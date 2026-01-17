@@ -134,14 +134,16 @@ class RSSFetcher:
                 pub_date = None
                 if hasattr(entry, 'published'):
                     try:
-                        pub_date = date_parser.parse(entry.published).isoformat() + "Z"
+                        # Parse date and format as ISO 8601
+                        date_obj = date_parser.parse(entry.published)
+                        pub_date = date_obj.isoformat()
                     except Exception:
-                        pub_date = datetime.utcnow().isoformat() + "Z"
+                        pub_date = datetime.utcnow().isoformat()
 
                 blogs.append({
                     "url": entry.link,
                     "title": entry.title,
-                    "pub_date": pub_date or datetime.utcnow().isoformat() + "Z"
+                    "pub_date": pub_date or datetime.utcnow().isoformat()
                 })
 
             print(f"Found {len(blogs)} blogs in RSS feed")
