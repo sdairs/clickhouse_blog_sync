@@ -1,0 +1,87 @@
+name: Sync ClickHouse Blogs
+
+on:
+  # Run daily at 6 AM UTC
+  schedule:
+    - cron: '0 6 * * *'
+
+  # Allow manual trigger
+  workflow_dispatch:
+
+# Permissions needed for committing changes
+permissions:
+  contents: write
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install dependencies
+        run: uv sync
+
+      - name: Run sync script
+        run: uv run python scripts/sync_blogs.py
+
+      - name: Check for changes
+        id: check_changes
+        run: |
+          if git diff --quiet && git diff --cached --quiet; then
+            echo "has_changes=false" >> $GITHUB_OUTPUT
+            echo "No changes to commit"
+          else
+            echo "has_changes=true" >> $GITHUB_OUTPUT
+            echo "Changes detected"
+          fi
+
+      - name: Commit and push changes
+        if: steps.check_changes.outputs.has_changes == 'true'
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          git add blogs/ all_blogs.md sync_state.json
+          git commit -m "chore: sync ClickHouse blogs [skip ci]"
+          git push
+
+      - name: Create job summary
+        if: always()
+        run: |
+          echo "## ClickHouse Blog Sync Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Status:** ${{ job.status }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          if [ -f sync_state.json ]; then
+            total=$(jq -r '.total_blogs' sync_state.json)
+            last_sync=$(jq -r '.last_sync' sync_state.json)
+            failed=$(jq -r '.failed_blogs | length' sync_state.json)
+
+            echo "**Total blogs:** $total" >> $GITHUB_STEP_SUMMARY
+            echo "**Last sync:** $last_sync" >> $GITHUB_STEP_SUMMARY
+            echo "**Failed blogs:** $failed" >> $GITHUB_STEP_SUMMARY
+
+            if [ "$failed" -gt 0 ]; then
+              echo "" >> $GITHUB_STEP_SUMMARY
+              echo "### Failed Blogs" >> $GITHUB_STEP_SUMMARY
+              jq -r '.failed_blogs[] | "- \(.url): \(.error)"' sync_state.json >> $GITHUB_STEP_SUMMARY
+            fi
+          fi
+
+          if [ "${{ steps.check_changes.outputs.has_changes }}" == "true" ]; then
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "Changes committed and pushed to repository." >> $GITHUB_STEP_SUMMARY
+          else
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "No new blogs found." >> $GITHUB_STEP_SUMMARY
+          fi
