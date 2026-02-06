@@ -1,5 +1,5 @@
 {
-  "last_sync": "2026-02-05T06:25:15.377355Z",
+  "last_sync": "2026-02-06T06:22:45.822158Z",
   "processed_blogs": {
     "https://clickhouse.com/blog/clickhouse-raises-400-million-series-d-acquires-langfuse-launches-postgres": {
       "title": "ClickHouse raises $400M Series D led by Dragoneer to accelerate expansion across analytics and AI infrastructure",
@@ -3840,9 +3840,15 @@
       "pub_date": "2026-02-04T13:43:36+00:00",
       "file_path": "blogs/2026-02-04-how-silverflow-simplified-its-data-platform-and.md",
       "processed_at": "2026-02-04T19:15:25.181399Z"
+    },
+    "https://clickhouse.com/blog/introducing-clickhouse-agent-skills": {
+      "title": "Introducing ClickHouse Agent Skills",
+      "pub_date": "2026-02-04T19:36:28+00:00",
+      "file_path": "blogs/2026-02-04-introducing-clickhouse-agent-skills.md",
+      "processed_at": "2026-02-06T06:22:35.128063Z"
     }
   },
-  "total_blogs": 640,
+  "total_blogs": 641,
   "failed_blogs": [
     {
       "url": "https://clickhouse.com/jp/blog/clickhouse-gcp-japan-availability",
@@ -7998,6 +8004,206 @@
       "url": "https://clickhouse.com/jp/blog/using-materialized-views-in-clickhouse-jp",
       "error": "404 Client Error: Not Found for url: https://clickhouse.com/jp/blog/using-materialized-views-in-clickhouse-jp.md",
       "attempted_at": "2026-02-05T06:25:15.312018Z"
+    },
+    {
+      "url": "https://clickhouse.com/jp/blog/202602-clickhouse-japan-country-manager",
+      "error": "404 Client Error: Not Found for url: https://clickhouse.com/jp/blog/202602-clickhouse-japan-country-manager.md",
+      "attempted_at": "2026-02-06T06:22:35.917059Z"
+    },
+    {
+      "url": "https://clickhouse.com/jp/blog/clickhouse-raises-400-million-series-d-acquires-langfuse-launches-postgres-jp",
+      "error": "404 Client Error: Not Found for url: https://clickhouse.com/jp/blog/clickhouse-raises-400-million-series-d-acquires-langfuse-launches-postgres-jp.md",
+      "attempted_at": "2026-02-06T06:22:36.258898Z"
+    },
+    {
+      "url": "https://clickhouse.com/jp/blog/clickhouse-gcp-japan-availability",
+      "error": "404 Client Error: Not Found for url: https://clickhouse.com/jp/blog/clickhouse-gcp-japan-availability.md",
+      "attempted_at": "2026-02-06T06:22:36.536908Z"
+    },
+    {
+      "url": "https://clickhouse.com/jp/blog/emq-ai-assisted-analytics-jp",
+      "error": "404 Client Error: Not Found for url: https://clickhouse.com/jp/blog/emq-ai-assisted-analytics-jp.md",
+      "attempted_at": "2026-02-06T06:22:36.798616Z"
+    },
+    {
+      "url": "https://clickhouse.com/jp/blog/cloud-data-warehouses-cost-performance-comparison-jp",
+      "error": "404 Client Error: Not Found for url: https://clickhouse.com/jp/blog/cloud-data-warehouses-cost-performance-comparison-jp.md",
+      "attempted_at": "2026-02-06T06:22:37.110425Z"
+    },
+    {
+      "url": "https://clickhouse.com/jp/blog/japan-cloud-jp",
+      "error": "404 Client Error: Not Found for url: https://clickhouse.com/jp/blog/japan-cloud-jp.md",
+      "attempted_at": "2026-02-06T06:22:37.356975Z"
+    },
+    {
+      "url": "https://clickhouse.com/jp/blog/clickpipes-flexible-scaling-monitoring-jp",
+      "error": "404 Client Error: Not Found for url: https://clickhouse.com/jp/blog/clickpipes-flexible-scaling-monitoring-jp.md",
+      "attempted_at": "2026-02-06T06:22:37.669704Z"
+    },
+    {
+      "url": "https://clickhouse.com/jp/blog/how-tesla-built-quadrillion-scale-observability-platform-on-clickhouse-jp",
+      "error": "404 Client Error: Not Found for url: https://clickhouse.com/jp/blog/how-tesla-built-quadrillion-scale-observability-platform-on-clickhouse-jp.md",
+      "attempted_at": "2026-02-06T06:22:38.037794Z"
+    },
+    {
+      "url": "https://clickhouse.com/jp/blog/how-anthropic-is-using-clickhouse-to-scale-observability-for-ai-era-jp",
+      "error": "404 Client Error: Not Found for url: https://clickhouse.com/jp/blog/how-anthropic-is-using-clickhouse-to-scale-observability-for-ai-era-jp.md",
+      "attempted_at": "2026-02-06T06:22:38.272932Z"
+    },
+    {
+      "url": "https://clickhouse.com/jp/blog/why-openai-uses-clickhouse-for-petabyte-scale-observability-jp",
+      "error": "404 Client Error: Not Found for url: https://clickhouse.com/jp/blog/why-openai-uses-clickhouse-for-petabyte-scale-observability-jp.md",
+      "attempted_at": "2026-02-06T06:22:38.522660Z"
+    },
+    {
+      "url": "https://clickhouse.com/jp/blog/cloud-circus-ja",
+      "error": "404 Client Error: Not Found for url: https://clickhouse.com/jp/blog/cloud-circus-ja.md",
+      "attempted_at": "2026-02-06T06:22:38.788430Z"
+    },
+    {
+      "url": "https://clickhouse.com/jp/blog/line-manga-ja",
+      "error": "404 Client Error: Not Found for url: https://clickhouse.com/jp/blog/line-manga-ja.md",
+      "attempted_at": "2026-02-06T06:22:39.013488Z"
+    },
+    {
+      "url": "https://clickhouse.com/jp/blog/postgres-cdc-connector-clickpipes-ga-jp",
+      "error": "404 Client Error: Not Found for url: https://clickhouse.com/jp/blog/postgres-cdc-connector-clickpipes-ga-jp.md",
+      "attempted_at": "2026-02-06T06:22:39.231724Z"
+    },
+    {
+      "url": "https://clickhouse.com/jp/blog/clickstack-a-high-performance-oss-observability-stack-on-clickhouse-jp",
+      "error": "404 Client Error: Not Found for url: https://clickhouse.com/jp/blog/clickstack-a-high-performance-oss-observability-stack-on-clickhouse-jp.md",
+      "attempted_at": "2026-02-06T06:22:39.448986Z"
+    },
+    {
+      "url": "https://clickhouse.com/jp/blog/202505-newsletter-jp",
+      "error": "404 Client Error: Not Found for url: https://clickhouse.com/jp/blog/202505-newsletter-jp.md",
+      "attempted_at": "2026-02-06T06:22:39.651758Z"
+    },
+    {
+      "url": "https://clickhouse.com/jp/blog/agenthouse-demo-clickhouse-llm-mcp-jp",
+      "error": "404 Client Error: Not Found for url: https://clickhouse.com/jp/blog/agenthouse-demo-clickhouse-llm-mcp-jp.md",
+      "attempted_at": "2026-02-06T06:22:39.875698Z"
+    },
+    {
+      "url": "https://clickhouse.com/jp/blog/clickhouse-gets-lazier-and-faster-introducing-lazy-materialization-jp",
+      "error": "404 Client Error: Not Found for url: https://clickhouse.com/jp/blog/clickhouse-gets-lazier-and-faster-introducing-lazy-materialization-jp.md",
+      "attempted_at": "2026-02-06T06:22:40.112839Z"
+    },
+    {
+      "url": "https://clickhouse.com/jp/blog/202504-newsletter-jp",
+      "error": "404 Client Error: Not Found for url: https://clickhouse.com/jp/blog/202504-newsletter-jp.md",
+      "attempted_at": "2026-02-06T06:22:40.358156Z"
+    },
+    {
+      "url": "https://clickhouse.com/jp/blog/202503-newsletter-jp",
+      "error": "404 Client Error: Not Found for url: https://clickhouse.com/jp/blog/202503-newsletter-jp.md",
+      "attempted_at": "2026-02-06T06:22:40.611802Z"
+    },
+    {
+      "url": "https://clickhouse.com/jp/blog/202502-newsletter-jp",
+      "error": "404 Client Error: Not Found for url: https://clickhouse.com/jp/blog/202502-newsletter-jp.md",
+      "attempted_at": "2026-02-06T06:22:40.816680Z"
+    },
+    {
+      "url": "https://clickhouse.com/jp/blog/postgres-cdc-connector-clickpipes-public-beta-jp",
+      "error": "404 Client Error: Not Found for url: https://clickhouse.com/jp/blog/postgres-cdc-connector-clickpipes-public-beta-jp.md",
+      "attempted_at": "2026-02-06T06:22:41.037357Z"
+    },
+    {
+      "url": "https://clickhouse.com/jp/blog/agent-facing-analytics-jp",
+      "error": "404 Client Error: Not Found for url: https://clickhouse.com/jp/blog/agent-facing-analytics-jp.md",
+      "attempted_at": "2026-02-06T06:22:41.247867Z"
+    },
+    {
+      "url": "https://clickhouse.com/jp/blog/clickhouse-release-25-01-jp",
+      "error": "404 Client Error: Not Found for url: https://clickhouse.com/jp/blog/clickhouse-release-25-01-jp.md",
+      "attempted_at": "2026-02-06T06:22:41.457162Z"
+    },
+    {
+      "url": "https://clickhouse.com/jp/blog/json-bench-clickhouse-vs-mongodb-elasticsearch-duckdb-postgresql-jp",
+      "error": "404 Client Error: Not Found for url: https://clickhouse.com/jp/blog/json-bench-clickhouse-vs-mongodb-elasticsearch-duckdb-postgresql-jp.md",
+      "attempted_at": "2026-02-06T06:22:41.677267Z"
+    },
+    {
+      "url": "https://clickhouse.com/jp/blog/evolution-of-clickhouse-cloud-new-features-superior-performance-tailored-offerings-jp",
+      "error": "404 Client Error: Not Found for url: https://clickhouse.com/jp/blog/evolution-of-clickhouse-cloud-new-features-superior-performance-tailored-offerings-jp.md",
+      "attempted_at": "2026-02-06T06:22:41.923713Z"
+    },
+    {
+      "url": "https://clickhouse.com/jp/blog/introducing-warehouses-compute-compute-separation-in-clickhouse-cloud-jp",
+      "error": "404 Client Error: Not Found for url: https://clickhouse.com/jp/blog/introducing-warehouses-compute-compute-separation-in-clickhouse-cloud-jp.md",
+      "attempted_at": "2026-02-06T06:22:42.173684Z"
+    },
+    {
+      "url": "https://clickhouse.com/jp/blog/202501-newsletter-jp",
+      "error": "404 Client Error: Not Found for url: https://clickhouse.com/jp/blog/202501-newsletter-jp.md",
+      "attempted_at": "2026-02-06T06:22:42.441771Z"
+    },
+    {
+      "url": "https://clickhouse.com/jp/blog/202412-newsletter-jp",
+      "error": "404 Client Error: Not Found for url: https://clickhouse.com/jp/blog/202412-newsletter-jp.md",
+      "attempted_at": "2026-02-06T06:22:42.730194Z"
+    },
+    {
+      "url": "https://clickhouse.com/jp/blog/202411-newsletter-jp",
+      "error": "404 Client Error: Not Found for url: https://clickhouse.com/jp/blog/202411-newsletter-jp.md",
+      "attempted_at": "2026-02-06T06:22:42.954735Z"
+    },
+    {
+      "url": "https://clickhouse.com/jp/blog/clickhouse-and-open-telemtry-jp",
+      "error": "404 Client Error: Not Found for url: https://clickhouse.com/jp/blog/clickhouse-and-open-telemtry-jp.md",
+      "attempted_at": "2026-02-06T06:22:43.178151Z"
+    },
+    {
+      "url": "https://clickhouse.com/jp/blog/a-new-powerful-json-data-type-for-clickhouse-jp",
+      "error": "404 Client Error: Not Found for url: https://clickhouse.com/jp/blog/a-new-powerful-json-data-type-for-clickhouse-jp.md",
+      "attempted_at": "2026-02-06T06:22:43.528723Z"
+    },
+    {
+      "url": "https://clickhouse.com/jp/blog/geniee-user-story-japanese",
+      "error": "404 Client Error: Not Found for url: https://clickhouse.com/jp/blog/geniee-user-story-japanese.md",
+      "attempted_at": "2026-02-06T06:22:43.795078Z"
+    },
+    {
+      "url": "https://clickhouse.com/jp/blog/postgres-to-clickhouse-data-modeling-tips-jp",
+      "error": "404 Client Error: Not Found for url: https://clickhouse.com/jp/blog/postgres-to-clickhouse-data-modeling-tips-jp.md",
+      "attempted_at": "2026-02-06T06:22:44.055992Z"
+    },
+    {
+      "url": "https://clickhouse.com/jp/blog/migrating-to-clickhouse-cloud-in-just-three-months-with-no-downtime-a-120-terabyte-data-journey-and-its-benefits-jp",
+      "error": "404 Client Error: Not Found for url: https://clickhouse.com/jp/blog/migrating-to-clickhouse-cloud-in-just-three-months-with-no-downtime-a-120-terabyte-data-journey-and-its-benefits-jp.md",
+      "attempted_at": "2026-02-06T06:22:44.276850Z"
+    },
+    {
+      "url": "https://clickhouse.com/jp/blog/modeling-machine-learning-data-in-clickhouse-jp",
+      "error": "404 Client Error: Not Found for url: https://clickhouse.com/jp/blog/modeling-machine-learning-data-in-clickhouse-jp.md",
+      "attempted_at": "2026-02-06T06:22:44.487911Z"
+    },
+    {
+      "url": "https://clickhouse.com/jp/blog/clickhouse-cloud-now-supports-prometheus-monitoring-jp",
+      "error": "404 Client Error: Not Found for url: https://clickhouse.com/jp/blog/clickhouse-cloud-now-supports-prometheus-monitoring-jp.md",
+      "attempted_at": "2026-02-06T06:22:44.730876Z"
+    },
+    {
+      "url": "https://clickhouse.com/jp/blog/how-trip.com-migrated-from-elasticsearch-and-built-a-50pb-logging-solution-with-clickhouse-jp",
+      "error": "404 Client Error: Not Found for url: https://clickhouse.com/jp/blog/how-trip.com-migrated-from-elasticsearch-and-built-a-50pb-logging-solution-with-clickhouse-jp.md",
+      "attempted_at": "2026-02-06T06:22:44.973865Z"
+    },
+    {
+      "url": "https://clickhouse.com/jp/blog/clickhouse-vs-snowflake-for-real-time-analytics-benchmarks-cost-analysis-jp",
+      "error": "404 Client Error: Not Found for url: https://clickhouse.com/jp/blog/clickhouse-vs-snowflake-for-real-time-analytics-benchmarks-cost-analysis-jp.md",
+      "attempted_at": "2026-02-06T06:22:45.175599Z"
+    },
+    {
+      "url": "https://clickhouse.com/jp/blog/clickhouse-vs-snowflake-for-real-time-analytics-comparison-migration-guide-jp",
+      "error": "404 Client Error: Not Found for url: https://clickhouse.com/jp/blog/clickhouse-vs-snowflake-for-real-time-analytics-comparison-migration-guide-jp.md",
+      "attempted_at": "2026-02-06T06:22:45.510723Z"
+    },
+    {
+      "url": "https://clickhouse.com/jp/blog/using-materialized-views-in-clickhouse-jp",
+      "error": "404 Client Error: Not Found for url: https://clickhouse.com/jp/blog/using-materialized-views-in-clickhouse-jp.md",
+      "attempted_at": "2026-02-06T06:22:45.761567Z"
     }
   ]
 }
