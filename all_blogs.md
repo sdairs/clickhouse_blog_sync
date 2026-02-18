@@ -1,6 +1,515 @@
 # ClickHouse Blogs
-Last updated: 2026-02-17 06:25:47 UTC
-Total blogs: 647
+Last updated: 2026-02-18 06:28:13 UTC
+Total blogs: 649
+
+---
+
+## AI-powered migrations from Postgres to ClickHouse
+Published: 2026-02-17T10:33:49+00:00
+URL: https://clickhouse.com/blog/ai-powered-migraiton-from-postgres-to-clickhouse-with-fiveonefour
+
+---
+title: "AI-powered migrations from Postgres to ClickHouse"
+date: "2026-02-17T10:33:49.999Z"
+author: "Fiveonefour"
+category: "Engineering"
+excerpt: "AI can drastically accelerate migrating analytical workloads from Postgres to ClickHouse. To set your agents up for success, give them the right environment."
+---
+
+# AI-powered migrations from Postgres to ClickHouse
+
+> **TL;DR:**
+> AI can drastically accelerate migrating analytical workloads from Postgres to ClickHouse. To set your agents up for success, give them the right environment:
+>  
+>1. Code: keep everything in code, it’s your agent’s comfort zone  
+>2. Cadence: enable fast, safe feedback loops  
+>3. Context: inject ClickHouse best practices via agent skills and references
+>  
+>Wrap it all up in an agent harness like [MooseStack](https://github.com/514-labs/moosestack) to avoid AI slop.
+>  
+>Want to jump right to implementation? Here's a practical, step-by-step [guide](https://docs.fiveonefour.com/guides/performant-dashboards/tutorial).
+
+Your dashboards are starting to crawl. Postgres is choking on your analytical queries. You know that Postgres with ClickHouse is the answer. You want to keep Postgres for your transactional workloads, but offload your analytical workloads onto ClickHouse. You want that vision of the unified data stack: Postgres + ClickHouse, working seamlessly in tandem, with the right tool used for the right job. 
+
+So how do you go about actually migrating your analytical workloads from Postgres to ClickHouse? You want AI to do the heavy lifting. We agree. But most AI-assisted migrations produce garbage. We’ve learned this the hard way migrating thousands of customer tables and queries.
+
+This post explores how to make your AI agents *actually effective* at offloading analytics from Postgres to ClickHouse.
+
+![Opening-top.png](https://clickhouse.com/uploads/Opening_top_7b2eeacfcb.png)
+*An AI agent effectively implementing ClickHouse best practices*
+
+---
+
+## Try the unified data stack
+
+ClickHouse + Postgres has become the unified data stack for applications that scale. With Managed Postgres now available in ClickHouse Cloud, this stack is a day-1 decision.
+
+[Get access](https://clickhouse.com/cloud/postgres?loc=blog-cta-65-try-the-unified-data-stack-get-access&utm_blogctaid=65)
+
+---
+
+## ClickHouse Migrations: Simple vs Reality
+
+If you’re just building a toy or a POC, your standard AI agent can probably do a decent job. The challenge comes when you’re building something real. Real is complex and full of edge cases and baggage. And you don’t just want “functional”: you need integrated, scalable, reliable, and blazing fast. That means carefully considering the nuances and specializations of the system.
+
+If you want the best out of ClickHouse in your production application, then you’re looking at (1) rearchitecting data models for OLAP performance, (2) rebuilding read-time joins and aggregations into write-time Materialized Views, (3) optimizing queries in your APIs, and (4) propagating and testing changes through to your frontend components.
+
+So, the question isn’t just “can my agent write ClickHouse SQL?”. It’s “can I give my agent everything it needs to work effectively within the complex environment of my integrated application stack?” To pull this off, you need to expose all the interfaces, tools, skills, code and context to your agent that are needed to rapidly and safely iterate to success. In other words: you need an “agent harness” for Postgres + ClickHouse.
+
+![Agentic-Harness-dark.png](https://clickhouse.com/uploads/Agentic_Harness_dark_1b04481cd8.png)
+
+Of course you can architect this harness yourself, but throughout this post, we’ll demonstrate how to leverage [MooseStack](https://github.com/514-labs/moosestack) (the ClickHouse-native open source developer framework) out of the box, as your harness to make your agents successful working with Postgres + ClickHouse. 
+
+From startups to large enterprises, we’ve seen this method successfully migrate production analytical workloads from Postgres to ClickHouse in days, instead of months.
+
+Let's dig in.
+
+> Want to get right to implementation? Here's a practical step-by-step [guide](https://docs.fiveonefour.com/guides/performant-dashboards/tutorial) for migrating your dashboards to ClickHouse with the help of AI.
+
+## **Code:** Everything as code - make your analytics stack legible to AI
+
+Coding agents are great at reading, writing, and reviewing code. They’re much less effective when it comes to coordinating infrastructure, tracking database status, managing schema evolutions, and other work that goes into implementing an actual production ClickHouse architecture. 
+
+The way to solve this is by treating your unified application and data stack as a single system expressed as code. Not as scattered DDL scripts, raw SQL strings, and tribal knowledge. But, rather, as shared, typed objects with explicit dependencies (see example below). All managed with git, and readily available in your IDE and local filesystem, ie your coding agent’s home turf. 
+
+```ts
+import { MaterializedView, OlapTable, sql } from "@514labs/moose-lib";
+import { sourceTable } from "path/to/SourceTable"; // could also be a view
+
+// Define the rows we want to serve to dashboards.
+// This is the schema of the destination ClickHouse table.
+// JSDoc comments embed as column descriptions in CH,
+// readable by agents querying the data.
+interface TargetSchema {
+id: string;
+
+/** Mean rating value computed across all submitted reviews with ratings. */
+average_rating: number;
+
+/** Total number of valid reviews contributing to the average rating. */
+num_reviews: number;
+}
+
+// Declare the destination serving table in code.
+export const targetTable = new OlapTable<TargetSchema>("target_table", {
+  orderByFields: ["id"],
+});
+
+// Declare the OLTP -> OLAP rewrite as a first-class object:
+// source table(s) -> transformation -> serving table.
+export const mvToTargetTable = new MaterializedView<TargetSchema>({
+  // Turn query-time aggregation into a precomputed rollup.
+  selectStatement: sql`
+    SELECT
+      ${sourceTable.columns.id},
+      avg(${sourceTable.columns.rating}) AS average_rating,
+      count(*) AS num_reviews
+    FROM ${sourceTable}
+    GROUP BY ${sourceTable.columns.id}
+  `,
+
+  // Explicit upstream dependencies (the “reads from” side of the graph).
+  selectTables: [sourceTable],
+
+  // Explicit downstream dependency (the “writes to” side of the graph).
+  targetTable,
+
+  // The name of the ClickHouse Materialized View.
+  materializedViewName: "mv_to_target_table",
+});
+```
+
+With MooseStack, code becomes your agents’ default interface to your ClickHouse data stack. For example, your source tables and your materialized views are declared as typed objects in your code base. This means:
+
+1. Your agent is working with common Typescript patterns that it’s already familiar with and more likely to succeed with  
+2. When it doesn’t succeed, your agent’s work is just lines of code, which means easy rollbacks, evolutions, and iterations, in the form factor coding agents are built for (plus the added security of version control with git)
+
+Not to mention, your agent can leverage and propagate these typed data models, eg. downstream to your APIs (e.g. Express, Fastify, Nextjs), your MCPs, your frontend, or wherever else the data that you have in ClickHouse is (now safely) referenced. Under the hood, this creates a dependency graph that is explicit and reproducible: MooseStack captures it as an “InfraMap” that can be surfaced to the agent via the [MooseStack dev MCP](https://docs.fiveonefour.com/moosestack/moosedev-mcp). When an agent edits a source schema or rollup, it no longer has to guess what breaks downstream: the dependencies are explicit, and the blast radius is discoverable from the code instantly accessible by your agent through the MCP.
+
+“Everything is code” turns a ClickHouse migration from a brittle database rewrite into a normal refactor of a modular codebase. This is exactly the kind of problem AI agents are good at. 
+
+## **Cadence:** Fast feedback loops for AI-safe OLAP iteration
+
+Even better, once the system is all code, you can build feedback loops around it!
+
+[Boyd’s law](https://blog.codinghorror.com/boyds-law-of-iteration/) states that the speed of iteration beats quality of iteration. If you rely on an LLM to one-shot your migration, it’s unlikely to succeed. 
+
+So, ideally, you’re validating the migration end-to-end with each incremental change: schema, rollups, API queries, and dashboard outputs. That’s only practical if the feedback loop is fast. Really fast. If every tweak requires a cloud deployment and a backfill just to discover a mistake, AI iteration becomes too slow to be useful.
+
+MooseStack gives developers and agents three layers of fast feedback during Postgres → ClickHouse migration work:
+
+1. **In the IDE**: catch schema, type and ClickHouse SQL issues while the agent is still writing code.  
+2. **In local dev** (`moose dev`): run the full OLAP stack end-to-end with hot-swapping infra, realistic data, and runtime errors and logs.  
+3. **In “preview branch” deployments**: validate behavior and performance on production-like infrastructure in the cloud before merging.
+
+### IDE feedback: schema, type, and SQL errors before you run anything
+
+As we discussed above, MooseStack treats tables and views as first-class, typed objects in your codebase, so your IDE can flag broken field references immediately. An agent can use this for almost instantaneous feedback.
+
+For example, a React component might render fields from a shared `EventModel`:
+
+```ts
+// app/analytics/page.tsx
+import { getEvents } from "moose";
+
+export default async function AnalyticsPage() {
+  const events = await getEvents();
+
+  return (
+    <ul>
+      {events.map((e) => (
+        <li key={e.id}>
+          {e.id}: {e.amount} at {e.event_time.toISOString()}
+        </li>
+      ))}
+    </ul>
+  );
+}
+```
+
+The MooseStack `OlapTable` object declares the ClickHouse object. The LLM might need to change that data model as part of a data modeling optimization in an OLTP → OLAP migration:
+
+```ts
+// moose/models/events.ts
+import { OlapTable } from "@514labs/moose-lib";
+
+export interface EventModel {
+  id: string;
+  amount: number;
+
+  // agent change: renamed `event_time` -> `occurred_at`
+  occurred_at: Date;
+}
+
+// This declares the ClickHouse table in code.
+export const Events = new OlapTable<EventModel>("events", {
+  orderByFields: ["occurred_at"],
+});
+```
+
+Because of the strict typing, this will cause an error in the frontend, which is presented to the agent almost immediately:
+
+```ts
+// app/analytics/page.tsx
+// ❌ IDE error: Property 'event_time' does not exist on type 'EventModel'
+<li key={e.id}>
+  {e.id}: {e.amount} at {e.event_time.toISOString()}
+</li>
+
+```
+
+Going further than type-safety (and, depending on the CLI) the agent can also directly access the [MooseStack LSP](https://docs.fiveonefour.com/moosestack/language-server) for validating syntax, autocomplete and error diagnostics.
+
+### Local dev feedback for AI: run the full OLAP stack end-to-end with `moose dev`
+
+Many problems with real applications only show up once the entire system is actually running: mutations fail asynchronously, schemas apply in unexpected order, data arrives with unexpected shapes, or rollups silently produce the wrong numbers in the frontend.
+
+That’s why your agent needs a fast, cheap runtime loop that mirrors your production stack. Agents should be able to apply schemas, push data through materialized views, execute real API queries, and validate the actual outputs your dashboards depend on.
+
+The best version of this is local, hot-reloading infrastructure with realistic data. Run your entire ClickHouse + Postgres + frontend stack locally, end-to-end, and make validation cheap enough that the agent can iterate on real mistakes instead of guessing.
+
+With MooseStack, that starts with:
+
+```shell
+moose dev
+```
+
+This command spins up your whole OLAP stack locally (including ClickHouse), and then automatically infers and applies schema change DDLs in real time as your agent writes code.
+
+This gives the agent two kinds of additional fast feedback:
+
+1. **Runtime errors**. If, for example, your application can’t connect to ClickHouse or a transformation throws an exception when it encounters unexpected data shapes (JSON is a common culprit), these failures can’t be silent. With `moose dev` they surface immediately in the console logs, which makes them visible to both developers and agents while they’re iterating.  
+     
+2. **MCP validation**. The [MooseDev MCP](https://docs.fiveonefour.com/moosestack/moosedev-mcp?lang=typescript) gives the agent tools to interrogate the local dev server. This allows the agent to validate: “did the system end up in the state the agent thought it created”? Are the right tables and views present? Does the transformed output look correct when queried? Are the logs telling the LLM anything interesting? The agent can even use `moose query` and `moose seed` to insert data to test data flows, sampling data from any step in the process.
+
+Realistic data is what makes these checks meaningful. Without it, you can “pass” validation on toy datasets and still ship incorrect rollups. 
+
+This is what makes OLTP → OLAP migration AI-safe: agents get fast, reality-based feedback from a running system, not just confidence from code that compiles. 
+
+## **Context:** Opinions, expertise, and patterns - give your agent the most relevant migration and OLAP context
+
+Of course, your agent’s work is only as good as the context you pass in. In addition to the real time context for feedback loops discussed above, there’s also:
+
+1. Static context: data and documentation about your existing implementation in your OLTP stack that needs to be migrated over to OLAP  
+2. Skills and guides: reusable implementation patterns peculiar to OLAP / Migrations  
+3. Reference implementations: show what “good” or “solved” has looked like in your organization
+
+### Static context: ground your agent in your real data and patterns
+
+In migration cases, where your core business logic already exists (and just needs to be translated), you of course want to pass all of that context in on your existing implementation. In addition, you’ll want to provide context and data that enables the agent to complete end-to-end testing of the migration as it iterates. That means:
+
+* Schemas, data dictionaries and data documentation  
+* Source data  
+* Any existing stored procedures or intermediate views  
+* Sample query inputs and outputs from the current system
+
+Our [Improving Dashboard Performance Guide](https://docs.fiveonefour.com/guides/performant-dashboards/tutorial) comes with [a starter kit](https://github.com/514-labs/moosestack/tree/main/examples/dashboard-migration), which you can clone into your project to compile context across all four categories listed above. This includes prebuilt prompts and templates for you to easily dispatch your agents and have them gather example requests and responses for representative test cases for later validation, e.g.: 
+
+````
+## Test case: <short-name>
+ 
+### Request (curl)
+ 
+```bash
+# Method: GET|POST
+# Path: /api/<endpoint>
+# Expected: HTTP 200
+# Auth: Bearer token via $API_TOKEN (do not paste secrets)
+# Notes: <timezone/order/pagination assumptions if relevant>
+ 
+# Set once in your shell:
+# export API_BASE_URL="http://localhost:4000"
+# export API_TOKEN="..."
+ 
+# GET (query params)
+curl -sS -G "$API_BASE_URL/api/<endpoint>" 
+  -H "Authorization: Bearer $API_TOKEN" 
+  -H "Content-Type: application/json" 
+  --data-urlencode "param1=value1" 
+  --data-urlencode "param2=value2" 
+  | jq .
+ 
+# POST (JSON body)
+curl -sS -X POST "$API_BASE_URL/api/<endpoint>" 
+  -H "Authorization: Bearer $API_TOKEN" 
+  -H "Content-Type: application/json" 
+  -d '{"param1": "value1", "param2": "value2"}' 
+  | jq .
+ 
+```
+ 
+### Expected response
+ 
+```json
+{
+  "REPLACE_ME": "paste the full JSON response body here (verbatim from the running endpoint)"
+}
+ 
+```
+````
+
+Front-loading the right context dramatically reduces migration debugging. Across the Postgres → ClickHouse migrations we’ve worked on, we’ve found that real query outputs give agents something concrete to reason against, helping them converge on correct ClickHouse models with fewer blind rewrites and fewer “looks right, but is wrong” failures.
+
+### Skills teach your agent *how* to implement OLAP migrations
+
+Static context helps an agent understand what you’re trying to do. Skills help it understand how to do it (with ClickHouse).
+
+MooseStack’s agent harness offers battle-tested [agent skills](https://github.com/514-labs/agent-skills), which codify ClickHouse best practices into agent-friendly rules for implementing ClickHouse in your application stack in Typescript or Python. 
+
+```
+// skills/clickhouse-best-practices/SKILL.mdname: clickhouse-best-practices
+description: MUST USE when reviewing ClickHouse schemas, queries, or configurations.
+Contains 28 rules that MUST be checked before providing recommendations.
+Always read relevant rule files and cite specific rules in responses.
+```
+
+```
+// skills/clickhouse-best-practices/rules/schema-types-avoid-nullable.md
+
+title: Avoid Nullable Unless Semantically Required
+impact: HIGH
+impactDescription: "Nullable adds storage overhead; use DEFAULT values instead"
+```
+
+These rules extend [ClickHouse’s agent skills](https://clickhouse.com/blog/introducing-clickhouse-agent-skills) (which focus on SQL implementation of ClickHouse best practices), and cover thorny, specialized topics in OLAP data modeling, like choosing efficient ORDER BY fields, managing cardinality, proper use of Nullability and other typing issues.
+
+Give them a spin:
+
+```
+// data modeling best practices skills
+
+npx skills add clickhouse/agent-skills // for ClickHouse SQL
+npx skills add 514-labs/agent-skills   // for Typescript or Python
+
+//Prompt: review and update my data models to implement more efficient OLAP best practices
+```
+
+### Reference implementations: your agent shouldn’t have to re-solve solved problems
+
+Even with good context and skills, agents will still try to invent solutions if they don’t see a concrete precedent. Point your agent at code that already reflects how you want your ClickHouse implementation built, for instance:
+
+* **An example semantic / query layer** ([`query-layer`](https://github.com/514-labs/query-layer)) which shows how to structure reusable, ClickHouse-aware queries in typescript abstractions  
+* **End-to-end example apps**, like the MooseStack examples ([`moosestack/examples`](https://github.com/514-labs/moosestack/tree/main/examples)), which demonstrate how schemas, materialized views, APIs, and dashboards fit together in a real project
+
+These examples anchor the agent in the *target* architecture, not the Postgres source. When it encounters a familiar problem shape, it works forward from established OLAP designs rather than backward from OLTP habits. That dramatically reduces variance and makes AI-assisted migrations feel deliberate instead of improvisational.
+
+For example, the query layer example above defines a serving-oriented query model once, and then reuses it everywhere dashboards need data:
+
+```ts
+export const eventsModel = defineQueryModel({
+  table: Events,
+
+  dimensions: {
+    status: { column: "status" },
+    day: { expression: sql`toDate(${Events.columns.event_time})`, as: "day" },
+  },
+
+  metrics: {
+    totalEvents: { agg: sql`count(*)` },
+    totalAmount: { agg: sql`sum(${Events.columns.amount})` },
+  },
+
+  filters: {
+    timestamp: { column: "event_time", operators: ["gte", "lte"] as const },
+    status: { column: "status", operators: ["eq", "in"] as const },
+  },
+});
+```
+
+This does two important things for migrations. First, it encodes OLAP-native patterns: pre-aggregated metrics, explicit dimensions, and constrained filters, rather than ad-hoc SQL scattered across handlers. Second, it gives the agent a concrete shape to imitate. Instead of inventing a new query abstraction mid-migration, it can adapt a proven one.
+
+By the way, we’re working on adding a lightweight semantic / metrics layer to MooseStack as a first class citizen, inspired by this query-layer example. If you have any feedback or requests, we’d love to hear from you on [our community slack](http://slack.moosestack.com). 
+
+---
+
+## Try the unified data stack
+
+ClickHouse + Postgres has become the unified data stack for applications that scale. With Managed Postgres now available in ClickHouse Cloud, this stack is a day-1 decision.
+
+[Get access](https://clickhouse.com/cloud/postgres?loc=blog-cta-66-try-the-unified-data-stack-get-access&utm_blogctaid=66)
+
+---
+
+## A Quick Teaser: From Local to Production
+
+A local, code‑first workflow doesn’t replace production deployment. It just makes it safe to iterate quickly before you ship. Your production ClickHouse cluster has different configuration, more data, and different failure modes. A materialized view that looks fine on 10,000 rows can fall apart at 10 million.
+
+In practice, deploying safely means creating staging and preview environments in the cloud. [Moose Migrate](https://docs.fiveonefour.com/moosestack/migrate) provides a code-based, optional human-in-the-loop path for deploying your new ClickHouse configurations to your cloud environment. 
+
+> Want to go from local, agentic iteration to cloud deployment with a `git push`? [Fiveonefour’s hosting](https://fiveonefour.boreal.cloud/sign-up) works with ClickHouse Cloud to provide automated preview branches, managed schema migrations, deep integration with Github and CI/CD, and an agentic harness for your unified data stack in the cloud. [Sign up for free](https://fiveonefour.boreal.cloud/sign-up). 
+
+We’re also excited about the next step: letting agents inspect your cloud deployments directly. The 514 CLI (currently in alpha) is designed to expose the same surface area a human would use to debug ClickHouse workloads: streaming logs, querying ClickHouse system tables, and verifying that migrations and materialized views completed successfully. These inspection capabilities are rolling out incrementally over the coming days and weeks, so deployments become observable and machine-verifiable within your AI harness, end-to-end. If you are interested in participating in this alpha release, [join our slack and let us know](http://slack.moosestack.com).
+
+## Conclusion
+
+Postgres + ClickHouse is the unified data stack for modern applications: transactional speed where you need it, analytical power where you don’t want compromise. With the right agent harness, like [MooseStack](https://github.com/514-labs/moosestack), AI can help you get there. When your unified data stack is expressed as code, reinforced with tight feedback loops, and grounded in ClickHouse best practices, agents can iterate safely and converge on real production outcomes. Ready to try it out in your own environment? Check out the [detailed step by step guide](https://docs.fiveonefour.com/guides/performant-dashboards/tutorial) to migrating your analytical workloads onto ClickHouse with the help of AI agents.   
+
+---
+
+## How SmartNews powers real-time ad performance dashboards with ClickHouse
+Published: 2026-02-17T08:35:59+00:00
+URL: https://clickhouse.com/blog/smart-news
+
+---
+title: "How SmartNews powers real-time ad performance dashboards with ClickHouse"
+date: "2026-02-17T08:35:59.304Z"
+author: "ClickHouse"
+category: "User stories"
+excerpt: "“With our old setup, we kept hearing complaints from customers that it was way too slow. But with ClickHouse, we can now display real-time aggregation results to advertisers.” - Ryu Kiyose, Engineering Manager"
+---
+
+# How SmartNews powers real-time ad performance dashboards with ClickHouse
+
+## Summary
+
+<style>
+div.w-full + p, 
+pre + p,
+span.relative + p {
+  text-align: center;
+  font-style: italic;
+}
+</style>
+
+SmartNews uses ClickHouse to power real-time ad performance dashboards for thousands of advertisers on Japan’s \#1 news app. Since migrating from Redshift to ClickHouse, user-facing queries that used to take several hours in their old setup now return in just a few seconds. They now handle around 3 million queries and 60,000 inserts per hour, with most reads completing in under 100 milliseconds.
+
+Founded in 2012, [SmartNews](https://www.smartnews.com/) has grown into the \#1 news app in Japan, with more than 50 million downloads. Its business model relies heavily on advertising: users interact with the app, advertisers deliver their campaigns, and SmartNews shares a portion of that revenue with its 4,500+ media partners. As engineering manager Ryu Kiyose puts it, “This motivates them to provide even more high-quality content, which we then deliver to our users.”
+
+But to keep that cycle running, advertisers need timely feedback. When Ryu joined the company in 2020, ad performance data often took hours to reach them. One of his first projects was to fix that. Today, the same data typically arrives in just a few seconds.
+
+At our [April 2025 meetup in Tokyo](https://clickhouse.com/videos/tokyo-meetup-smartnews-15apr25), Ryu shared how SmartNews rebuilt its analytics pipeline with ClickHouse, replacing a slow, batch-driven system with a fast, streaming engine that now powers millions of queries per hour.
+
+## From batch to real-time visibility
+
+Prior to ClickHouse, SmartNews’s pipeline involved multiple steps. Ad delivery logs were written to Amazon S3 every 15 minutes, then processed in hourly batches and loaded into Amazon Redshift for aggregation. From there, the results were exported to Amazon RDS, where they could be queried by SmartNews’s Ads Manager dashboard. 
+
+“This entire end-to-end process took about two to three hours,” Ryu says. “We kept hearing complaints that it was way too slow.”
+
+![SmartNews User Story Issue 1232 (4).jpg](https://clickhouse.com/uploads/Smart_News_User_Story_Issue_1232_4_d53ff5c28b.jpg)
+
+SmartNews's pre-ClickHouse pipeline circa 2021: batchy, delayed, fragile.
+
+In 2021, they overhauled the system. Now, ad delivery data is streamed through Kafka before being inserted into ClickHouse. Flink is used, too, though Ryu notes that it’s “not doing anything special”—just copying data due to some internal technical requirements. “All of our business logic and aggregation logic is handled within ClickHouse,” he says.
+
+![SmartNews User Story Issue 1232 (3).jpg](https://clickhouse.com/uploads/Smart_News_User_Story_Issue_1232_3_37c469ffcc.jpg)
+
+SmartNews's current ClickHouse-based pipeline: streaming, real-time, scalable.
+
+The new architecture is simpler, and the performance gains have been passed on to end users. “End to end, the fastest processing time is about 2 to 3 seconds,” Ryu says. “By connecting to Ads Manager, we can display real-time aggregation results to advertisers.”
+
+## Serving millions of queries per hour
+
+For each campaign, SmartNews’s Ads Manager dashboard lets advertisers see metrics like budget spend, impressions, click counts, click-through rates, and more. “We’re sending data here in real time, and the latest data is always available in ClickHouse,” Ryu says. 
+
+The system runs around 60,000 insert queries per hour, or roughly 1,000 per minute, representing about 20 GB of data. These continuous inserts ensure that advertisers can view the latest results with minimal lag.
+
+On the read side, the platform handles approximately 3 million SELECT queries per hour, or around 100 per second, across several thousand advertiser accounts. Most queries complete in under 100 milliseconds. “That’s quite fast,” Ryu adds.
+
+## Scaling from EC2 to Kubernetes
+
+When the team first rolled out ClickHouse, they deployed it on AWS EC2 using a basic four-node cluster with two shards and two replicas per shard. Each node had its own local table, with [distributed tables](https://clickhouse.com/docs/engines/table-engines/special/distributed) layered on top and [materialized views](https://clickhouse.com/docs/materialized-views) used for aggregation.
+
+![SmartNews User Story Issue 1232 (1).jpg](https://clickhouse.com/uploads/Smart_News_User_Story_Issue_1232_1_96884692ff.jpg)
+
+ClickHouse on EC2: 2 shards with 2 replicas each—simple and reliable.
+
+It was a straightforward, reliable setup. But as data volume grew, so did the need for something more flexible. “Recently,” Ryu says, “our infrastructure has been evolving rapidly.”
+
+To ensure what he calls “future scalability and flexibility,” the team migrated everything to Kubernetes. They’re still running with four nodes, but now use three shards with two replicas per shard, allowing for greater parallelism and better workload distribution.
+
+![SmartNews User Story Issue 1232.jpg](https://clickhouse.com/uploads/Smart_News_User_Story_Issue_1232_e8f91b21c4.jpg)
+
+ClickHouse on Kubernetes: 3 shards with 2 replicas each—more flexible and scalable.
+
+ClickHouse’s architecture made this kind of scaling simple. Each node still has its own local table, while distributed tables span the entire cluster. On top of that, the team performs aggregations and writes to separate summary tables to keep queries fast and efficient.
+
+## A clean, efficient pipeline
+
+When Ryu was a university student, he and his peers had a saying: “Talk is cheap, show me the code.” What that means, he says, is “rather than just talking about something, people want to see the actual code.” True to his word, he delivered at the Tokyo meetup, walking through the structure behind SmartNews’s real-time reporting pipeline.
+
+The architecture is intentionally simple. After Flink receives ad events (e.g. clicks, impressions), it writes them to ClickHouse in mini-batches, inserting “hundreds or even thousands of rows at a time.” These records land in a raw “ads action” table, with each row containing the log type (click or impression), campaign ID, timestamp, and other metadata.
+
+![SmartNews User Story Issue 1232 (2).jpg](https://clickhouse.com/uploads/Smart_News_User_Story_Issue_1232_2_d10d073dec.jpg)
+
+SmartNews’s ad event pipeline: Flink to ClickHouse with materialized views.
+
+From there, [materialized views](https://clickhouse.com/docs/materialized-views) take over. These views aggregate the raw rows into an “ads report” table that groups impressions and clicks by campaign and time window. The logic is simple: if the log type is “impression,” it increments the impression count; if it’s “click,” it increments the click count. The team uses ClickHouse’s [ReplicatedSummingMergeTree engine](https://clickhouse.com/docs/engines/table-engines/mergetree-family/replication) to sum up values efficiently during ingestion.
+
+By pre-aggregating data on the way in, the system avoids scanning massive volumes of raw events at query time. “This significantly reduces the amount of data,” Ryu explains. “That way, queries are much lighter when displaying on the dashboard.”
+
+It’s a clean, efficient pipeline. Raw events go in, real-time summaries come out. For most reporting needs, that simplicity is exactly the point.
+
+## Calculating ad reach in real time
+
+While the data pipeline is simple by nature, one of the most technically challenging parts is calculating ad reach—specifically, the number of unique users who’ve seen an ad.
+
+Unlike impressions or clicks, which can be summed in real time with straightforward logic, reach requires counting unique users across large datasets, often over dynamic and unpredictable time windows. “This is actually pretty challenging,” Ryu says, “because the time period isn’t fixed. If you want to calculate the distinct count for a specific period, it’s hard to pre-aggregate or compress the data in advance.”
+
+To solve this, SmartNews uses ClickHouse’s [uniqCombined function](https://clickhouse.com/docs/sql-reference/aggregate-functions/reference/uniqcombined), which implements a variant of the [HyperLogLog algorithm](https://en.wikipedia.org/wiki/HyperLogLog)—something Ryu describes as “almost like magic.” Instead of tracking every unique user ID, the system stores a compressed intermediate “reach state.” This state doesn’t carry much meaning on its own, but it enables fast, memory-efficient estimation of distinct counts when queried.
+
+The logic fits neatly into the broader architecture. As new ad events flow into the raw action table, materialized views use ClickHouse’s aggregate functions to update the reach state. When queried, the reporting tables return approximate distinct counts grouped by campaign and time window. This approach lets SmartNews balance performance and accuracy using tunable parameters built into the function.
+
+To test how well it worked, the team ran a series of accuracy experiments. For campaigns with up to 500 unique users, the counts were 100% accurate. At 40,000 users, the margin of error rose slightly to around 2%, and remained in that range even as counts scaled into the millions. The algorithm is designed to keep the error rate stable regardless of the total number of records, making it well-suited for estimating high-cardinality metrics like ad reach.
+
+Query performance also held up under scale. For a week’s worth of data, the team measured a P95 latency of 1.2 seconds. A full month of data returned in about 3 seconds, while three months took roughly 5 seconds. “This is fast enough,” Ryu says—especially for a real-time dashboard querying compressed estimates at scale.
+
+## Speed, scale, and simplicity
+
+SmartNews’s investment in ClickHouse has brought newfound speed, scale, and simplicity. Instead of a slow, batch-based reporting system, they’ve built a real-time analytics platform that delivers valuable performance insights to advertisers within seconds. 
+
+Core logic that once spanned multiple tools now runs entirely inside ClickHouse. Materialized views, efficient table engines, and approximate aggregates now power everything from high-volume dashboards to deeper campaign analytics.
+
+For Ryu and the team, the impact goes beyond faster queries. It’s about having a foundation flexible enough to grow with the business. ClickHouse gives them the confidence to keep innovating, expanding the platform, and supporting advertisers across Japan.
+
+---
+
+## Looking to scale your team’s data operations?
+
+Interested in seeing how ClickHouse works on your data? Get started with ClickHouse Cloud in minutes and receive $300 in free credits.
+
+[Sign up](https://console.clickhouse.cloud/signUp?loc=blog-cta-64-looking-to-scale-your-team-s-data-operations-sign-up&utm_blogctaid=64)
+
+---
 
 ---
 
