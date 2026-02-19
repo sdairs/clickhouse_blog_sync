@@ -1,6 +1,78 @@
 # ClickHouse Blogs
-Last updated: 2026-02-18 06:28:13 UTC
-Total blogs: 649
+Last updated: 2026-02-19 06:27:22 UTC
+Total blogs: 651
+
+---
+
+## pg_clickhouse is the fastest Postgres extension on ClickBench
+Published: 2026-02-18T11:46:55+00:00
+URL: https://clickhouse.com/blog/pg_clickhouse-fastest-analytics-for-postgres
+
+---
+title: "pg_clickhouse is the fastest Postgres extension on ClickBench"
+date: "2026-02-18T11:46:55.753Z"
+author: "David Wheeler"
+category: "Product"
+excerpt: "The pg_clickhouse extension minimizes the effort required to run typical analytics queries in Postgres by delegating execution to ClickHouse."
+---
+
+# pg_clickhouse is the fastest Postgres extension on ClickBench
+
+In December 2025, we launched [pg_clickhouse](https://github.com/ClickHouse/pg_clickhouse), a PostgreSQL extension to query ClickHouse directly from Postgres. Its primary goal is to minimize the application migration effort required to move analytics workloads from Postgres to ClickHouse. In designing pg_clickhouse, we made deliberate architectural choices to ensure that you can continue to use the familiar Postgres interface for both transactional and analytical queries, while harnessing the full power of ClickHouse for analytics.
+
+In this blog post, we examine those design choices and highlight their performance impact by benchmarking pg_clickhouse in [ClickBench](https://benchmark.clickhouse.com/).
+
+## Query pushdown vs. shoehorning analytics into Postgres
+
+We designed **pg_clickhouse** to minimize load on Postgres by offloading analytic execution as much as possible to ClickHouse. Instead of running heavy analytics inside Postgres and consuming its resources, it rewrites queries for execution in ClickHouse and only the results are returned, on a best-effort basis.
+
+This architecture contrasts with most analytic extensions that embed columnar storage and analytic execution engines directly within Postgres. While those approaches can accelerate analytics, they still rely on Postgres resources and are ultimately constrained by a single shared node. As data volumes grow into the terabyte or tens-of-terabytes range, analytics workloads begin to compete with transactional workloads for the same system resources.
+
+By delegating execution to ClickHouse, pg_clickhouse enables independent scaling and avoids resource contention within Postgres. This model especially enhances aggregation-heavy queries that scan millions or billions of rows. In this context, effective **query pushdown** is the central challenge, not just for filtering, but for aggregation in particular.
+
+## pg_clickhouse is the fastest Postgres extension on ClickBench
+
+To evaluate the impact of these design choices, we recently added pg_clickhouse to ClickBench, a standard benchmark for analytical DBMS.
+
+As of the end of January, the results are in: ***pg_clickhouse is [the fastest PostgreSQL extension](https://benchmark.clickhouse.com/#system=+gkus|_b|pnc|saB&type=-&machine=-ca2l|6t|g4e|6ax|ae-l|6ale|g-l|3al&cluster_size=-&opensource=-&hardware=+c&tuned=+n&metric=combined&queries=-), outperforming all other Postgres analytics extensions, performing only slightly slower than native ClickHouse itself.*** Across all 42 ClickBench queries, on both ARM64 (c8g) and AMD64 (c6a) instances, performance closely tracks ClickHouse.
+
+![Screenshot comparing the ClickBench performance of pg_clickhouse to ClickHouse on both arm64 (c8g) and amd64 (c6a) servers.](https://clickhouse.com/uploads/clickbench_2026_02_02_c689143402.png)
+
+These results confirm that pg_clickhouse pushes down full query execution to ClickHouse. The only measurable overhead comes from rewriting queries, the network round-trip, and converting the results to Postgres. Postgres does not execute the analytical workload itself; it acts purely as a routing and result layer.
+
+## Comprehensive aggregate and expression pushdown
+
+ClickBench relies a relatively simple schema: a single denormalized table with no `JOIN`s. While this avoids join pushdown complexity, it highlights something equally important: *comprehensive aggregate and expression pushdown.*
+
+The benchmark exercises a broad range of operations that pg_clickhouse fully entrusts to ClickHouse, including:
+
+*   `COUNT()`, `SUM()`, `AVG()`, `COUNT(DISTINCT)`
+*   `MIN()`, `MAX()`
+*   `GROUP BY`
+*   `ORDER BY` (including `ORDER BY COUNT()`)
+*   `HAVING`
+*   `EXTRACT()`, `DATE_TRUNC`
+*   Date comparisons
+*   `LIKE`, `REGEXP_REPLACE()`
+*   `CASE WHEN`
+
+These represent only a subset of the aggregates, functions, and expressions currently supported. We continue to expand coverage, document supported patterns, and close remaining gaps, most recently in [yesterday's 0.1.4 release](https://github.com/ClickHouse/pg_clickhouse/releases/tag/v0.1.4).
+
+And we're not stopping here. Work is already underway to support more complex query shapes, including subqueries and [CTEs](https://www.postgresql.org/docs/current/queries-with.html). We'll share more on these improvements in the coming months.
+
+## Get Started
+
+To start using **pg_clickhouse**, you can try the open-source version through [this quickstart guide](https://github.com/ClickHouse/pg_clickhouse/blob/main/doc/tutorial.md). **pg_clickhouse** also comes included in our [managed Postgres service](https://clickhouse.com/cloud/postgres).
+
+---
+
+## Try Postgres managed by ClickHouse
+
+ClickHouse + Postgres has become the unified data stack for applications that scale. With Managed Postgres now available in ClickHouse Cloud, this stack is a day-1 decision.
+
+[Get access](https://clickhouse.com/cloud/postgres?loc=blog-cta-67-try-postgres-managed-by-clickhouse-get-access&utm_blogctaid=67)
+
+---
 
 ---
 
@@ -508,6 +580,82 @@ For Ryu and the team, the impact goes beyond faster queries. It’s about having
 Interested in seeing how ClickHouse works on your data? Get started with ClickHouse Cloud in minutes and receive $300 in free credits.
 
 [Sign up](https://console.clickhouse.cloud/signUp?loc=blog-cta-64-looking-to-scale-your-team-s-data-operations-sign-up&utm_blogctaid=64)
+
+---
+
+---
+
+## Trouble will find you: How Cloudflare uses ClickHouse to scale analytics at quadrillion-row scale
+Published: 2026-02-16T13:12:19+00:00
+URL: https://clickhouse.com/blog/cloudflare
+
+---
+title: "Trouble will find you: How Cloudflare uses ClickHouse to scale analytics at quadrillion-row scale"
+date: "2026-02-16T13:12:19.166Z"
+author: "ClickHouse"
+category: "User stories"
+excerpt: "“At Cloudflare, we’re always scaling. There’s always more trouble tomorrow. But we’ve designed our system around ClickHouse to be able to deal with that.”  Jamie Herre, Senior Director of Engineering"
+---
+
+# Trouble will find you: How Cloudflare uses ClickHouse to scale analytics at quadrillion-row scale
+
+For [Cloudflare](https://www.cloudflare.com/en-ca/)’s Jamie Herre, trouble is the engineer’s version of Murphy’s Law: whatever *can* go wrong *will* go wrong, and at scale it’s not a matter of *if* but *when*. A drive fails. A server goes down. A certificate expires. A link breaks. “If you carry a pager, you know what I’m talking about,” he says. “You can always assume something is broken somewhere.”
+
+When Jamie joined Cloudflare as Senior Director of Engineering in 2018, its events pipeline was already “by far” the biggest he’d ever seen. Seven years later, the company has grown to serve roughly one-fifth of the world’s websites. What once looked enormous now feels modest compared to the quadrillions of events Cloudflare processes daily.
+
+Scaling, Jamie argues, isn’t a milestone or a box to check. It’s a journey of constant adaptation: to more data, more complexity, more failure. Each new ceiling eventually becomes the floor for what comes next. “When we talk about scaling, it’s not a process that ends,” he says. “As you go up in scale, things are going to fail more frequently.”
+
+Trouble and scaling, in this sense, are two sides of the same coin. A sudden surge in traffic can look a lot like losing half your capacity to an outage, and vice versa. In both cases, the system is stretched beyond yesterday’s limits. The challenge for designers and engineers, Jamie says, isn’t to avoid that stress—that’s impossible—but to build infrastructure that bends without breaking, and keeps delivering answers in the face of inevitable failure.
+
+## What good trouble looks like
+
+To show what “bending without breaking” looks like in practice, Jamie demoed his team’s analytics system at an [August 2025 ClickHouse meetup](https://clickhouse.com/videos/meetupsf_august_2025_2) at Cloudflare’s office in San Francisco. 
+
+The first results showed the system’s scale. A single query scanned 96 trillion events in an hour and returned in less than two seconds, with a margin of error under one percent. Zooming out to a full day, the same query covered 1.61 quadrillion events—and still finished in less than two seconds. For Jamie, part of the fun was being able to say “quadrillion” out loud (“it’s a vanity thing,” he jokes) but his point was serious: even at volumes that, for many teams, would defy imagination, the system continued to respond instantly and accurately.
+
+Then came the stress test. What happens when trouble arrives not as a traffic surge, but as a loss of capacity? Jamie simulated disconnecting a major North American data center, and then all of North America at once. Errors spiked, as expected, but the queries kept returning results. Thanks to Cloudflare’s distributed, active-active design, with more than 300 data centers around the world, European clusters automatically picked up the load, and the results remained consistent within the same tight margin of error.
+
+Even when scaling the query window—from an hour to a day, a week, a month, and even a year—the system’s performance held steady. “No matter how much I ask it for, it will return results in less than two seconds,” Jamie says.
+
+The demo proved that Cloudflare’s analytics system is both resilient and responsive. It can withstand large-scale outages and changes in scale without collapsing, and return queries in seconds regardless of load, capacity, or volume. In other systems, maintaining that level of responsiveness at extreme scale would require complex coordination, aggressive tuning, and major architectural tradeoffs, but ClickHouse lets Cloudflare operate this way by design. The fundamental assumption may be that “something is always sub-optimal,” but that doesn’t prevent successful responses.
+
+“At Cloudflare, we’re always scaling,” Jamie says. “There’s always more trouble tomorrow. But we’ve designed our system around ClickHouse to be able to deal with that.”
+
+## Why ClickHouse works for Cloudflare
+
+“So what’s so great about ClickHouse?” Jamie asks. It turns out, quite a lot.
+
+Cloudflare has been running on open-source ClickHouse for nearly 10 years, making it one of the OLAP database’s earliest large-scale adopters. That long history has shaped how Jamie and his team think about resilience and performance at global scale.
+
+One “underrated feature,” according to Jamie, is the HTTP protocol. Cloudflare’s analytics clients interact with ClickHouse entirely over HTTP, which makes integration simple and universal. “There are all these tools and modes that you can leverage,” he says.
+
+He also highlights the “minimal coordination required.” Unlike systems that rely on constant Raft or Paxos negotiation, ClickHouse nodes don’t need heavy orchestration to keep working. “When I take away a third of the capacity, like we did in the demo, not that much goes wrong, because all of those nodes are still there,” he explains.
+
+That philosophy extends to what Jamie calls “soft clusters”—the ability to interrogate any node and choose dynamic combinations. “This gives us a lot of control and flexibility about how to find the nodes that are working and happy,” he says. There’s also what he calls “optional complexity,” or the ability to turn features on and off as needed. “We’ve tried to leverage the things that work well for our specific use case,” he adds.
+
+Even the SQL dialect has turned out to be a “surprising advantage.” It took some getting used to, but over time Jamie has come to value how expressive and efficient it is for the team’s workloads. “It’s really cool,” he says.
+
+Finally, Jamie emphasizes the value of ClickHouse’s open-source community and source code. For Cloudflare, being able to understand, contribute to, and rely on the database’s evolution has been valuable. “We’ve gotten a lot over the years by being part of this community,” he says.
+
+## Jamie’s advice—just do it!
+
+Jamie closed his talk with a reminder that scaling is never finished. The best time to prepare is right now. “It’s never too early, and it’s never too late,” he says. “You’ll never be done.”
+
+The important thing, he argues, is to think about scaling *before* trouble forces your hand. “Say your workload suddenly scales 10x or 100x—would it fail in a good way, or would it fail in a bad way? And then the inverse of that is, what if you lose nine-tenths of the capacity? Would it just keel over? Or would you still be able to use it successfully?”
+
+For Cloudflare, these aren’t hypotheticals. With quadrillions of events a day, hundreds of data centers around the world, and the omnipresent inevitability of failure, the company has to design for explosive growth and catastrophic loss at the same time. ClickHouse gives Jamie and his team the flexibility to handle either scenario without sacrificing speed or resilience.
+
+Your company may not operate at Cloudflare’s scale, but the same design principles apply whether you’re starting with gigabytes or scaling from terabytes to petabytes—the goal is simply to be ready when scale arrives.
+
+The lesson is universal. Trouble is guaranteed. The only question is whether you’ll be ready when it finds you.
+
+---
+
+## Ready to make your systems more resilient?
+
+Interested in seeing how ClickHouse works on your data? Get started with ClickHouse Cloud in minutes and receive $300 in free credits.
+
+[Sign up](https://console.clickhouse.cloud/signUp?loc=blog-cta-63-ready-to-make-your-systems-more-resilient-sign-up&utm_blogctaid=63)
 
 ---
 
