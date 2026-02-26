@@ -1,6 +1,618 @@
 # ClickHouse Blogs
-Last updated: 2026-02-25 06:28:58 UTC
-Total blogs: 654
+Last updated: 2026-02-26 06:25:49 UTC
+Total blogs: 657
+
+---
+
+## Clone massive tables instantly and experiment safely in ClickHouse
+Published: 2026-02-24T08:22:17+00:00
+URL: https://clickhouse.com/blog/table-cloning
+
+---
+title: "Clone massive tables instantly and experiment safely in ClickHouse"
+date: "2026-02-24T08:22:17.475Z"
+author: "Tom Schreiber"
+category: "Engineering"
+excerpt: "Learn how to clone massive tables in ClickHouse instantly, without copying a single byte. Discover how immutable data parts and part-level copy-on-write make safe experimentation and migrations effortless."
+---
+
+# Clone massive tables instantly and experiment safely in ClickHouse
+
+<style>
+div.w-full + p,
+span.relative + p {
+  text-align: center;
+  font-style: italic;
+}
+</style>
+
+
+> **TL;DR**<br/><br/>`CREATE TABLE staging CLONE AS prod;`<br/>→ creates an instant clone without copying a single byte.<br/><br/>It’s basically a Git fork for tables: identical at start, diverges on write (copy-on-write). Safe for destructive testing.
+
+
+
+## A safe way to experiment {#a_safe_way_to_experiment}
+
+You have a massive ClickHouse table in production.
+
+Now you want to test destructive changes in staging: deletes, updates, schema tweaks, maybe even aggressive optimizations.
+
+But you absolutely don’t want to risk touching the production data.
+
+Wouldn’t it be nice if you could simply create an **exact copy** of that massive table **instantly** and repeatably, and then test any destructive change you want? Without touching the production data at all. And **without copying a single byte**.
+
+In ClickHouse, you can.
+
+This is one of those features that feels like magic. But it’s actually a very clean consequence of how ClickHouse stores data.
+
+And although this feature is [documented](https://clickhouse.com/docs/sql-reference/statements/create/table#with-a-schema-and-data-cloned-from-another-table) in the ClickHouse documentation, it’s still surprisingly underused in practice.
+
+> In [ClickHouse Cloud](https://clickhouse.com/cloud), this pattern extends even further.  
+   Clone the production table and run tests on a [separate service with isolated compute resources](https://clickhouse.com/blog/introducing-warehouses-compute-compute-separation-in-clickhouse-cloud).  
+      
+In this post, we’ll take a closer look at how table cloning works under the hood, and why immutable data parts make it possible.
+
+**Prefer a quick walkthrough?**
+
+Mark recorded a short explanation of table cloning:  
+
+<iframe width="768" height="432" src="https://www.youtube.com/embed/y_9Q_Us-yhA" frameborder="0" allowfullscreen></iframe>
+
+<br/><br/>
+
+## Reminder: the immutable data part model {#reminder_the_immutable_data_part_model}
+
+Every insert into a ClickHouse table produces a new, self-contained, immutable [data part](https://clickhouse.com/docs/parts) on disk.
+
+To sketch this, we use the following orders table tracking the total revenue per customer:
+
+<pre><code type='click-ui' language='sql'>
+CREATE TABLE orders
+(
+    order_id UInt32,
+    customer String,
+    total UInt32
+)
+ENGINE = MergeTree
+ORDER BY order_id;
+</code></pre>
+
+For this insert into the orders table:
+
+<pre><code type='click-ui' language='sql'>
+INSERT INTO orders VALUES
+    (1001, 'Liam', 31000),
+    (1002, 'Ben',   7500),
+    (1003, 'Anna', 12000);
+</code></pre>
+
+ClickHouse creates a new part on disk:
+
+![](https://clickhouse.com/uploads/clone_tables_feb2026_image2_521b2b8d25.png)
+<br/>
+
+Under the hood, this part is a **directory** on disk that contains compressed **column files**, one per column in the table: order_id, customer, and total. Rows inside a part are physically sorted by the table’s sorting key, in this case, order_id.
+
+
+Data parts are fully self-contained. They include all metadata required to interpret their contents, without relying on a central catalog. Not shown in the diagram above, but parts contain additional metadata files, such as the sparse primary index, secondary data skipping indexes, column statistics, checksums, min-max indexes (if partitioning is used), and more.
+
+As new data arrives, ClickHouse never modifies existing parts in place. It always writes **new parts**.
+
+In the background, parts are [merged](https://clickhouse.com/docs/merges) into larger parts to control part counts and consolidate data, but even merges produce entirely **new parts**.
+
+*(This design also enables ClickHouse to achieve [very high insert throughput](https://clickhouse.com/docs/concepts/why-clickhouse-is-so-fast#storage-layer-concurrent-inserts-are-isolated-from-each-other): data can be written as independent parts without global synchronization, and [consolidated](https://clickhouse.com/docs/concepts/why-clickhouse-is-so-fast#storage-layer-merge-time-computation) later during background merges.)*
+
+Similarly, deleting rows…
+
+<pre><code type='click-ui' language='sql'>
+DELETE FROM orders WHERE order_id = 1001;
+</code></pre>
+
+…or updating rows…
+
+<pre><code type='click-ui' language='sql'>
+UPDATE orders
+SET total = 3600
+WHERE order_id = 36043;
+</code></pre>
+
+…is [implemented](https://clickhouse.com/blog/updates-in-clickhouse-2-sql-style-updates) by identifying the part containing the affected rows, writing a **new part** (or [part fragment](https://clickhouse.com/blog/updates-in-clickhouse-2-sql-style-updates#stage-3-patch-parts--updates-the-clickhouse-way)) with the changes applied, and then eventually removing the old part.
+
+This **strict immutability** is the architectural property that makes instant, zero-copy table cloning possible.
+
+## From immutable parts to instant clones {#from_immutable_parts_to_instant_clones}
+
+When you execute…
+
+<pre><code type='click-ui' language='sql'>
+CREATE TABLE staging CLONE AS production;
+</code></pre>
+
+…ClickHouse does **not** copy the production table’s data.
+
+### No data is copied
+
+Because data parts are immutable and never modified in place, their content can be safely shared.
+
+Instead of copying data, ClickHouse creates a corresponding part directory for the cloned table for each existing part of the source table. If the source table has 142 parts, the clone will also have 142 parts.
+
+The files inside the cloned table’s part directories are **hard-linked** to the corresponding files in the source table’s part directories (via [POSIX hard links](https://en.wikipedia.org/wiki/Hard_link) on local filesystems or via metadata indirection on object storage such as S3).
+
+This applies to all files inside the part directory, including column data files as well as metadata files such as the sparse primary index, secondary data skipping indexes, column statistics, checksums, and min-max indexes.
+
+*For clarity, the discussion below focuses on column files to explain the mechanics. In reality, the same hard-linking behavior applies to every file inside the part directory.*
+
+### The clone behaves exactly like the source
+
+At the moment of cloning, the new table has exactly the same number of data parts and the same column files and indexes per data part as the source table.
+
+The clone, therefore, behaves exactly like the original: queries, mutations, background merges, and storage layout all work in the same way. There is no “lightweight” or degraded mode. The clone is a full-fledged table from the very beginning.
+
+> If you’re familiar with Git, this is essentially a fork: the cloned table starts identical to the original and diverges only when you modify it.
+
+### Safe sharing through immutability
+
+Sharing column files between the production table and the cloned table is safe because any modification (inserts, deletes, or updates) always produces new data parts containing new column files.
+
+**If you modify the cloned table**:  
+ClickHouse writes new parts for the clone only. The original production table continues referencing the unchanged parts.
+
+Conversely, **if the production table is modified**:  
+It also produces new parts containing new column files, while the previously referenced column files remain in place as long as data parts of the cloned table still reference them (as explained below, column files are only removed when no table references them anymore).
+
+### Copy-on-write and storage efficiency
+
+As a consequence, as long as neither table modifies the shared data, **the clone consumes virtually no additional disk space for the data itself**. The referenced corresponding data part directories of both tables simply share the same underlying column files.
+
+Only when data of one of the tables is modified are new parts written, and even then, only for the affected data.
+
+> **Part-level copy-on-write**  
+Even in a petabyte-scale table, updating a single row rewrites only the data part that contains it, **not the entire dataset**. All other parts remain shared and untouched.
+
+This is a fundamental property of the storage design: modifications are isolated at the part level, not the table level.
+
+Note that this **part-level copy-on-write is not something special that only the clone does**. It is the fundamental mechanism used for all data modifications in ClickHouse, including for the source table itself.
+
+As explained earlier, data modifications are implemented by identifying the part containing the affected rows, writing a new part with the changes applied, and eventually removing the old part.
+
+This *is* part-level copy-on-write. Cloning doesn’t introduce a new write path. It reuses the exact same storage mechanics that power all data modifications.
+
+### The source table is no longer special
+
+Because parts are shared independently, **the source table is no longer special after cloning**.  it is simply another table referencing the same column files. You can drop the source table, and the column files will remain on disk as long as the data parts of the cloned table still reference them. Underlying column files are only removed once no table (and no running query) references them anymore.
+
+### Instant cloning, independent of table size
+
+The cloning time is effectively independent of table size.
+
+Whether the source table contains millions of rows or trillions, even petabytes of data, **cloning is near-instantaneous**. 
+
+Technically, cloning time is proportional to the number of data parts (not the number of rows or bytes), since ClickHouse only creates corresponding part directories and hard links to existing files. Because these are lightweight filesystem operations, cloning remains extremely fast in practice, even for very large tables.
+
+To see how this works in practice, let’s walk through it visually.
+
+## Copy-on-write in action (visual walkthrough) {#copy_on_write_in_action}
+
+The diagrams below illustrate the part-level copy-on-write behavior described above.
+
+The first diagram sketches how the column files inside the data parts of a cloned table are hard-linked to the column files of the source table data parts.
+
+![](https://clickhouse.com/uploads/clone_tables_feb2026_image3_d323c0323d.png)
+<br/>
+
+*For simplicity, the diagram highlights only the column files. In reality, a data part also contains metadata files such as the sparse primary index, secondary data skipping indexes, column statistics, checksums, and min-max indexes. The entire set of files inside the part directory is hard-linked.*
+
+And when the cloned table is updated…
+
+<pre><code type='click-ui' language='sql'>
+UPDATE cloned_orders
+SET total = 3600
+WHERE order_id = 36043;
+</code></pre>
+
+…a copy-on-write operation occurs:
+
+
+![](https://clickhouse.com/uploads/clone_tables_feb2026_image4_0b8375336b.png)
+<br/>
+
+As explained earlier, this rewrite happens at the **part level**: only the data part containing the affected row is replaced. All other parts remain shared and untouched.
+
+The affected data part in the cloned table is rewritten as a new physical part containing the updated rows. The cloned table now references this newly written part directory instead of its previous directory, whose column files were hard-linked to the source. 
+
+The cloned table’s original part directory, containing hard links to the source part’s column files, is removed (because it is replaced with the newly written part).
+
+The original production table continues to reference its unchanged part directory.
+
+Since the original table still references its unchanged part directory (whose column files were hard-linked from the clone’s previous part directory), the underlying files remain on disk.
+
+Column files are only removed once no table depends on them anymore.
+
+This is the core mechanism behind table cloning in ClickHouse.
+
+Immutability makes sharing safe. Part-level copy-on-write guarantees isolation **without rewriting entire tables**.
+
+Now that we’ve seen how it works under the hood, let’s step back and look at what this enables in practice.
+
+## Putting it all together {#putting_it_all_together}
+
+Table cloning in ClickHouse is a surprisingly powerful and practical feature.
+
+Whenever you need an **exact copy** of a table
+
+* for staging environments  
+* schema or index experiments  
+* backfills  
+* migrations  
+* testing destructive changes
+
+You can create it **instantly**, without risking production data.
+
+The clone starts as an exact copy. It evolves independently. And as long as no data is modified, it consumes virtually **no additional storage**.
+
+Cloning feels like magic.
+
+It’s a natural consequence of how ClickHouse stores data: immutable parts that can be safely shared, combined with part-level copy-on-write semantics.
+
+Because parts are never modified in place, they can be reused. Because modifications always create new parts, isolation is guaranteed.
+
+The result is a feature that is simple, safe, storage-efficient, and effectively independent of table size.
+
+And in ClickHouse Cloud, cloned tables can optionally be queried from isolated compute services, so both your production data *and* compute remain untouched.
+
+---
+
+## Ready to get cloning?
+
+Interested in seeing how ClickHouse works on your data? Get started with ClickHouse Cloud in minutes and receive $300 in free credits.
+
+[Sign up](https://console.clickhouse.cloud/signUp?loc=blog-cta-78-ready-to-get-cloning-sign-up&utm_blogctaid=78)
+
+---
+
+---
+
+## How Luzmo uses ClickHouse Cloud to power fast end-user analytics
+Published: 2026-02-20T12:03:05+00:00
+URL: https://clickhouse.com/blog/luzmo
+
+---
+title: "How Luzmo uses ClickHouse Cloud to power fast end-user analytics"
+date: "2026-02-20T12:03:05.325Z"
+author: "ClickHouse"
+category: "User stories"
+excerpt: "“ClickHouse Cloud has been quite infectious inside our company. It’s extremely fast, extremely versatile, and extremely cost-efficient.”  Haroen Vermylen, Co-Founder and CTO"
+---
+
+# How Luzmo uses ClickHouse Cloud to power fast end-user analytics
+
+## Summary
+
+Luzmo uses ClickHouse Cloud to power fast, embedded analytics for data-driven companies with highly variable, customer-defined data. After years on open-source ClickHouse, Luzmo moved to ClickHouse Cloud to offload infrastructure management and focus on building analytics, not running clusters. ClickHouse now supports embedded analytics, query and plugin log analysis, and vector search, delivering high performance, flexibility, and cost-efficiency.
+
+
+[Luzmo](https://www.luzmo.com/) empowers data-heavy applications to deliver lightning-fast, accessible analytics to their users. By integrating powerful visualizations and AI-driven exploration directly into the application, Luzmo helps teams building data-centric software turn high-volume information into intuitive, actionable insights for their customers.
+
+Some companies use Luzmo to surface familiar SaaS metrics (e.g. campaign performance, ROI, usage trends) inside marketing or sales platforms. Others, like Belgium's largest telecom provider, Proximus, operate in very different domains, where location intelligence and large-scale operational data need to be visualized, explored, and monetized. In every case, analytics need to feel instant, even when the underlying data is complex.
+
+From the beginning, delivering that kind of experience meant choosing infrastructure that could keep up. We caught up with Luzmo's co-founder and CTO, Haroen Vermylen, to chat about why the team originally adopted ClickHouse, what prompted their move from open source to [ClickHouse Cloud](https://clickhouse.com/cloud), and how ClickHouse has since spread across the company, powering everything from end-user analytics to observability-related workloads and vector search.
+
+<iframe width="748" height="432" src="https://www.youtube.com/embed/dEwnRl1wH-Q" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe>
+
+## Why Luzmo originally chose ClickHouse
+
+Luzmo was founded (as Cumul.io) in Leuven, Belgium, in 2015\. Two years later, the team discovered ClickHouse. "It's been quite a ride," Haroen says with a smile.
+
+At the time, Luzmo needed a fast internal warehouse to store and analyze data for customers who preferred the platform to host it on their behalf. While Luzmo is federated (many customers keep their data in their own systems), others rely on it to store and query that data efficiently.
+
+Back then, much of the analytics world still equated serious performance with sprawling distributed systems and large clusters. Scaling typically meant spending heavily on infrastructure and taking on significant operational complexity.
+
+ClickHouse, open-sourced just a year earlier, offered a different set of tradeoffs. Rather than requiring massive infrastructure to unlock speed, it delivered major performance gains even at small scale, while still offering a clear path to grow as needed. "ClickHouse came out, and it worked on my laptop," Haroen recalls. "That was pretty amazing."
+
+The team evaluated a number of alternatives, but none offered ClickHouse's combination of performance, flexibility, and scalability. "We want to make things fast for our customers," Haroen says. "That's why we settled on ClickHouse."
+
+## From open-source to ClickHouse Cloud
+
+In late 2022, ClickHouse released [ClickHouse Cloud](https://clickhouse.com/cloud), giving teams a way to run ClickHouse without having to manage clusters themselves. Luzmo was one of the first customers to sign up.
+
+For Haroen and the team, the motivation was simple enough: they never set out to manage infrastructure. "We're in the business of building analytics," he says. "Running clusters isn't really our core business, so that was a task that we wanted to get rid of."
+
+Moving to a managed service allowed the team to offload day-to-day operational work and stay focused on building analytics and reporting for customers. It was a "best of both worlds" situation, with ClickHouse Cloud handling provisioning, upgrades, and ongoing maintenance, while still preserving the performance benefits and scalability that attracted Haroen and the team to ClickHouse in the first place.
+
+## One platform, many use cases
+
+Over the years, Luzmo's use of ClickHouse has evolved well beyond customer-facing analytics. As Haroen jokes, "ClickHouse has been quite infectious inside our company."
+
+For example, Luzmo now uses ClickHouse for observability-related workloads, storing query logs and plugin logs so both the team and its customers can understand how queries behave in production. That visibility helps customers identify slow queries, trace issues back to specific data sources, and make informed decisions about how their analytics are powered.
+
+More recently, ClickHouse has become part of Luzmo's work with [vector search](https://clickhouse.com/docs/knowledgebase/vector-search). Rather than introducing a separate system, the team uses ClickHouse to store embeddings, metadata, and related data, extending the platform into what Haroen describes as "non-obvious use cases."
+
+In practice, ClickHouse has become a kind of default. Once in place, it's often the simplest and most effective choice for the next problem, without adding unnecessary architectural sprawl.
+
+## Engineering for the unknown
+
+Luzmo's architecture comes with a few unique challenges. As a multi-tenant platform, the team often doesn't know what data it will receive until it arrives. That leads to tens of thousands of tables, highly variable schemas, and workloads that don't fit neatly into predefined models.
+
+On top of that, many customer queries span multiple systems. To manage that complexity, Luzmo has built its own query engine to optimize and coordinate those requests, ordering and grouping them to reduce load and improve efficiency. In some cases, large volumes of incoming queries can be consolidated into a single, more efficient operation, reducing pressure on ClickHouse while still delivering fast results.
+
+Some of these challenges have required custom engineering. But over time, Haroen says, improvements in ClickHouse itself have smoothed many of the rough edges. New features and data types continue to expand what's possible, even in environments where the data is unpredictable by nature.
+
+## "Fast, versatile, cost-efficient"
+
+Luzmo bills itself as "the fastest way to embed analytics in your product." For Haroen, that promise goes hand in hand with the role ClickHouse plays under the hood.
+
+Today, ClickHouse Cloud supports everything from end-user analytics to observability and emerging workloads like vector search. It gives Luzmo the performance it needs, the flexibility to take on new use cases, and the cost profile to scale without friction. And it does all of that while keeping analytics fast and effortless for end users.
+
+Asked to sum up Luzmo's ClickHouse experience in a few words, Haroen thinks for a moment before responding: "extremely fast, extremely versatile, extremely cost-efficient."
+
+
+---
+
+## Need speed and scalability from your database?
+
+Interested in seeing how ClickHouse works on your data? Get started with ClickHouse Cloud in minutes and receive $300 in free credits.
+
+[Sign up](https://console.clickhouse.cloud/signUp?loc=blog-cta-75-need-speed-and-scalability-from-your-database-sign-up&utm_blogctaid=75)
+
+---
+
+---
+
+## How to set up ClickHouse for agentic analytics
+Published: 2026-02-20T10:21:37+00:00
+URL: https://clickhouse.com/blog/how-to-set-up-clickhouse-for-agentic-analytics
+
+---
+title: "How to set up ClickHouse for agentic analytics"
+date: "2026-02-20T10:21:37.559Z"
+author: "Amy Chen"
+category: "Product"
+excerpt: "Agentic analytics has changed the warehouse contract. Stakeholders are skipping dashboards and asking chatbots directly: “What was net revenue in EMEA last quarter?”"
+---
+
+# How to set up ClickHouse for agentic analytics
+
+I started at ClickHouse in December, and I want to tell you about one of my favorite coworkers.
+
+They know what was discussed in Slack. They know which dbt model to query for warehouse adoption. They don’t judge me for asking basic questions like “what’s the difference between control plane and data plane?” 
+
+Honestly, they’ll even Google things for me when I’m too lazy.
+
+But they are not perfect.
+
+Sometimes, if they don’t have full context, they will confidently tell me something completely wrong.  They have a habit of confusing correlation with causation. Sometimes, they run very expensive queries unnecessarily. 
+
+Their name is [DWAINE (Data Warehouse AI Natural Expert)](https://clickhouse.com/blog/ai-first-data-warehouse) and they’re one of our internal AI agents.
+
+---
+
+## Join the webinar
+
+Join our data warehousing webinar series starting on February 25th on how to transform and serve up your data for data warehousing.
+
+
+[Register here](https://clickhouse.com/company/events/202602-AMER-data-warehousing-Level2?loc=blog-cta-72-join-the-webinar-register-here&utm_blogctaid=72)
+
+---
+
+## How AI has changed the interface of business analytics
+
+You probably know a DWAINE too. When an AI agent goes off the rails, it’s not always because the model is dumb.
+
+It could be because:
+
+* It queried raw data rather than curated data.  
+* It finds five definitions of “revenue.”  
+* It scanned 3TB because it can.   
+* It’s competing against other processes for resources and timed out.
+
+Conversational and [agentic analytics](https://clickhouse.com/blog/agent-facing-analytics) have changed the warehouse contract. Stakeholders are skipping dashboards and asking chatbots directly: “What was net revenue in EMEA last quarter?”
+
+If your warehouse wasn’t designed for these new experiences, your AI Agent will show the consequences. 
+
+## Data Warehouses now power agents
+
+What’s interesting is that many of the core tenets of data warehousing haven’t changed. What has changed is *why* they matter. 
+
+For dashboarding, stakeholders see answers to existing questions through dashboards that have been curated by a human. Someone who understands the context of the business, and has been setting up your dashboards for years.
+
+With AI agents, stakeholders get free rein to choose their own questions, and the warehouse answers directly. Poor warehouse design now can result in confident misinformation given to stakeholders who assume it is trustworthy.
+
+If your warehouse is going to power conversational analytics, you need to keep the core tenets: 
+
+* **Isolate workloads by compute resources, not by duplicating data.** AI queries, dashboards, ingestion, and transformations should not fight over the same machines.
+
+* **Expose only curated data marts to AI.** The model should see stable, canonical definitions. Do not expose raw tables and competing metric logic.
+
+* **Enforce guardrails early and at multiple levels.** Role-level permissions, resource limits, and schema discipline prevent PII leaks and runaway queries.
+
+* **Optimize for both low latency and accuracy.** No one wants to watch an LLM “think.” And no one wants it to be confidently wrong.
+
+I’m going to give a high-level overview of how you could set up ClickHouse with these guidelines in mind. 
+
+## Understanding the architecture
+
+Open source ClickHouse runs as a single system where storage and compute are tightly coupled. The same machines store your data and run your queries. In ClickHouse Cloud, those responsibilities are separate:
+
+* Storage lives in object storage.  
+* Compute runs on dedicated CPU and memory clusters, called **services**.
+
+Even though storage and compute are separated under the hood, it still feels like you’re working with one database.
+
+ClickHouse Cloud goes a step further still. Instead of having just one compute cluster, you can create multiple services that all access the same shared storage. This allows you to dedicate resources to specific workloads without having to duplicate data. A group of services is a **warehouse**.   
+
+![Architecture diagram](https://clickhouse.com/uploads/diagrams_for_Data_warehousing_Blog_1396_d4f42d12d8.jpg)
+
+In Data Warehousing, it’s important to have separate services for different workloads to ensure you have the right-sized machines for each workload, controlling both cost and performance. For instance, dashboards and ad hoc queries will likely need smaller compute resources than cleaning up a dataset where you’re iterating over massive data volumes. 
+
+For sensitive data, such as PII or separate customer datasets, you may want to use multiple warehouses to isolate it. You can still access that data from another warehouse via the [remote function](https://clickhouse.com/docs/sql-reference/table-functions/remote). But when starting out - we recommend keeping it simple, start out with one warehouse. 
+
+The ClickHouse Cloud warehouse design also supports two different types of services: **read/write** and **read-only.** While both can read the data, **only a read/write service can write to ClickHouse**. A read-only service can still export data externally through a table function but can’t change data in ClickHouse. One special concept in warehouses is the primary (also called parent) service. This is the first service you create for the warehouse and will define some key default settings, such as the release channel (how quickly you will be upgraded to ClickHouse versions) and region (all services in a warehouse share the same region), for all subsequent services. 
+
+### Set up your Warehouse & Services 
+
+To start out, create four services. You can create them either in the UI or via the API. 
+
+- Ingestion Service (Read/Write): For running ingestion pipelines via ClickPipes or self-managed.   
+- Transformation Service (Read/Write): For transformation workloads and pipelines  
+- LLM Service (Read Only): For dashboarding and LLMs   
+- Development Service (Read/Write): For developers to develop and sandbox with.
+
+![Set up your services](https://clickhouse.com/uploads/diagrams_for_Data_warehousing_Blog_1396_1_43fdcd2ac3.jpg)
+
+When creating the services, we recommend setting these settings: 
+
+* Auto-idling (on all services, including Primary)  
+* Auto-scaling  
+* Backups (for production Services)  
+* Turn on Gen AI for access to the latest AI features
+
+### Logical schema design
+
+Now that you have your warehouse, you will want to organize your data for ease of discovery for both humans and machines. 
+
+Structure your data into separate databases. ClickHouse supports a two-part namespace: <*database_name*>.<*object_name*>. 
+
+Pick a structure that makes discovery easier based on how your team(s) communicate. A common model is using dimensional or medallion architecture. As an example to guide us through this blog, we will use lightweight dimensional modeling.
+
+- Raw (Ingestion layer)  
+- Staging (Cleaned and standardized)  
+- Marts (Curated, aggregated, AI-ready)
+
+<pre><code type='click-ui' language='sql'>
+create database raw;
+create database staging;
+create database marts;
+</pre></code>
+
+For development, you can either create a sandbox database for developers to share or a database per developer. Shared is great for collaboration, especially if you’re iterating together over the same objects, while developer-specific allows isolation and prevents surprises. For this blog, we will follow through with a developer-specific database for sandboxing. 
+
+<pre><code type='click-ui' language='sql'>
+create database dev_sandbox_achen;
+</pre></code>
+
+## Access control
+
+Since all the databases you just created are accessible to all the services you created, you’ll need to set up access controls to implement guardrails.
+
+### Create roles and grant access
+
+Create roles to group together different permissions, such as table access. We recommend starting out with at least: 
+
+- Developer (able to read from Raw and create/modify in Staging & Marts databases)  
+- LLM (able to query only the Marts database tables and views)  
+- *(optional)* Service_Role (similar to Developer, for automated processes like orchestration)
+
+Here is some sample SQL to get you started:
+
+<pre><code type='click-ui' language='sql'>
+/* Developer Role Creation & Permissioning */
+create role if not exists developer_role;
+grant select on raw.* to developer_role;
+grant select, insert, alter, create, drop on staging.* to developer_role;
+grant select, insert, alter, create, drop on marts.* to developer_role;
+grant create temporary table on *.* to developer_role;
+
+/* LLM  Role Creation & Permissioning */
+create role if not exists llm_role;
+grant select on marts.* to llm_role;
+</pre></code>
+
+### Create Users
+
+Now that you have the roles, you can create users for the databases. *Please note that user management for the ClickHouse Cloud console is separate to user management within the database itself.*
+
+<pre><code type='click-ui' language='sql'>
+/* Developer User Creation & Permissioning */
+create user if not exists amy
+identified with sha256_password by 'Strong_dev_password___1';
+grant developer_role to amy;
+alter user amy default role developer_role;
+grant select, insert, alter, create, drop on dev_sandbox_achen.* to amy;
+
+/* LLM User Creation & Permissioning */
+create user if not exists dwaine_service_user
+identified with sha256_password by 'Strong_llm_password__2';
+grant llm_role to dwaine_service_user;
+alter user dwaine_service_user default role llm_role;
+</pre></code>
+
+### Define resource allocation
+
+Now, you don’t want your LLM to run wild with a query that is incorrect or taking more resources than desired. To prevent this, apply resource allocations on the role you are giving to your LLM user as guardrails.
+
+<pre><code type='click-ui' language='sql'>
+/* Introduces some resource limitations to LLM */
+alter role llm_role
+settings
+    readonly = 1, /*no mutations*/
+    max_execution_time = 30, /*kill long running queries */ 
+    max_memory_usage = 2000000000, /* limits high memory consumption*/
+    max_rows_to_read = 100000000, /* limit full scans */
+    max_bytes_to_read = 5000000000, /* prevents giant table scans*/
+    max_threads = 4; /* manages CPU explosion */
+</pre></code>
+
+There’s a variety of [settings](https://clickhouse.com/docs/operations/settings/query-complexity) you can implement in order to set boundaries on the user, role, session, and query level.
+
+Now that we have the infrastructure up and ready to start, you can jump into the more standard ETL process of ingestion and transformation. 
+
+## Ingest data
+
+There are a variety of ways you can pull data into ClickHouse. The most popular ways are:
+
+- [**ClickPipes**](https://clickhouse.com/docs/integrations/clickpipes): managed continuous ingestion   
+- [**Table Functions**](https://clickhouse.com/docs/sql-reference/table-functions)**:** With 80+ table functions like `s3()` or `postgresql()`, you can access many data sources for either batch or stream ingestion. With just one SQL statement, you can query directly from external sources (no need to create an external table, set up separate permissions to object store, etc).   
+- [**Data Catalog integrations**:](https://clickhouse.com/docs/use-cases/data-lake) If you’re on ClickHouse version 25.10+, you can connect to your open table format data catalog. You can configure it via the UI (via Data Sources) or via SQL. This will give you access to your external iceberg/delta tables just as you would a regular ClickHouse database. 
+
+![ClickPipes data sources](https://clickhouse.com/uploads/image2_70ba1b5802.png)
+
+Everything can be set up via the ClickHouse Cloud console or by orchestrating the SQL externally (for table functions). Ingest that data into the Raw database so it’s ready for processing. 
+
+### Designing the transformation and consumption layers
+
+After you have ingested your data into the raw database, staging and marts is where the fun begins. This is where you will transform your data and create the serving layer, consumable for the AI Agent. This often means:
+
+Staging (Transformation)
+
+* Deduplicate  
+* Normalize types  
+* Enforce ordering and define primary keys  
+* Use incremental materialized views to process new data as it lands and build real-time pipelines.
+
+Marts (Consumption):
+
+* Curate canonical metrics  
+* Pre-aggregate expensive joins  
+* Remove ambiguity  
+* Flatten schemas  
+* Use Refreshable materialized views for recomputing the full result and guarantee consistency for AI
+
+Now there is, of course, much more we can dig into this topic here, including optimizing your queries and how to provide context to your AI Agent about your specific business logic with Skills and documentation. But to keep this short and sweet, look out for a follow-up. 
+
+---
+
+## Join the webinar
+
+Join our data warehousing webinar series starting on February 25th on how to transform and serve up your data for data warehousing.
+
+[Register here](https://clickhouse.com/company/events/202602-AMER-data-warehousing-Level2?loc=blog-cta-73-join-the-webinar-register-here&utm_blogctaid=73)
+
+---
+
+## Finally: Invite the AI in
+
+After setting up your services, defining roles, enforcing guardrails, and building clean staging and marts layers, it’s time to let the AI agent in.
+
+Connect your agent via the [Agentic Data Stack](https://clickhouse.com/ai), MCP, or your own client, and use your read-only LLM credentials.
+
+Now your stakeholders can start to ask questions like: 
+
+* “Who were our 50 most active users this quarter?”  
+* “Show me retention curves for paid vs organic over the last six months.  
+*  “Why did revenue dip last week?”
+
+Remember, an AI-ready warehouse isn’t just about chucking a chatbot on top of your warehouse. It’s about meeting the requirements of conversational analytics with the core tenets of data warehousing. 
 
 ---
 
