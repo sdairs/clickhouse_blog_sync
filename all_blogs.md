@@ -1,6 +1,397 @@
 # ClickHouse Blogs
-Last updated: 2026-03-02 06:24:23 UTC
-Total blogs: 659
+Last updated: 2026-03-03 06:21:18 UTC
+Total blogs: 661
+
+---
+
+## ClickHouse.Driver 1.0.0: The Official .NET Client Hits Stable
+Published: 2026-03-02T12:02:31+00:00
+URL: https://clickhouse.com/blog/clickhouse-driver-1_0_0-official-dotnet-client
+
+---
+title: "ClickHouse.Driver 1.0.0: The Official .NET Client Hits Stable"
+date: "2026-03-02T12:02:31.751Z"
+category: "Product"
+excerpt: "We are proud to announce the release of ClickHouse.Driver 1.0.0, the first stable release of the official .NET client for ClickHouse."
+---
+
+# ClickHouse.Driver 1.0.0: The Official .NET Client Hits Stable
+
+<style>
+div.w-full + p,
+span.relative + p {
+  text-align: center;
+  font-style: italic;
+}
+</style>
+
+We are proud to announce the release of ClickHouse.Driver 1.0.0, the first stable release of the official .NET client for ClickHouse. This has been a ground-up effort: new API design, full type coverage, package signing, and OpenTelemetry integration, all built on top of the community project we adopted last year. Starting with 1.0.0, the public API is stable. The package follows semver, and we won't break your code between minor versions.
+
+This release also comes bundled with a big [documentation](https://clickhouse.com/docs/integrations/csharp) upgrade and 40+ [practical usage examples](https://github.com/ClickHouse/clickhouse-cs/tree/main/examples).
+
+## **Road to 1.0.0** {#road_to_100}
+
+The 1.0.0 release builds on two major pre-releases:
+
+**0.8.0** focused on packaging, configuration, and observability:
+
+* Added support for .NET 10
+* NuGet package signing and strong naming
+* `ClickHouseClientSettings` for structured configuration
+* Logging and diagnostics support via `ILoggerFactory`
+* `EnableDebugMode` for low-level network tracing
+* Improved OpenTelemetry/ActivitySource integration
+
+**0.9.0** focused on type support:
+
+* Added support for BFloat16, Time/Time64, Geometry types (LineString, MultiLineString, Polygon)
+* Reading Dynamic now supports all underlying types
+* Improved JSON and FixedString support
+
+## **The New ClickHouseClient API** {#the_new_clickhouseclient_api}
+
+1.0.0 introduces `ClickHouseClient`, a new primary API that replaces the [ADO.NET](http://ADO.NET) classes for most use cases. It's thread-safe, singleton-friendly, and a lot less ceremony than `ClickHouseConnection`.
+
+```c#
+using var client = new ClickHouseClient("Host=localhost");
+
+// DDL
+await client.ExecuteNonQueryAsync("CREATE TABLE logs (ts DateTime, msg String) ENGINE = MergeTree ORDER BY ts");
+
+// Binary bulk insert (replaces ClickHouseBulkCopy)
+await client.InsertBinaryAsync("logs", ["ts", "msg"], rows); // rows: IEnumerable<object[]>
+
+// Query
+var parameters = new ClickHouseParameterCollection();
+parameters.AddParameter("since", DateTime.UtcNow.AddDays(-7));
+using var reader = await client.ExecuteReaderAsync("SELECT * FROM logs WHERE ts > {since:DateTime}", parameters);
+
+// Scalar
+var count = await client.ExecuteScalarAsync("SELECT count() FROM logs");
+```
+
+**Key methods:**
+
+| Method | What it does |
+| ----- | ----- |
+| `ExecuteNonQueryAsync` | DDL/DML (CREATE, INSERT, ALTER, DROP) |
+| `ExecuteScalarAsync` | Returns a single result |
+| `ExecuteReaderAsync` | Stream results via `ClickHouseDataReader` |
+| `InsertBinaryAsync` | High-performance bulk insert |
+| `ExecuteRawResultAsync` | Raw result stream in arbitrary format (e.g. save Parquet directly to a file) |
+| `InsertRawStreamAsync` | Insert from stream (CSV, JSON, Parquet, etc.) |
+| `PingAsync` | Check server connectivity |
+| `CreateConnection()` | Get a `ClickHouseConnection` for ORM compatibility |
+
+Per-query settings (query ID, custom server settings, roles, bearer token) are passed via the new `QueryOptions` and `InsertOptions` classes. The [ADO.NET](http://ADO.NET) layer (`ClickHouseConnection` / `ClickHouseCommand`) remains fully supported for ORM integration with Dapper and linq2db.
+
+**Note:** `ClickHouseBulkCopy` is now deprecated. Use `client.InsertBinaryAsync(table, columns, rows)` instead.
+
+## **What Else is New in 1.0.0** {#what_else_is_new_in_100}
+
+### **Automatic parameter type extraction from SQL** {#automatic_parameter_type_extraction_from_sql}
+
+No more specifying the type twice. The driver now extracts parameter types directly from your SQL:
+
+```c#
+// Before: type specified in both the SQL and the parameter
+command.CommandText = "SELECT {dt:DateTime('Europe/Amsterdam')}";
+command.AddParameter("dt", "DateTime('Europe/Amsterdam')", value);
+
+// After: type extracted from SQL automatically
+command.CommandText = "SELECT {dt:DateTime('Europe/Amsterdam')}";
+command.AddParameter("dt", value);
+```
+
+### **JWT authentication, roles, custom HTTP headers** {#jwt_authentication_roles_custom_http_headers}
+
+JWT authentication, ClickHouse roles, and custom HTTP headers are now supported at the client level, with per-query overrides via `QueryOptions`. Check out the examples on GitHub: [JWT example](https://github.com/ClickHouse/clickhouse-cs/blob/main/examples/Core/Auth_001_JwtAuthentication.cs), [roles example](https://github.com/ClickHouse/clickhouse-cs/blob/main/examples/Advanced/Advanced_006_Roles.cs), and [custom headers example](https://github.com/ClickHouse/clickhouse-cs/blob/main/examples/Advanced/Advanced_007_CustomHeaders.cs).
+
+### **POCO serialization for JSON columns** {#poco_serialization_for_json_columns}
+
+Write plain C# objects directly to typed JSON columns. Properties are serialized using the column's type hints, with automatic inference for unhinted properties:
+
+```c#
+client.RegisterJsonSerializationType<UserEvent>();
+
+await client.InsertBinaryAsync("events", ["data"], rows);
+```
+
+Control serialization using attributes: use `[ClickHouseJsonPath("custom.path")]` for custom paths and `[ClickHouseJsonIgnore]` to exclude properties. See the [JSON type example](https://github.com/ClickHouse/clickhouse-cs/blob/main/examples/DataTypes/DataTypes_005_JsonType.cs).
+
+### **Mid-stream exception detection** {#mid_stream_exception_detection}
+
+ClickHouse 25.11+ can signal exceptions mid-stream via the `X-ClickHouse-Exception-Tag` header. The driver now detects these and throws a proper `ClickHouseServerException` with the error message, instead of a generic `EndOfStreamException`.
+
+### **QBit vector type** {#qbit_vector_type}
+
+QBit stores vectors in a compact transposed binary format; quantization granularity is chosen at query time rather than at insert time, letting you trade precision for speed without re-ingesting data. See the [QBit similarity search example](https://github.com/ClickHouse/clickhouse-cs/blob/main/examples/DataTypes/Vector_001_QBitSimilaritySearch.cs).
+
+### **Query ID auto-generation** {#query_id_auto_generation}
+
+Every query now gets a unique ID automatically when one isn't explicitly set, making it easier to trace queries in server logs.
+
+### **Additional improvements** {#additional_improvements}
+
+* **Binary data in String/FixedString columns** — write `byte[]`, `ReadOnlyMemory<byte>`, or `Stream`; read back with the `ReadStringsAsByteArrays` setting.
+* Full support for Dynamic type binary writing.
+* **`AddParameter()` convenience method** on `ClickHouseParameterCollection`.
+
+## **Breaking Changes** {#breaking_changes}
+
+1.0.0 includes breaking changes to clean up the API surface. Here's a summary:
+
+**Dropped .NET Framework / .NET Standard.** The library now targets `net6.0`, `net8.0`, `net9.0`, and `net10.0` only. If you're on .NET Framework, stay on the previous version or migrate to .NET 6.0+.
+
+**DateTime behavior changed for columns without explicit timezone.** Columns like `DateTime` (without a timezone parameter) now return `DateTime` with `Kind=Unspecified`, preserving the stored wall-clock time exactly. Writing also changed: `DateTime.Kind` is now respected. `Utc` and `Local` values maintain their instant, while `Unspecified` values are treated as wall-clock time.
+
+*Migration:* Use explicit timezones in column definitions (`DateTime('UTC')`) or apply timezones after reading.
+
+**Removed `UseServerTimezone`.** No longer needed since timezone-less columns return `Unspecified` values. `ServerTimezone` moved from `ClickHouseConnection` to `ClickHouseCommand` (extracted from response headers).
+
+**JSON write mode default changed from Binary to String.** JSON data is now serialized via `System.Text.Json` and parsed server-side. This removes the need for the client to parse JSON structure into binary column format before sending. The server handles parsing directly from the JSON string. Binary writing now only works with POCOs.
+
+*Migration:* JSON string or JsonNode writing still works, but the JSON string will be parsed on the server instead of the client. This could lead to subtle changes in paths without type hints, e.g., values previously parsed as Int32 may be parsed as Int64.
+
+**Other changes:**
+
+* Removed feature discovery query from `OpenAsync` (no more `SELECT version()` on connect)
+* Several helper/extension methods made internal
+* See the full [release notes](https://github.com/ClickHouse/clickhouse-cs/blob/main/RELEASENOTES.md) for details and migration guidance
+
+## **Getting Started** {#getting_started}
+
+Install via NuGet:
+
+```shell
+dotnet add package ClickHouse.Driver
+```
+
+Quick start:
+
+```c#
+using ClickHouse.Driver;
+
+using var client = new ClickHouseClient("Host=localhost;Port=8123");
+
+// Create a table
+await client.ExecuteNonQueryAsync("""
+    CREATE TABLE IF NOT EXISTS events (
+        timestamp DateTime('UTC'),
+        event_type String,
+        payload JSON
+    ) ENGINE = MergeTree ORDER BY timestamp
+    """);
+
+// Insert data
+var rows = new List<object[]>
+{
+	    ([DateTime.UtcNow, "click", """{"page": "/home"}"""]),
+	    ([DateTime.UtcNow, "view", """{"page": "/about"}"""]),
+};
+await client.InsertBinaryAsync("events", ["timestamp", "event_type", "payload"], rows);
+
+// Query
+using var reader = await client.ExecuteReaderAsync("SELECT * FROM events");
+while (reader.Read())
+{
+    Console.WriteLine($"{reader.GetDateTime(0)} | {reader.GetString(1)} | {reader.GetString(2)}");
+}
+```
+
+## **Links** {#links}
+
+* **Documentation:** [clickhouse.com/docs/integrations/csharp](https://clickhouse.com/docs/integrations/csharp)
+* **GitHub:** [github.com/ClickHouse/clickhouse-cs](https://github.com/ClickHouse/clickhouse-cs)
+* **Usage examples:** [github.com/ClickHouse/clickhouse-cs/tree/main/examples](https://github.com/ClickHouse/clickhouse-cs/tree/main/examples)
+* **.NET Demo App**: [https://github.com/ClickHouse/dotnet-demo-app](https://github.com/ClickHouse/dotnet-demo-app)
+* **NuGet:** [nuget.org/packages/ClickHouse.Driver](https://www.nuget.org/packages/ClickHouse.Driver)
+
+We'd love your feedback! [Open an issue](https://github.com/ClickHouse/clickhouse-cs/issues) or find us on [ClickHouse Community Slack](https://clickhouse.com/slack).
+
+
+---
+
+## Get started today
+
+Interested in seeing how ClickHouse works on your data? Get started with ClickHouse Cloud in minutes and receive $300 in free credits.
+
+[Sign up](https://console.clickhouse.cloud/signUp?loc=blog-cta-86-get-started-today-sign-up&utm_blogctaid=86)
+
+---
+
+---
+
+## Faster OpenTelemetry migrations to ClickStack with Bindplane
+Published: 2026-02-26T13:14:55+00:00
+URL: https://clickhouse.com/blog/bindplane-faster-otel-migrations-to-clickstack
+
+---
+title: "Faster OpenTelemetry migrations to ClickStack with Bindplane"
+date: "2026-02-26T13:14:55.331Z"
+category: "Community"
+excerpt: "Already running telemetry pipelines? Learn how to add ClickStack alongside your existing observability backend using Bindplane — no   rip-and-replace required. One config change rolls out to your entire OpenTelemetry Collector fleet, so you can validate a"
+---
+
+# Faster OpenTelemetry migrations to ClickStack with Bindplane
+
+<style>
+div.w-full + p,
+span.relative + p {
+  text-align: center;
+  font-style: italic;
+}
+</style>
+
+Many teams are looking to consolidate their observability backend and avoid the fragmentation of separate stores for logs, metrics, and traces. But migrations aren’t easy, and no one wants to run blind while they evaluate and move to a new platform. With OpenTelemetry and Bindplane, you can easily make the switch to ClickStack without impacting your existing stack.
+
+In our [previous post](https://clickhouse.com/blog/bindplane-clickstack-operating-opentelemetry-collectors-at-scale), we introduced the Bindplane \+ ClickStack integration and how it solves the operational challenge of running OpenTelemetry Collectors at scale. That post covered what Bindplane and ClickStack are, and why they work well together. This post picks up where that one left off.
+
+Here, we're going to get practical. If you already have telemetry pipelines running — shipping logs to Elasticsearch, metrics to Datadog, traces to Splunk — this post walks through how to add ClickStack alongside those existing destinations using Bindplane. No rip-and-replace required. You can start routing data to ClickStack today, evaluate it against what you're already using, and migrate at your own pace.
+
+We'll cover three things: adding ClickStack as an additional destination to an existing pipeline, using routing logic to control what data goes where, and using Bindplane's processor capabilities to format and enrich data before it reaches ClickStack.
+
+## Why migrate to ClickStack? {#why-migrate-to-clickstack}
+
+Most teams don't run a single observability backend. They've accumulated tools over time: one platform for logs, another for metrics, maybe a third for traces. Each comes with its own agents, its own data formats, and its own bill. The result is increased operational overhead from managing multiple collector fleets, and rising costs that scale unpredictably with data volume.
+
+ClickStack consolidates logs, metrics, and traces into a single backend powered by ClickHouse. It's OpenTelemetry-native, which means it works with the telemetry you're already generating, no re-instrumentation required. And because ClickHouse's columnar architecture compresses observability data efficiently, teams typically see significant reductions in storage costs compared to platforms built on inverted indices or proprietary storage engines.
+
+But here's the thing: nobody wants to rip out their entire observability stack overnight. You need to run ClickStack alongside what you already have, prove the value, and transition gradually. That's exactly what Bindplane enables.
+
+## Prerequisites {#prerequisites}
+
+Before getting started, you'll need:
+
+* A running Bindplane instance (cloud or self-hosted) with at least one collector installed and reporting data. If you're new to Bindplane, check out our [Getting Started Guide.](https://docs.bindplane.com/)  
+* A ClickStack instance (cloud or self-hosted). Learn more about ClickStack [here](https://clickhouse.com/docs/use-cases/observability/clickstack).  
+* An existing telemetry pipeline in Bindplane sending data to your current observability backend. This is the pipeline you'll be adding ClickStack alongside.
+
+## Step 1: Add ClickStack as an additional destination {#step-1-add-clickstack-as-an-additional-destination}
+
+The simplest way to start evaluating ClickStack is to send a copy of the telemetry you're already collecting. Bindplane supports multiple destinations per configuration, so you can add ClickStack alongside your current backend, verify data is flowing correctly, then start shifting workloads.
+
+In Bindplane, open the configuration you want to modify and click "(+) Destination." Select **ClickStack** from the destination list. Bindplane has a native ClickStack destination type, so there's no need to configure a generic OTLP exporter manually.
+
+![](https://clickhouse.com/uploads/bindplane_feb2026_image11_330e20ba7d.png)
+
+
+
+![](https://clickhouse.com/uploads/bindplane_feb2026_image1_9488c49935.png)
+
+*The Bindplane destination selection screen showing the list of available destinations, with ClickStack highlighted*
+
+Configure the ClickStack destination with your instance's hostname, port, and API ingestion key. You can find your API ingestion key in ClickStack under Team Settings → API Keys. Select which telemetry types you want to send — logs, metrics, traces, or any combination.
+
+![](https://clickhouse.com/uploads/bindplane_feb2026_image9_539ca9dfc5.png)
+
+*The ClickStack destination configuration form in Bindplane, showing endpoint URL, authentication fields, and telemetry type selection*
+
+After saving the destination, you'll see it appear in the topology view, but it won't be receiving data yet. The new destination shows up disconnected from your pipeline, as in the screenshot below.
+
+![](https://clickhouse.com/uploads/bindplane_feb2026_image4_99fd38a1d2.png)
+
+*The Bindplane topology view showing the source pipeline connected to the original destination (e.g., Splunk HEC, showing active throughput), and the ClickStack destination sitting below it disconnected, showing 0 B/m and 100% reduction. This is the state immediately after adding the destination.*
+
+To start sending data to ClickStack, you need to connect it to your pipeline. Hover over the processor node on the source side of your pipeline and click the **\+** button that appears, then click the processor node on the ClickStack destination. This draws a line between the two, routing telemetry to that destination.
+
+![](https://clickhouse.com/uploads/bindplane_feb2026_image8_d29fd983b8.png)
+
+*The Bindplane configuration topology view showing sources on the left, processors in the middle, and two destinations on the right — the original destination and the newly added ClickStack destination*
+
+Roll out the updated configuration to your collectors. Once the rollout completes, telemetry will begin flowing to both destinations simultaneously. You can verify data is arriving in ClickStack by opening the ClickStack UI (HyperDX)  and searching for recent logs or traces.
+
+![](https://clickhouse.com/uploads/bindplane_feb2026_image3_7a7623bc1e.png)
+
+*ClickStack UI showing incoming telemetry data, such as the log explorer or trace view with recent data flowing in from the Bindplane pipeline.*
+
+This is a good opportunity to add processors that shape your data for ClickStack before rolling out. We'll cover that more in the blueprint section below, but even at this stage you can add destination-level processors on the ClickStack path to filter, enrich, or transform data independently of what gets sent to your other destination.
+
+![](https://clickhouse.com/uploads/bindplane_feb2026_image2_a888073968.png)
+
+*The Bindplane snapshot of logs flowing through the pipeline.*
+
+Click **Start Rollout** to deploy the updated configuration to your collector fleet. Bindplane handles the rollout safely across your fleet. You can use [progressive rollouts](https://docs.bindplane.com/feature-guides/progressive-rollouts) to deploy to a subset of collectors first and verify data is arriving in ClickStack before rolling out to everyone. Once the rollout completes, open the ClickStack UI  and confirm telemetry is arriving. You should see logs, metrics, or traces (depending on what your sources are collecting) populating in real time.
+
+At this point, you're running a dual-write setup. Every log, metric, and trace your collectors produce is being sent to both your existing backend and ClickStack. This is a safe way to validate ClickStack's performance, query speed, and compression without affecting your production observability workflows.
+
+## Step 2: Route specific data to ClickStack {#step-2-route-specific-data-to-clickstack}
+
+Running everything in parallel is a great starting point, but most teams don't want to send 100% of their data to every destination indefinitely. The next step in any migration is to start shifting specific workloads to ClickStack while keeping your existing platform running for everything else.
+
+Bindplane gives you fine-grained control over what goes where using [routing connectors](https://docs.bindplane.com/integrations/connectors) and [destination-level processors](https://docs.bindplane.com/how-to-guides/routing-telemetry). Here are two patterns that come up in most migrations.
+
+### Example: Migrate services one at a time {#example-migrate-services-one-at-a-time}
+
+Once you've comfortably validated ClickStack in parallel, the next step is to start shifting workloads off your legacy destination. The standard approach across the industry is to do this service by service or team by team, not all at once. Pick a service, validate its dashboards and alerts in ClickStack, then stop sending that service's data to the old platform. Rinse and repeat.
+
+Say you have a gateway that collects telemetry from multiple services, all going to Splunk. You want to migrate your application service's logs to ClickStack first because it's your highest-volume source and that team is ready to switch.
+
+Add a **Filter by Condition** processor on your Splunk destination, configured to **exclude** logs where the `service.name` attribute (or whichever resource attribute identifies the service) matches the one you're migrating. Those logs will stop going to Splunk but will continue flowing to ClickStack.
+
+![](https://clickhouse.com/uploads/bindplane_feb2026_image12_82693ace9a.png)
+
+*The Filter by Condition processor configuration showing the OTTL condition "severity_number < 13" with the action set to "Exclude" and telemetry type set to "Logs".*
+
+Once the team that owns that service has confirmed their logs are landing correctly in ClickStack, their dashboards work in the ClickStack UI, and their alerts are firing as expected, you repeat the process for the next service. Each time, add another exclusion on the Splunk side. When all services have been migrated, disconnect the Splunk destination entirely. Starting with lower-risk or non-production services first gives your team a chance to build confidence before migrating business-critical workloads.
+
+### Example: Cut legacy ingest costs while you migrate {#example-cut-legacy-ingest-costs-while-you-migrate}
+
+Migrating service by service takes time, and during that transition you may be paying for two platforms. A routing connector can help reduce the cost of running in parallel by limiting what your legacy platform ingests while ClickStack picks up the rest.
+
+A common pattern is to route WARN, ERROR, and FATAL logs to your existing destination, with a catch-all route that sends everything else to ClickStack. Your legacy platform keeps the high-severity logs that feed your alerting rules and on-call workflows. ClickStack gets the rest, giving your team full visibility into debug and info logs without the cost pressure.
+
+![](https://clickhouse.com/uploads/bindplane_feb2026_image10_3d1bad2a40.png)
+
+
+
+![](https://clickhouse.com/uploads/bindplane_feb2026_image5_58953549e8.png)
+
+
+
+![](https://clickhouse.com/uploads/bindplane_feb2026_image7_9e012479f6.png)
+
+*The Routing connector configuration showing two routes: "High-severity" with the OTTL expression attributes["severity_number"] >= 13, and "Everything-else" with no condition. The telemetry type is set to Logs.*
+
+As you rebuild alerts and dashboards in the ClickStack UI and gain confidence with each migrated service, you can update the routing connector to shift the high-severity logs to ClickStack too, eventually removing the legacy destination entirely.
+
+As the migration progresses, these two patterns cover most of what you'll need. Filters let you gradually peel sources off your legacy destination while ClickStack receives everything. The routing connector lets you make clean splits when you want each log going to exactly one place. Both approaches keep your existing stack operational throughout the process.
+
+## Step 3: Enrich and format data for ClickStack {#step-3-enrich-and-format-data-for-clickstack}
+
+Bindplane’s [blueprints](https://docs.bindplane.com/feature-guides/blueprints) come with pre-built configurations that automatically normalize log formats, extract structure, enrich records with resource attributes, and drop fields that increase storage cost without adding analytical value.
+
+> By turning unstructured logs into structured data before they reach ClickHouse, you unlock the full advantages of columnar storage. Structured columns compress far more efficiently and are scanned more selectively during queries. As demonstrated in benchmarks, this approach can [improve compression to up to 170](https://clickhouse.com/blog/log-compression-170x)x, delivering both lower storage costs and faster queries.
+
+Blueprints work alongside the routing described above, so each destination path through your pipeline can have its own formatting applied independently.
+
+We'll cover specific ClickStack blueprints in detail in an upcoming post.
+
+## Putting it all together {#putting-it-all-together}
+
+The overall arc is straightforward: start with parallel ingestion, shift services one at a time as your team validates each one in ClickStack, and eventually decommission the legacy destination. Most teams can get through the full migration in a matter of weeks, not months, and Bindplane handles the rollouts centrally so you're never hand-editing collector configs along the way.
+
+## What's next {#whats-next}
+
+Bindplane supports more than 130 sources and destinations out of the box, and ClickStack is a first-class integration. Whatever you're migrating from, Bindplane has a native integration.
+
+The observability landscape is shifting toward open standards and unified backends. ClickStack and Bindplane together make it possible to join that shift without disrupting the systems your team relies on today. Start with a single pipeline, send some data, and see what ClickStack can do.
+
+* **Get started with ClickStack:** [clickhouse.com/clickstack](https://clickhouse.com/clickstack)  
+* **Get started with Bindplane:** [app.bindplane.com](https://app.bindplane.com)  
+* **Bindplane \+ ClickStack docs:** [ClickStack integration guide](https://clickhouse.com/docs/use-cases/observability/clickstack/integration-partners/bindplane)  
+* **Part 1 of this series:** [Bindplane \+ ClickStack: Operating OpenTelemetry Collectors at Scale](https://clickhouse.com/blog/bindplane-clickstack-operating-opentelemetry-collectors-at-scale)
+
+
+---
+
+## Get started today
+
+Interested in seeing how ClickHouse works on your data? Get started with ClickHouse Cloud in minutes and receive $300 in free credits.
+
+[Sign up](https://console.clickhouse.cloud/signUp?loc=blog-cta-85-get-started-today-sign-up&utm_blogctaid=85)
+
+---
 
 ---
 
