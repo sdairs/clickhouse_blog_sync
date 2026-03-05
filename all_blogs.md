@@ -1,6 +1,167 @@
 # ClickHouse Blogs
-Last updated: 2026-03-04 06:19:46 UTC
-Total blogs: 663
+Last updated: 2026-03-05 06:21:31 UTC
+Total blogs: 707
+
+---
+
+## ClickStack APIs arrive in the ClickHouse Cloud OpenAPI
+Published: 2026-03-03T17:36:35+00:00
+URL: https://clickhouse.com/blog/clickstack-api
+
+---
+title: "ClickStack APIs arrive in the ClickHouse Cloud OpenAPI"
+date: "2026-03-03T17:36:35.849Z"
+category: "Product"
+excerpt: "ClickStack APIs arrive in the ClickHouse Cloud OpenAPI"
+---
+
+# ClickStack APIs arrive in the ClickHouse Cloud OpenAPI
+
+<style>
+div.w-full + p,
+span.relative + p {
+  text-align: center;
+  font-style: italic;
+}
+</style>
+
+As teams scale their observability with ClickStack across more services and environments, keeping configuration consistent becomes its own challenge. A dashboard built for one service needs to be replicated for the next. Alerts configured in development need to be recreated in staging and production. The more environments you operate, the more manual work is involved. And with it, the risk of drift, missed alerts, and inconsistency.
+
+With ClickStack resources now in the ClickHouse Cloud API, observability configuration can live in your deployment pipelines, version control, and infrastructure-as-code workflows. Dashboards follow a service from dev through staging to production. Alerts ship alongside the applications they monitor. Configuration is reviewed in pull requests and deployed through CI/CD.
+
+Together with capabilities like role-based access control on the roadmap, this lays the foundation for production-grade observability workflows with the same controls teams already apply to application code.
+
+[Explore the full API reference](https://clickhouse.com/docs/cloud/manage/api/swagger#tag/ClickStack)
+
+## **Getting started** {#getting_started}
+
+Getting started takes minutes if you already have a Managed ClickStack service and a ClickHouse Cloud API key.
+
+**Prerequisites:** a ClickHouse Cloud organization with a Managed ClickStack service, and an API key with Service Admin or Org Admin permissions.
+
+The full endpoint reference — including request and response schemas for all supported resources — is available in the [ClickStack API documentation](https://clickhouse.com/docs/use-cases/observability/clickstack/api-reference). The OpenAPI spec can also be [downloaded directly](https://api.clickhouse.cloud/v1) for SDK generation or to import into tools like [Postman](https://www.postman.com/) for interactive exploration.
+
+## **What you can do now** {#what_you_can_do_now}
+
+The API covers the core resources teams need to manage ClickStack programmatically:
+
+**Dashboards** can be created, read, updated, and deleted through the API, including chart configurations and dashboard-level filters. Dashboards built through the API render identically in the ClickStack UI, with the same layout and behavior you would get by building them interactively.
+
+**Alerts** can be defined as rules tied to dashboard tiles or saved searches with webhook delivery.
+
+**Sources** and **Webhooks** round out the supported resources — list your configured data sources and webhook destinations to retrieve the IDs that dashboard and alert configurations require, without manual lookups.
+
+This release enables the first wave of the config-as-code improvements. We are continuing to expand coverage — a Terraform provider for ClickStack is actively in development, and additional resource types are on the way.
+
+## **How it works** {#how_it_works}
+
+ClickStack endpoints live under the same base path as the rest of the ClickHouse Cloud API:
+
+```shell
+https://api.clickhouse.cloud/v1/organizations/{organizationId}/services/{serviceId}/clickstack/...
+```
+
+**If you are already using ClickHouse Cloud API keys, you can start making ClickStack API calls immediately — no separate credentials or token exchange required.** The only requirement is that the API key has Org Admin or Service Admin permissions. API keys scoped to particular services will have access to the ClickStack teams corresponding to those services, while Org Admin keys have access to all services.
+
+A dedicated "Manage ClickStack API" permission is assigned by default to Org Admin and Service Admin roles, with finer-grained access control planned for a future release.
+
+We also invested in making the API spec clean and predictable for tooling consumers. Inline schemas have been replaced with named types, number fields use `integer` rather than `number`, and validation errors return structured details rather than opaque 400 responses. These choices matter when generating SDKs, writing Terraform providers, or integrating with CI/CD tooling that consumes the OpenAPI spec directly.
+
+## **Examples** {#examples}
+
+Here are a few common examples to illustrate how the API works in practice.
+
+**List all dashboards for a ClickStack service:**
+
+<pre><code type='click-ui' language='bash'>
+curl -X GET \
+  'https://api.clickhouse.cloud/v1/organizations/{organizationId}/services/{serviceId}/clickstack/dashboards' \
+  --user '<keyId>:<keySecret>' \
+  -H 'Content-Type: application/json'
+</code></pre>
+
+**Create a dashboard with a request volume time series chart filtered by service name:**
+
+<pre><code type='click-ui' language='bash'>
+curl -X POST \
+  'https://api.clickhouse.cloud/v1/organizations/{organizationId}/services/{serviceId}/clickstack/dashboards' \
+  --user '<keyId>:<keySecret>' \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "name": "API Monitoring Dashboard",
+    "tiles": [
+      {
+        "x": 0,
+        "y": 0,
+        "w": 24,
+        "h": 12,
+        "name": "Request Volume",
+        "config": {
+          "displayType": "line",
+          "sourceId": "[sourceId]",
+          "asRatio": false,
+          "alignDateRangeToGranularity": true,
+          "fillNulls": true,
+          "select": [
+            {
+              "valueExpression": "",
+              "aggFn": "count",
+              "where": "ServiceName:\"api\"",
+              "whereLanguage": "lucene"
+            }
+          ]
+        }
+      }
+    ],
+    "tags": ["monitoring"]
+  }'
+</code></pre>
+
+**Create an alert on a dashboard chart with webhook notification to Slack:**
+
+<pre><code type='click-ui' language='bash'>
+curl -X POST \
+  'https://api.clickhouse.cloud/v1/organizations/{organizationId}/services/{serviceId}/clickstack/alerts' \
+  --user '<keyId>:<keySecret>' \
+  -H 'Content-Type: application/json' \
+  -d '{
+        "name": "Alert SREs when request rate is high",
+        "message": "API request rate exceeded expected volume",
+        "threshold": 1000,
+        "interval": "1m",
+        "thresholdType": "above",
+        "source": "tile",
+        "channel": {
+        	"type": "webhook",
+        	"webhookId": "[webhookId]",
+        	"webhookService": "slack_api",
+        	"slackChannelId": "#prod-api-alerts"
+        	},
+        "tileId": "[tileId]",
+        "dashboardId": "[dashboardId]"
+}'
+</code></pre>
+
+The response includes the created resource with its assigned `id`, which you can then use for updates. Validation errors return structured details so issues surface immediately rather than silently producing misconfigured resources.
+
+**Tip:** The OpenAPI spec is available for [download](https://api.clickhouse.cloud/v1) and works with the tooling you already use. Import it into [Postman](https://www.postman.com/) or [Insomnia](https://insomnia.rest/) to generate a ready-to-use collection, open it in the [Swagger Editor](https://editor.swagger.io/) to explore endpoints in your browser, or use it with VS Code extensions like [REST Client](https://marketplace.visualstudio.com/items?itemName=humao.rest-client) or [Thunder Client](https://marketplace.visualstudio.com/items?itemName=rangav.vscode-thunder-client) for a lightweight workflow without leaving your editor.
+
+## **What comes next** {#what_comes_next}
+
+The ClickStack API is the first of several capabilities focused on making ClickStack easier to integrate and operate at scale. A Terraform provider is in active development, finer-grained access control is on the roadmap, and we plan to expand the API surface with additional resources as the offering matures.
+
+We would love to hear what resources and workflows matter most to your team. Join the ClickHouse Slack and hop into the [#olly-clickstack channel](https://clickhouse.com/slack) to share feedback, ask questions, or help shape what comes next.
+
+
+---
+
+## Get started today with ClickStack
+
+Interested in seeing how ClickStack works for your observability data? Get started in minutes and receive $300 in free credits.
+
+[Sign up](https://console.clickhouse.cloud/signUp?loc=blog-cta-91-get-started-today-with-clickstack-sign-up&utm_blogctaid=91)
+
+---
 
 ---
 
@@ -545,6 +706,1428 @@ Or try the hosted demo at [AgentHouse](https://llm.clickhouse.com/) to chat with
 
 ---
 
+## AWS、Googleを経てClickHouseへ - ClickHouseが「AI時代のミッシングピース」だと確信した理由
+Published: 2026-02-26T04:22:24+00:00
+URL: https://clickhouse.com/blog/career-kitasako
+
+---
+title: "AWS、Googleを経てClickHouseへ - ClickHouseが「AI時代のミッシングピース」だと確信した理由"
+date: "2026-02-26T04:22:24.197Z"
+category: "Company and culture"
+excerpt: "AWS、Googleを経てClickHouseへ。日本のテックシーンをリードしてきた北迫が、新天地でのミッションを公開！AI Eraの勝敗を分ける「データの鮮度」と、ClickHouseがもたらすパラダイムシフトとは？立ち上げフェーズの熱量あふれる入社エントリーです。"
+---
+
+# AWS、Googleを経てClickHouseへ - ClickHouseが「AI時代のミッシングピース」だと確信した理由
+
+この度、ClickHouse株式会社に最高技術責任者 兼 技術統括本部長として入社いたしました、北迫です。
+
+私はこれまで20年以上にわたり、ITコンサルティングからクラウド普及の黎明期、そしてAIの社会実装まで、常にテクノロジーの最前線で日本のビジネスを支援してきました。AWSでのクラウド普及、AmazonでのAlexaエコシステム構築、そしてGoogle Cloudでの最先端インフラとAI戦略――。
+
+「最先端のテクノロジーを、いかに日本のビジネスの現場に浸透させ、真の価値につなげるか」
+
+この一貫したテーマを追い求めてきた私が、次なる挑戦の舞台として選んだのがClickHouseです。なぜ今、この「爆速データベース」が必要なのか。そして私がこのチームで成し遂げたいことは何か。入社にあたっての決意を綴らせていただきました。
+
+
+### 自己紹介：クラウドの変遷と共に歩んだ、技術とビジネスの24年
+2001年に日本ヒューレット・パッカード株式会社に入社し、通信メディアのお客様を中心に、システム提案から構築までのITコンサルタントおよび開発PMに従事。キャリアの初期から大規模なシステム実装の現場に深く関わってきました。
+転機となったのは、2012年にアマゾン ウェブ サービス ジャパン株式会社にSolutions Architectの初期メンバーとして参画したことです。日本におけるクラウド普及に奔走し、メディア・エンターテインメント技術部 部長としてチームを牽引しました。その後、アマゾンジャパン合同会社へ転籍し、Amazon Alexa / Echoの日本展開をリード。Solutions Architectとして、家電やオーディオ機器へのAlexa組み込みやネットサービスの対応など、広範なエコシステム構築を技術面から統括し、その後 技術本部 兼 ビジネス開発本部長を担当しました。
+2021年からはグーグル・クラウド・ジャパン合同会社にPrincipal Architectとして参画。Googleの最先端のインフラとデータ分析およびAIに関するテクノロジーを活用し、デジタルネイティブ企業やパブリックセクターの戦略案件をリードしてきました。一貫して大切にしてきたのは、最先端のテクノロジーをいかに日本のビジネスの現場に浸透させ、真の価値につなげるかという視点です。
+
+
+### なぜ今、ClickHouseなのか？AI Eraの勝敗を分ける「データの鮮度と即時性」
+クラウドの普及、さらに最先端のテクノロジーが身近になったことで、お客様のビジネススピードは飛躍的に向上しました。しかし、AI Eraの到来により、その速度はさらに次元を変えて増していくことを肌で実感しています。これに伴い、扱うデータは爆発的に増加する一方で、データの「鮮度」や「活用の即時性」がビジネスの勝敗を分ける決定的な要因になっています。
+Googleで世界最高峰のデータ処理技術に触れてきたからこそ、ミリ秒単位のレスポンスとペタバイト級のデータを自在に扱うClickHouseの圧倒的なパフォーマンスには、これまでの常識を覆す衝撃を受けました。これこそがAI時代のデータプラットフォームにおけるミッシングピース（欠けていた最後のパズル）だと確信し、参画を決意しました。
+
+
+### 最高技術責任者としての使命：リアルタイムアナリティクスの普及と、強固な技術支援体制の構築
+ClickHouse株式会社の最高技術責任者 兼 技術統括本部長として、私の役割は大きく2つあります。
+一つは、お客様のビジネスを加速するプラットフォームとして、ClickHouseという圧倒的なポテンシャルを持つリアルタイムアナリティクスデータストアを、技術の観点からしっかりとサポートする体制を築くことです。もう一つは、日本においてリアルタイムアナリティクスをより多くの方に普及させ、マーケットの開拓を行うことです。単なるツールの提供に留まらず、データの鮮度がビジネス価値に直結するというパラダイムシフトを、日本のエンジニアや意思決定者の皆様と共に推し進めていきます。
+
+
+### 描く未来：データ分析を「思考の速度」で答えが出る日常的な体験へ
+私が描く未来は、データ分析が「準備に時間をかける特別な作業」ではなく、「思考の速度で答えが出る日常的な体験」になる世界です。
+日本の多くの企業が、ClickHouseを通じてデータの真の力を解放し、AI Eraにおける競争力を手にすること。そして、日本発の高度な活用事例をグローバルへ発信していくこと。技術のプロフェッショナル集団として、日本のデータプラットフォームのあり方を再定義していくことが私の目標です。
+
+
+### 未来の仲間へ：0から1を創り出す、エキサイティングな物語を共に
+ビジネスやサービスの変革を起こすAI Eraの大きな波の中で、それを支える重要なデータプラットフォームであるClickHouseは、今まで実現が難しかったお客様の新しいサービスを可能にするポテンシャルを持っています。
+日本におけるClickHouse Japanの物語は、まだ始まったばかりです。0から1を作り上げるこのエキサイティングなフェーズで、新たな取り組みに高いモチベーションを持てるエンジニアの方と、ぜひ一緒に働きたいと考えています。私たちと一緒に、新しい時代のスタンダードを創り上げましょう！
+
+
+---
+
+## State of Geospatial in ClickHouse in March 2026
+Published: 2026-02-24T14:55:04+00:00
+URL: https://clickhouse.com/blog/state-of-geospatial-march-2026
+
+---
+title: "State of Geospatial in ClickHouse in March 2026"
+date: "2026-02-24T14:55:04.513Z"
+author: "Mark Needham"
+category: "Product"
+excerpt: "Everything you need to know about ClickHouse as a geospatial analytics engine: its type system, indexing grids, strengths, and limitations."
+---
+
+# State of Geospatial in ClickHouse in March 2026
+
+ClickHouse is best known as an analytics engine built for speed at scale, but over the past several years it has grown a surprisingly complete set of geospatial capabilities.
+
+In this post we're going to take a tour of where things stand today: the type system, the functions, the sharp edges, a look at where ClickHouse fits and where it does not.
+
+## A brief history {#a-brief-history}
+
+Geospatial support in ClickHouse has grown steadily over time rather than arriving all at once.
+
+ClickHouse uses a YY.MM versioning scheme - version 20.1 shipped in January 2020, 21.9 in September 2021, and so on. The earliest geospatial functions predate this scheme and appear under version 1.x in the function catalog.
+
+Those early functions were a handful of coordinate-distance functions: `greatCircleDistance` and eventually `geoDistance`. There were no geometry types - functions just took raw coordinate values as parameters.
+
+In 2020 (version 20.1), the grid-based indexing systems arrived: `geohashEncode`/`geohashDecode` and [H3](https://h3geo.org/) (Uber's hexagonal hierarchical grid) both landed in that release. [S2](https://s2geometry.io/) (Google's spherical geometry library) followed in 2021 (version 21.9). These cover a huge share of real-world spatial analytics use cases - binning observations into cells, aggregating by region at a chosen resolution, proximity lookups - and ClickHouse handles them extremely fast.
+
+`Point`, `Ring`, `Polygon`, and `MultiPolygon` arrived in v20.5 (May 2020), initially behind an experimental flag. They are custom names layered over ClickHouse's existing primitives - `Tuple` and `Array` - rather than a separate storage format. The experimental flag was removed in v23.5, making them production-ready. WKT parsing functions like `readWKTPolygon` and `svg` followed in v21.4. `LineString` came later still, added in v24.6.
+
+The most significant recent additions both landed in 2025. The `Geometry` type, introduced in v25.11, uses the [`Variant`](https://clickhouse.com/docs/en/sql-reference/data-types/variant) type and can hold any geometry subtype in a single column - points alongside polygons alongside linestrings - without splitting into separate columns or tables. WKB (Well-Known Binary) support arrived around the same time (v25.7–v25.12), enabling direct import from [PostGIS](https://postgis.net) and other GIS tools without a text parsing round-trip.
+
+If you want to trace this history yourself, you can use the `system.functions` table, which records which version each function was introduced in:
+
+<pre><code type='click-ui' language='sql'>
+SELECT
+    splitByChar('.', introduced_in)[1] AS major_version,
+    count(),
+    bar(count(), 0, 40, 40) AS chart
+FROM system.functions
+WHERE categories LIKE '%Geo%'
+GROUP BY major_version
+ORDER BY major_version ASC
+</code></pre>
+
+```shell
+┌─major_version─┬─count()─┬─chart───────────────────────────────────┐
+│ 1             │       5 │ █████                                   │
+│ 20            │      17 │ █████████████████                       │
+│ 21            │      39 │ ███████████████████████████████████████ │
+│ 22            │      23 │ ███████████████████████                 │
+│ 25            │      15 │ ███████████████                         │
+└───────────────┴─────────┴─────────────────────────────────────────┘
+```
+
+The big batch of functions in 2021 reflects the arrival of WKT parsing functions, S2 support, and additional H3 functions all within that release year.
+
+To see the full list with exact versions, [`sortableSemVer`](https://clickhouse.com/blog/semantic-versioning-udf) lets you sort version strings correctly (ClickHouse's built-in `version` type won't sort `20.1` before `21.4` lexicographically for example):
+
+<pre><code type='click-ui' language='sql'>
+CREATE FUNCTION sortableSemVer AS version ->
+    arrayMap(
+        x -> toUInt32OrZero(x),
+        splitByChar('.', extract(version, '(\d+(\.\d+)+)'))
+    );
+
+SELECT name, introduced_in
+FROM system.functions
+WHERE categories LIKE '%Geo%'
+ORDER BY sortableSemVer(introduced_in) ASC;
+</code></pre>
+
+There are more than 90 functions, so we won't list them all here. 
+
+## The type system {#the-type-system}
+
+As of the 26.1 release, ClickHouse has six [concrete geometry types](https://clickhouse.com/docs/en/sql-reference/data-types/geo). Each one is a named alias over a primitive type:
+
+| Type | Stored as | Description |
+|---|---|---|
+| `Point` | `Tuple(Float64, Float64)` | A single (x, y) coordinate |
+| `Ring` | `Array(Point)` | A closed polygon ring without holes |
+| `LineString` | `Array(Point)` | An open or closed polyline |
+| `MultiLineString` | `Array(LineString)` | Multiple lines |
+| `Polygon` | `Array(Ring)` | A polygon; first ring is the outer boundary, subsequent rings are holes |
+| `MultiPolygon` | `Array(Polygon)` | Multiple polygons |
+
+Because these are aliases over primitives, you can cast from the underlying primitive type to the named geo type using `::` syntax:
+
+<pre><code type='click-ui' language='sql'>
+SELECT
+    (51.5, -0.12) AS tuple, toTypeName(tuple),
+    tuple::Point AS point, toTypeName(point),
+    [(0,0),(1,1),(2,0)] AS arr, toTypeName(arr),
+    arr::LineString AS linestring, toTypeName(linestring); 
+</code></pre>
+
+```shell
+Row 1:
+──────
+tuple:                  (51.5,-0.12)
+toTypeName(tuple):      Tuple(Float64, Float64)
+point:                  (51.5,-0.12)
+toTypeName(point):      Point
+arr:                    [(0,0),(1,1),(2,0)]
+toTypeName(arr):        Array(Tuple(UInt8, UInt8))
+linestring:             [(0,0),(1,1),(2,0)]
+toTypeName(linestring): LineString
+```
+
+The geometry types themselves are order-agnostic - `Point` is just a `Tuple(Float64, Float64)` with no built-in notion of which value is longitude and which is latitude. However, ClickHouse's geo functions follow the **(longitude, latitude)** convention - x first, y second. This catches a lot of people who are used to the lat/lon convention from GPS or mapping APIs.
+
+You can create typed columns directly. For example, the following table has a `Point` column and a `Polygon` column:
+
+<pre><code type='click-ui' language='sql'>
+CREATE TABLE places (
+    name    String,
+    location Point,
+    boundary Polygon
+)
+ORDER BY name;
+</code></pre>
+
+### The `Geometry` type {#the-geometry-type}
+
+`Geometry` is a [`Variant`](https://clickhouse.com/docs/en/sql-reference/data-types/variant)`(Point, LineString, MultiLineString, Ring, Polygon, MultiPolygon)`. It can hold any of the above in a single column, which means you can store mixed-geometry data - points alongside polygons alongside linestrings - without splitting into separate columns or tables.
+
+<iframe width="768" height="432" src="https://www.youtube.com/embed/pO8PPAl2Dr0" frameborder="0" allowfullscreen></iframe>
+
+You can cast any concrete type to `Geometry` and extract it back using dot notation:
+
+<pre><code type='click-ui' language='sql'>
+SELECT
+    (51.5, -0.12)::Point AS point, toTypeName(point),
+    point::Geometry AS geom, toTypeName(geom),
+    geom.Point AS point2, toTypeName(point2)
+FORMAT Vertical;
+</code></pre>
+
+```shell
+Row 1:
+──────
+point:              (51.5,-0.12)
+toTypeName(point):  Point
+geom:               (51.5,-0.12)
+toTypeName(geom):   Geometry
+point2:             (51.5,-0.12)
+toTypeName(point2): Nullable(Point)
+```
+
+Dot notation returns `Nullable(T)` rather than `T` - because in a real table, a given row might hold a `Polygon` or `LineString` instead of a `Point`, in which case `geom.Point` would be `NULL`. If we need a plain `Point`, we can cast with `::Point` to strip the `Nullable`:
+
+<pre><code type='click-ui' language='sql'>
+SELECT
+    (51.5, -0.12)::Point AS point, toTypeName(point),
+    point::Geometry AS geom, toTypeName(geom),
+    geom.Point::Point AS point2, toTypeName(point2)
+FORMAT Vertical;
+</code></pre>
+
+```shell
+Row 1:
+──────
+point:              (51.5,-0.12)
+toTypeName(point):  Point
+geom:               (51.5,-0.12)
+toTypeName(geom):   Geometry
+point2:             (51.5,-0.12)
+toTypeName(point2): Point
+```
+
+Let's have a look at an example. The following table has a `Geometry` column:
+
+<pre><code type='click-ui' language='sql'>
+CREATE TABLE geo (
+    id UInt32, 
+    geom Geometry
+)
+ORDER BY id;
+</code></pre>
+
+We can ingest various geospatial values into the table using their underlying primitive representations - a tuple for a `Point`, an array of tuples for a `LineString`, an array of rings for a `Polygon`:
+
+<pre><code type='click-ui' language='sql'>
+-- a Point
+INSERT INTO geo VALUES (1, (51.5, -0.12));
+
+-- a LineString
+INSERT INTO geo VALUES (3, [(0,0),(1,1),(2,0)]);
+
+-- a Polygon
+INSERT INTO geo VALUES (2, [[(0,0),(1,0),(1,1),(0,1),(0,0)]]);
+</code></pre>
+
+Because `Geometry` is a [`Variant`](https://clickhouse.com/docs/sql-reference/data-types/variant), you can inspect and extract the underlying type at query time. [`variantType`](https://clickhouse.com/docs/sql-reference/data-types/variant) returns the concrete type of each row, and dot notation (e.g. `geom.Polygon`, `geom.LineString`) extracts the value as that specific subtype - returning an empty value if the row holds a different type:
+
+<pre><code type='click-ui' language='sql'>
+SELECT geom, toTypeName(geom), variantType(geom), 
+       geom.Polygon, geom.LineString, geom.Point
+FROM geo;
+</code></pre>
+
+```shell
+Row 1:
+──────
+geom:              [[(0,0),(1,0),(1,1),(0,1),(0,0)]]
+toTypeName(geom):  Geometry
+variantType(geom): Polygon
+geom.Polygon:      [[(0,0),(1,0),(1,1),(0,1),(0,0)]]
+geom.LineString:   []
+geom.Point:        ᴺᵁᴸᴸ
+
+Row 2:
+──────
+geom:              (51.5,-0.12)
+toTypeName(geom):  Geometry
+variantType(geom): Point
+geom.Polygon:      []
+geom.LineString:   []
+geom.Point:        (51.5,-0.12)
+
+Row 3:
+──────
+geom:              [(0,0),(1,1),(2,0)]
+toTypeName(geom):  Geometry
+variantType(geom): LineString
+geom.Polygon:      []
+geom.LineString:   [(0,0),(1,1),(2,0)]
+geom.Point:        ᴺᵁᴸᴸ
+```
+
+## Ingesting geospatial data via WKT {#ingesting-geospatial-data-via-wkt}
+
+[WKT (Well-Known Text)](https://en.wikipedia.org/wiki/Well-known_text_representation_of_geometry) is the standard text format for geometry, used by PostGIS, [QGIS](https://qgis.org), and most GIS tools.
+We can use the [`readWKT`](https://clickhouse.com/docs/sql-reference/functions/geo/geometry) function to parse WKT strings into `Geometry` values:
+
+<pre><code type='click-ui' language='sql'>
+SELECT readWKT('POINT(0.1 51.5)') AS geom, toTypeName(geom)
+UNION ALL
+SELECT readWKT('POLYGON((0 0,1 0,1 1,0 1,0 0))') AS geom, toTypeName(geom)
+UNION ALL
+SELECT readWKT('MULTIPOLYGON(((0 0,1 0,1 1,0 1,0 0)))') AS geom, toTypeName(geom);
+</code></pre>
+
+```shell
+┌─geom────────────────────────────────┬─toTypeName(geom)─┐
+│ (0.1,51.5)                          │ Geometry         │
+│ [[[(0,0),(1,0),(1,1),(0,1),(0,0)]]] │ Geometry         │
+│ [[(0,0),(1,0),(1,1),(0,1),(0,0)]]   │ Geometry         │
+└─────────────────────────────────────┴──────────────────┘
+```
+
+Alongside `readWKT`, there are also specific functions that return the concrete sub-type:
+
+<pre><code type='click-ui' language='sql'>
+SELECT readWKTPoint('POINT(0.1 51.5)') AS geom, toTypeName(geom)
+UNION ALL
+SELECT readWKTPolygon('POLYGON((0 0,1 0,1 1,0 1,0 0))') AS geom, toTypeName(geom)
+UNION ALL
+SELECT readWKTLineString('LINESTRING(0 0,1 1,2 0)') AS geom, toTypeName(geom)
+UNION ALL
+SELECT readWKTMultiPolygon('MULTIPOLYGON(((0 0,1 0,1 1,0 1,0 0)))') AS geom, 
+       toTypeName(geom)
+UNION ALL
+SELECT readWKTMultiLineString('MULTILINESTRING((0 0,1 1),(2 0,3 1))') AS geom, 
+    toTypeName(geom);
+</code></pre>
+
+```shell
+┌─geom────────────────────────────────┬─toTypeName(geom)─┐
+│ (0.1,51.5)                          │ Point            │
+│ [[(0,0),(1,0),(1,1),(0,1),(0,0)]]   │ Polygon          │
+│ [(0,0),(1,1),(2,0)]                 │ LineString       │
+│ [[[(0,0),(1,0),(1,1),(0,1),(0,0)]]] │ MultiPolygon     │
+│ [[(0,0),(1,1)],[(2,0),(3,1)]]       │ MultiLineString  │
+└─────────────────────────────────────┴──────────────────┘
+```
+
+If we want to go from the concrete sub-types to `Geometry`, we can cast using `::Geometry`:
+
+<pre><code type='click-ui' language='sql'>
+SELECT readWKTPoint('POINT(0.1 51.5)') AS subtype, toTypeName(subtype),
+       subtype::Geometry AS geom, toTypeName(geom)
+UNION ALL
+SELECT readWKTPolygon('POLYGON((0 0,1 0,1 1,0 1,0 0))') AS subtype, toTypeName(subtype),
+       subtype::Geometry AS geom, toTypeName(geom)
+UNION ALL
+SELECT readWKTLineString('LINESTRING(0 0,1 1,2 0)') AS subtype, toTypeName(subtype),
+       subtype::Geometry AS geom, toTypeName(geom)
+FORMAT Vertical;
+</code></pre>
+
+```shell
+Row 1:
+──────
+subtype:             (0.1,51.5)
+toTypeName(subtype): Point
+geom:                (0.1,51.5)
+toTypeName(geom):    Geometry
+
+Row 2:
+──────
+subtype:             [[(0,0),(1,0),(1,1),(0,1),(0,0)]]
+toTypeName(subtype): Polygon
+geom:                [[(0,0),(1,0),(1,1),(0,1),(0,0)]]
+toTypeName(geom):    Geometry
+
+Row 3:
+──────
+subtype:             [(0,0),(1,1),(2,0)]
+toTypeName(subtype): LineString
+geom:                [(0,0),(1,1),(2,0)]
+toTypeName(geom):    Geometry
+```
+
+## Ingesting geospatial data via WKB {#ingesting-geospatial-data-via-wkb}
+
+[WKB (Well-Known Binary)](https://en.wikipedia.org/wiki/Well-known_text_representation_of_geometry#Well-known_binary) is the binary equivalent of WKT. You will encounter it when pulling data from PostGIS (where `ST_AsBinary` or `ST_AsEWKB` gives you raw bytes), when reading [GeoParquet](https://geoparquet.org) files (GeoParquet stores geometry as WKB in a binary column and has become the standard interchange format for large geospatial datasets like [Overture Maps](https://overturemaps.org) and [Natural Earth](https://www.naturalearthdata.com)), or from any GIS pipeline using [OGR/GDAL](https://gdal.org).
+
+We can use the `readWKB` function to parse WKB bytes into a `Geometry` value:
+
+<pre><code type='click-ui' language='sql'>
+SELECT readWKB(wkb_bytes);
+SELECT readWKBPolygon(wkb_bytes);
+</code></pre>
+
+In the upcoming 26.3 release, ClickHouse will be able to parse GeoParquet files directly, including columns with mixed geometry types (e.g. both Polygons and MultiPolygons in the same column):
+
+<pre><code type='click-ui' language='sql'>
+SELECT
+    left(toString(geometry), 50),
+    toTypeName(geometry),
+    variantType(geometry) AS variant_type
+FROM url('https://github.com/opengeospatial/geoparquet/raw/main/examples/example.parquet')
+SETTINGS max_http_get_redirects = 10;
+</code></pre>
+
+```shell
+Row 1:
+──────
+left(toString(geometry), 50): [[[(180,-16.067132663642447),(180,-16.555216566639
+toTypeName(geometry):         Geometry
+variant_type:                 MultiPolygon
+
+Row 2:
+──────
+left(toString(geometry), 50): [[(33.90371119710453,-0.9500000000000001),(34.0726
+toTypeName(geometry):         Geometry
+variant_type:                 Polygon
+
+Row 3:
+──────
+left(toString(geometry), 50): [[(-8.665589565454809,27.656425889592356),(-8.6651
+toTypeName(geometry):         Geometry
+variant_type:                 Polygon
+
+Row 4:
+──────
+left(toString(geometry), 50): [[[(-122.84000000000003,49.000000000000114),(-122.
+toTypeName(geometry):         Geometry
+variant_type:                 MultiPolygon
+
+Row 5:
+──────
+left(toString(geometry), 50): [[[(-122.84000000000003,49.000000000000114),(-120,
+toTypeName(geometry):         Geometry
+variant_type:                 MultiPolygon
+```
+
+On versions prior to 26.3, mixed geometry columns will fail with `ClickHouse does not support multiple geo types in one column`. The workaround was to disable the GeoParquet parser and use `readWKB` explicitly:
+
+<pre><code type='click-ui' language='sql'>
+SELECT readWKB(geometry) AS geom
+FROM url(
+    'https://github.com/opengeospatial/geoparquet/raw/main/examples/example.parquet',
+    Parquet,
+    'geometry String'
+)
+SETTINGS max_http_get_redirects = 10,
+         input_format_parquet_allow_geoparquet_parser = 0;
+</code></pre>
+
+## The coordinate order problem {#the-coordinate-order-problem}
+
+ClickHouse geometry functions expect **(longitude, latitude)** - x first, y second - following the mathematical convention and the WKT/WKB standard. Many data sources, particularly GPS tracks, [OpenStreetMap](https://www.openstreetmap.org) exports, and various APIs, give you (latitude, longitude). If your points are appearing in the ocean when they should be on land, this is why.
+
+Use `flipCoordinates` to swap them:
+
+<pre><code type='click-ui' language='sql'>
+SELECT flipCoordinates(readWKT('POINT(51.5 -0.12)'));
+</code></pre>
+
+```shell
+┌─flipCoordina⋯5 -0.12)'))─┐
+│ (-0.12,51.5)             │
+└──────────────────────────┘
+```
+
+`flipCoordinates` works on all geometry types including `Geometry`.
+
+## Exporting geospatial data as WKT {#exporting-geospatial-data-as-wkt}
+
+`wkt()` converts any geometry value back to a WKT string - the reverse of `readWKT`. It accepts both `Geometry` and concrete subtypes:
+
+<pre><code type='click-ui' language='sql'>
+SELECT wkt(geom) 
+FROM geo;
+</code></pre>
+
+```shell
+┌─wkt(geom)──────────────────────────────┐
+│ POINT(51.5 -0.12)                      │
+│ MULTILINESTRING((0 0,1 0,1 1,0 1,0 0)) │
+│ LINESTRING(0 0,1 1,2 0)                │
+└────────────────────────────────────────┘
+```
+
+## Exporting geospatial data as WKB {#exporting-geospatial-data-as-wkb}
+
+`wkb()` is the inverse of `readWKB` - it converts any geometry value to its WKB binary representation. The raw output is not human-readable:
+
+<pre><code type='click-ui' language='sql'>
+SELECT wkb(geom) 
+FROM geo;
+</code></pre>
+
+```shell
+Row 1:
+──────
+wkb(geom): �I@���Q���
+
+Row 2:
+──────
+wkb(geom): �?�?�?�?
+
+Row 3:
+──────
+wkb(geom): �?�?@
+...
+```
+
+We can wrap it in `hex()` to get a printable representation:
+
+<pre><code type='click-ui' language='sql'>
+SELECT hex(wkb(geom)) 
+FROM geo;
+</code></pre>
+
+```shell
+Row 1:
+──────
+hex(wkb(geom)): 01050000000100000001020000000500000000000000000000000000000000000000000000000000F03F0000000000000000000000000000F03F000000000000F03F0000000000000000000000000000F03F00000000000000000000000000000000
+
+Row 2:
+──────
+hex(wkb(geom)): 01010000000000000000C04940B81E85EB51B8BEBF
+
+Row 3:
+──────
+hex(wkb(geom)): 01020000000300000000000000000000000000000000000000000000000000F03F000000000000F03F00000000000000400000000000000000
+```
+
+The practical use is exporting to a GeoParquet file. Name the WKB column `geometry` and set `output_format_parquet_geometadata = 1` to write the geometry column metadata that makes it a valid GeoParquet file:
+
+<pre><code type='click-ui' language='sql'>
+SELECT id, wkb(geom) AS geometry
+FROM geo
+INTO OUTFILE 'geo_export.parquet'
+FORMAT Parquet
+SETTINGS output_format_parquet_geometadata = 1;
+</code></pre>
+
+Any tool that reads GeoParquet (QGIS, GeoPandas, ClickHouse, and others) can now consume this file directly.
+
+## Spatial operations {#spatial-operations}
+
+ClickHouse also has a number of functions for spatial operations. 
+
+### Distance {#distance}
+
+ClickHouse has two functions for point-to-point distance: `greatCircleDistance` and `geoDistance`. They both take (lon1, lat1, lon2, lat2) in degrees and return meters:
+
+`greatCircleDistance` uses the Haversine formula (spherical Earth). The following query works out the distance from London to Paris, ~342 km
+
+<pre><code type='click-ui' language='sql'>
+SELECT greatCircleDistance(-0.12, 51.5, 2.35, 48.86);
+</code></pre>
+
+```shell
+┌─greatCircleD⋯.35, 48.86)─┐
+│        342211.3799805301 │
+└──────────────────────────┘
+```
+
+If you have `Point` columns, extract the coordinates using `.1` (longitude) and `.2` (latitude):
+
+<pre><code type='click-ui' language='sql'>
+WITH
+    (-0.12, 51.5)::Point AS london,
+    (2.35, 48.86)::Point AS paris
+SELECT greatCircleDistance(london.1, london.2, paris.1, paris.2);
+</code></pre>
+
+This will return the same output as the previous query.
+
+We can also use `geoDistance`, which uses the WGS-84 ellipsoid. This function is more accurate, but can be slightly slower:
+
+<pre><code type='click-ui' language='sql'>
+SELECT geoDistance(-0.12, 51.5, 2.35, 48.86);
+</code></pre>
+
+```shell
+┌─geoDistance(⋯.35, 48.86)─┐
+│       342580.40445145103 │
+└──────────────────────────┘
+```
+
+For most use cases the difference between the two is small. `geoDistance` is more accurate near the poles.
+
+### Area and perimeter {#area-and-perimeter}
+
+For computing area and perimeter, ClickHouse has four functions covering two coordinate systems:
+
+| Function | Coordinate system | Unit |
+|---|---|---|
+| `areaCartesian(geom)` | Flat/2D | coordinate units squared |
+| `perimeterCartesian(geom)` | Flat/2D | coordinate units |
+| `areaSpherical(geom)` | Spherical | steradians (unit sphere) |
+| `perimeterSpherical(geom)` | Spherical | radians (unit sphere) |
+
+`areaSpherical` and `perimeterSpherical` operate on a unit sphere with radius 1, returning steradians and radians respectively. They do not return square meters or meters. To get physical units, you need to multiply by Earth's radius yourself:
+
+<pre><code type='click-ui' language='sql'>
+WITH readWKTPolygon(
+    'POLYGON((-0.1 51.5, 0.0 51.5, 0.0 51.6, -0.1 51.6, -0.1 51.5))'
+) AS geom
+SELECT
+    abs(areaSpherical(geom)) * pow(6371007.18, 2) AS area_m2,
+    abs(areaSpherical(geom)) * pow(6371007.18, 2) / 1e6 AS area_km2,
+    perimeterSpherical(geom) * 6371007.18 AS perimeter_m;
+</code></pre>
+
+```shell
+┌──────────area_m2─┬──────────area_km2─┬───────perimeter_m─┐
+│ 76885325.3526875 │ 76.88532535268749 │ 36067.92002218744 │
+└──────────────────┴───────────────────┴───────────────────┘
+```
+
+The `abs()` is needed because the sign of the area depends on the winding order of the polygon vertices (clockwise vs counterclockwise). Data from most external sources will produce a negative value.
+
+### Point-in-polygon {#point-in-polygon}
+
+Next, let's check if a point is inside a polygon, using the `pointInPolygon` function.
+The Tower of London is famous for being inside the City of London, so let's check if it is:
+
+<pre><code type='click-ui' language='sql'>
+WITH
+    (-0.0759, 51.5081)::Point AS towerOfLondon,
+    [(-0.1, 51.5), (0.0, 51.5), (0.0, 51.6), (-0.1, 51.6), (-0.1, 51.5)] AS centralLondon
+SELECT pointInPolygon(towerOfLondon, centralLondon);
+</code></pre>
+
+```shell
+┌─pointInPolyg⋯tralLondon)─┐
+│                        1 │
+└──────────────────────────┘
+```
+
+`pointInPolygon` is well-optimized and handles non-convex polygons correctly. For a single polygon this is fine, but if you need to match points against a large table of boundary polygons - for example, enriching millions of GPS coordinates with their region or neighborhood - a polygon dictionary is a much better approach.
+
+### Polygon dictionaries {#polygon-dictionaries}
+
+A [polygon dictionary](https://clickhouse.com/docs/en/sql-reference/dictionaries) is a specialised ClickHouse dictionary backed by a spatial index. Instead of calling `pointInPolygon` against every row in a polygons table (a full scan), `dictGet` resolves which polygon a point falls in using the index - making point-in-polygon lookups against many boundaries fast.
+
+<iframe width="764" height="432" src="https://www.youtube.com/embed/FyRsriQp46E" frameborder="0" allowfullscreen></iframe>
+
+
+To demonstrate, let's enrich the NYC taxi pickups with the borough each trip started in. First we need a source table for the borough boundaries. The [NYC Open Data borough boundaries](https://gist.githubusercontent.com/ix4/6f44e559b29a72c4c5d130ac13aad317/raw/a7a3a37f2fe054ebc18871b34b023d312668f035/nyc.geojson) are available as [GeoJSON](https://geojson.org/), so we can query them directly with `url()`:
+
+<pre><code type='click-ui' language='sql'>
+WITH arrayJoin(json.features::Array(JSON)) AS feature,
+     JSONExtract(assumeNotNull(
+        toJSONString(feature.geometry.coordinates)), 'MultiPolygon') AS polygon
+SELECT
+    feature.properties.boro_name AS name,
+    left(wkt(polygon), 50)
+FROM url('https://gist.githubusercontent.com/ix4/6f44e559b29a72c4c5d130ac13aad317/raw/a7a3a37f2fe054ebc18871b34b023d312668f035/nyc.geojson', JSONAsObject)
+SETTINGS max_http_get_redirects = 10;
+</code></pre>
+
+```shell
+┌─name──────────┬─left(wkt(polygon), 50)─────────────────────────────┐
+│ Bronx         │ MULTIPOLYGON(((-73.8968 40.7958,-73.898 40.7956,-7 │
+│ Staten Island │ MULTIPOLYGON(((-74.0531 40.5777,-74.0549 40.5778,- │
+│ Queens        │ MULTIPOLYGON(((-73.8367 40.5949,-73.833 40.5927,-7 │
+│ Manhattan     │ MULTIPOLYGON(((-74.005 40.6876,-74.0056 40.6868,-7 │
+│ Brooklyn      │ MULTIPOLYGON(((-73.8671 40.5821,-73.869 40.5817,-7 │
+└───────────────┴────────────────────────────────────────────────────┘
+```
+
+Looks good! Next let's create a table:
+
+<pre><code type='click-ui' language='sql'>
+CREATE TABLE nyc_boroughs (
+    name    String,
+    polygon MultiPolygon
+)
+ORDER BY name;
+</code></pre>
+
+And ingest the borough multi polygons:
+
+<pre><code type='click-ui' language='sql'>
+INSERT INTO nyc_boroughs
+WITH arrayJoin(json.features::Array(JSON)) AS feature,
+     JSONExtract(assumeNotNull(
+        toJSONString(feature.geometry.coordinates)), 'MultiPolygon') AS polygon
+SELECT feature.properties.boro_name AS name, polygon
+FROM url('https://gist.githubusercontent.com/ix4/6f44e559b29a72c4c5d130ac13aad317/raw/a7a3a37f2fe054ebc18871b34b023d312668f035/nyc.geojson', JSONAsObject)
+SETTINGS max_http_get_redirects = 10;
+</code></pre>
+
+Now, we'll create the polygon dictionary from that table. The `POLYGON` layout builds the spatial index; `STORE_POLYGON_KEY_COLUMN 1` keeps the polygon geometry accessible alongside the attributes:
+
+<pre><code type='click-ui' language='sql'>
+CREATE DICTIONARY nyc_borough_dict (
+    name    String,
+    polygon MultiPolygon
+)
+PRIMARY KEY polygon
+SOURCE(CLICKHOUSE(TABLE 'nyc_boroughs'))
+LAYOUT(POLYGON(STORE_POLYGON_KEY_COLUMN 1))
+LIFETIME(MIN 0 MAX 0);
+</code></pre>
+
+With the dictionary in place, `dictGet` resolves the borough for any point in a single indexed lookup:
+
+<pre><code type='click-ui' language='sql'>
+SELECT
+    dictGet('nyc_borough_dict', 'name', (pickup_longitude, pickup_latitude)) AS borough,
+    pickup_longitude,
+    pickup_latitude
+FROM trips_small
+LIMIT 5;
+</code></pre>
+
+```shell
+┌─borough───┬───pickup_longitude─┬───pickup_latitude─┐
+│ Manhattan │ -73.97540283203125 │ 40.75189971923828 │
+│ Manhattan │ -73.98404693603516 │ 40.73202133178711 │
+│ Manhattan │ -73.97335052490234 │ 40.76108932495117 │
+│ Manhattan │  -73.9787368774414 │ 40.78765869140625 │
+│ Manhattan │  -74.0101089477539 │ 40.72054672241211 │
+└───────────┴────────────────────┴───────────────────┘
+```
+
+We can now aggregate across all 10 million trips by borough - something that would require a full `pointInPolygon` scan against a polygons table without the dictionary:
+
+<pre><code type='click-ui' language='sql'>
+SELECT
+    dictGet('nyc_borough_dict', 'name', (pickup_longitude, pickup_latitude)) AS borough,
+    count() AS trips,
+    round(avg(fare_amount), 2) AS avg_fare
+FROM trips_small
+WHERE pickup_longitude IS NOT NULL
+GROUP BY borough
+ORDER BY trips DESC;
+</code></pre>
+
+```shell
+┌─borough───────┬───trips─┬─avg_fare─┐
+│ Manhattan     │ 9044239 │     11.6 │
+│ Queens        │  625563 │    34.26 │
+│ Brooklyn      │  174932 │    13.95 │
+│               │  148193 │    16.39 │
+│ Bronx         │    7768 │     14.4 │
+│ Staten Island │     145 │    29.58 │
+└───────────────┴─────────┴──────────┘
+```
+
+The empty borough row is worth investigating - `dictGet` returns an empty string when no polygon matches. We can look at where those unmatched trips are geographically:
+
+<pre><code type='click-ui' language='sql'>
+SELECT
+    round(pickup_longitude, 2) AS lon,
+    round(pickup_latitude, 2) AS lat,
+    count() AS trips
+FROM trips_small
+WHERE pickup_longitude IS NOT NULL
+  AND dictGet('nyc_borough_dict', 'name', (pickup_longitude, pickup_latitude)) = ''
+GROUP BY lon, lat
+ORDER BY trips DESC
+LIMIT 10;
+</code></pre>
+
+```shell
+┌────lon─┬───lat─┬──trips─┐
+│      0 │     0 │ 136783 │
+│ -73.95 │ 40.77 │    712 │
+│ -73.96 │ 40.76 │    640 │
+│ -73.95 │ 40.76 │    593 │
+│ -74.18 │ 40.69 │    450 │
+│ -74.01 │  40.7 │    362 │
+│ -74.01 │ 40.75 │    282 │
+│    -74 │ 40.77 │    264 │
+│ -74.04 │ 40.73 │    264 │
+│ -74.18 │  40.7 │    206 │
+└────────┴───────┴────────┘
+```
+
+The dominant cluster is (0, 0). We can confirm how many trips have genuinely bad coordinates versus plausible-but-outside-NYC ones:
+
+<pre><code type='click-ui' language='sql'>
+SELECT
+    countIf(pickup_longitude = 0 OR pickup_latitude = 0) AS zero_coords,
+    countIf(pickup_longitude NOT BETWEEN -75 AND -72) AS bad_lon,
+    countIf(pickup_latitude NOT BETWEEN 39 AND 42) AS bad_lat
+FROM trips_small
+WHERE dictGet('nyc_borough_dict', 'name', (pickup_longitude, pickup_latitude)) = '';
+</code></pre>
+
+```shell
+┌─zero_coords─┬─bad_lon─┬─bad_lat─┐
+│      136783 │  136954 │  136943 │
+└─────────────┴─────────┴─────────┘
+```
+
+Of the 148,193 unmatched trips, 136,783 have coordinates exactly at (0, 0) - missing GPS data stored as zero rather than `NULL`. 
+
+The remaining ~11,000 have plausible coordinates that fall just outside the borough boundaries, mostly pickups in New Jersey (the coordinates cluster around the Newark/Bayonne area).  Those could be captured by extending the dictionary with NJ county boundaries from a source like the US Census Bureau TIGER/Line files.
+
+The zero-coordinate trips are unrecoverable bad data regardless. This is a data quality issue that `dictGet` surfaces naturally: those zero coordinates return no match rather than being silently bucketed into a valid cell, as happened with the `ifNull(pickup_longitude, 0)` workaround in the H3 table.
+
+### Polygon set operations {#polygon-set-operations}
+
+ClickHouse has a set of polygon operations for computing intersections, unions, differences, and convex hulls. All functions come in `Cartesian` and `Spherical` variants - use `Cartesian` for projected coordinates and `Spherical` for longitude/latitude.
+
+Let's demonstrate with two overlapping squares: a 2×2 square at the origin and a second 2×2 square shifted one unit to the right:
+
+<pre><code type='click-ui' language='sql'>
+WITH
+    [[(0,0),(2,0),(2,2),(0,2),(0,0)]]::Polygon AS poly1,
+    [[(1,0),(3,0),(3,2),(1,2),(1,0)]]::Polygon AS poly2
+SELECT
+    polygonsIntersectCartesian(poly1, poly2) AS intersects,
+    wkt(polygonsUnionCartesian(poly1, poly2)) AS union_wkt,
+    wkt(polygonsIntersectionCartesian(poly1, poly2)) AS intersection_wkt,
+    wkt(polygonsSymDifferenceCartesian(poly1, poly2)) AS sym_diff_wkt,
+    polygonsWithinCartesian(poly1, poly2) AS poly1_within_poly2
+FORMAT Vertical;
+</code></pre>
+
+```shell
+Row 1:
+──────
+intersects:         1
+union_wkt:          MULTIPOLYGON(((3 2,3 0,1 0,0 0,0 2,3 2)))
+intersection_wkt:   MULTIPOLYGON(((1 2,2 2,2 0,1 0,1 2)))
+sym_diff_wkt:       MULTIPOLYGON(((1 2,1 0,0 0,0 2,1 2)),((2 2,3 2,3 0,2 0,2 2)))
+poly1_within_poly2: 0
+```
+
+The intersection is the 1×2 strip where the two squares overlap (x from 1 to 2). The symmetric difference is the two non-overlapping portions. Neither polygon is fully within the other, so `polygonsWithinCartesian` returns 0.
+
+`polygonConvexHullCartesian` returns the smallest convex polygon that contains all the vertices:
+
+<pre><code type='click-ui' language='sql'>
+WITH [[(0,0),(2,0),(1,2),(0,0)]]::Polygon AS concave_poly
+SELECT wkt(polygonConvexHullCartesian(concave_poly));
+</code></pre>
+
+```shell
+┌─wkt(polygonCo⋯ncave_poly))─┐
+│ POLYGON((0 0,1 2,2 0,0 0)) │
+└────────────────────────────┘
+```
+
+## Grid-based spatial analytics {#grid-based-spatial-analytics}
+
+This is arguably where ClickHouse is strongest for geospatial work. Instead of precise geometric operations, you discretize space into a grid and aggregate - which maps perfectly to ClickHouse's columnar aggregation model.
+
+ClickHouse supports three grid systems: Geohash, S2, and H3. Let's go through each of them in turn.
+
+### Geohash {#geohash}
+
+Geohash is a geocoding system that encodes a latitude/longitude pair into a short base-32 string. For example, the coordinates `(40.7128, -74.0060)` — New York City — encode to `dr5regw` at precision 7. The longer the string, the smaller and more precise the cell.
+
+The diagram below shows the geohash grid around San Francisco. Each cell is identified by a short string, and can be recursively subdivided by appending more characters:
+
+![Geohash rectangular grid cells around San Francisco](https://clickhouse.com/uploads/2026_02_26_10_34_02_ab51e8c492.png)
+
+ClickHouse has [three geohash functions](https://clickhouse.com/docs/en/sql-reference/functions/geo/geohash). We can encode a point at a given precision (1–12) using `geohashEncode`:
+
+<pre><code type='click-ui' language='sql'>
+SELECT geohashEncode(-0.12, 51.5, 6);                        
+</code></pre>
+
+```shell
+┌─geohashEncode(-0.12, 51.5, 6)─┐
+│ gcpuvr                        │
+└───────────────────────────────┘
+```
+
+We can then decode back to the (longitude, latitude) of the cell center using the `geoHashDecode` function:
+
+<pre><code type='click-ui' language='sql'>
+SELECT geohashDecode('gcpuvr');
+</code></pre>
+
+```shell
+┌─geohashDecode('gcpuvr')──────────┐
+│ {                               ↴│
+│↳  "longitude": -0.1153564453125,↴│
+│↳  "latitude": 51.50115966796875 ↴│
+│↳}                                │
+└──────────────────────────────────┘
+```
+
+We can also find all the geohash cells within a bounding box at a given precision using the `geohashesInBox` function:
+
+<pre><code type='click-ui' language='sql'>
+SELECT geohashesInBox(-0.5, 51.3, 0.3, 51.7, 4);
+</code></pre>
+
+```shell
+Row 1:
+──────
+geohashesInB⋯3, 51.7, 4): ['gcpe','gcps','gcpt','gcpw','gcpg','gcpu','gcpv','gcpy','u105','u10h','u10j','u10n']
+```
+
+Geohash cells are rectangles, not equal-area, and cells at the same level vary in size by latitude. It is simple and widely supported but not ideal for aggregations where you care about equal-area bucketing.
+
+### H3 {#h3}
+
+[H3](https://h3geo.org/) is Uber's hexagonal hierarchical indexing system. Hexagons tessellate without gaps, are roughly equal-area at a given resolution, and the hierarchy is clean - each cell has exactly 7 children at the next finer resolution (with a small number of pentagon exceptions).
+
+The diagram below from the [H3 docs](https://h3geo.org/docs/highlights/indexing) shows the indexing system being applied to part of San Francisco:
+
+![H3 parent-child cell indexing applied to part of San Francisco](https://clickhouse.com/uploads/Parent_Child_Indexing_df09b3ab4c.png)
+
+
+ClickHouse has [40+ H3 functions](https://clickhouse.com/docs/en/sql-reference/functions/geo/h3). We can encode a point to an H3 index at a given resolution using `geoToH3`. Note that unlike most ClickHouse geo functions, `geoToH3` takes **(latitude, longitude)** order - matching H3's own convention:
+
+<pre><code type='click-ui' language='sql'>
+SELECT geoToH3(51.5, -0.12, 9);
+</code></pre>
+
+```shell
+┌─geoToH3(51.5, -0.12, 9)─┐
+│      617438095026421759 │
+└─────────────────────────┘
+```
+
+We can then decode back to the cell center using `h3ToGeo`:
+
+<pre><code type='click-ui' language='sql'>
+SELECT h3ToGeo(617438095026421759);
+</code></pre>
+
+```shell
+┌─h3ToGeo(617438095026421759)────────┐
+│ {                                 ↴│
+│↳  "latitude": 51.50008600604051,  ↴│
+│↳  "longitude": -0.1214503427323559↴│
+│↳}                                  │
+└────────────────────────────────────┘
+```
+
+We can find the k-ring - the cell itself and all cells within k steps, using `h3kRing`:
+
+<pre><code type='click-ui' language='sql'>
+SELECT h3kRing(617438095026421759, 2);
+</code></pre>
+
+```shell
+Row 1:
+──────
+h3kRing(6174⋯6421759, 2): [617438095026421759,617438095026159615,617438095025111039,617438095025373183,617438095021441023,617438095022489599,617438095522922495,617438095522660351,617439388697624575,617438095026683903,617438095025635327,617438095025897471,617438095014100991,617438095013576703,617438095021703167,617438095020916735,617438095021965311,617438095522398207,617438095522136063]
+```
+
+We can find the parent cell at a coarser resolution using `h3ToParent`:
+
+<pre><code type='click-ui' language='sql'>
+SELECT h3ToParent(617438095026421759, 6);
+</code></pre>
+
+```shell
+┌─h3ToParent(6⋯6421759, 6)─┐
+│       603927296197263359 │
+└──────────────────────────┘
+```
+
+We can find the area of a cell in square meters using `h3CellAreaM2`:
+
+<pre><code type='click-ui' language='sql'>
+SELECT h3CellAreaM2(617438095026421759);
+</code></pre>
+
+```shell
+┌─h3CellAreaM2⋯5026421759)─┐
+│         94179.9099582598 │
+└──────────────────────────┘
+```
+
+We can find the grid distance between two cells using `h3Distance`:
+
+<pre><code type='click-ui' language='sql'>
+SELECT h3Distance(geoToH3(51.5, -0.12, 9), geoToH3(51.51, -0.11, 9));
+</code></pre>
+
+```shell
+┌─h3Distance(g⋯ -0.11, 9))─┐
+│                        6 │
+└──────────────────────────┘
+```
+
+H3 is excellent for aggregating observations by geography, computing catchment areas, and building hexagonal heatmaps. ClickHouse covers the full H3 API surface. We haven't covered all of them here - other useful ones include `h3PolygonToCells` (all cells covering a polygon), `h3ToChildren` (the inverse of `h3ToParent`), `h3ToGeoBoundary` (the polygon boundary of a cell, useful for visualization), and `h3IsValid` (validate a cell ID).
+
+### S2 {#s2}
+
+[S2](https://s2geometry.io/) is Google's spherical geometry library. It starts by projecting the six faces of a cube onto the unit sphere, giving six top-level cells. Each cell is then subdivided into four children recursively, producing a hierarchy of quadrilateral cells at increasing levels of detail.
+
+The image below, from the [S2 docs](https://s2geometry.io/devguide/s2cell_hierarchy), shows two of the six face cells, one of which has been subdivided several times:
+
+![Two S2 face cells, one subdivided several times to show the cell hierarchy](https://clickhouse.com/uploads/S2_Cells_Hierarchy_29a58ffc32.gif)
+
+S2 is used in Google Maps and BigQuery.
+
+ClickHouse has [10+ S2 functions](https://clickhouse.com/docs/en/sql-reference/functions/geo/s2). We can encode a point to an S2 cell ID using `geoToS2`:
+
+<pre><code type='click-ui' language='sql'>
+SELECT geoToS2(-0.12, 51.5);
+</code></pre>
+
+```shell
+┌─geoToS2(-0.12, 51.5)─┐
+│  5221366071371671575 │
+└──────────────────────┘
+```
+
+We can decode back to the (longitude, latitude) of the cell center using `s2ToGeo`:
+
+<pre><code type='click-ui' language='sql'>
+SELECT s2ToGeo(5221366071371671575);
+</code></pre>
+
+```shell
+┌─s2ToGeo(5221366071371671575)──────────────┐
+│ (-0.11999997687890043,51.499999963181374) │
+└───────────────────────────────────────────┘
+```
+
+We can find the neighboring cells using `s2GetNeighbors`:
+
+<pre><code type='click-ui' language='sql'>
+SELECT s2GetNeighbors(5221366071371671575);
+</code></pre>
+
+```shell
+Row 1:
+──────
+s2GetNeighbo⋯1371671575): [5221366071371671613,5221366071371671577,5221366071371671569,5221366071371671573]
+```
+
+We can check whether two cells share any area using `s2CellsIntersect`:
+
+<pre><code type='click-ui' language='sql'>
+SELECT s2CellsIntersect(5221366071371671575, 5221366071371671613);
+</code></pre>
+
+```shell
+┌─s2CellsInter⋯1371671613)─┐
+│                        0 │
+└──────────────────────────┘
+```
+
+Adjacent cells share an edge but not area, so `s2CellsIntersect` returns 0.
+
+For most use cases, H3 is the better choice. The main reason to reach for S2 is if your data comes from or needs to interoperate with BigQuery, which uses S2 natively via `S2_CELLIDFROMPOINT` and `S2_COVERINGCELLIDS`.
+
+### Which grid system to use? {#which-grid-system-to-use}
+
+| | Geohash | H3 | S2 |
+|---|---|---|---|
+| Cell shape | Rectangle | Hexagon | Square (projected) |
+| Equal area? | No | Approximately | Approximately |
+| Hierarchy | Clean | Clean (×7) | Clean (×4) |
+| ClickHouse support | [3 functions](https://clickhouse.com/docs/en/sql-reference/functions/geo/geohash) | [40+ functions](https://clickhouse.com/docs/en/sql-reference/functions/geo/h3) | [10+ functions](https://clickhouse.com/docs/en/sql-reference/functions/geo/s2) |
+| Ecosystem | Very widely supported | Widely supported | Google ecosystem |
+
+For new projects, H3 is usually the right choice. Geohash is good when you need interoperability with systems that already use it. S2 if you are working with BigQuery or Google Maps data.
+
+## Visualizing geometry {#visualizing-geometry}
+
+`svg()` converts a geometry into an SVG element fragment - a `Point` becomes a `<circle>`, a `Polygon` becomes a `<path>`, a `LineString` becomes a `<polygon>`. Here we call it on a simplified London boundary polygon and the Tower of London point:
+
+<pre><code type='click-ui' language='sql'>
+SELECT 'london' AS name, svg(readWKT('POLYGON((-0.51 51.63,-0.10 51.69,0.26 51.65,0.33 51.52,0.25 51.30,-0.06 51.28,-0.33 51.32,-0.51 51.45,-0.51 51.63))')) AS fragment
+UNION ALL
+SELECT 'tower_of_london' AS name, svg((-0.0759, 51.5081)) AS fragment;
+</code></pre>
+
+```shell
+Row 1:
+──────
+name:     london
+fragment: <g fill-rule="evenodd"><path d="M -0.51,51.63 L -0.1,51.69 L 0.26,51.65 L 0.33,51.52 L 0.25,51.3 L -0.06,51.28 L -0.33,51.32 L -0.51,51.45 L -0.51,51.63 z " style=""/></g>
+
+Row 2:
+──────
+name:     tower_of_london
+fragment: <circle cx="-0.0759" cy="51.5081" r="5" style=""/>
+```
+
+To build a viewable SVG, we can wrap the fragments in an `<svg>` tag with a `viewBox` covering our coordinate range. There are two things to handle:
+
+1. SVG's Y-axis points downward while latitude increases northward. We can fix this with a `scale(1,-1)` transform.
+2. `svg()` uses a hardcoded `r="5"` for circles which is enormous relative to a geographic viewport. We can fix this using the `replaceOne` function.
+
+We end up with the following query, which also colors the point dark so that it's easier to see:
+
+```sql
+WITH
+    readWKT('POLYGON((-0.51 51.63,-0.10 51.69,0.26 51.65,0.33 51.52,0.25 51.30,-0.06 51.28,-0.33 51.32,-0.51 51.45,-0.51 51.63))') AS london,
+    (-0.0759, 51.5081) AS tower_of_london,
+    replaceOne(svg(london), 'style=""', 'style="fill:#FAFF69;stroke:#1A1A2E;stroke-width:0.005"') AS london_svg,
+    replaceOne(replaceOne(svg(tower_of_london), 'r="5"', 'r="0.02"'), 'style=""', 'style="fill:#161517;"') AS tower_svg
+SELECT concat(
+    '<svg xmlns="http://www.w3.org/2000/svg" viewBox="-0.55 51.24 0.92 0.49" width="600" height="300">',
+    '<g transform="scale(1,-1) translate(0,-102.97)">',
+    london_svg,
+    tower_svg,
+    '</g></svg>');
+```
+
+The output of this query is shown below:
+
+```xml
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="-0.55 51.24 0.92 0.49" width="600" height="300"><g transform="scale(1,-1) translate(0,-102.97)"><g fill-rule="evenodd"><path d="M -0.51,51.63 L -0.1,51.69 L 0.26,51.65 L 0.33,51.52 L 0.25,51.3 L -0.06,51.28 L -0.33,51.32 L -0.51,51.45 L -0.51,51.63 z " style="fill:#FAFF69;stroke:#1A1A2E;stroke-width:0.005"/></g><circle cx="-0.0759" cy="51.5081" r="0.02" style="fill:#161517;"/></g></svg>
+```
+
+If we want to generate an SVG file and open it in a browser, we can run the following command:
+
+```shell
+clickhouse --query "
+  WITH
+      readWKT('POLYGON((-0.51 51.63,-0.10 51.69,0.26 51.65,0.33 51.52,0.25 51.30,-0.06 51.28,-0.33 51.32,-0.51 51.45,-0.51 51.63))') AS
+  london,
+      (-0.0759, 51.5081) AS tower_of_london,
+      replaceOne(svg(london), 'style=\"\"', 'style=\"fill:#FAFF69;stroke:#1A1A2E;stroke-width:0.005\"') AS london_svg,
+      replaceOne(replaceOne(svg(tower_of_london), 'r=\"5\"', 'r=\"0.02\"'), 'style=\"\"', 'style=\"fill:#161517;\"') AS tower_svg
+  SELECT concat(
+      '<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"-0.55 51.24 0.92 0.49\" width=\"600\" height=\"300\">',
+      '<g transform=\"scale(1,-1) translate(0,-102.97)\">',
+      london_svg,
+      tower_svg,
+      '</g></svg>')" > output.svg && open output.svg
+```
+
+The resulting SVG is shown below:
+
+![London polygon with the Tower of London marked as a dark circle](https://clickhouse.com/uploads/output_a02db73401.svg)
+
+## Spatial analytics in practice: NYC Taxis {#spatial-analytics-in-practice-nyc-taxis}
+
+To make this concrete, let's use the [NYC Taxi sample dataset](https://clickhouse.com/docs/getting-started/example-datasets/nyc-taxi) with approximately 10 million trips, each with pickup and dropoff coordinates. We'll build an H3-indexed table, generate a hexagonal heatmap, identify the busiest pickup hotspots, and run a radius query — showing how the concepts from the previous sections fit together in practice.
+
+First, the base table ordered first by `pickup_datetime`, which is its normal sort order:
+
+<pre><code type='click-ui' language='sql'>
+CREATE TABLE trips_small (
+    trip_id             UInt32,
+    pickup_datetime     DateTime,
+    dropoff_datetime    DateTime,
+    pickup_longitude    Nullable(Float64),
+    pickup_latitude     Nullable(Float64),
+    dropoff_longitude   Nullable(Float64),
+    dropoff_latitude    Nullable(Float64),
+    passenger_count     UInt8,
+    trip_distance       Float32,
+    fare_amount         Float32,
+    extra               Float32,
+    tip_amount          Float32,
+    tolls_amount        Float32,
+    total_amount        Float32,
+    payment_type        Enum('CSH' = 1, 'CRE' = 2, 'NOC' = 3, 'DIS' = 4, 'UNK' = 5),
+    pickup_ntaname      LowCardinality(String),
+    dropoff_ntaname     LowCardinality(String)
+) ENGINE = MergeTree
+ORDER BY (pickup_datetime, dropoff_datetime);
+</code></pre>
+
+Let's insert the data:
+
+<pre><code type='click-ui' language='sql'>
+INSERT INTO trips_small
+SELECT * FROM s3(
+    'https://datasets-documentation.s3.eu-west-3.amazonaws.com/nyc-taxi/trips_{0..9}.gz',
+    'TabSeparatedWithNames'
+);
+</code></pre>
+
+```shell
+10000840 rows in set. Elapsed: 11.355 sec. Processed 10.00 million rows, 842.03 MB (880.76 thousand rows/s., 74.16 MB/s.)
+Peak memory usage: 584.77 MiB.
+```
+
+We can confirm how many rows have been loaded by running the following query:
+
+<pre><code type='click-ui' language='sql'>
+SELECT count()
+FROM trips_small;
+</code></pre>
+
+```shell
+┌──count()─┐
+│ 10000840 │ -- 10.00 million
+└──────────┘
+```
+
+Now the H3 version. We add `pickup_h3` and `dropoff_h3` as `MATERIALIZED` columns - computed automatically at ingest from the coordinates - and put `pickup_h3` first in the `ORDER BY` so spatial queries use the primary key index. Note the `ifNull` wrappers because the coordinate columns are `Nullable`:
+
+<pre><code type='click-ui' language='sql'>
+CREATE TABLE trips_small_h3 (
+    trip_id             UInt32,
+    pickup_datetime     DateTime,
+    dropoff_datetime    DateTime,
+    pickup_longitude    Nullable(Float64),
+    pickup_latitude     Nullable(Float64),
+    dropoff_longitude   Nullable(Float64),
+    dropoff_latitude    Nullable(Float64),
+    passenger_count     UInt8,
+    trip_distance       Float32,
+    fare_amount         Float32,
+    extra               Float32,
+    tip_amount          Float32,
+    tolls_amount        Float32,
+    total_amount        Float32,
+    payment_type        Enum('CSH' = 1, 'CRE' = 2, 'NOC' = 3, 'DIS' = 4, 'UNK' = 5),
+    pickup_ntaname      LowCardinality(String),
+    dropoff_ntaname     LowCardinality(String),
+    pickup_h3           UInt64 MATERIALIZED geoToH3(ifNull(pickup_latitude, 0), ifNull(pickup_longitude, 0), 9),
+    dropoff_h3          UInt64 MATERIALIZED geoToH3(ifNull(dropoff_latitude, 0), ifNull(dropoff_longitude, 0), 9)
+) ENGINE = MergeTree
+ORDER BY (pickup_h3, pickup_datetime);
+</code></pre>
+
+Let's insert the data into this table, speeding things up by loading the data directly from `trips_small` instead of S3:
+
+<pre><code type='click-ui' language='sql'>
+INSERT INTO trips_small_h3 
+SELECT * 
+FROM trips_small;
+</code></pre>
+
+```shell
+10000840 rows in set. Elapsed: 9.766 sec. Processed 10.00 million rows, 723.35 MB (1.02 million rows/s., 74.06 MB/s.)
+Peak memory usage: 424.98 MiB.
+```
+
+We can combine `h3ToGeoBoundary` with `svg()` to visualize the H3 grid directly from ClickHouse. `h3ToGeoBoundary` returns the cell boundary as a `Ring` in **(latitude, longitude)** order, so we swap coordinates with `arrayMap` before wrapping as a `Polygon` for `svg()`. We also need to flip the y-axis since SVG's y increases downward while latitude increases upward.
+
+In the query below, we build a heatmap of the taxi trips with each H3 cell colored by `log(trip count)`, and written to SVG format:
+
+```sql
+WITH cells AS (
+    SELECT
+        assumeNotNull(geoToH3(pickup_latitude, pickup_longitude, 9)) AS cell,
+        count() AS trips
+    FROM trips_small
+    WHERE pickup_latitude BETWEEN 40.4 AND 40.95
+      AND pickup_longitude BETWEEN -74.3 AND -73.7
+    GROUP BY cell
+    HAVING trips >= 10
+),
+max_trips AS (SELECT max(log(trips)) AS max_log FROM cells)
+SELECT concat(
+    '<svg xmlns="http://www.w3.org/2000/svg" viewBox="-74.05 40.58 0.32 0.35" width="650" height="1000" preserveAspectRatio="none">',
+    '<rect x="-74.05" y="40.58" width="0.32" height="0.35" fill="#0a1628"/>',
+    '<g transform="scale(1,-1) translate(0,-81.51)">',
+    arrayStringConcat(groupArray(
+        replaceAll(
+            svg([arrayMap(p -> (p.2, p.1), h3ToGeoBoundary(cell))]::Polygon),
+            'style=""',
+            concat('style="fill:rgba(56,139,230,', toString(round(log(trips) / max_log, 3)), ');stroke:none"')
+        )
+    ), ''),
+    '</g></svg>'
+)
+FROM cells, max_trips
+FORMAT TSVRaw;
+```
+
+The `FORMAT TSVRaw` at the end outputs the raw string value with no table borders - without it, ClickHouse wraps the output in `┌─┐` characters that would break the SVG file.
+
+Since the query contains single-quoted strings, save it to a file (e.g. `h3_heatmap.sql`) and run it with `--queries-file`. Pipe the output to an SVG file and open it in a browser:
+
+<pre><code type='click-ui' language='bash'>
+clickhouse --queries-file h3_heatmap.sql > h3_heatmap.svg
+</code></pre>
+
+![NYC taxi pickup density as an H3 hexagonal heatmap](https://clickhouse.com/uploads/h3_nyc_15bdb90bcb.svg)
+
+Manhattan is the bright diagonal strip running northeast to southwest - its grid is tilted ~29° from true north. Brooklyn spreads to the lower right, Queens to the right, and the two isolated bright clusters are LaGuardia (upper) and JFK (lower) airports.
+
+
+We can now find the top pickup hotspots by grouping on the H3 cell:
+
+<pre><code type='click-ui' language='sql'>
+SELECT pickup_h3, count() AS trips
+FROM trips_small_h3
+WHERE pickup_h3 != 0
+GROUP BY pickup_h3
+ORDER BY trips DESC
+LIMIT 10;
+</code></pre>
+
+```shell
+┌──────────pickup_h3─┬──trips─┐
+│ 617733123811311615 │ 168301 │
+│ 619056821840379903 │ 136783 │
+│ 617733123811835903 │ 122822 │
+│ 617733124072407039 │  96570 │
+│ 617733150971789311 │  92725 │
+│ 617733123872391167 │  92066 │
+│ 617733124388552703 │  90773 │
+│ 617733123870818303 │  88238 │
+│ 617733150972837887 │  83712 │
+│ 617733123869507583 │  83588 │
+└────────────────────┴────────┘
+
+10 rows in set. Elapsed: 0.033 sec.
+```
+
+The second row - 136,783 trips at cell `619056821840379903` - is the bad-coordinate bucket we encountered earlier: those are the `(0, 0)` GPS failures that `geoToH3` maps to a cell near the equator. We can filter it out by checking the cell center is within a plausible latitude range.
+
+We can visualize these hotspots on the same heatmap we built above, highlighting the top 10 valid cells in white:
+
+```sql
+WITH all_cells AS (
+      SELECT
+          assumeNotNull(geoToH3(pickup_latitude, pickup_longitude, 9)) AS cell,
+          count() AS trips
+      FROM trips_small
+      WHERE pickup_latitude BETWEEN 40.4 AND 40.95
+        AND pickup_longitude BETWEEN -74.3 AND -73.7
+      GROUP BY cell
+      HAVING trips >= 10
+  ),
+  max_log AS (SELECT max(log(trips)) AS max_log FROM all_cells),
+  top_cells AS (
+      SELECT pickup_h3 AS cell, count() AS trips
+      FROM trips_small_h3
+      WHERE pickup_h3 != 0
+      GROUP BY cell
+      HAVING h3ToGeo(cell).latitude BETWEEN 40.0 AND 42.0
+      ORDER BY trips DESC
+      LIMIT 10
+  ),
+  background AS (
+      SELECT replaceAll(
+          svg([arrayMap(p -> (p.2, p.1), h3ToGeoBoundary(cell))]::Polygon),
+          'style=""',
+          concat('style="fill:rgba(250,255,105,', toString(round(log(trips) / max_log, 3)), ');stroke:none"')
+      ) AS fragment
+      FROM all_cells, max_log
+  ),
+  highlights AS (
+      SELECT replaceAll(
+          svg([arrayMap(p -> (p.2, p.1), h3ToGeoBoundary(cell))]::Polygon),
+          'style=""',
+          'style="fill:rgba(255,255,255,0.9);stroke:#161517;stroke-width:0.0005"'
+      ) AS fragment
+      FROM top_cells
+  )
+  SELECT concat(
+      '<svg xmlns="http://www.w3.org/2000/svg" viewBox="-74.05 40.58 0.32 0.35" width="650" height="1000" preserveAspectRatio="none">',
+      '<rect x="-74.05" y="40.58" width="0.32" height="0.35" fill="#161517"/>',
+      '<g transform="scale(1,-1) translate(0,-81.51)">',
+      arrayStringConcat((SELECT groupArray(fragment) FROM background), ''),
+      arrayStringConcat((SELECT groupArray(fragment) FROM highlights), ''),
+      '</g></svg>'
+  )
+  FORMAT TSVRaw;
+```
+
+Save to a file and pipe to SVG as before:
+
+```shell
+clickhouse --queries-file h3_hotspots.sql > h3_hotspots.svg
+```
+
+![Top 10 H3 pickup hotspots (white) overlaid on the NYC taxi pickup heatmap](https://clickhouse.com/uploads/h3_hotspots_1c45d17ee7.svg)
+
+The white cells in the left cluster are all in Midtown Manhattan - the blocks around Penn Station, Grand Central, and Times Square. The two isolated white cells to the right are at LaGuardia Airport.
+
+For a radius query - all pickups within two H3 cells of Times Square - `h3kRing` gives us the set of cells to look up, and the primary key index does the rest:
+
+<pre><code type='click-ui' language='sql'>
+SELECT count() AS trips
+FROM trips_small_h3
+WHERE pickup_h3 IN (
+    SELECT arrayJoin(h3kRing(geoToH3(40.758, -73.985, 9), 2))
+);
+</code></pre>
+
+```shell
+┌───trips─┐
+│ 1144573 │ -- 1.14 million
+└─────────┘
+
+1 row in set. Elapsed: 0.006 sec.
+```
+
+The equivalent query against the base table uses a bounding box as there's no H3 index to lean on:
+
+<pre><code type='click-ui' language='sql'>
+SELECT count() AS trips
+FROM trips_small
+WHERE pickup_latitude BETWEEN 40.7525 AND 40.7633
+AND pickup_longitude BETWEEN -73.9925 AND -73.97
+</code></pre>
+
+```shell
+┌──trips─┐
+│ 951983 │
+└────────┘
+
+1 row in set. Elapsed: 0.074 sec.
+```
+
+The H3 version is around 12 times faster on 10 million rows - a gap that widens significantly as data volume grows. The result counts differ because the bounding box is rectangular while the H3 k-ring is hexagonal - they cover a similar area with different shapes - the bounding box misses some trips in the corners of the outermost hexagonal cells.
+
+## When to use ClickHouse for geospatial in March 2026 {#when-to-use-clickhouse-for-geospatial}
+
+ClickHouse excels at geospatial problems where the bottleneck is aggregate query speed on large datasets. If you're binning billions of location observations into H3 or geohash cells, running distance calculations or radius queries at scale, building hexagonal heatmaps, or enriching points with a fixed polygon boundary set via polygon dictionaries, ClickHouse is an excellent fit.
+
+## What ClickHouse doesn't do in geospatial in March 2026 {#what-clickhouse-doesnt-do}
+
+ClickHouse doesn't support the full feature set of [PostGIS](https://postgis.net), and for most analytical workloads that's fine as the performance advantage of what's supported is enormous. But, it's still worth knowing what's not currently supported.
+
+**No traditional spatial indexing.** There is no [R-tree](https://en.wikipedia.org/wiki/R-tree) index, but ClickHouse has effective alternatives. Storing H3 or geohash values in the primary key - as shown in the NYC taxi example above - is a form of spatial indexing: range scans on the primary key efficiently resolve spatial queries. `quadtreemortonEncode(x, y)` provides Morton-encoded quadtree indexing for Cartesian coordinates. The trade-off is that these approaches require knowing your query patterns at table design time.
+
+**No coordinate reference system (CRS) awareness.** ClickHouse treats all coordinates as numbers. There is no reprojection, no EPSG code support, no awareness of whether your data is in [WGS-84](https://en.wikipedia.org/wiki/World_Geodetic_System) or [Web Mercator](https://en.wikipedia.org/wiki/Web_Mercator_projection). You are responsible for ensuring your data is in a consistent CRS before ingesting.
+
+**`areaSpherical` does not return meters.** As described earlier in this blog post, the spherical functions work on a unit sphere, which is maybe not obvious at first glance.
+
+**No ad-hoc spatial joins at index speed.** Joining a table of millions of points against a table of hundreds of polygons at query time requires a `pointInPolygon` call on every row combination. For the common case of enriching points with a fixed set of boundaries - boroughs, regions, zones - the [polygon dictionary](/blog/state-of-geospatial-2026#polygon-dictionaries) approach described above solves this with an indexed lookup. But for arbitrary spatial joins between two large tables at query time, there is no equivalent of a spatial index join.
+
+**Function naming.** If you are coming from PostGIS or any OGC-compliant database, the function names are different. e.g. `pointInPolygon` not `ST_Contains`, `wkt()` not `ST_AsText`, `readWKTPolygon` not `ST_GeomFromText`.
+
+If your workload requires CRS-aware reprojection, complex topology operations (snapping, validation, simplification), or ad-hoc spatial joins between two large dynamic tables at query time, you'll likely need [PostGIS](https://postgis.net) or a dedicated GIS tool instead.
+
+## Where things are heading {#where-things-are-heading}
+
+The introduction of the [`Geometry`](https://clickhouse.com/docs/en/sql-reference/data-types/geo) variant type in 2025 was the most significant architectural change to ClickHouse's geospatial support in several years. It makes the type system genuinely composable - you can write functions that accept any geometry type, store mixed data naturally, and ingest from external sources without knowing the geometry type in advance. The recent work to make all geometry functions accept both `Geometry` and the individual sub-types continues to smooth out the rough edges.
+
+For analytics at scale on location data, ClickHouse is already an excellent choice. The tooling is mature, the performance is hard to beat, and the 2025 type system improvements mean the ergonomics are considerably better than they were.
+
+
+---
+
+## Get started today
+
+Interested in seeing how ClickHouse works on your data? Get started with ClickHouse Cloud in minutes and receive $300 in free credits.
+
+[Sign up](https://console.clickhouse.cloud/signUp?loc=blog-cta-84-get-started-today-sign-up&utm_blogctaid=84)
+
+---
+
+---
+
 ## Clone massive tables instantly and experiment safely in ClickHouse
 Published: 2026-02-24T08:22:17+00:00
 URL: https://clickhouse.com/blog/table-cloning
@@ -808,6 +2391,106 @@ And in ClickHouse Cloud, cloned tables can optionally be queried from isolated c
 Interested in seeing how ClickHouse works on your data? Get started with ClickHouse Cloud in minutes and receive $300 in free credits.
 
 [Sign up](https://console.clickhouse.cloud/signUp?loc=blog-cta-78-ready-to-get-cloning-sign-up&utm_blogctaid=78)
+
+---
+
+---
+
+## LINEヤフーが世界有数のKafkaデプロイメントのオブザーバビリティにClickHouseを活用
+Published: 2026-02-23T13:00:06+00:00
+URL: https://clickhouse.com/blog/line-yahoo-jp
+
+---
+title: "LINEヤフーが世界有数のKafkaデプロイメントのオブザーバビリティにClickHouseを活用"
+date: "2026-02-23T13:00:06.267Z"
+author: "ClickHouse"
+category: "User stories"
+excerpt: "ClickHouseはLINEヤフー社のオブザーバビリティスタックの中でも非常に重要な役割を果たしています。毎秒700万行という莫大な量のデータ処理を24台のサーバーで賄うという、驚くようなコストパフォーマンスを達成しています。ー 上級ソフトウェアエンジニア 岡田 遥来氏"
+---
+
+# LINEヤフーが世界有数のKafkaデプロイメントのオブザーバビリティにClickHouseを活用
+
+## 概要
+
+- LINEヤフーはClickHouseを使用して世界有数のKafkaデプロイメントを観測し、1日に1兆以上のメッセージと2.6ペタバイトのI/Oを処理している。
+- ClickHouseはAPIログを毎秒700万行インジェストし、これまでの観測ツールでは想像もできないほど大規模な、ミリ秒レベルのデバッグを可能にする。
+- LINEヤフーはわずか24台のサーバーで4.1兆行をリアルタイムに分析し、Kafkaのアップストリームのバグ特定や、パフォーマンス改善に役立てている。
+
+
+[LINEヤフー](https://www.lycorp.co.jp/)については、まずその規模を説明する必要があるでしょう。「巨大テックカンパニー」では足りず、「国民的デジタルインフラ」と理解していただく必要があります。LINEとYahoo!の合併により生まれたLINEヤフーは、日本で最も有名なメッセージングアプリと、国内有数のニュースポータル、および巨大な支払いエコシステムを運営し、それらの間のデータ転送を、数えきれないほどの基幹サービスによって稼働させています。
+
+それほどのスケールを堅実に動かしているのが、同社が全社的に使用しているApache Kafkaプラットフォームです。この中枢のプラットフォームがまるで神経系のように、アプリログ、マイクロサービスイベント、ゲーム内テレメトリなど、あらゆるデータを運んでいます。ピーク時には毎秒3,100万件のメッセージを処理することもあり、1日に流れるメッセージの数は1兆、さらにI/Oは2.6ペタバイトを超えるほどです。
+
+「これはかなり大規模なKafkaクラスターです」と、LINEヤフーのKafkaプラットフォームチームで上級ソフトウェアエンジニアとテックリードを兼務する岡田 遥来氏は言います。「巨大です。おそらく世界でも有数の規模でしょう。」
+
+ClickHouseが2025年6月に開催した[Observability happy hour in Tokyo](https://clickhouse.com/jp/videos/tokyo-o11y-happy-hour-line-corp-18jun25)で、岡田氏はKafkaを巨大な規模で運用していることや、まだ誰も知らない問題を発見したことを説明しました。その問題を解決するために、ほとんどの企業が想像もできないようなレベルのオブザーバビリティと、データベース速度、コスト効率、そして開発者にとって使いやすいことなどが求められました。
+
+
+## 稀有なKafkaデプロイメント
+岡田氏は、「社内で最もよく使用しているミドルウェアソリューションはKafkaです。」と説明しました。これは大袈裟ではありません。LINEヤフーはKafkaを、たとえばサービス間のクラシックなPub/Sub通信、ログパイプライン、非同期処理、ゲーム内データのストリーミング、そして、内部システム間でデータベースの同期を保つためのCDCフローなど、あらゆる処理に使用しています。サービスから送信されるデータのほとんどがKafkaに到達するといった状態です。
+
+しかし、彼らにとって重要なのはそこではなく、そのボリュームです。LINEヤフーのKafkaプラットフォームは、200を超えるブローカーで構成され、25,000以上のクライアントサービスに機能を提供しています。負荷がそのレベルに達すると、ほんの些細な問題でも雪だるまが膨らむように効率が急降下し、稼働停止に追い込まれます。
+
+また、KafkaはもともとLinkedInが開発し、2011年にオープンソース化されたプラットフォームです。1日に1兆を超えるほどのワークロードは想定されていません。未知の領域に足を踏み入れるようなチャレンジを、LINEヤフーは続けてきました。「これほどの規模で運用すると、世界中でまだ誰も目にしたことのない問題にも遭遇します。」（岡田氏）これまで、彼らはログの削除でレースコンディションが起きること、予期しないfsyncコールによりパフォーマンスがわずかに低下すること、Linuxカーネルの問題により接続が急増した際にパフォーマンスが急低下することなど、アップストリームの問題を修正およびレポートし、貢献してきました。
+
+「こういった問題が日々起こったり起こらなかったりするので、オブザーバビリティが非常に重要になります」と岡田氏は言います。「各問題のルート構造を分析し、根本原因を突き止めるために、システムスタックのどの部分に関しても最大限のオブザーバビリティが必要です。」
+
+
+## マルチレイヤで構成されるLINEヤフーのオブザーバビリティスタック
+巨大なシステムで問題をいち早く検出するため、社内でオブザーバビリティスタックを構築しました。それは一般的なモニタリングセットアップというよりも、むしろ完璧な調査研究システムに近いものでした。
+
+![lineyahoo1.png](https://clickhouse.com/uploads/lineyahoo1_43fc07e3ae.png)
+（図）Kafka、JVM、カーネル、ディスクのメトリクスをキャプチャし、リアルタイムで診断するマルチレイヤオブザーバビリティスタック
+
+このスタックの最上部で実行されるプルーブは、エンドツーエンドのパフォーマンスを定期的に測定し、メッセージがプロデューサーからブローカーを通過してコンシューマーに到達するまでの時間を調べます。その下の層では、Async Profilerを使用してKafkaの処理をプロファイリングし、CPU動作の情報とJVMレベルのインサイトを取得して、問題をピンポイントで特定するために使用します。そこからさらに、ディレイアカウンティング、eBPFツール、各ディスクのリードコレクター、およびSMARTデータエクスポーターを使用してLinuxカーネルを詳しく測定します。カーネルスケジューラに問題が起きたり、ディスクが異常な動作を始めたりすると、わかるようになっています。
+
+ですが、何か問題が起きた際に最も活躍するのは、やはりClickHouseを活用したKafka APIリクエストログパイプラインです。LINEヤフーはこのレイヤで、システムのあらゆる瞬間の動作を正確に把握していると言います。プロデュース、フェッチ、コンシューム、ブローカー間レプリケーション、管理オペレーションなど、Kafkaへのあらゆるリクエストがインターセプトされ、プロトコルバッファ経由でシリアル化されて、内部のKafkaクラスターにプッシュされます。その後、「ログインジェスター」にコンシュームされて、ClickHouseに大規模バッチで書き込まれます。
+
+![lineyahoo2.png](https://clickhouse.com/uploads/lineyahoo2_a90bc9b693.png)
+（図）Kafka APIのリクエストフロー。インターセプト後にClickHouseに送られる大容量のクエリ可能データをオブザーバビリティに使用。
+
+これにより、莫大な量のデータが生成されます。同社では毎秒700万行のAPIリクエストログをClickHouseに格納しますが、やがてそれは4.1兆行を超えるデータセットにまで拡大します。「ClickHouseにインジェストされるデータ量はとんでもなく大きいです」（岡田氏）
+
+
+## ClickHouseを選んだ理由
+LINEヤフーがClickHouseを選んだ理由は主に3つあります。まず、ClickHouseは[SQLに対応](https://clickhouse.com/docs/sql-reference)しており、エンジニアが特別なトレーニングを受けなくてもデータをクエリできることです。「SQLは社内の開発者にとって最も使い慣れたクエリ言語です」と岡田氏は言います。「これは非常に大きな利点です。」
+
+2つ目は、ClickHouseの[圧縮機能](https://clickhouse.com/docs/data-compression/compression-in-clickhouse)です。「ClickHouseはとにかくストレージ効率に優れています。カラムナーアーキテクチャのおかげで、非常に高い圧縮率が得られます。データ量が多くなっても、高いストレージ効率を維持できます。」（岡田氏）
+
+最後は何と言っても、ClickHouseの[パフォーマンス](https://clickhouse.com/docs/concepts/why-clickhouse-is-so-fast)と[水平方向への拡張性](https://clickhouse.com/docs/architecture/horizontal-scaling)です。「パフォーマンスは非常に重要」と岡田氏は言います。「毎秒700万行のインジェストを24のClickHouseクラスターノードだけで実行できます。エネルギー効率にも、コスト効果にも非常に優れています。」
+
+データアクセスにはRedashのダッシュボードを使用しますが、デバッグのセッション中にSQLクエリをダイレクトに実行して行うこともあります。また、岡田氏がClickHouseの[Tokyo happy hour](https://clickhouse.com/jp/videos/tokyo-o11y-happy-hour-line-corp-18jun25)で説明したように、このクエリこそが、まだ誰も知らないKafkaのバグを捕捉する立役者となるのです。
+
+
+## Kafkaのバグを運用環境で捉える
+ことの始まりは、Kafkaのパーティションでプロデュースリクエストが失敗したという、過去に体験したことのないエラーに遭遇したことでした。岡田氏はいつものようにダッシュボードをチェックし、レプリケーションが完全に停止したという、非常に深刻なアラームを確認します。リーダーはメッセージを受信するものの、フォロワーがそれに追いついておらず、プロデューサーがクォーラムを失うため、新しいメッセージが拒否されています。
+
+最初はフォロワーの問題のように思えたのですが、フォロワーのログを詳しく調査すると、「offset out of order」や「non-monotonic offsets」という奇妙なメッセージに気付きました。これはあってはならないことです。Kafkaパーティションのオフセットは常に1つずつ前進するように作られており、1つでも後退すると、レプリケーションのパイプライン全体が壊れる可能性があります。そこで岡田氏はバッファのダンプを調査しますが、そのとき、「奇妙な現象」に遭遇します。正常にカウントアップされていたオフセットが、突如として大幅に巻き戻されているのです。Kafkaの奥深くに何か問題があると思いました。
+
+岡田氏は、ProduceとListOffsetsの2つのKafka API（どちらもディスクのログセグメントにタッチする）の間で[レースコンディション](https://en.wikipedia.org/wiki/Race_condition)が起きていると推測します。極度に短い瞬間に2つのスレッドが同時にアクセスし、オフセットの状態を変えることで矛盾が起きたと仮定したのです。「この時点ではコードを解読しただけであり、単なる仮定に過ぎませんでした」と岡田氏は言います。「これをどう証明するかが重要でした。」
+
+これを調査するため、どのAPIコールがどの瞬間に起きているかを厳密に知る必要がありました。岡田氏は言います。「ClickHouseで収集したAPIリクエストログが非常に役に立ちました。」ClickHouseに格納されたAPIリクエストログを使用し、エラーが発生した瞬間の数百万行に対してSQLクエリを実行しました。そして岡田氏の推測どおり、ListOffsetsコールはProduceリクエストが失敗したまさにその瞬間に起きていたことを突き止めました。2つのオペレーションが衝突したという明確な証拠により、アップストリームのバグであると証明されたのです。
+
+岡田氏はチームでKafkaコミュニティに修正プログラムを提出し、イシューは現在レビュー中とのことです。数兆ものAPIログを簡単にクエリできるClickHouseのパワーがなければ、これほど簡単には解決しなかったはずです。
+
+
+## LINEヤフーのスケールに欠かせないClickHouse
+ほとんどの企業にとって、Kafkaは堅牢で予測可能なインフラストラクチャです。LINEヤフーほどの規模であっても、Kafkaというオープンソースプラットフォームに与えられた処理を何でも高速に実行します。
+
+そこにClickHouseを組み込むことで、同社はメッセージ件数が1日に1兆を超えるほどのシステムで、リアルタイムなフォレンジックをプレーンなSQLで可能にしています。エンジニアは仮定を立て、クエリを作成し、数十億、あるいは数兆ものレコードに対して動作の追跡をミリ秒単位で行うことができます。
+
+岡田氏は最後に、「ClickHouseは我々のオブザーバビリティスタックの中でも非常に重要な役割を果たしています。」と付け加えました。「毎秒700万行という莫大な量のデータ処理を24台のサーバーで賄うという、驚くようなコストパフォーマンスを達成しています。」
+
+LINEヤフーほどのスケールで運用していると、何が起きても不思議ではありません。ですが、オブザーバビリティプラットフォームの中枢でClickHouseが機能している限り、どれほど奇妙で稀なバグであろうと必ず手掛かりは残ります。その手掛かりのおかげで、岡田氏のチームは世界有数の規模を誇るKafkaシステムを毎日無事に稼働させているのです。
+
+
+---
+
+## ClickHouse Cloudを無料トライアル
+
+社内オブザーバビリティスタックのアップグレードに関心を持たれた方は、ClickHouse Cloudを30日間無料でお試しください。
+
+[詳しくはこちら](https://clickhouse.com/jp/cloud?loc=blog-cta-82-clickhouse-cloud&utm_blogctaid=82)
 
 ---
 
@@ -4998,6 +6681,601 @@ Interested in seeing how Managed ClickStack works for your observability data? G
 
 ---
 
+## 主要5大クラウドデータウェアハウスのコストパフォーマンス比較
+Published: 2026-02-05T03:05:27+00:00
+URL: https://clickhouse.com/blog/cloud-data-warehouses-cost-performance-comparison-jp
+
+---
+title: "主要5大クラウドデータウェアハウスのコストパフォーマンス比較"
+date: "2026-02-05T03:05:27.298Z"
+author: "Tom Schreiber and Lionel Palacin"
+category: "Engineering"
+excerpt: "実際の課金モデルを使用して、10億〜1000億行規模で主要5大クラウドデータウェアハウスをベンチマークし、1ドルあたりのパフォーマンスを測定しました。データ量が増えるにつれてコストパフォーマンスがどのように変化するかを示しています。"
+---
+
+# 主要5大クラウドデータウェアハウスのコストパフォーマンス比較
+
+> **要約**<br/><br/>**Snowflake**、**Databricks**、**ClickHouse Cloud、BigQuery**、**Redshift**を10億行、100億行、1000億行の規模でベンチマークし、各ベンダーの実際のコンピュート課金ルールを適用しました。<br/><br/>
+大規模な分析ワークロードにおいて、**ClickHouse Cloudは他のすべてのシステムよりも桁違いに優れたコストパフォーマンスを提供します**。
+
+## クラウドウェアハウスのコストパフォーマンスを比較する方法
+
+データセットと一連の分析クエリがあります。それらを実行できる複数のクラウドデータウェアハウスがあります。そして質問はシンプルです：
+
+> **分析ワークロードにおいて、1ドルあたり最も高いパフォーマンスを得られるのはどこか？**
+
+価格表ではこれに答えられません。
+
+[答えられないのです](/blog/how-cloud-data-warehouses-bill-you)。異なるベンダーはコンピュートの計測方法が異なり、容量の価格設定が異なり、「コンピュートリソース」の定義が異なるため、その数値を額面通りに比較することはできません。
+
+そこで私たちは、主要な5つのクラウドデータウェアハウスすべてで*同じ*本番環境由来の分析ワークロードを実行しました：
+
+* **Snowflake**
+* **Databricks**
+* **ClickHouse Cloud**
+* **BigQuery**
+* **Redshift**
+
+そして、**10億**、**100億**、**1000億**行という3つのスケールで実行し、データが増えるにつれてコストとパフォーマンスがどのように変化するかを確認しました。
+
+短いバージョンが必要な場合は、ネタバレをどうぞ：**コストパフォーマンスはシステム間で線形にスケールしません。**
+
+> **ClickHouse Cloudは他のすべてのシステムよりも桁違いに優れたコストパフォーマンスを提供します。**
+
+![Blog-Costs-animation01_small.gif](https://clickhouse.com/uploads/Blog_Costs_animation01_small_de9ac301cc.gif)
+
+詳細、チャート、方法論が必要な場合は、読み進めてください。
+
+>**再現可能なパイプライン**：<br/>この投稿のすべての結果は、[Bench2Cost](/blog/how-cloud-data-warehouses-bill-you#before-we-dive-in-how-we-calculate-costs-with-bench2cost)を使用して生成されています。これは、オープンで完全に再現可能なベンチマークパイプラインです。
+Bench2Costは各システムの実際の**コンピュート**課金モデルを生の実行時間に適用するため、コスト比較が正確で検証可能です。
+<br/><br/>
+**ストレージは焦点ではありません**：<br/>
+Bench2Costはすべてのシステムの**ストレージコスト**も計算しますが、ストレージ価格はシンプルで、ベンダー間で類似しており、分析ワークロードのコンピュートと比較して無視できるため、ここでは強調していません。
+<br/><br/>
+**隠れたストレージの勝利**：<br/>
+とはいえ、チャートからリンクされている結果JSONの生の数値を見ると、**ClickHouse Cloudはストレージサイズとストレージコストの両方で他のすべてのシステムを静かに打ち負かしており、多くの場合桁違いです**が、これはこの比較の範囲外です。
+
+
+
+## インタラクティブベンチマークエクスプローラー
+
+静的なチャートはストーリーテリングには最適ですが、完全なデータセットの表面をかすめるだけです。
+
+そこで、私たちは新しいものを構築しました：**完全にインタラクティブなベンチマークエクスプローラー**を**ブログ内に埋め込みました**。
+
+ベンダー、ティア、クラスターサイズ、データセットスケールを自由に組み合わせることができます。ランタイム、コスト、コストパフォーマンスランキングを切り替え、この研究の背後にある完全な結果を探索できます。
+
+<iframe src="/uploads/benchmark_costs_dashboard_95d2e2ef2b.html" frameborder="0" style="width: 100%; height: 800px;"></iframe>
+
+
+これらの数値をどのように生成したかを理解したい場合は、すべて投稿の最後にある[付録](/blog/cloud-data-warehouses-cost-performance-comparison#appendix-benchmark-methodology)に文書化されています。
+
+まず10億行から始めて、各スケールでのシステムのパフォーマンスを見ていきましょう。
+
+*(付録で説明されているように、各システムを評価するために標準的な43クエリのClickBench分析ワークロードを使用しています。)*
+
+
+## 10億行：ベースライン
+
+> **10億スケールはベースラインとしてのみ含めていますが、現代のデータプラットフォームにとってより現実的なストレスポイントは100億、1000億、それ以上です。**<br/><br/>
+今日の分析ワークロードは、数百億、数千億、さらには数兆行で日常的に動作しています。
+[Teslaはストレステストのために**1京行以上**をClickHouseに取り込みました](https://clickhouse.com/blog/how-tesla-built-quadrillion-scale-observability-platform-on-clickhouse#proving-the-system-at-scale)、そして[ClickPy](https://clickpy.clickhouse.com/)、私たちのPythonクライアントテレメトリデータセットは、すでに **[2兆行](https://sql.clickhouse.com/?query=U0VMRUNUCiAgICAgICAgZm9ybWF0UmVhZGFibGVRdWFudGl0eShzdW0oY291bnQpKSBBUyB0b3RhbCwgdW5pcUV4YWN0KHByb2plY3QpIGFzIHByb2plY3RzIEZST00gcHlwaS5weXBpX2Rvd25sb2Fkcw&run_query=true)** を超えています。
+
+以下の[散布図](/blog/cloud-data-warehouses-cost-performance-comparison#how-to-read-the-scatter-plot-charts)は、5つのシステムそれぞれについて、10億行のClickBench実行の合計実行時間（横軸）と合計コンピュートコスト（縦軸）を示しています。
+
+*(明確さのために目盛りラベルを非表示にしていますが、点の位置は完全に正確なままです。上記のインタラクティブベンチマークエクスプローラーには完全な数値軸が表示されます。)*
+
+![Blog-Costs.008.png](https://clickhouse.com/uploads/Blog_Costs_008_3d74ce58e7.png)
+*(表示される構成は各エンジンの全範囲を表しています。[詳細は付録](/blog/cloud-data-warehouses-cost-performance-comparison#what-configurations-we-compare)を参照してください。)*
+
+10億行では、チャートは3つの明確な[象限の動作](/blog/cloud-data-warehouses-cost-performance-comparison#how-to-read-the-scatter-plot-charts)を明らかにします。
+
+
+<table>
+  <thead>
+    <tr>
+      <th>カテゴリ</th>
+      <th>システム / ティア</th>
+      <th>実行時間</th>
+      <th>コスト</th>
+    </tr>
+  </thead>
+  <tbody>
+    <!-- FAST & LOWER COST -->
+    <tr>
+      <td colspan="4"><strong>大きなグループが理想的な象限に該当します — 十分に高速<em>かつ</em>リーズナブルな価格 — しかし、1ドルあたりの価値プロファイルは非常に異なります。</strong></td>
+    </tr>
+    <tr>
+      <td><code>高速 & 低コスト</code></td>
+      <td><strong>ClickHouse Cloud</strong> (<a href="https://clickhouse.com/blog/clickhouse-parallel-replicas">9ノード</a>)</td>
+      <td><a href="https://github.com/ClickHouse/examples/blob/main/blog-examples/Bench2Cost/clickhouse-cloud/results_1B/aws.9.236.parallel_replicas.json">~23秒</a></td>
+      <td>
+        <a href="https://github.com/ClickHouse/examples/blob/main/blog-examples/Bench2Cost/clickhouse-cloud/results_1B/aws.9.236.parallel_replicas.json">~$0.67</a>
+      </td>
+    </tr>
+    <tr>
+      <td><code>高速 & 低コスト</code></td>
+      <td><strong>BigQuery Enterprise（容量）</strong></td>
+      <td><a href="https://github.com/ClickHouse/examples/blob/main/blog-examples/Bench2Cost/bigquery/results_1B/result_enriched.json">~38秒</a></td>
+      <td><a href="https://github.com/ClickHouse/examples/blob/main/blog-examples/Bench2Cost/bigquery/results_1B/result_enriched.json">~$0.80</a></td>
+    </tr>
+    <tr>
+      <td><code>高速 & 低コスト</code></td>
+      <td><strong>Redshift Serverless（128 RPU）</strong></td>
+      <td><a href="https://github.com/ClickHouse/examples/blob/main/blog-examples/Bench2Cost/redshift-serverless/results_1B/enriched_1b.json">~64秒</a></td>
+      <td><a href="https://github.com/ClickHouse/examples/blob/main/blog-examples/Bench2Cost/redshift-serverless/results_1B/enriched_1b.json">~$0.85</a></td>
+    </tr>
+    <tr>
+      <td><code>高速 & 低コスト</code></td>
+      <td><strong>Databricks（Large）</strong></td>
+      <td><a href="https://github.com/ClickHouse/examples/blob/main/blog-examples/Bench2Cost/databricks/results_1B/clickbench_Large_enriched.json">~80秒</a></td>
+      <td><a href="https://github.com/ClickHouse/examples/blob/main/blog-examples/Bench2Cost/databricks/results_1B/clickbench_Large_enriched.json">~$0.62</a></td>
+    </tr>
+    <tr>
+      <td><code>高速 & 低コスト</code></td>
+      <td><strong>Snowflake（Large）</strong></td>
+      <td><a href="https://github.com/ClickHouse/examples/blob/main/blog-examples/Bench2Cost/snowflake/results_1B/large_enriched.json">~127秒</a></td>
+      <td><a href="https://github.com/ClickHouse/examples/blob/main/blog-examples/Bench2Cost/snowflake/results_1B/large_enriched.json">~$0.85</a></td>
+    </tr>
+        <!-- FAST & HIGH COST -->
+    <tr>
+      <td colspan="4"><strong>これらの2つは許容できる速度を提供しますが、価格が高額です。</strong></td>
+    </tr>
+    <tr>
+      <td><code>高速 & 高コスト</code></td>
+      <td><strong>Snowflake（4X-Large）</strong></td>
+      <td><a href="https://github.com/ClickHouse/examples/blob/main/blog-examples/Bench2Cost/snowflake/results_1B/4xl_enriched.json">~45秒</a></td>
+      <td><a href="https://github.com/ClickHouse/examples/blob/main/blog-examples/Bench2Cost/snowflake/results_1B/4xl_enriched.json">~$4.8</a></td>
+    </tr>
+    <tr>
+      <td><code>高速 & 高コスト</code></td>
+      <td><strong>Databricks（4X-Large）</strong></td>
+      <td><a href="https://github.com/ClickHouse/examples/blob/main/blog-examples/Bench2Cost/databricks/results_1B/clickbench_4X-Large_enriched.json">~59秒</a></td>
+      <td><a href="https://github.com/ClickHouse/examples/blob/main/blog-examples/Bench2Cost/databricks/results_1B/clickbench_4X-Large_enriched.json">~$6.1</a></td>
+    </tr>
+    <!-- BIGQUERY ON-DEMAND -->
+    <tr>
+      <td colspan="4"><strong>BigQuery On-Demandは高速ですが、TiBあたりのスキャン課金により、メインプロットから完全に外れます。</strong></td>
+    </tr>
+    <tr>
+      <td><code>高速 & 高コスト</code>（チャート外）</td>
+      <td><strong>BigQuery On-Demand</strong></td>
+      <td><a href="https://github.com/ClickHouse/examples/blob/main/blog-examples/Bench2Cost/bigquery/results_1B/result_enriched.json">~38秒</a></td>
+      <td><a href="https://github.com/ClickHouse/examples/blob/main/blog-examples/Bench2Cost/bigquery/results_1B/result_enriched.json">~$16.9</a></td>
+    </tr>
+    <!-- SLOW & LOWER COST -->
+    <tr>
+      <td colspan="4"><strong>これらのティアは安価ですが、非常に遅いです。</strong></td>
+    </tr>
+        <tr>
+      <td><code>低速 & 低コスト</code></td>
+      <td><strong>Databricks（2X-Small）</strong></td>
+      <td><a href="https://github.com/ClickHouse/examples/blob/main/blog-examples/Bench2Cost/databricks/results_1B/clickbench_2X-Small_enriched.json">~712秒</a></td>
+      <td><a href="https://github.com/ClickHouse/examples/blob/main/blog-examples/Bench2Cost/databricks/results_1B/clickbench_2X-Small_enriched.json">~$0.55</a></td>
+    </tr>
+    <tr>
+      <td><code>低速 & 低コスト</code></td>
+      <td><strong>Snowflake（X-Small）</strong></td>
+      <td><a href="https://github.com/ClickHouse/examples/blob/main/blog-examples/Bench2Cost/snowflake/results_1B/xs_enriched.json">~785秒</a></td>
+      <td><a href="https://github.com/ClickHouse/examples/blob/main/blog-examples/Bench2Cost/snowflake/results_1B/xs_enriched.json">~$0.65</a></td>
+    </tr>
+  </tbody>
+</table>
+
+
+コスト効率を直接比較するために、以下のチャートは実行時間とコストを単一のコストパフォーマンススコアに集約しています（[方法論の定義](/blog/cloud-data-warehouses-cost-performance-comparison#how-we-measure-overall-cost-performance-ranking)）：
+
+![Blog-Costs.009.png](https://clickhouse.com/uploads/Blog_Costs_009_18d232f919.png)
+
+画像は明確になります：
+
+
+
+* **ClickHouse Cloudは最も強力な総合コストパフォーマンスを提供します**。最も低い*実行時間 × コスト*値を持ち、他のすべてはそれと比較されます。
+
+* **BigQuery（容量モード）**が次に続き、このデータセットサイズではClickHouseの約**2倍悪い**です。
+
+* **他のほとんどの構成は急速に落ち込みます**。*実行時間 × コスト*が上昇するにつれて：**3〜4倍悪い**から、より大きなSnowflakeとDatabricksティアでは**2桁の倍数**まで。
+
+
+> 真のストーリーはデータが増えたときに始まります。<br/><br/>10億行は現代の基準ではまだ小さく、データが100億行と1000億行にスケールするにつれて経済性は急速に変化し、ほとんどのシステムは「高速 & 低コスト」ゾーンから急激に外れ始めます。
+
+
+## 100億行：亀裂が現れ始める
+
+以下の[散布図](/blog/cloud-data-warehouses-cost-performance-comparison#how-to-read-the-scatter-plot-charts)は、5つのシステムそれぞれについて、100億行のClickBench実行の合計実行時間（横軸）と合計コンピュートコスト（縦軸）を示しています。
+
+*(前述のとおり、視覚的な明確さのために目盛りラベルを非表示にしていますが、点の位置は実際の基礎値を反映しています。上記のインタラクティブベンチマークエクスプローラーには完全な数値軸が含まれています。)*
+
+![Blog-Costs.011.png](https://clickhouse.com/uploads/Blog_Costs_011_a2429a91bc.png)
+*(表示される構成は各エンジンの全範囲を表しています。[詳細は付録](/blog/cloud-data-warehouses-cost-performance-comparison#what-configurations-we-compare)を参照してください。)*
+
+100億行では、最初の真の分離が現れます。実行時間が延び、コストが上昇するにつれて、システムは「高速 & 低コスト」[象限](/blog/cloud-data-warehouses-cost-performance-comparison#how-to-read-the-scatter-plot-charts)から外れ始めます。
+
+
+<table>
+  <thead>
+    <tr>
+      <th>カテゴリ</th>
+      <th>システム / ティア</th>
+      <th>実行時間</th>
+      <th>コスト</th>
+    </tr>
+  </thead>
+  <tbody>
+    <!-- FAST & LOWER COST -->
+    <tr>
+      <td colspan="4"><strong>これらは100億行でも理想的な象限にある唯一の2つのシステムですが、速度プロファイルは非常に異なります。</strong></td>
+    </tr>
+    <tr>
+      <td><code>高速 & 低コスト</code></td>
+      <td><strong>ClickHouse Cloud</strong> (<a href="https://clickhouse.com/blog/clickhouse-parallel-replicas">20ノード</a>)</td>
+      <td><a href="https://github.com/ClickHouse/examples/blob/main/blog-examples/Bench2Cost/clickhouse-cloud/results_10B/aws.20.236.parallel_replicas.json">~67秒</a></td>
+      <td>
+        <a href="https://github.com/ClickHouse/examples/blob/main/blog-examples/Bench2Cost/clickhouse-cloud/results_10B/aws.20.236.parallel_replicas.json">~$4.27</a>
+      </td>
+    </tr>
+    <tr>
+      <td><code>高速 & 低コスト</code></td>
+      <td><strong>Databricks（Large）</strong></td>
+      <td><a href="https://github.com/ClickHouse/examples/blob/main/blog-examples/Bench2Cost/databricks/results_10B/clickbench_Large_enriched.json">~604秒</a></td>
+      <td><a href="https://github.com/ClickHouse/examples/blob/main/blog-examples/Bench2Cost/databricks/results_10B/clickbench_Large_enriched.json">~$4.70</a></td>
+    </tr>
+    <!-- FAST & HIGH COST -->
+    <tr>
+      <td colspan="4"><strong>これらのシステムはまだ合理的に高速ですが、データが増えるにつれて価格が急激に上昇します。</strong></td>
+    </tr>
+    <tr>
+      <td><code>高速 & 高コスト</code></td>
+      <td><strong>Snowflake（4X-Large）</strong></td>
+      <td><a href="https://github.com/ClickHouse/examples/blob/main/blog-examples/Bench2Cost/snowflake/results_10B/4xl_enriched.json">~135秒</a></td>
+      <td><a href="https://github.com/ClickHouse/examples/blob/main/blog-examples/Bench2Cost/snowflake/results_10B/4xl_enriched.json">~$14.41</a></td>
+    </tr>
+    <tr>
+      <td><code>高速 & 高コスト</code></td>
+      <td><strong>Databricks（4X-Large）</strong></td>
+      <td><a href="https://github.com/ClickHouse/examples/blob/main/blog-examples/Bench2Cost/databricks/results_10B/clickbench_4X-Large_enriched.json">~188秒</a></td>
+      <td><a href="https://github.com/ClickHouse/examples/blob/main/blog-examples/Bench2Cost/databricks/results_10B/clickbench_4X-Large_enriched.json">~$19.28</a></td>
+    </tr>
+    <tr>
+      <td><code>高速 & 高コスト</code></td>
+      <td><strong>BigQuery Enterprise（容量）</strong></td>
+      <td><a href="https://github.com/ClickHouse/examples/blob/main/blog-examples/Bench2Cost/bigquery/results_10B/result_enriched.json">~350秒</a></td>
+      <td><a href="https://github.com/ClickHouse/examples/blob/main/blog-examples/Bench2Cost/bigquery/results_10B/result_enriched.json">~$11.73</a></td>
+    </tr>
+    <!-- BIGQUERY ON-DEMAND -->
+    <tr>
+      <td colspan="4"><strong>BigQuery On-Demandは合理的に高速に実行されますが、オンデマンド課金モデルによりコストが高く、散布図の軸範囲をはるかに超えています。</strong></td>
+    </tr>
+    <tr>
+      <td><code>高速 & 高コスト</code>（チャート外）</td>
+      <td><strong>BigQuery On-Demand</strong></td>
+      <td><a href="https://github.com/ClickHouse/examples/blob/main/blog-examples/Bench2Cost/bigquery/results_10B/result_enriched.json">~350秒</a></td>
+      <td><a href="https://github.com/ClickHouse/examples/blob/main/blog-examples/Bench2Cost/bigquery/results_10B/result_enriched.json">~$169</a></td>
+    </tr>
+    <!-- SLOW & LOWER COST -->
+    <tr>
+      <td colspan="4"><strong>コストは低いままですが、実行時間は数分または数時間の範囲に漂います。</strong></td>
+    </tr>
+    <tr>
+      <td><code>低速 & 低コスト</code></td>
+      <td><strong>Snowflake（Large）</strong></td>
+      <td><a href="https://github.com/ClickHouse/examples/blob/main/blog-examples/Bench2Cost/snowflake/results_10B/large_enriched.json">~1,213秒</a></td>
+      <td><a href="https://github.com/ClickHouse/examples/blob/main/blog-examples/Bench2Cost/snowflake/results_10B/large_enriched.json">~$8.09</a></td>
+    </tr>
+    <tr>
+      <td><code>低速 & 低コスト</code></td>
+      <td><strong>Snowflake（X-Small）</strong></td>
+      <td><a href="https://github.com/ClickHouse/examples/blob/main/blog-examples/Bench2Cost/snowflake/results_10B/xs_enriched.json">~9,547秒（2.6時間）</a></td>
+      <td><a href="https://github.com/ClickHouse/examples/blob/main/blog-examples/Bench2Cost/snowflake/results_10B/xs_enriched.json">~$7.96</a></td>
+    </tr>
+    <!-- SLOW & HIGH COST -->
+    <tr>
+      <td colspan="4"><strong>これらの2つは、はるかに高速な代替品よりも遅く<em>、かつ</em>高価です。</strong></td>
+    </tr>
+    <tr>
+      <td><code>低速 & 高コスト</code></td>
+      <td><strong>Redshift Serverless（128 RPU）</strong></td>
+      <td><a href="https://github.com/ClickHouse/examples/blob/main/blog-examples/Bench2Cost/redshift-serverless/results_10B/enriched_10b.json">~1,068秒</a></td>
+      <td><a href="https://github.com/ClickHouse/examples/blob/main/blog-examples/Bench2Cost/redshift-serverless/results_10B/enriched_10b.json">~$13.58</a></td>
+    </tr>
+    <tr>
+      <td><code>低速 & 高コスト</code></td>
+      <td><strong>Databricks（2X-Small）</strong></td>
+      <td><a href="https://github.com/ClickHouse/examples/blob/main/blog-examples/Bench2Cost/databricks/results_10B/clickbench_2X-Small_enriched.json">~17,558秒（4.9時間）</a></td>
+      <td><a href="https://github.com/ClickHouse/examples/blob/main/blog-examples/Bench2Cost/databricks/results_10B/clickbench_2X-Small_enriched.json">~$13.66</a></td>
+    </tr>
+  </tbody>
+</table>
+
+[コストパフォーマンススコア](/blog/cloud-data-warehouses-cost-performance-comparison#how-we-measure-overall-cost-performance-ranking)を見ると、分離は明白になります：
+
+![Blog-Costs.012.png](https://clickhouse.com/uploads/Blog_Costs_012_7d7df43431.png)
+
+100億行でギャップは広がります：
+
+
+* **ClickHouse Cloudは明確なリーダーであり続けます**。大きなマージンでトップのコストパフォーマンススポットを維持しています。
+
+* **次善のシステムはすでに大きく遅れています**。ClickHouseよりも**7〜13倍悪い**です（Snowflake 4X-L、Databricks Large、Databricks 4X-Large）。
+
+* **BigQuery Enterprise**はさらに後退し、約**14倍悪い**です。
+
+* その後、すべてが長い尾に崩壊し、**数十から数百倍悪く**、Redshift Serverless（128 RPU）、Snowflake L、BigQuery On-Demand、Snowflake X-Small、Databricks 2X-Smallが含まれます。
+
+
+> 100億行では、経済性が急激に分岐します：ClickHouse Cloudは他のすべてのシステムよりも桁違いに優れたコストパフォーマンスを提供します。
+
+
+## 1000億行：真のストレステスト
+
+以下の[散布図](/blog/cloud-data-warehouses-cost-performance-comparison#how-to-read-the-scatter-plot-charts)は、5つのシステムそれぞれについて、1000億行のClickBench実行の合計実行時間（横軸）と合計コンピュートコスト（縦軸）を示しています。
+
+*(前述のとおり、視覚的な明確さのために目盛りラベルを非表示にしていますが、点の位置は実際の基礎値を反映しています。上記のインタラクティブベンチマークエクスプローラーには完全な数値軸が含まれています。)*
+
+![Blog-Costs.014.png](https://clickhouse.com/uploads/Blog_Costs_014_291362ced8.png)
+*(表示される構成は各エンジンの全範囲を表しています。[詳細は付録](/blog/cloud-data-warehouses-cost-performance-comparison#what-configurations-we-compare)を参照してください。**両軸は対数スケールであるため、垂直および水平のジャンプは見た目よりもさらに大きいです。**)*
+
+
+1000億行では、分離は劇的になります。ClickHouse Cloudは、このスケールでも「高速 & 低コスト」領域にしっかりとどまる唯一のシステムです。
+
+他のすべてのエンジンは現在、「低速 & 高コスト」にしっかりと押し込まれており、実行時間は数分から数時間の範囲で、コストは桁違いに高くなっています。
+
+
+
+<table>
+  <thead>
+    <tr>
+      <th>カテゴリ</th>
+      <th>システム / ティア</th>
+      <th>実行時間</th>
+      <th>コスト</th>
+    </tr>
+  </thead>
+  <tbody>
+    <!-- FAST & LOW COST -->
+    <tr>
+      <td colspan="4">
+        <strong>ClickHouse Cloudは1000億行でも高速<em>かつ</em>低コストを維持する唯一のシステムです。効率ゾーンにある唯一のシステムです。</strong>
+      </td>
+    </tr>
+    <tr>
+      <td><code>高速 & 低コスト</code></td>
+      <td><strong>ClickHouse Cloud</strong> (<a href="https://clickhouse.com/blog/clickhouse-parallel-replicas">20ノード</a>)</td>
+      <td><a href="https://github.com/ClickHouse/examples/blob/main/blog-examples/Bench2Cost/clickhouse-cloud/results_100B/aws.20.236.parallel_replicas.json">~275秒</a></td>
+      <td><a href="https://github.com/ClickHouse/examples/blob/main/blog-examples/Bench2Cost/clickhouse-cloud/results_100B/aws.20.236.parallel_replicas.json">~$17.62</a></td>
+    </tr>
+    <!-- SLOW & HIGH COST -->
+    <tr>
+      <td colspan="4">
+        <strong>他のすべてのシステムは1000億行で低速 & 高コスト象限に入り、ClickHouseよりも遅く<em>、かつ</em>大幅に高価です。</strong>
+      </td>
+    </tr>
+    <tr>
+      <td><code>低速 & 高コスト</code></td>
+      <td><strong>Databricks（4X-Large）</strong></td>
+      <td><a href="https://github.com/ClickHouse/examples/blob/main/blog-examples/Bench2Cost/databricks/results_100B/clickbench_4X-Large_enriched.json">~1,049秒</a></td>
+      <td><a href="https://github.com/ClickHouse/examples/blob/main/blog-examples/Bench2Cost/databricks/results_100B/clickbench_4X-Large_enriched.json">~$107.69</a></td>
+    </tr>
+    <tr>
+      <td><code>低速 & 高コスト</code></td>
+      <td><strong>Snowflake（4X-Large）</strong></td>
+      <td><a href="https://github.com/ClickHouse/examples/blob/main/blog-examples/Bench2Cost/snowflake/results_100B/4xl_enriched.json">~1,212秒</a></td>
+      <td><a href="https://github.com/ClickHouse/examples/blob/main/blog-examples/Bench2Cost/snowflake/results_100B/4xl_enriched.json">~$129.26</a></td>
+    </tr>
+    <tr>
+      <td><code>低速 & 高コスト</code></td>
+      <td><strong>BigQuery Enterprise（容量）</strong></td>
+      <td><a href="https://github.com/ClickHouse/examples/blob/main/blog-examples/Bench2Cost/bigquery/results_100B/result_enriched.json">~3,870秒</a></td>
+      <td><a href="https://github.com/ClickHouse/examples/blob/main/blog-examples/Bench2Cost/bigquery/results_100B/result_enriched.json">~$126.52</a></td>
+    </tr>
+       <tr>
+      <td><code>低速 & 高コスト</code>（チャート外）</td>
+      <td><strong>BigQuery On-Demand</strong></td>
+      <td><a href="https://github.com/ClickHouse/examples/blob/main/blog-examples/Bench2Cost/bigquery/results_100B/result_enriched.json">~3,870秒</a></td>
+      <td><a href="https://github.com/ClickHouse/examples/blob/main/blog-examples/Bench2Cost/bigquery/results_100B/result_enriched.json">~$1,692.84</a></td>
+    </tr>
+    <tr>
+      <td><code>低速 & 高コスト</code></td>
+      <td><strong>Redshift Serverless（128 RPU）</strong></td>
+      <td><a href="https://github.com/ClickHouse/examples/blob/main/blog-examples/Bench2Cost/redshift-serverless/results_100B/enriched_100b.json">~5,016秒</a></td>
+      <td><a href="https://github.com/ClickHouse/examples/blob/main/blog-examples/Bench2Cost/redshift-serverless/results_100B/enriched_100b.json">~$55.06</a></td>
+    </tr>
+    <tr>
+      <td><code>低速 & 高コスト</code></td>
+      <td><strong>Databricks（Large）</strong></td>
+      <td><a href="https://github.com/ClickHouse/examples/blob/main/blog-examples/Bench2Cost/databricks/results_100B/clickbench_Large_enriched.json">~11,821秒</a></td>
+      <td><a href="https://github.com/ClickHouse/examples/blob/main/blog-examples/Bench2Cost/databricks/results_100B/clickbench_Large_enriched.json">~$91.94</a></td>
+    </tr>
+    <tr>
+      <td><code>低速 & 高コスト</code></td>
+      <td><strong>Snowflake（Large）</strong></td>
+      <td><a href="https://github.com/ClickHouse/examples/blob/main/blog-examples/Bench2Cost/snowflake/results_100B/large_enriched.json">~21,119秒</a></td>
+      <td><a href="https://github.com/ClickHouse/examples/blob/main/blog-examples/Bench2Cost/snowflake/results_100B/large_enriched.json">~$140.80</a></td>
+    </tr>
+  </tbody>
+</table>
+
+*(SnowflakeとDatabricksの最小ウェアハウスサイズはここには示されていません。1000億行では数日間実行されるため、この比較の範囲をはるかに超えています。)*
+
+そして[コストパフォーマンススコア](/blog/cloud-data-warehouses-cost-performance-comparison#how-we-measure-overall-cost-performance-ranking)ビューは、ギャップを見逃すことを不可能にします：
+
+![Blog-Costs.015.png](https://clickhouse.com/uploads/Blog_Costs_015_a93e315273.png)
+
+1000億行では、コストパフォーマンスのスプレッドが大幅に増加します：
+
+
+
+* **ClickHouse Cloudは明確なリーダーであり続けます（最高の総合コストパフォーマンス）。**
+
+* 次善のシステム、 **Databricks（4X-Large）** は、**23倍悪い**まで落ちます。
+
+* **Snowflake（4X-L）**は**32倍悪い**で続きます。
+
+* **BigQuery Enterprise、Redshift Serverless（128 RPU）、Databricks（Large）、Snowflake（L）**は**数百倍悪い**範囲に入ります。
+
+* **BigQuery On-Demand**はチャートの底に崩壊し、**1,350倍悪い**です。
+
+
+> 私たちが**1000億行**で止めたのは、ClickHouse Cloudが限界に達したからではなく、[達していませんでした](https://clickpy.clickhouse.com/)、同じベンチマークを**1兆行**以上に押し上げることが、他のほとんどのシステムにとって**法外に高価**であるか、または数日間の実行イベントになるからです。<br/><br/>1000億では、いくつかのウェアハウスはすでに単一のClickBench実行で **$100〜$1,700**のコンピュート請求を発生させており、より小さなティアは数日間実行されます。
+
+
+## 最高のコストパフォーマンスを提供するのは誰ですか？
+
+私たちはシンプルな質問から始めました。今、データでそれに答えることができます：
+
+> 分析ワークロードにおいて、1ドルあたり最も高いパフォーマンスを得られるのはどこか？
+
+より大きなスケール — 100億、そして1000億行 — に押し上げると、トレンドは明白になります：すべての主要なクラウドデータウェアハウスが「低速 & 高コスト」に向かって漂います。
+
+**1つを除いて。**
+
+1000億行のストレステストを含むすべてのスケールで、**ClickHouse Cloudは「高速 & 低コスト」にとどまる唯一のシステムです**。他のすべてのシステムは遅く、高価、またはその両方になります。
+
+<br/>
+
+![Blog-Costs-animation01_small.gif](https://clickhouse.com/uploads/Blog_Costs_animation01_small_de9ac301cc.gif)
+<br/>
+
+> **大規模な分析ワークロードにおいて、ClickHouse Cloudは他のすべてのシステムよりも桁違いに優れたコストパフォーマンスを提供します。**
+
+そして、ここにキッカーがあります：SnowflakeとDatabricksはすでに、提供する最大のウェアハウスサイズで、ハードリミットに達していました。
+
+ClickHouse Cloudにはそのような上限はありません。
+
+私たちが20コンピュートノードで止めたのは、ClickHouse Cloudが限界に達したからではなく、結論がすでに決定的だったからです。
+
+ベンチマークをどのように実行したかを正確に確認したい場合は、完全な方法論が以下の付録に含まれています。
+
+<br/><br/>
+## 付録：ベンチマーク方法論
+
+このセクションは、5つのシステムすべてでベンチマークを実行し、価格を正規化した方法の完全な詳細を提供します。
+
+
+### ベンチマークセットアップ
+
+この分析は[ClickBench](https://benchmark.clickhouse.com/)に基づいており、**[本番環境由来の匿名化されたデータセット](https://github.com/ClickHouse/ClickBench/?tab=readme-ov-file#overview)**と**43の現実的な分析クエリ**（クリックストリーム、ログ、ダッシュボードなど）を使用しており、合成データではありません。
+
+しかし、標準データセットは約1億行で、現在の基準では小さいです。今日のデータセットは頻繁に数十億、数兆、さらには数京で動作します。[Teslaは負荷テストのために1京行以上をClickHouseに取り込みました](https://clickhouse.com/blog/how-tesla-built-quadrillion-scale-observability-platform-on-clickhouse#proving-the-system-at-scale)、そして[ClickPy](https://clickpy.clickhouse.com/)、私たちのPythonクライアントテレメトリデータセットは、すでに[2兆行](https://sql.clickhouse.com/?query=U0VMRUNUCiAgICAgICAgZm9ybWF0UmVhZGFibGVRdWFudGl0eShzdW0oY291bnQpKSBBUyB0b3RhbCwgdW5pcUV4YWN0KHByb2plY3QpIGFzIHByb2plY3RzIEZST00gcHlwaS5weXBpX2Rvd25sb2Fkcw&run_query=true)を超えています。
+
+データが増えるにつれてコストとパフォーマンスがどのように進化するかを理解するために、**ClickBenchを10億、100億、1000億行に拡張し**、3つのスケールすべてで完全な43クエリベンチマークを再実行しました。
+
+*結果を公正で再現可能に保つために、標準的な[ClickBenchルール](https://github.com/ClickHouse/ClickBench/?tab=readme-ov-file#overview)に従いました：チューニングなし、エンジン固有の最適化なし、最小/最大コンピュート設定の変更なし。これにより、すべての結果が、ハンドチューニングやワークロード固有のトリック（例：マテリアライズドビューで集計を事前計算）なしで、各システムが箱から出してどのように動作するかを反映することを保証します。*
+
+互換性のない課金モデルを持つシステム間で結果を比較可能にするために、コンパニオン投稿の[Bench2Costフレームワーク](/blog/how-cloud-data-warehouses-bill-you#before-we-dive-in-how-we-calculate-costs-with-bench2cost)を使用しました。これは、生のクエリごとの実行時間を取得し、各ベンダーの実際のコンピュート価格モデルを適用し、すべてのシステム上のすべてのクエリの**実行時間とコンピュートコスト**、さらに**ストレージコストとシステムメタデータ**を含む統一されたデータセットを生成します。
+
+
+### 比較する構成
+
+インタラクティブベンチマークエクスプローラーでは*すべての*ティアとクラスターサイズを比較できますが、この投稿では、比較をシンプルで一貫性のあるものにしています：
+
+
+
+* **[Snowflake](/blog/how-cloud-data-warehouses-bill-you#snowflake)と[Databricks](/blog/how-cloud-data-warehouses-bill-you#databricks-sql-serverless)**：それぞれ3つのウェアハウスサイズ、**最小**、**中規模サイズ**、**最大**のEnterpriseティアサイズを含め、完全な実用的なスペクトルをカバーします。*（Snowflake固有の詳細、Gen 2ウェアハウス、QAS、新しいウェアハウスサイズについては、以下のメモを参照してください。）*
+
+* **[ClickHouse Cloud](/blog/how-cloud-data-warehouses-bill-you#clickhouse-cloud)**：ClickHouse Cloudには固定されたウェアハウス形状がないため、「小/中/大」ティアは存在しません。代わりに、データセットサイズごとに**1つの固定されたClickHouse Cloud Enterpriseティア構成**を使用します。
+
+* **[BigQuery](/blog/how-cloud-data-warehouses-bill-you#bigquery)**：BigQueryはチャートに2回表示されます。これは、クラスターサイズの概念を持たない完全なサーバーレスシステムですが、2つの課金モデルを提供しているためです。ワークロードを1回実行し（2000スロットのベース容量で）、その後、同じ実行時間をEnterprise（使用された**スロット容量ベース**）価格と**オンデマンド**（スキャンされたTiBあたり）価格の両方を使用して価格設定します。
+
+* **[Redshift Serverless](/blog/how-cloud-data-warehouses-bill-you#redshift-serverless)**：Redshift Serverlessは1回表示されます。これは同様にウェアハウスサイズやティアを持たないためです。**デフォルトの128 RPUベース構成**を使用します。
+
+
+すべての価格は、該当する場合、同じクラウドプロバイダーとリージョン（AWS us-east）で取得されます。BigQueryは例外で、GCP us-eastを使用します。
+
+ベンダーが複数の価格ティアを提供する場合（例：Enterprise対Standard/Basic）、一貫性のためにEnterpriseティアを使用しますが、相対的なコストパフォーマンスの違いはティア間で広く同じままです。インタラクティブベンチマークエクスプローラーで代替ティアを探索することで、これを確認できます。
+
+これにより、10億、100億、1000億行にわたって公正で、解釈可能で、一貫した比較が維持されます。
+
+### Snowflake Gen2、QAS、新しいウェアハウスサイズ、Interactiveウェアハウスに関する注記
+
+このベンチマークでは、**Snowflakeの標準Gen 1ウェアハウス**を使用しました。これは今日ほとんどのリージョンでデフォルトの構成のままです。
+
+[Gen 2ウェアハウス](https://docs.snowflake.com/en/en/user-guide/warehouses-gen2)は、同じTシャツサイズで[25〜35%多くのクレジット/時間を消費](https://www.snowflake.com/legal-files/CreditConsumptionTable.pdf)し、その可用性はクラウド/リージョンによって異なるため、Gen 1に焦点を当てることで、環境間で一貫した比較を維持します。
+
+また、**SnowflakeのQuery Acceleration Service（[QAS](https://docs.snowflake.com/en/user-guide/query-acceleration-service)）を有効にしませんでした**。<br/>
+QASはウェアハウスの上に**サーバーレスバーストコンピュート**を追加し、スパイキーまたはスキャンヘビーなクエリフラグメントを加速できますが、[追加の課金ディメンションを導入する](https://docs.snowflake.com/en/user-guide/query-acceleration-service#query-acceleration-service-cost)ため、クリーンなベースライン比較を維持するために、この研究では除外しています。
+
+Snowflakeは**4X-Largeよりも大きいウェアハウスサイズ**も導入しました - [具体的には](https://docs.snowflake.com/en/user-guide/warehouses-overview#warehouse-size)**5X-Large**と**6X-Large**です。これらは[2024年初頭に開始](https://docs.snowflake.com/en/release-notes/performance-improvements-2024)され、その後クラウド全体に拡大しましたが、4X-Largeは最も広く使用される上位ティアのままであるため、ここでは最大サイズとして選択しました。
+
+Snowflakeの[Interactiveウェアハウス](https://docs.snowflake.com/en/user-guide/interactive)（プレビュー）は、低レイテンシ、高同時実行ワークロードに最適化されています。これらは標準ウェアハウスよりも[1時間あたりの価格が低い](https://www.snowflake.com/legal-files/CreditConsumptionTable.pdf)です（例：XSで0.6対1クレジット/時間）が、[SELECTクエリに5秒のタイムアウトを強制](https://docs.snowflake.com/en/user-guide/interactive#limitations-of-interactive-warehouses)し、[1時間の最小課金期間](https://docs.snowflake.com/en/user-guide/interactive#cost-and-billing-considerations)を持ち、各再開は完全な最小料金をトリガーします。
+
+> Snowflakeは多くの相互作用するパフォーマンス変数を提供します — Gen 1対Gen 2、QAS、5XL/6XLティア、Interactiveウェアハウス。最初のベンチマークでこれらを混合することを意図的に避け、比較をクリーンに保ちました。Snowflake固有のフォローアップ記事で、これらの構成を深く探索します。
+
+###  ホット対コールドランタイムに関する注記
+
+ClickBenchに沿って、**ホット**ランタイムを報告します。これは3回の実行のうちの最良のものとして定義され、すべての場所でクエリ結果キャッシュを**無効にしました**。コールドスタートベンチマークは含まれていません：クラウドウェアハウスは非常に異なるデータキャッシング動作を公開し、ほとんどはOS レベルのページキャッシュのリセットやオンデマンドでのコンピュートの再起動を許可しません。コールド条件は標準化できないため、公正で再現可能な結果のいずれも生成しません。
+
+###  ネイティブストレージ形式に関する注記
+
+このベンチマークの各システムは、**そのクエリエンジンのネイティブストレージ形式**を使用して評価されます。たとえば、ClickHouse CloudのMergeTree、DatabricksのDelta Lake、Snowflakeの独自のマイクロパーティション形式、BigQueryのCapacitorカラムナーストレージです。これにより、各エンジンが設計および最適化された条件下で測定されることを保証します。
+
+補足として、SnowflakeやClickHouse Cloudを含むいくつかのシステムは、Delta Lake、Apache Iceberg、またはApache Hudiなどのオープンテーブル形式を直接クエリすることもできます。ただし、この研究は厳密にネイティブパフォーマンスとコストに焦点を当てています。オープンテーブル形式でこれらのエンジンを比較する別のベンチマークが計画されています。お楽しみに。
+
+### メータリング粒度に関する注記
+
+5つのシステムすべてで比較を一貫して保つために、1つの簡略化を行います：
+
+**すべてのシステムが完璧な秒単位の粒度でコンピュートを課金しているかのように扱います。**
+
+実際には、[コンパニオン投稿](/blog/how-cloud-data-warehouses-bill-you)で詳述されているように：
+
+
+
+* Snowflake、Databricks、ClickHouse Cloudは、アイドルタイムアウト後にのみ課金を停止し、それぞれがウェアハウス/サービスが実行されているときに**1分間の最小料金**を持っています。
+
+* BigQueryとRedshift Serverlessは使用を**秒単位**で計測しますが、それでも**最小料金ウィンドウ**を適用します（例：BigQueryのスロット消費の1分間最小、Redshift ServerlessのRPU使用の1分間最小）。
+
+
+### 範囲と機能の違いに関する注記
+
+この分析は1つの質問を見ています：
+
+> データがスケールするにつれて、分析ワークロードを実行するのにいくらかかるか？
+
+比較をクリーンに保つために、意図的に43クエリベンチマークの**コンピュートコストのみに焦点を当てています**。より広範なプラットフォーム機能（ガバナンス、エコシステム統合、ワークロード管理、レイクハウス機能、MLツールなど）を比較しようと**しません**。これらは間接的にベンダーがコンピュートの価格をどのように設定するかに影響を与える可能性がありますが。
+
+
+### 「総合コストパフォーマンスランキング」の測定方法
+
+完全に異なる課金モデルを持つシステムを比較するために、1つのシンプルでスケール独立なメトリックを使用します：
+
+`コストパフォーマンススコア = 実行時間 × コスト`
+
+*(小さい方が良い)*
+
+このメトリックは、コストパフォーマンスランキングの背後にある直感を捉えています：
+
+
+
+* **高速なシステムはより良いスコアを獲得します**
+* **低コストのシステムはより良いスコアを獲得します**
+* **低速または高コストのシステムはすぐに膨張します**
+* **コストとランタイムは複合します**。非効率性は互いに掛け算されます
+
+
+これは私たちが気にする質問に直接答えます：
+
+> **このシステムがワークロードを完了するのにどれくらい高価か？**
+
+すべての結果を正規化して、**最良のシステムがベースライン（1×）になり**、他のすべてのシステムは**N×悪い**として表示され、ランキングを一目で比較しやすくします。
+
+
+### 散布図チャートの読み方
+
+上記のセクションで使用している「合計実行時間対合計コンピュートコスト」散布図の読み方に関する2つの簡単なメモ：
+
+
+
+* **両軸は対数スケールを使用しています。** システム間の違いは、より大きなデータ量で桁違いに及ぶため、対数-対数ビューはすべてを読みやすく保ちます。
+
+* **プロットを一目で解釈しやすくするために、4つの象限を重ねました**（「高速 & 低コスト」、「高速 & 高コスト」など）。これらの象限は**純粋に視覚的**です。これらは中央値または統計的カットポイントに基づいて**いません**。読者を方向付けるシンプルな方法です。
+
+
+興味深いのは、データセットが増えるにつれてシステムが象限間をどのように移動するかです。
+
+---
+
 ## Introducing ClickHouse Agent Skills
 Published: 2026-02-04T19:36:28+00:00
 URL: https://clickhouse.com/blog/introducing-clickhouse-agent-skills
@@ -5600,6 +7878,54 @@ Interested in seeing how ClickHouse works on your data? Get started with ClickHo
 [Sign up](https://console.clickhouse.cloud/signUp?loc=blog-cta-51-looking-to-scale-your-team-s-data-operations-sign-up&utm_blogctaid=51)
 
 ---
+
+---
+
+## ClickHouse 日本法人 代表取締役社長に 金古 毅 氏が就任
+Published: 2026-02-01T12:27:35+00:00
+URL: https://clickhouse.com/blog/202602-clickhouse-japan-country-manager
+
+---
+title: "ClickHouse 日本法人 代表取締役社長に 金古 毅 氏が就任"
+date: "2026-02-01T12:27:35.274Z"
+author: "ClickHouse"
+category: "Company and culture"
+excerpt: "AI時代に不可欠なデータ分析マネジメント領域において、大量かつ高速なデータ分析基盤で高度な意思決定を可能にし、日本企業のイノベーション創出と競争力強化を実現"
+---
+
+# ClickHouse 日本法人 代表取締役社長に 金古 毅 氏が就任
+
+### AI時代に不可欠なデータ分析マネジメント領域において、大量かつ高速なデータ分析基盤で高度な意思決定を可能にし、日本企業のイノベーション創出と競争力強化を実現
+
+リアルタイム分析データ基盤のリーディングカンパニーであるClickHouse Inc.（CEO: Aaron Katz）の日本法人、ClickHouse株式会社（クリックハウス、本社：東京都港区）は、金古 毅 （かねこ たけし）が、2026年2月1日付でClickHouse株式会社の代表取締役社長に就任したことをお知らせします。
+
+金古毅は、日本マイクロソフト、レッドハットなどグローバル企業でのエンタープライズビシネス事業のリーダーとして20年以上の経験を持ちます。直近では、ニュータニックス・ジャパン合同会社でコーポレートバイスプレジデント 兼 代表執行役員社長として組織を牽引してきました。
+
+![Takeshi Kaneko_blog announcement.png](https://clickhouse.com/uploads/Takeshi_Kaneko_blog_announcement_79d2faf942.png)
+
+昨年11月にJapan Cloudと提携し日本法人を設立したClickHouseは、大規模なリアルタイムデータ処理と分析のために設計された高速な列指向データベースを基盤とするデータ分析プラットフォームです。AIエージェントがソフトウェアに組み込まれ、より頻繁かつ複雑なクエリが生成される中、ClickHouseは高スループット・低レイテンシ（低遅延）を特長とし、こうした要求に応える性能を提供します。
+
+ClickHouseは、AI時代におけるリアルタイムな意思決定を支える次世代アナリティクス基盤として、2016年のプロジェクト公開以降、グローバルで急速に採用を拡大しています。2021年に米国法人設立、2022年にClickHouse Cloud提供開始以降、わずか4年で世界3,000社以上に導入され、ARR（年間経常収益）は前年比4倍の成長を遂げています。Microsoft、OpenAI、Sony、Tesla、Deutsche Bank、Netflix、eBay、Trip.coといった業界を代表する企業から信頼されているClickHouseは、日本国内でも、楽天グループ、LINEヤフー、NEC、スマートニュースなど、大量かつ即時のデータ分析を重視する企業をサポートしています。
+
+#### **▪️ClickHouse CEOのAaron Katzのコメント：**
+
+このたび、豊富なエンタープライズビジネスの経験と卓越したリーダーシップを持つ金古氏を、ClickHouse日本法人の代表取締役社長として迎えられることを大変嬉しく思います。AIエージェントの活用が進む中で、リアルタイムかつ大規模なデータ分析に加え、AIエージェントのオブザーバビリティ（可観測性）を支えるデータ基盤の重要性は、これまで以上に高まっています。日本市場は、AIとデータを活用した高度な意思決定への関心が非常に高く、まさに今、ClickHouseの価値が最も発揮される市場の一つです。金古氏のリーダーシップのもと、日本のお客様やパートナーと共に、AI時代におけるデータマネジメントの新たなスタンダードを築いていくことを楽しみにしています。
+
+#### **▪️ClickHouse株式会社 代表取締役社長 金古毅のコメント：**
+
+このたび、ClickHouse株式会社の代表取締役社長に就任することを大変光栄に思います。AIがビジネスの中核に組み込まれる時代において、データを「蓄積する」だけでなく、「即座に分析し、意思決定につなげる」ことの重要性は飛躍的に高まっています。ClickHouseは、高速かつスケーラブルなデータ分析基盤として、日本企業の課題に真正面から応える次世代のデータマネジメント基盤です。これまで日本およびグローバル企業で培ってきた経験を活かし、日本のお客様がAIとデータを競争力に変えるためのパートナーとして、日本市場に根差した体制と顧客支援を強化し、日本企業のイノベーション創出と競争力強化に貢献してまいります。
+
+#### **▪️ClickHouse株式会社 代表取締役社長 金古毅のプロフィール：**
+
+1993年に株式会社トーメン（現・豊田通商）へ入社し、海外通信プラントにおけるプロジェクトマネジメント業務に従事。2000年に日本マイクロソフト株式会社へ転じ、OEMビジネスからクラウドビジネスまで幅広い領域でパートナービジネスを統括し、執行役員として成長を牽引した。2019年にレッドハット株式会社へ常務執行役員として参画し、パートナーアライアンスおよび中堅市場を担当。2020年からは副社長執行役員として日本市場全体の事業拡大に貢献した。2022年にはニュータニックス・ジャパン合同会社の代表執行役員社長に就任し、多様な業種・業態のお客様のDX推進をリード。2026年2月、ClickHouse株式会社に入社し、代表取締役社長に就任。
+
+#### **＜ClickHouseについて＞**
+
+ClickHouseは、リアルタイムデータ処理および分析のために設計された、高速なオープンソースのカラム型データベース管理システムです。高いパフォーマンスを実現するよう設計されたClickHouse Cloudは、卓越したクエリ速度と高い同時実行性能を提供し、膨大なデータ量から即座に洞察を得ることが求められるアプリケーションに最適です。AIエージェントがソフトウェアにますます組み込まれ、これまでよりもはるかに頻繁かつ複雑なクエリを生成するようになる中で、ClickHouseは、こうした課題に対応するために特別に設計された、高スループットかつ低レイテンシのエンジンを提供します。Sony、Tesla、Memorial、Sloan Kettering、Lyft、Instacartといった業界を代表する企業から信頼されているClickHouseは、スケーラブルで効率的、かつモダンなデータプラットフォームを通じて、チームが洞察を引き出し、より賢明な意思決定を行うことを支援します。詳細についてはこちら（[https://clickhouse.com/jp](https://clickhouse.com/jp)）をご覧ください。
+
+LinkedIn: [ClickHouse Japan](https://www.linkedin.com/company/clickhouse-jp/about/)<br>
+X: [ClickHouse Japan](https://x.com/ClickHouseJapan) <br>
+Facebook: [ClickHouse Japan](https://www.facebook.com/ClickHouseJP)
 
 ---
 
@@ -6248,6 +8574,112 @@ Interested in seeing how ClickHouse works on your data? Get started with ClickHo
 [Sign up](https://console.clickhouse.cloud/signUp?loc=blog-cta-45-looking-to-scale-your-team-s-data-operations-sign-up&utm_blogctaid=45)
 
 ---
+
+---
+
+## ClickHouse、Dragoneer主導でシリーズDにて4億ドルを調達、分析・AIインフラのグローバル展開を加速（抄訳版)
+Published: 2026-01-27T02:12:53+00:00
+URL: https://clickhouse.com/blog/clickhouse-raises-400-million-series-d-acquires-langfuse-launches-postgres-jp
+
+---
+title: "ClickHouse、Dragoneer主導でシリーズDにて4億ドルを調達、分析・AIインフラのグローバル展開を加速（抄訳版)"
+date: "2026-01-27T02:12:53.911Z"
+author: "ClickHouse"
+category: "Company and culture"
+excerpt: "〜Langfuse買収、ネイティブPostgres発表でAI時代のデータ基盤を拡張〜"
+---
+
+# ClickHouse、Dragoneer主導でシリーズDにて4億ドルを調達、分析・AIインフラのグローバル展開を加速（抄訳版)
+
+ClickHouseは、LLMオブザーバビリティ分野に参入するためにLangfuseを買収するとともに、トランザクション処理と分析処理のワークロードを統合するネイティブPostgresサービスを発表しました。 
+
+リアルタイム分析、データウェアハウジング、オブザーバビリティ、そしてAI/ML（機械学習）分野のリーダーであるClickHouseは本日、シリーズD資金調達を完了し、総額4億ドルを調達したことを発表しました。このラウンドはDragoneer Investment Groupが主導し、Bessemer Venture Partners、GIC、Index Ventures、Khosla Ventures、Lightspeed Venture Partners、T. Rowe Price Associates, Inc.の投資助言を受けるファンド、およびWCM Investment Managementが参加しました。
+
+今回の資金調達は、ClickHouseが継続的かつ加速的な成長を遂げてきた期間を背景に実施されたものです。同社は現在、フルマネージドサービスであるClickHouse Cloudにおいて3,000社以上の顧客を抱えており、ARR（年間経常収益）は前年比250%以上の成長を記録しています。過去3か月間で、Capital One、Lovable、Decagon、Polymarket、Airwallexなどの顧客が同プラットフォームを導入、または既存の導入規模を拡大しました。これらの顧客は、Meta、Cursor、Sony、TeslaといったAI分野のイノベーターや大手ブランドを含む、既存の強固な顧客基盤に加わっています。
+
+**▪️ClickHouse CEO Aaron Katzコメント​​**
+
+「ClickHouseは最も要求の厳しいデータワークロードに対して卓越したパフォーマンスとコスト効率を提供するように構築されており、今回の勢いはその戦略の正しさを裏付けるものです。今後に向けて、トランザクション処理と分析処理を統合したワークロードへの対応を進めることで、開発者が最適な技術基盤の上で、AI駆動のあらゆるアプリケーションを構築できるようにしていきます。さらに、LLMのオブザーバビリティを提供ラインアップに加えることで、AIアプリケーションの開発者が、本番環境への移行過程でAIの出力品質や動作を評価できるようにします。今回の追加資金と継続的な製品開発により、私たちはAI時代におけるデータおよびLLMオブザーバビリティを担う最先端のプラットフォームを提供する体制が整いました。」
+
+![Founders_AMS_2025.jpeg](https://clickhouse.com/uploads/Founders_AMS_2025_df2919ac2a.jpeg)
+
+**データインフラストラクチャとAIを大規模に支える、確信度の高い投資**
+
+2012年にMarc Stad氏によって設立されたDragoneerは、厳選された少数のカテゴリーを代表する企業との長期的なパートナーシップを志向し、調査主導の高度に選別的な投資アプローチを取っています。同社は、過去10年間にわたり、主要なデータプラットフォームや、基盤となるAI企業のいくつかに投資してきました。
+
+AIシステムが実験段階から本番環境に移行するにつれて、基盤となるデータインフラストラクチャに求められる要件はますます高まっています。AI駆動型アプリケーションは、はるかに大量のクエリを生成し、より厳しいレイテンシ要件のもとで動作し、継続的な評価とオブザーバビリティが必要です。このような環境では、大規模かつデータ集約型の本番ワークロードを支えるインフラストラクチャプラットフォームに、ますます価値が集中していきます。
+
+**▪️Dragoneer Investment Group パートナー Christian Jensen氏 コメント**
+
+「大規模なプラットフォーム転換は、最終的には本番環境に最も近いところに位置するインフラストラクチャ企業に報酬をもたらします。モデルの性能が向上するにつれて、ボトルネックはデータインフラストラクチャへと移ります。ClickHouseが際立っていたのは、大規模に動作するAIシステムに必要なパフォーマンス、効率性、信頼性を備えているからです。」
+
+Dragoneerによる今回の投資は、厳格な評価プロセスを経た結果であり、その中で同プラットフォームが、現代のデータスタックにおけるカテゴリーを代表するリーダーであることが明らかになりました。ClickHouseは、常時稼働している顧客向けシステムやAI駆動のシステムに組み込まれた、ミッションクリティカルなリアルタイムワークロードを幅広くサポートしています。
+
+ClickHouseの成長は、既存のシステムを単に置き換えるのではなく、新しいワークロードを実現してきた点にも支えられています。リアルタイム分析を高いコスト効率で大規模に実行できることで、従来はレイテンシやコストの制約から実現が難しかったユースケースを可能にしています。多くのデータインフラストラクチャプラットフォームが社内向け分析チームを主な対象としているのに対し、ClickHouseはパフォーマンスと信頼性がエンドユーザー体験に直結する、顧客向け製品に組み込まれることが多いのも特徴です。
+
+**▪️Dragoneer Investment Group パートナー Christian Jensen氏 コメント​​**
+
+「私たちは、システムが停止してはならない状況で顧客が頼りにするプラットフォームを探しており、ClickHouseは一貫してその特性を備えていることを示してきました。」
+
+**LLMオブザーバビリティ：ClickHouse、Langfuseの買収により市場に参入**
+
+ClickHouseは、オープンソースのLLMオブザーバビリティプラットフォームであるLangfuseを買収したことを発表しました。システムの健全性とパフォーマンス指標に焦点を当てる従来のオブザーバビリティとは異なり、LLMオブザーバビリティは、非決定的でますます複雑化するAIシステムが、正確で安全でかつユーザーの意図に沿った出力を生成していることを保証することに重点を置いています。AIシステムが本番ワークフローに深く組み込まれるようになるにつれて、LLMオブザーバビリティは、AI駆動のアプリケーションを構築、運用するチームにとって重要な要件となっています。
+
+Langfuseのオープンソースプロジェクトは急速に採用が進んでおり、2025年末時点でGitHubのスター数が2万件を超え、SDKの月間インストール数は2,600万回以上に達しました。
+
+**▪️Langfuse  CEO  Marc Klingen氏のコメント**
+
+「LangfuseをClickHouse上に構築したのは、LLMオブザーバビリティと評価は本質的にデータの問題であるからです。今回、1つのチームとして統合されることで、より緊密に連携したエンドツーエンドの製品を提供できるようになります。これにより、より高速なデータ取り込み、より高度な評価、本番環境での問題から測定可能な改善へと至るまでの道のりを、より短くすることができます。」
+
+![2025-langfuse-founders.jpg](https://clickhouse.com/uploads/2025_langfuse_founders_75f417565c.jpg)
+_**Langfuseの共同創設者 ​​Clemens Rawert、Marc Klingen、Max Deichmann**_
+
+**ネイティブPostgresサービス：ClickHouse、AI開発者向けの統合データスタックを発表** 
+
+ClickHouseは、ClickHouseと深く統合されたエンタープライズグレードのPostgresサービスを発表しました。トランザクション処理と分析処理の両方の機能を必要とするモダンなリアルタイムAIアプリケーションを支えるために、ClickHouseは、NVMeストレージとネイティブなCDC（変更データキャプチャ）機能を備えた高性能でスケーラブルなPostgresを含む、統合データスタックを提供しています。わずか数クリックでトランザクションデータをClickHouseに同期し、最大で100倍高速な分析を実現します。ネイティブなPostgres拡張によって実現される統合クエリレイヤーにより、ユーザーは、個別のシステムを管理することなく、トランザクションと分析をシームレスに横断するアプリケーションを構築できます。このサービスは、Citus Data、Heroku、Microsoftでの豊富な実績を持つチームが率いる、高性能Postgresを提供するオープンソースクラウド企業Ubicloudとのパートナーシップのもとで開発されています。
+
+**▪️Ubicloudの共同CEO兼共同創設者であるUmur Cubukcu氏 コメント**
+
+「PostgresとClickHouseは本質的に相互補完的であり、AIアプリケーションにとって重要な存在です。トランザクション用の本番環境グレードのPostgresと、分析用のClickHouseが一体となって機能する統合スタックを提供することで、チームの複雑さを取り除きます。UbicloudとしてClickHouseと力を合わせられることを大変うれしく思います。信頼できるチーム同士が最高水準の製品を構築し、共に成長していく。これこそが、オープンソースエコシステムの成功のあり方です。」
+
+![ubicloud-founders.png](https://clickhouse.com/uploads/ubicloud_founders_4e00466225.png)
+_**Ubicloudの共同創設者 Umur、Ozgun、Daniel**_
+
+**グローバル展開の継続とプロダクトの力強い成長​​**
+
+資金調達およびLangfuseの買収と並行して、ClickHouseはグローバルでの展開とエコシステムの拡大を続けています。過去1年間で、同社はJapan Cloudとのパートナーシップを通じて日本市場に参入したほか、OneLakeに焦点を当てたMicrosoft Azureとのパートナーシップを発表しました。さらに、ClickHouseはサンフランシスコ、ニューヨーク、アムステルダム、シドニー、バンガロールでユーザーイベントを開催し、1,000人以上の参加者を集め、OpenAI、Tesla、Capital One、Ramp、Canvaなどの企業から講演者を招きました。また、The Chainsmokersが出演するAWS re:Inventの顧客向けイベントを2年連続で開催しました。
+
+最近の製品面での進展は、分析、AI、オブザーバビリティが重なり合う領域におけるClickHouseの立ち位置を、さらに強固なものにしています。同社はデータレイク対応に多額の投資を行い、Apache Iceberg、Delta Lake、そして最も広く利用されているデータカタログとの互換性を追加しました。また、AIオブザーバビリティを含むオブザーバビリティ用途において重要性が高まっている全文検索機能も拡張しています。さらに、より要求の厳しいAI駆動型アプリケーションを支えるための軽量UPDATEも導入されました。本プラットフォームは、最近のベンチマークにおいて主要なクラウドデータ ウェアハウスを上回る結果を示すなど、業界トップクラスの価格性能比を引き続き提供しています。
+
+シリーズDの資金調達、Langfuseの買収、そしてネイティブPostgresサービスの導入により、ClickHouseは成長をさらに加速させ、統合データプラットフォームおよびAIオブザーバビリティにおける役割を一層拡大していく体制を整えています。
+
+- ClickHouseのネイティブPostgresサービスを体験するには、[こちら](https://clickhouse.com/cloud/postgres)からサインアップしてください。
+- Langfuse買収の詳細については、ClickHouseの[ブログ](https://clickhouse.com/blog/clickhouse-acquires-langfuse-open-source-llm-observability)をご覧ください。
+- ClickHouseの最新ニュースやお知らせについては、[LinkedIn](https://www.linkedin.com/company/clickhouseinc/)と[X](https://x.com/ClickHouseDB)ご覧ください。
+
+※原文はこちらをご覧ください。
+[https://clickhouse.com/blog/clickhouse-raises-400-million-series-d-acquires-langfuse-launches-postgres](https://clickhouse.com/blog/clickhouse-raises-400-million-series-d-acquires-langfuse-launches-postgres)
+本文と原文に相違がある場合には、英語の原文を優先します。
+
+**ClickHouseについて**
+
+ClickHouseは、リアルタイムデータ処理および分析のために設計された、高速なオープンソースのカラム型データベース管理システムです。高いパフォーマンスを実現するよう設計されたClickHouse Cloudは、卓越したクエリ速度と高い同時実行性能を提供し、膨大なデータ量から即座に洞察を得ることが求められるアプリケーションに最適です。AIエージェントがソフトウェアにますます組み込まれ、これまでよりもはるかに頻繁かつ複雑なクエリを生成するようになる中で、ClickHouseは、こうした課題に対応するために特別に設計された、高スループットかつ低レイテンシのエンジンを提供します。Sony、Tesla、Memorial、Sloan Kettering、Lyft、Instacartといった業界を代表する企業から信頼されているClickHouseは、スケーラブルで効率的、かつモダンなデータプラットフォームを通じて、チームが洞察を引き出し、より賢明な意思決定を行うことを支援します。詳細についてはこちら（[https://clickhouse.com/jp](https://clickhouse.com/jp) ）をご覧ください。
+
+Facebook: [ClickHouse Japan](https://www.facebook.com/ClickHouseJP)
+LinkedIn: [ClickHouse Japan](https://www.linkedin.com/company/clickhouse-jp/about/)
+X: [ClickHouse Japan](https://x.com/ClickHouseJP)
+
+**Dragoneer Investment Groupについて**
+
+Dragoneerは、運用資産総額300億ドル超を擁する、成長志向の投資会社です。同社は、公開市場および非公開市場の双方において、カテゴリーを代表する企業を築く創業者や経営チームとパートナーシップを組んでいます。これまでに、Dragoneerの支援を受けた企業のうち50社以上が株式公開を果たしています。Dragoneerの投資先には、Airbnb、Amwins、Atlassian、Databricks、Datadog、Meta、Nubank、OpenAI、Revolut、ServiceNow、Snowflake、Spotify、Uberなどが含まれます。
+
+**Langfuseについて**
+
+Langfuseは、LLMアプリケーション/エージェントの構築、テスト、監視のためのオープンソースプラットフォームです。チームはLangfuseを使用して、エージェントのワークフローをトレースおよびデバッグし、評価を行い、本番環境におけるAI出力の品質を継続的に測定して改善できます。Langfuseはマネージドクラウドサービスとして提供されているほか、本番規模でのセルフホスティングにも対応しています。Langfuseは最も急成長しているLLMエンジニアリングプラットフォームの1つで、GitHubスター数は20,470件、SDKの月間インストール数は2,600万回以上、Dockerのプル数は600万回以上に達しています。また、Fortune 50企業のうち19社、Fortune 500企業のうち63社から信頼されています。詳細については、[langfuse.com](https://langfuse.com/)をご覧ください。
+
+**Ubicloudについて**
+
+Ubicloudはオープンソース版AWSの構築を目指し、ベアメタル環境およびパブリッククラウド全体にわたって中核的なクラウドサービスを提供しています。Microsoftに買収されたCitus Dataで分散型PostgreSQLを開発したチームによって設立され、Ubicloudの主力データベース製品であるUbicloud PostgreSQLは、業界トップクラスの価格性能比を備えた、エンタープライズグレードのマネージドPostgres体験を提供します。AI、コンピュート、PostgreSQL、KubernetesにまたがるUbicloudの各種サービスは、毎週100万台を超えるVMを支えており、クラウドコストを最大70%削減します。Ubicloud は、Y Combinatorやその他の著名なシリコンバレーの投資家から支援を受けています。詳細については、Xで[@ubicloudHQ](https://x.com/ubicloudHQ)をフォローするか、[ubicloud.com](https://www.ubicloud.com/)をご覧ください。
 
 ---
 
@@ -14101,6 +16533,47 @@ Our new open-source CLI uses agents to scan your TypeScript code, identify analy
 
 ---
 
+## ClickHouse、Google Cloud 東京リージョンで「ClickHouse Cloud」の提供を開始 ― 日本国内で高速・データマネジメントが可能に ―
+Published: 2025-12-18T01:37:31+00:00
+URL: https://clickhouse.com/blog/clickhouse-gcp-japan-availability
+
+---
+title: "ClickHouse、Google Cloud 東京リージョンで「ClickHouse Cloud」の提供を開始 ― 日本国内で高速・データマネジメントが可能に ―"
+date: "2025-12-18T01:37:31.458Z"
+category: "Product"
+excerpt: "ClickHouse、Google Cloud 東京リージョンで「ClickHouse Cloud」の提供を開始 "
+---
+
+# ClickHouse、Google Cloud 東京リージョンで「ClickHouse Cloud」の提供を開始 ― 日本国内で高速・データマネジメントが可能に ―
+
+#### データ分析基盤のリーディングカンパニーであるClickHouse株式会社は、Google Cloud 東京リージョンにおいて「ClickHouse Cloud」が正式に利用可能になったことを発表しました。
+
+今回の提供開始により、日本国内の企業はデータを国内に保持したまま、低遅延かつ高信頼性のリアルタイム分析を実現できるようになります。
+
+本発表は、2025年11月7日の ClickHouse株式会社の設立に続くもので、当社が日本市場に向けて最適化された分析基盤の提供を加速していく姿勢を示すものです。
+
+#### 日本の次世代データドリブンアプリケーションを支える ClickHouse Cloud
+
+ClickHouse Cloud は、オープンソースの ClickHouse を基盤としたフルマネージドサービスで、数十億行のデータをミリ秒単位で処理する超高速クエリエンジンを提供します。
+
+世界中のデータドリブン企業に採用されており、日本の企業はインフラ運用負荷を最小限に抑えながら、アプリケーションの高速化、AI/ML ワークロードの効率化、データドリブン経営への対応を実現できます。
+
+生成AI、IoT、デジタルマーケティング、金融サービスなど、多くの業界では、競争優位性を高めるためにリアルタイムデータ活用が不可欠な時代に突入しています。
+ClickHouse Cloud は、CIO、CDO、CTO、およびエンジニアリングチームが、複雑なインフラ構築や運用に追われることなく、分析や AI 開発などの付加価値の高い業務に集中できる環境を提供します。
+
+#### Google Cloud 東京リージョン提供開始により得られる主なメリット
+
+- 低遅延パフォーマンス：日本国内のユーザーに対して高速レスポンスを実現し、アプリケーション性能を最適化します。
+- データ主権の確保：データの国内処理・保管により、セキュリティおよびコンプライアンス要件に対応できます。
+- AI/MLワークフローの強化：リアルタイムデータの収集・分析からモデル学習・推論まで、Google Cloud の各種サービスとシームレスに連携し、AI 活用のエンドツーエンドの流れを支援します。
+
+#### ClickHouse Cloud の導入方法
+
+ClickHouse Cloud は Google Cloud Marketplace から利用可能で、既存の Google Cloud 環境とスムーズに統合できます。詳細はこちらをご覧ください。  
+[https://clickhouse.com/jp](https://clickhouse.com/jp)
+
+---
+
 ## What really matters for performance: lessons from a year of benchmarks
 Published: 2025-12-17T16:22:24+00:00
 URL: https://clickhouse.com/blog/what-really-matters-for-performance-lessons-from-a-year-of-benchmarks
@@ -15473,6 +17946,123 @@ ClickHouse CI[ performance](https://github.com/ClickHouse/ClickHouse/pull/87366#
 1. `FixedHashMap.h:123# Aggregator::mergeDataImpl`  was identified slight increase. This points to the `isZero` function. But why still annotated with Aggregator function? Some compiler trick recognized while being inlined in the same function the original source code is still in another file.
 
 2. I still don't fully understand why the new function `mergeSingleLevelDataImplFixedMap` and others are identified as white. Some tricks in the flamegraph differential calculation. 
+
+---
+
+## EMQとClickHouseの連携: 産業用エッジで機能する、AIを活用したリアルタイム分析
+Published: 2025-12-16T09:09:28+00:00
+URL: https://clickhouse.com/blog/emq-ai-assisted-analytics-jp
+
+---
+title: "EMQとClickHouseの連携: 産業用エッジで機能する、AIを活用したリアルタイム分析"
+date: "2025-12-16T09:09:28.694Z"
+author: "ClickHouse"
+category: "User stories"
+excerpt: "「ClickHouse MCPを使用することで、高度に複雑な分析や、データの監視、きめ細かなコントロールが可能になります。」- ソリューションアーキテクト、孫 セイ氏"
+---
+
+# EMQとClickHouseの連携: 産業用エッジで機能する、AIを活用したリアルタイム分析
+
+<style>
+div.w-full + p, 
+pre + p,
+span.relative + p {
+  text-align: center;
+  font-style: italic;
+}
+</style>
+
+> **TL;DR**<br/><br/>EMQは、MQTTベースの産業用IoTプラットフォームにおけるリアルタイム分析基盤として ClickHouse Cloud を活用し、1,000社を超えるエンタープライズ顧客にサービスを提供しています。ClickHouse を中核としたデータパイプラインにより、エッジデバイスからクラウドダッシュボードまでを連携し、高スループットなデータ取り込みとサブセカンドでのクエリ処理を実現しています。
+<br/><br/>
+さらに、ClickHouse MCP を用いることで、オペレーターが自然言語でライブデータにアクセスし、トラブルシューティングを行える AI 主導の可観測性ツールの開発を進めています。
+
+「産業用IoT」と聞いて、何を想像するでしょうか。おそらく、工場で流れる品目を測定するセンサーや、スマート車両からの遠隔測定、生産ラインの機械が出す自動アラートなどが頭に浮ぶことでしょう。ですが、メッセージブローカー、データパイプライン、分析エンジンをすべて連携させて、水面下でリアルタイムにインテリジェンスを生成するシステムなどはご存じないかもしれません。
+
+10年以上もの間、[EMQ](https://www.emqx.com/en)はそのようなインフラストラクチャの最前線にいました。同社の旅は2013年、オープンソースのMQTTブローカーである[EMQX](https://www.emqx.com/en/platform)の開発と共に始まります。これは、低帯域幅かつコンカレンシーの高い環境でも、デバイスの連携を可能にする製品です。EMQXは瞬く間に、世界で最も拡張性の高いIoT、IIoT、コネクテッドビークルアプリケーション向けのMQTTプラットフォームとなりました。
+
+それ以降、EMQは1,000以上の企業クライアントにサービスを提供し、2億5000万以上のデバイスを接続するグローバルリーダーへと成長します。Geely、HPE、VMware、Verifone、SAIC Volkswagen、Lucid、Ericssonなどを顧客に持ち、工場の設備から電力グリッド、自動運転、ロボットシステムまで、あらゆるシステムに同社のテクノロジーが採用されています。
+
+EMQの規模やリーチが拡大するにつれ、同社のプラットフォームに対する期待も大きくなりました。顧客にとっては、デバイス間でメッセージをルーティングするだけでなく、メッセージの意味を理解することも重要です。リアルタイムのインサイトや、柔軟な分析、データを受け取った瞬間にアクションを起こす機能も要求されました。コネクティビティからインテリジェンスへシフトしたことにより、新しい何かがEMQに求められたのです。
+
+今年の前半、EMQのソリューションアーキテクト、孫 セイ氏は、ClickHouseによる東京ミートアップに[4月](https://clickhouse.com/videos/tokyo-meetup-EMQ-15apr25)と[6月](https://clickhouse.com/videos/tokyo-meetup-emq-29jul25)の2回参加し、[EMQをClickHouseと統合させることで](https://clickhouse.com/docs/integrations/emqx)、高速かつ柔軟な、エッジからクラウドまでのエンドツーエンドの可視性を構築した事例を紹介しました。メッセージングと分析の機能を別々のシステムに置くのではなく、1つのリアルタイムプラットフォームに組み込むシナリオで、メッセージングの基盤やAIを活用したオブザーバビリティ層をどのように構築するかについて説明しています。
+
+## MQTTを大規模に機能させる
+
+EMQの主力製品はMQTTブローカーの[EMQX](https://www.emqx.com/en)です。「Kafkaはデータトランザクションの機能を重視し、我々は並列性と低遅延を重視しています」と孫氏は説明します。「データをエッジからクラウドサービスへ、低遅延で配信することが我々の課題です。」
+
+[MQTT](https://en.wikipedia.org/wiki/MQTT)はもともとIBMで1999年に作成された軽量プロトコルです。2010年に一般に入手可能になりました。HTTPがポイントツーポイントの通信を使用するのに対し、MQTTではパブリッシャ―とサブスクライバーの間にブローカーが置かれます。「このブローカーにはメッセージを正しくルーティングする役割のほかに、各メッセージや接続の状態を管理する役割もあります」と孫氏は言います。
+
+また、開発者はMQTTのQuality of Serviceの設定を変えることで、メッセージの配信を細かく調整することもできます。「軽量で重要度の低いデータにレベル0を設定すると、一度だけ送信されて終了します。」と孫氏は説明します。「重要なデータにはレベル1を使用し、少なくとも一度は必ず配信されるようにします。また、必要に応じてレベル2を設定し、データが必ず一度送信されるようにもできます。」
+
+このように柔軟であり、かつ並列性の高い環境にも対応できることから、MQTTはIoTおよび産業用のワークロードで広く採用されるプロトコルとなっています。
+
+しかし、大規模なMQTTクラスターを稼働させることは、特にステート管理の面で課題が伴います。すべての接続でメタデータ、つまりメッセージヘッダー、フッター、およびパブリッシャーとサブスクライバーの間の連携の状態がデータでやり取りされます。「たくさんのデータを監視する必要があります」と孫氏は言います。「そのため、クラスター内のサーバー間でデータを同期することが複雑で難しいです。」
+
+EMQXはこの課題を、セッションの状態を管理するコアノードと、処理をスケールアウトさせるレプリカノードの2種類のノードを持つクラウドアーキテクチャを使用して解決しました。「これで、無限に拡張できるクラウド環境を構築できます。」（孫氏）
+
+2024年に、孫氏のチームは1億の同時接続を処理できるクラスターを構築しました。「このクラウドで、毎秒200万メッセージという非常に高いスループットを達成しました。」と孫氏は言います。「その当時、最大23のノードを実行していましたが、最近では最大75ノードの大規模なIoTクラウドを構築できるようになりました。」
+
+## ClickHouseによるリアルタイム分析
+
+未加工のデバイスデータからインサイトをリアルタイムで入手するために、EMQは高インジェスト率と低遅延クエリに対応し、かつ産業用プロトコルと最新の分析ツールに幅広く互換性を維持するセットアップを必要としていました。そのために同社が選んだのが[ClickHouse Cloud](hhttps://clickhouse.com/jp/cloud)です。
+
+![EMQ User Story_Diagram 1.png](https://clickhouse.com/uploads/EMQ_User_Story_Diagram_1_5ee460a97a.png)
+_EMQによるClickHouseベースの分析セットアップ。エッジデバイスとクラウドダッシュボードが連携する。_
+
+ClickHouseはEMQの分析スタックの中心に位置し、インジェストから可視化までのすべての機能を提供します。PostgresやMySQLなどのリレーショナルデータベース、Kafkaなどのストリーミングシステム、EMQXなどの産業用ブローカーを含むさまざまなソースから、データを取り込むことができます。
+
+一般的なデータフローでは、産業用デバイスからサウスバウンドプロトコル経由でテレメトリが[NeuronEX](https://www.emqx.com/en/products/neuronex)（EMQのエッジゲートウェイ）に送信され、データが正規化されます。そこからデータがMQTTを経由してEMQXに移動し、Kafkaを通過したのち、最終的にClickHouse Cloudに取り込まれます。「この種のアーキテクチャでは、エッジのデータからデータベースまでをすべて連携させることができます。」と孫氏は言い、このセットアップならパブリックネットワーク経由でも1秒未満で分析を完了できることを説明しました。
+
+![EMQ diagram 2_JP.png](https://clickhouse.com/uploads/EMQ_diagram_2_JP_3349486942.png)
+_エッジデバイスからClickHouseの分析機能への、エンドツーエンドのデータパイプライン。_
+
+ClickHouseに取り込まれたデータは、すぐさま高速なクエリに使用されます。[ディクショナリ](https://clickhouse.com/docs/sql-reference/dictionaries)、[プロジェクション](https://clickhouse.com/docs/sql-reference/statements/alter/projection)、[マテリアライズドビュー](https://clickhouse.com/docs/materialized-views)などの機能により、アクセスの速度を高め、リソースの使用を減らすことができます。エンジニアはGrafana、Power BI、Tableauなどのツールを使用するか、Python、Java、Rust、Goなどで直接操作することで、データを探索できます。また、ClickHouseは[S3](https://clickhouse.com/docs/integrations/s3)や[Delta Lake](https://clickhouse.com/docs/integrations/deltalake)などの外部のデータレイクと連携することで、リアルタイムのストリーミングデータを、履歴データと簡単に組み合わせることができます。
+
+孫氏は4月のミートアップで、Pythonで生成される工場のシミュレーションデータを使用したデモを行っています。OPC-UAデバイスで、温度や湿度などのセンサーによる読み取りデータが生成され、Modbusデバイスでは生産数やエラーコードなどの送信が行われます。データはNeuronEXを使用して正規化されたのち、MQTT経由でEMQXにストリーミングされます。そこから、EMQXのシンク機能により、データをSQLで構成されたパイプラインを使用してClickHouseにルーティングします。
+
+インジェストされたデータは、すぐさまクエリと可視化に使用されます。孫氏はClickHouseの[AIを活用したクエリビルダー](https://clickhouse.com/docs/use-cases/AI/ai-powered-sql-generation)を紹介し、自然言語のプロンプトをSQLに変換する機能について次のように述べています。「ClickHouseのAI機能は非常にユーザーフレンドリーだと思います。AIが1つの文を分析すると、SQLステートメントが瞬時に生成されるので、データをリアルタイムにチェックできます。」
+
+また、孫氏はClickHouse Cloudに組み込まれたダッシュボードを紹介し、更新の間隔を10秒に設定して、最新のデータを画面に表示しました。「生産数や欠陥品の数などを瞬時に確認できます。」（孫氏）
+
+## ClickHouse MCPによりAIをエッジで活用する
+
+<iframe width="768" height="432" src="https://www.youtube.com/embed/eY_kVWsOlOk?si=DVPWbPG224PuK88s" title="YouTube video player" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" referrerpolicy="strict-origin-when-cross-origin" allowfullscreen></iframe>
+
+孫氏は6月のミートアップで、EMQがClickHouseのAI機能の使用を継続的に拡大し、AIを活用したリアルタイムの分析ツールを産業用IoT環境に構築した事例を紹介しました。そのために、同社は製造業のクライアントを前提に、3つの主な課題に取り組む必要がありました。
+
+1つ目は多様なエッジデバイスの管理が複雑になること。「装置や製造現場の種類があまりにも多いため、管理が複雑になりました。」（孫氏）
+
+2つ目はメッセージの遅延を追跡すること。「各メッセージの遅延を個別に追跡することはできません。」と孫氏は説明します。「メッセージ群の平均的な遅延、または遅延を監視することしかできません。」
+
+そして3つ目は、アーキテクチャのノースバウンド側（つまりクラウド面）で複数のデータベースを操ることです。「各メッセージに対し、時系列のデータベースと、機器の詳細な情報を格納するリレーショナルデータベース、そして内部のナレッジを記録するベクトルデータベースが必要です。」
+
+そして、孫氏は当時の目標について、「ClickHouseを統合データプラットフォームとして使用し、3つのデータベースの機能を1つにまとめること」だったと説明しました。
+
+そこでEMQが選んだのが[ClickHouse MCPサーバー](https://clickhouse.com/blog/integrating-clickhouse-mcp)でした。MCP (Model Context Protocol) とは、AIエージェントとサードパーティシステム（データベース、API、ツールなど）の間で、自然言語による対話を可能にするための、新しいオープンプロトコルです。各システムをMCPサーバーでラップすることで、イベントの追跡、デバッグ、クエリ、および分析を、AIで拡張したワークフローを使用して行うことができます。EMQの事例では、これを活用することで、オペレーターが「なぜ機械が故障したのか」や、「どこで遅延が発生しているのか」などを自然言語で質問し、ClickHouseのライブデータを基に回答を得ることができます。
+
+このデモで、孫氏はリアルタイムのオブザーバビリティ、高度な分析、そしてAIを活用したトラブルシューティングが、MCPによって可能になることを説明しました。トレースIDやベクトル検索を使用しているため、オペレーターはエラーの原因を瞬時に突き止めたり、エラーコードを取得したり、解決策を調べたり、また、それらすべてを同じシステム内で行うことができます。「MCPを使用することで、高度に複雑な分析や、データの監視、きめ細かなコントロールが可能になります。」と孫氏は言います。「これにより、遅延の変化やエラーをリアルタイムで検出することができます。」
+
+孫氏は新しい開発ツールのデモも行い、センサーデータのシミュレート、スキーマレコメンデーションの生成、LLMを使用したEMQXルールエンジンの構成の自動化などを紹介しました。「私はあまりSQLが得意ではないので、このような機能があると本当に助かります」（孫氏）
+
+このシステムで、大規模なデータのストリーミングや処理が可能ですが、軽量のエッジハードウェアからでもクラウドダッシュボードにデータを送出し、クロスクラスターの可視性を提供することができます。またEMQは、より機能が制限された環境でも、MCPをMQTTと連携させる方法を考案し、対応しています。「軽量のさまざまなデバイスにMCPをインストールすることは難しいので、新しい方法を探さなくてはなりません」と孫氏は言います。「MCPサーバーのプロキシをブローカーにインストールすることで、従来型の標準的なデバイスにもAIの機能を追加することができます。つまり、すべてのデバイスをAI機能で拡張できます。」
+
+## 未来の工場に機能を提供する
+
+EMQはClickHouse MCPを導入し、リアルタイムのパイプラインや、AIを活用したオブザーバビリティを構築して、ClickHouseとの連携を実現しました。このように、産業用IoTが飛躍的に進化を遂げていることは明らかです。メッセージング、ストレージ、分析などのシステムを別々に用意してつなぎ合わせるのではなく、高速で柔軟性が高く、AIに対応した統合スタックを導入後すぐに構築する企業が増えているのです。
+
+データのクエリ、監視、操作を簡単にすることで、EMQは顧客のオペレーションがよりスマートでレスポンシブになるようサポートしています。また、EMQXがClickHouseとシームレスに連携し、MCPなどのAI機能も簡単に追加できることから、今後ますますデータを多用するインテリジェントな工場で、ClickHouseのプラットフォームが積極的に採用されていくことでしょう。
+
+[EMQXとClickHouseの連携についてはこちら](https://clickhouse.com/docs/integrations/emqx)をご覧ください。また、無料の試用版を[EMQX Cloudはこちら](https://www.emqx.com/en/try)、[ClickHouse Cloudはこちら](https://clickhouse.com/jp/cloud)からどうぞ。
+
+---
+
+## 今すぐ始める
+
+お客様のデータで ClickHouse がどのように機能するか、ご確認になりませんか。ClickHouse Cloud は数分で利用を開始でき、300ドル分の無料クレジットをご提供いたします。
+
+[サインアップ](https://console.clickhouse.cloud/signUp?loc=blog-cta-27&utm_blogctaid=27)
+
+---
 
 ---
 
@@ -24022,6 +26612,97 @@ We’re also exploring dedicated compute pools for alerts, allowing users with l
 Users in the private preview can now explore alerting in ClickStack integration for ClickHouse Cloud and enjoy the same powerful, ClickHouse-powered alerts available in the open source version. 
 
 If you’d like to join the private preview, reach out to your ClickHouse account rep or complete the[ interest form](https://clickhouse.com/cloud/clickstack-private-preview).
+
+
+---
+
+## ClickHouse、Japan Cloudと提携し日本法人設立を発表 〜AI時代に不可欠なリアルタイム分析基盤で、日本ビジネスの成長を加速〜​​
+Published: 2025-11-05T14:36:35+00:00
+URL: https://clickhouse.com/blog/japan-cloud-jp
+
+---
+title: "ClickHouse、Japan Cloudと提携し日本法人設立を発表 〜AI時代に不可欠なリアルタイム分析基盤で、日本ビジネスの成長を加速〜​​"
+date: "2025-11-05T14:36:35.280Z"
+author: "ClickHouse"
+category: "Company and culture"
+excerpt: "ClickHouse、Japan Cloudと提携し日本法人設立を発表"
+---
+
+# ClickHouse、Japan Cloudと提携し日本法人設立を発表 〜AI時代に不可欠なリアルタイム分析基盤で、日本ビジネスの成長を加速〜​​
+
+**ClickHouse株式会社**  
+**2025年11月7日（金曜） AM10:00**
+
+リアルタイム分析データ基盤のリーディングカンパニー ClickHouse, Inc.（クリックハウス、本社：米国カリフォルニア州マウンテンビュー、CEO：Aaron Katz）は、ジャパン・クラウド・コンピューティング株式会社（Japan Cloud）との提携により、日本法人「ClickHouse株式会社」の設立を発表しました。
+
+ClickHouseはJapan Cloudと協力し、日本企業がリアルタイムデータを活用して迅速な意思決定を行い、イノベーションを推進し、AI時代における競争力を強化できるよう支援します。  
+本件を通じ、ClickHouseは日本市場での事業展開を加速させ、AI時代に不可欠なリアルタイム分析基盤を提供することで、日本企業の競争力向上とビジネス成長の加速を目指します。
+
+![ClickHouse+Japan Cloud logos_white (1).png](https://clickhouse.com/uploads/Click_House_Japan_Cloud_logos_white_1_d2c04933de.png)
+
+■ AI時代に求められるデータ戦略  
+日本は、AIおよびリアルタイムデータ分析の分野において、世界でも最も有望な市場のひとつです。日本政府もまた、AI導入・データ基盤の強化・リアルタイム分析技術の活用を通じた産業競争力の強化を明確に打ち出しています。  
+2025年6月に閣議決定された「デジタル社会の実現に向けた重点計画」では、AIの社会実装、データインフラ整備、相互運用性の確保、AI向け計算資源の拡充などが、国の重点政策として位置づけられています（※1）。  
+このような環境のもと、ClickHouseは日本におけるデータドリブン経営とAI活用の高度化を支援していきます。
+
+同時に、多くの企業が次のような課題に直面しています。
+
+* 迅速な意思決定の難しさ：顧客行動やシステム状況を即座に把握できる仕組みがない。  
+* AI／機械学習の限界：AIモデルの精度維持には最新の“生きたデータ”が不可欠だが、更新が追いつかない。  
+* コストと運用の非効率：大量データ分析のたびに高コストが発生し、スピード経営を阻害している。  
+* 膨大な業務データを保有していながら、部門間で分断され十分に活用されていない（※2）
+
+
+このような背景から、世界中でリアルタイムにデータを分析・活用する基盤への転換が加速しています。ClickHouseは、その中核を担うプラットフォームとして注目を集めています。ClickHouseは、Japan Cloudの深い市場知見と実績を掛け合わせることで、日本企業がリアルタイムにデータを活用し、迅速な意思決定とイノベーションを実現することを目指します。
+
+■ ClickHouseとは：  
+ClickHouseは、大規模なリアルタイムデータ処理と分析のために構築された高速な列指向データベース管理システムです。卓越したクエリ速度と同時実行性を提供し、膨大なデータから瞬時の洞察を必要とするアプリケーションに最適です。AIエージェントがソフトウェアに組み込まれることが増え、より頻繁で複雑なクエリを生成する中、ClickHouseはこの課題に対応するために特別に設計された高スループット・低レイテンシ（低遅延）を提供します。
+
+AI時代に求められる“即応的な意思決定”を支える次世代のデータ分析基盤として、グローバルで急速に採用が拡大しています。
+
+ClickHouseは以下のような領域で広く活用されています。
+
+* リアルタイム分析：ユーザー行動や広告配信を即座に可視化し、サービス改善を加速。  
+* 機械学習と生成AI：AIモデルに“生きたデータ”をリアルタイム供給し、予測精度を最適化。  
+* 可観測性（Observability）：システムログやアプリケーションを常時監視し、異常を即時に検知・対応。
+
+
+■ グローバルおよび日本で評価されるリアルタイム分析基盤  
+ClickHouseは、過去1年間で顧客数が2,000社を突破し、ARR（年間経常収益）は前年の4倍に拡大するほどリアルタイム分析領域で注目を集めています。  
+その成長力が評価され、2025年の「Forbes Cloud 100」にも選出されました（※3）。  
+導入企業には、**Microsoft、OpenAI、Anthropic、Sony、Tesla、Deutsche Bank、Netflix、eBay、Trip.com**など、AIや大規模データを活用するグローバル企業が名を連ねます。また日本国内でも、**楽天グループ、LINEヤフー、NEC、スマートニュース**など、リアルタイムデータ分析を重視する企業への導入が進んでいます。さらに、Gartner Peer Insights（Cloud Database Management Systems）のユーザー評価 では「性能」「柔軟性」「スケーラビリティ」の各面で高い評価を得ています（※4）。
+
+■ ClickHouse CEO, Aaron Katz コメント  
+日本はAI・データ分析領域において成長ポテンシャルの高い市場の一つです。  
+ClickHouseが提供するリアルタイム分析基盤は、まさにこの成長を支えるテクノロジーです。​​Japan Cloudは、Braze、Kong、New Relic、PagerDutyといった世界的テクノロジー企業の日本展開を成功に導いてきた信頼あるパートナーです。  
+今回の提携を通じて、日本企業がAI時代のデータ活用をさらに加速し、グローバル市場においても競争力を高めていけるよう支援できることを非常に楽しみにしています。
+
+■ Japan Cloud パートナー／ジャパン・クラウド・コンサルティング株式会社 代表取締役社長 福田 康隆 コメント  
+ClickHouseは、AI・リアルタイム分析分野のリーディングカンパニーであり、その革新的な技術は日本企業の変革を支える中核基盤となります。  
+私たちはClickHouseと共に、日本市場におけるデータ活用の高度化と企業成長を力強く支援していきます。  
+                
+
+ClickHouse(日本語ページ）はこちらをご覧ください。  
+[https://clickhouse.com/jp](https://clickhouse.com/jp)
+
+出典  
+(※1)デジタル庁「デジタル社会の実現に向けた重点計画」（2025年6月13日閣議決定）  
+[https://www.digital.go.jp/policies/priority-policy-program](https://www.digital.go.jp/policies/priority-policy-program)  
+(※2)IPA「データ利活用・データスペースガイドブック第2.0版」2025年1月29日）  
+[https://www.ipa.go.jp/digital/data/jod03a000000a82y-att/data-utilization-and-data-spaces-guidebook.pdf?utm_source=chatgpt.com](https://www.ipa.go.jp/digital/data/jod03a000000a82y-att/data-utilization-and-data-spaces-guidebook.pdf?utm_source=chatgpt.com)
+
+(※3)  ClickHouse Extends Series C Financing and Expands Leadership Team to Fuel Growth  
+[https://clickhouse.com/blog/clickhouse-extends-series-c-financing-expands-leadership-team](https://clickhouse.com/blog/clickhouse-extends-series-c-financing-expands-leadership-team)  
+(※4)  Gartner Peer Insights — ClickHouse Reviews in Cloud DBMS  
+[https://www.gartner.com/reviews/market/cloud-database-management-systems/vendor/clickhouse](https://www.gartner.com/reviews/market/cloud-database-management-systems/vendor/clickhouse)
+
+**ClickHouseについて**  
+ClickHouseは、リアルタイムデータ処理と大規模分析のために設計された、高速な列指向データベース管理システムです。高いパフォーマンスを追求して設計されたClickHouse Cloudは、圧倒的なクエリ速度と同時実行性能を実現し、大量データから瞬時にインサイトを得るアプリケーションに最適です。AIがソフトウェアに組み込まれ、より頻繁で複雑なクエリが発生する時代において、ClickHouseはそのニーズに応える高スループット・高リアルタイム性のエンジンを提供します。Sony、Tesla、Anthropic、Memorial Sloan Kettering Cancer Center、Lyft、Instacartなどの世界的企業に信頼され、チームがスケーラブルで効率的な最新のデータプラットフォームを活用し、より賢明な意思決定を行うことを支援しています。  
+詳細はこちらをご覧ください。 [https://clickhouse.com/jp](https://clickhouse.com/jp)
+
+**Japan Cloudについて**  
+Japan Cloudは、世界中から優れたテクノロジー企業を発掘し、中長期的な視点で共同経営を行い、日本企業の生産性向上と新しいキャリアパスの提供に貢献することを目指しています。  
+Japan Cloudは、2000年のSalesforceの日本法人設立を始め、Braze、Kong、New Relic、PagerDutyなどの日本進出をサポートしました。各社での経験と実績をもとに、現在では累計19社の外資系テック企業の日本法人の経営に携わっています。詳しくはこちらをご覧ください。[https://www.japancloud.jp](https://www.japancloud.jp)
 
 
 ---
@@ -35740,6 +38421,102 @@ If you're experimenting with similar ideas or have thoughts on how to improve th
 
 ---
 
+## ストリーミング ClickPipes の柔軟なスケーリングと強化されたモニタリング
+Published: 2025-08-26T02:51:24+00:00
+URL: https://clickhouse.com/blog/clickpipes-flexible-scaling-monitoring-jp
+
+---
+title: "ストリーミング ClickPipes の柔軟なスケーリングと強化されたモニタリング"
+date: "2025-08-26T02:51:24.354Z"
+category: "Product"
+excerpt: "ストリーミング ClickPipes が柔軟なスケーリングと強化されたモニタリングに対応しました。これにより、進化するデータ取り込みワークロードに合わせてコストとパフォーマンスを自由にコントロールできます。"
+---
+
+# ストリーミング ClickPipes の柔軟なスケーリングと強化されたモニタリング
+
+## はじめに
+
+データ取り込みワークロードは千差万別で、そのパターンも予測しやすいものからそうでないものまで存在します。私たちが [ClickPipes](https://clickhouse.com/cloud/clickpipes) を開発した際には、オブジェクトストレージ、メッセージブローカー、データベースといったデータ基盤の最も一般的な構成要素から、あらゆるスループット、データサイズ、トポロジーに対応できるようにすることを目指しました。現在では、[Property Finder](https://clickhouse.com/blog/how-property-finder-migrated-to-clickhouse)、[Flock Safety](https://clickhouse.com/blog/why-flock-safety-turned-to-clickhouse)、[Seemplicity](https://clickhouse.com/blog/seemplicity-scaled-real-time-security-analytics-with-postgres-cdc-and-clickhouse) を含む数百社のお客様が、リアルタイムでの大規模データ取り込みを効率的かつ低コストで管理するために ClickHouse Cloud の ClickPipes を利用しています。
+
+製品の進化に伴い、最も多かったリクエストのひとつは、多様なデータ取り込みワークロードのニーズにより適合させるために、ストリーミング ClickPipes の構成にさらなる柔軟性を持たせてほしい、というものでした。これに応える形で、今回 **新しいスケーリングオプション** を導入しました。これにより、ストリーミング ClickPipes の **水平スケーリングと垂直スケーリング** の両方を制御できるようになります。レプリカ数やレプリカサイズを直接選択できるようになり、さらにリソース使用状況を追跡できる強化されたモニタリングも利用可能になりました。
+
+
+### ストリーミング ClickPipes のサイズ指定はどのように動作するのか？
+
+> **注記**: データベース用およびオブジェクトストレージ用の ClickPipes は異なるアーキテクチャを採用しており、計算リソースの割り当てを直接制御する必要はありません。今回の新機能はストリーミング ClickPipes のみに適用され、ClickPipe ごとのコストとパフォーマンスの比率をお客様がより柔軟に制御できるようにします。
+
+ClickPipes は ClickHouse Cloud 内にレプリカをデプロイすることで動作します。各レプリカは Kafka または Kinesis のストリーミングデータソースのコンシューマーとして機能します。デフォルトでは、ClickPipes は **Extra Small レプリカ（0.125 vCPU、512 MiB RAM）** を 1 つ起動してデータストリームを処理します。これらのレプリカは並列でデータを取得し、必要に応じて処理や変換を行い、ストリームのオフセットをコミットし、その結果を直接 ClickHouse サービスに書き込みます。このアーキテクチャにより、高スループットかつスケーラブルなデータ取り込みが可能となり、フォールトトレランスと効率的な負荷分散を実現します。
+
+![unnamed.png](https://clickhouse.com/uploads/unnamed_357981c8a1.png)
+
+### レプリカとは？
+
+ClickPipes における レプリカ とは、受信するデータストリームを処理するために並列で動作するデータ処理パイプラインのインスタンスを指します。各レプリカは Kafka または Kinesis ストリームのコンシューマーとして機能し、データ量が増加してもシステムが効率的にスケールし、パフォーマンスを維持できるようにします。レプリカは、ワークロードの特定のニーズに応じて 垂直方向（スケールアップ） と 水平方向（スケールアウト） の両方で拡張することが可能です。
+
+
+## 柔軟なスケーリングオプション
+
+ストリーミング ClickPipes のトポロジーをより細かく制御できるよう、レプリカ数（*水平スケーリング*）とレプリカサイズ（*垂直スケーリング*）の2つの新しいスケーリングオプションを導入しました。これらのスケーリングオプションは、新しい ClickPipe の作成時や既存の ClickPipe を編集する際に UI（下図参照）から選択可能です。また、[OpenAPI](https://clickhouse.com/docs/cloud/manage/api/swagger#tag/ClickPipes/paths/~1v1~1organizations~1%7BorganizationId%7D~1services~1%7BserviceId%7D~1clickpipes~1%7BclickPipeId%7D~1scaling/patch) や [Terraform](https://github.com/ClickHouse/terraform-provider-clickhouse/blob/619ba02fc70e5d672e221f424a9aeedc43fa2d0a/examples/clickpipe/multiple_pipes_example/main.tf) からもスケーリングを設定できます。
+
+![unnamed.gif](https://clickhouse.com/uploads/unnamed_8240b37fa9.gif)
+
+### 垂直スケーリング（Vertical scaling）
+
+垂直スケーリング、または *スケールアップ* とは、ClickPipe 内の各レプリカに割り当てるリソース（CPU とメモリ）を増やすことを指します。これは、大きなペイロードや複雑なスキーマを持つ Kafka や Kinesis ストリームのように、各レプリカごとにより多くの処理能力が必要なワークロードに最適です。
+垂直スケーリングでは以下の構成が利用できます：
+
+| レプリカサイズ          | CPU          | メモリ  |
+|------------------------|--------------|--------|
+| Extra Small (デフォルト)  | 0.125 Cores  | 512 Mb |
+| Small                  | 0.25 Cores   | 1 Gb   |
+| Medium                 | 0.5 Cores    | 2 Gb   |
+| Large                  | 1 Core       | 4 Gb   |
+| Extra Large            | 2 Cores      | 8 Gb   |
+
+### サイズ別ベンチマーク
+
+以下は Kafka ストリームからデータを取り込む Large サイズ（1 vCPU / 4 GB）の ClickPipe レプリカに関する性能ベンチマークの一例です。ワークロードに適したレプリカサイズを選択する際の参考として利用してください。詳細や追加のサイズ選定ガイダンスについては、ドキュメントを参照ください。
+
+| レプリカサイズ | メッセージサイズ | データ形式 | スループット  |
+|-------------|--------------|-------------|------------|
+| Large       | 1.6 kb       | JSON        | 63 mb/s    |
+| Large       | 1.6 kb       | AVRO        | 99 mb/s    |
+
+### 水平スケーリング（Horizontal scaling）
+
+水平スケーリング、または *スケールアウト* とは、ClickPipe にレプリカを追加することを指します。これによりワークロードを複数のレプリカに分散でき、より大量のデータを同時に処理できるようになります。Kafka と Kinesis は、それぞれ複数のパーティションやシャードにデータを分散する仕組みを持っており、ClickPipes は水平スケーリングによってこの仕組みに比例して処理をスケールできます。
+
+
+## 強化されたリソースモニタリング
+
+各 ClickPipe の詳細ページには、レプリカごとの CPU およびメモリ使用率が表示され、レプリカ全体の平均リソース利用状況が確認できるようになりました。さらに、チャートには CPU とメモリの上限値も表示され、*スケールアップ* および *スケールアウト* イベントを含めた利用状況の推移を追跡できます。これにより、ワークロードをより深く理解し、自信を持ってリサイズ操作を計画できるようになります。
+
+![unnamed (1).png](https://clickhouse.com/uploads/unnamed_1_301ef80db2.png)
+
+## 柔軟なスケーリングによる料金への影響
+
+従来、ストリーミング ClickPipes はデフォルトで Medium サイズのレプリカごとに **\$0.05/時間** の固定料金で提供されていました。今回、レプリカサイズを設定できるようになったことで、デフォルトを Extra Small に変更し、料金モデルも更新しました。料金はレプリカサイズとレプリカ数に応じて決定され、最安で **\$0.0125/時間** から利用可能です。詳細な料金については [ClickPipes 料金ドキュメント](https://clickhouse.com/docs/cloud/manage/billing/overview#clickpipes-pricing) をご参照ください。
+
+| レプリカサイズ     | コンピュートユニット | RAM     | vCPU  | 料金/時間（レプリカあたり） |
+|---------------|----------------|---------|------|-------------------------|
+| Extra Small   | 0.0625         | 512 MiB | 0.125| $0.0125                 |
+| Small         | 0.125          | 1 GiB   | 0.25 | $0.025                  |
+| Medium        | 0.25           | 2 GiB   | 0.5  | $0.05                   |
+| Large         | 0.5            | 4 GiB   | 1.0  | $0.10                   |
+| Extra Large   | 1.0            | 8 GiB   | 2.0  | $0.20                   |
+
+> **注記**: コンピュート料金に加え、ClickPipes は **\$0.04/GB** のデータ取り込みコストが発生します。詳細は [ClickPipes 料金ドキュメント](https://clickhouse.com/docs/cloud/manage/billing/overview#clickpipes-pricing) をご確認ください。
+
+## 次のステップ
+
+柔軟なスケーリングと強化されたリソースモニタリングによって、ストリーミング ClickPipes のコストとパフォーマンスのバランスを完全に制御できるようになりました。これにより、データ取り込みワークロードの変化にもより適切に備えることができます。詳細については [ドキュメント](https://clickhouse.com/docs/integrations/clickpipes) を参照し、ストリーミング ClickPipes のデプロイライフサイクル管理方法をご確認ください。
+
+
+
+
+
+---
+
 ## Data engineering and software engineering are converging
 Published: 2025-08-25T11:35:20+00:00
 URL: https://clickhouse.com/blog/eight-principles-of-great-developer-experience-for-data-infrastructure
@@ -44612,6 +47389,380 @@ Creating a Slack bot that can process natural language questions and execute the
 
 ---
 
+## AnthropicがClickHouseを使ってAI時代のオブザーバビリティをスケールさせる方法
+Published: 2025-07-16T06:44:49+00:00
+URL: https://clickhouse.com/blog/how-anthropic-is-using-clickhouse-to-scale-observability-for-ai-era-jp
+
+---
+title: "AnthropicがClickHouseを使ってAI時代のオブザーバビリティをスケールさせる方法"
+date: "2025-07-16T06:44:49.782Z"
+author: "ClickHouse"
+category: "User stories"
+excerpt: "Claudeの開発元であるAnthropicが、どのようにClickHouseを活用して高速かつ安全な分析基盤を構築し、膨大なデータの処理や厳格なAIセーフティ要件に対応しながら、Claude 4を支えているのかをご覧ください。"
+---
+
+# AnthropicがClickHouseを使ってAI時代のオブザーバビリティをスケールさせる方法
+
+[Anthropic](https://www.anthropic.com/) は、ここ数年で「AIの限界に挑みながら、安全かつ責任ある方法で取り組む企業」としての評価を築いてきました。
+同社は、最先端の大規模言語モデル「[Claude](https://www.anthropic.com/claude)」シリーズを開発する企業として、その姿勢をインフラレベルにも深く根付かせており、オブザーバビリティは性能と保護の両面で重要な役割を担っています。
+
+> 「ClickHouseは、Claude 4の開発とリリースを支える上で極めて重要な役割を果たしました。」
+> — Maruth Goyal氏, Anthropic テクニカルスタッフ
+
+2024年にClaudeの利用が急増したことで、Anthropicのオブザーバビリティチームは、膨大なテレメトリ、メトリクス、ログの嵐を相手にすることになりました。そして新しいモデルがリリースされるたびに、要求される信頼性と厳格さはさらに増していきました。
+彼らはリアルタイムで問題を検出し、機密データの漏洩を防ぎながら、安全な計算環境の中ですべてを稼働させ続ける必要があったのです。
+
+<iframe width="768" height="432" src="https://www.youtube.com/embed/SrLKbzdFEWA?si=q5610y3g14TUSjcQ" title="YouTube video player" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" referrerpolicy="strict-origin-when-cross-origin" allowfullscreen></iframe>
+
+
+## 大きな力には、大きな責任が伴う
+
+AnthropicがClaude 3を2024年3月にリリースしたとき、
+「世間の注目を集め始めました」とテクニカルスタッフのMaruth Goyal氏は振り返ります。
+しかし、数ヶ月後にClaude 3.5が登場した際には、「まさに大混乱が起こりました」と彼は言います。
+
+利用は急増し、モデルはさらに洗練されていきました。
+それに伴い、支えるインフラも急激にスケーリングを求められることになりました。計算環境は爆発的に拡大し、それに比例して監視・トラブルシューティング・チューニングのために処理すべきデータ量も膨れ上がっていきました。
+突然、既存のオブザーバビリティシステムではその規模についていけなくなったのです。
+
+![anthropic-1.jpg](https://clickhouse.com/uploads/anthropic_1_0d480442af.jpg)
+
+「ものすごい量のデータを抱えたらどうなると思いますか？」と氏は問いかけます。
+「データベースが炎上し、クエリがタイムアウトし、エンジニアはイライラし、予算が燃えます。」
+
+同時に、AnthropicのセキュリティとAI安全基準はますます厳格になっていきました。
+2025年5月にClaude Opus 4がリリースされた際、同社は[AIセーフティレベル3（ASL-3）対策](https://www.anthropic.com/news/activating-asl3-protections)を導入しました。これは、AIの誤用リスクを低減するために設けられた社内ガードレール群です。
+この対策において特に重要だったのが、データアクセスの厳格な制限だったとMaruth氏は説明します。
+
+「非常に強力なモデルの重みが、悪意のある人物によって極めて有害な目的に使われるリスクを私たちは非常に懸念しています」と彼は語ります。
+「それを防ぐために、私たちはクラスターからのすべての外部通信を徹底的に監視しています。Anthropicの安全な計算環境から、データが外に出ることは一切許されません。」
+
+
+## オブザーバビリティをスケーリングするためにClickHouseを選ぶ
+
+2024年の終わり頃、Maruth氏とAnthropicのチームは、より優れたデータベースソリューションを探し始めた。彼らの要望は非常に野心的だった。
+
+「私たちはリアルタイムで大量のデータを取り込む必要があります。セミ構造化データに対して、高速で対話的かつ多機能な分析ができなければなりません。それをAnthropicの安全な計算環境内にデプロイする必要があり、さらにスケーラブルなコスト構造も求められます。」
+
+それだけでなく、業界標準のオブザーバビリティツールとスムーズに連携し、常に付きっきりで面倒を見なくても済むデータベースであることも必要だった。
+
+「私のチームは1月まで3人しかいなかったんです」とMaruth氏は語る。「だから、無茶はしたくなかったんです。」
+
+Anthropicらしい発想で、彼は正解を求めて地の果てまで探し回る必要はないと分かっていた。
+
+「もし“どれを使えばいいか”を超知能に聞けたら最高ですよね」と彼は冗談めかして言う。「部屋の隅にでも転がっていれば便利なんですけど。」
+
+彼はClaudeにおすすめを聞いてみた。Claudeの答えはClickHouseだった。詳細に調べてみると、Maruth氏は納得した。
+
+「これはスケール可能なリアルタイム取り込みに対応しています。高速な分析、柔軟なデプロイ、そしてコスト効率の高いスケーリングが可能です。」
+
+彼はそれをチームに提案し、全員が賛成した。
+
+「これはいいね。」
+
+あとは、それをエアギャップされた厳密に管理された環境でどう動かすかを考えるだけだった。
+
+![anthropic-1.png](https://clickhouse.com/uploads/anthropic_1_f8a40f8682.png)
+
+
+## Anthropic流のClickHouse導入
+
+ClickHouseは技術的には理想的な選択だったが、標準的なデプロイ方法はAnthropicの要件には完全には合っていなかった。オープンソース版には明確な利点があった。「すぐに使い始められるし、実績もあって、パフォーマンスも優れている」とMaruth氏は言う。しかし同時に、ディスクの管理、レプリカの運用、シャードの再構成など、いわゆる「全部盛り」の運用が求められることも意味していた。「人生は楽しくない、いや、ClickHouseがあるから楽しいんですけどね。でも運用コストは高いんです」と彼は付け加える。
+
+[ClickHouse Cloud](https://clickhouse.com/cloud)にも独自の利点があった。「動的なスケーリングが可能で、コスト効率が高く信頼性のあるBLOBストレージがバックにある」とMaruth氏は言う。「でも、それはClickHouse Cloudでしか使えないんです。」これは致命的な問題だった。というのも、Anthropicではすべてを自社の安全な計算環境内で実行する必要があったからだ。
+
+そこで彼らはハイブリッドなアプローチを選んだ。ClickHouseチームと連携しながら、ClickHouse Cloudのアーキテクチャをカスタマイズし、Anthropicのインフラ内部にエアギャップされた形でデプロイした。コントロールプレーンからデータプレーンに至るまですべて、社内で運用されている。
+
+
+![anthropic-3.png](https://clickhouse.com/uploads/anthropic_3_7c4662a981.png)
+
+*AnthropicにおけるClickHouseの導入構成*
+
+クラスターはKubernetes上で稼働しており、ClickHouse Operatorによってオーケストレーションされています。ZooKeeperの代替として3つの「keeper」が用意されており、それぞれが異なるアベイラビリティゾーンに配置されています。サーバーは水平方向にスケーラブルで、オブジェクトストレージをバックエンドに使用しています。監視はPrometheusが担当し、取り込み処理はVectorが担い、オブザーバビリティパイプラインをシンプルかつ効率的につなぎ合わせています。
+
+Maruth氏の説明によると、この構成はAnthropicのあらゆる要件を満たしています。需要に応じてスケールでき、エンジニアがメンテナンスに追われることもありません。「そして何より重要なのは、すべてがAnthropicの安全な環境内でデプロイされ、完全に私たち自身の手で運用されているという点です」と彼は言います。
+
+## スピード、セキュリティ、そして運用の健全性
+
+Anthropicの新しいオブザーバビリティ構成は、すでに大きな改善をもたらしています。Maruth氏の言葉を借りれば、「データベースは“グリーン”で、クエリは“稲妻のように速く”、お金も燃えていない」。
+
+「以前のソリューションでは」と彼は説明します。「データベースの運用担当者は、やりたい作業に集中できず、眠れず、ストレスを抱えていました。彼らはデータベースの外で、サポートに連絡したり、再シャーディングや書き込みレプリケーションの修正について助けを求めたりすることに時間を取られていたのです。」
+
+では今はどうか？「そういうことは一切ありません」とMaruth氏は言います。あるエンジニアは彼にこう言ったそうです。「最近、データベースが動いてることすら意識してませんでした。」それこそが理想の姿です。
+
+ClickHouseのおかげで、膨大なデータセットに対する高速かつ信頼性の高いクエリが“当たり前”のものになりました。チームはインフラの心配をせずに、本当に重要なこと――より良いツールを構築し、より高速なモデルを提供し、Claudeの可能性をさらに広げる――に集中できるようになったのです。
+
+## Claude 4からエージェント主導の分析へ
+オブザーバビリティのスケーリングに加えて、Maruth氏はこう述べています。「ClickHouseは、Claude 4の開発とリリースを支える上でも非常に重要な役割を果たしました。」高度なモデルをトレーニングするには、パフォーマンスメトリクスやシステム挙動を常時可視化する必要があります。ClickHouseは、そのデータをリアルタイムで分析するためのスピードと柔軟性を提供してくれました。「最先端の言語モデルの開発において、すでに大きな価値を発揮しています」と彼は言います。
+
+現在、チームが見据えているのは次のフロンティア、すなわち「エージェント主導の分析（agentic analytics）」です。[ClickHouseのMCPサーバーの導入](https://clickhouse.com/blog/integrating-clickhouse-mcp)により、Anthropicは自社モデル――たとえばエージェント型のコーディングツール [Claude Code](https://www.anthropic.com/claude-code)――をClickHouseに直接接続できるようになりました。これにより、エージェントがプログラム的にメトリクスをクエリし、質問を投げかけ、答えを得ることが可能になります。従来のクエリ言語を書く必要はありません。
+
+「この展開にはとてもワクワクしています。私にとって、オブザーバビリティとはSQLやPromQLのことではなく、“問い”そのものだからです」とMaruth氏は語ります。「自分の問いを投げて、それに対する必要な答えを返してもらえる――本質的には、それがすべてなんです。」
+
+ClickHouseを基盤に据えることで、Anthropicは今日のAIワークロードを支えるスケーラブルで安全な基盤を手に入れました。そして今後は、より動的でエージェント駆動の未来へと進もうとしています。
+
+ClickHouseがあなたのチームのデータ運用にどれほどのスピードとスケーラビリティをもたらせるか、詳しく知りたい方は、[ClickHouse Cloudを30日間無料でお試しください](https://clickhouse.com/cloud)。
+
+
+---
+
+## なぜOpenAIはペタバイト規模のオブザーバビリティにClickHouseを選んだのか
+Published: 2025-07-16T06:22:23+00:00
+URL: https://clickhouse.com/blog/why-openai-uses-clickhouse-for-petabyte-scale-observability-jp
+
+---
+title: "なぜOpenAIはペタバイト規模のオブザーバビリティにClickHouseを選んだのか"
+date: "2025-07-16T06:22:23.369Z"
+author: "ClickHouse"
+category: "User stories"
+excerpt: "OpenAIは1日にペタバイト級のログを取り込み、その処理を支えているのがClickHouseです。 数十億規模のモデル実験から、ChatGPTのバイラル的スパイクに至るまで、あらゆる現象を可視化するために、彼らがどのようにオブザーバビリティを構築したのかをご覧ください。"
+---
+
+# なぜOpenAIはペタバイト規模のオブザーバビリティにClickHouseを選んだのか
+
+自分のオブザーバビリティがすごいと思ってる？それなら、一度 [OpenAI](https://openai.com/) の立場になってみるといい。
+
+
+OpenAIは毎日、ペタバイト級のログデータを取り込んでいます。これは、議会図書館500館分または20億枚のiPhone写真に相当します。もし1秒に1枚ずつ写真を撮ったとしても、OpenAIが1日でログに記録するデータ量に到達するには60年かかります。その保存には、パレット1台分のハードドライブが必要です。しかも、そのボリュームは毎月20％以上のペースで増加しています。
+
+「このスケール感は、本当に信じられないレベルです」と、OpenAIのエンジニアリングマネージャー、Akshay Nanavati氏は語ります。
+
+モデル研究、ChatGPT、企業向けAPIの提供など、OpenAIは複数の重要かつ急成長中のシステムを抱えており、それぞれが検索可能で高速かつ信頼性の高いログを生成しています。オブザーバビリティとはつまり、高カーディナリティのトレースや突発的な取り込みスパイク、バイラルなユーザー成長による急激な変動に対応できるインフラを構築することを意味しています。
+
+Akshay氏とPoom氏が [ClickHouse初のOpen Houseユーザーカンファレンス](https://clickhouse.com/openhouse) で行った講演をご覧ください：
+
+<iframe width="768" height="432" src="https://www.youtube.com/embed/yIVz0NKwQvA?si=XvWRI2cfoFs7xYsQ" title="YouTube video player" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" referrerpolicy="strict-origin-when-cross-origin" allowfullscreen></iframe>
+
+<br/>
+
+## AIのあらゆる層におけるオブザーバビリティ
+
+OpenAIは研究機関であると同時に、プロダクトエンジニアリング組織でもあります。その使命は、AIの革新における複数の異なるが密接に連携した分野にまたがっています。
+「これらすべての機能において、オブザーバビリティは欠かせないものです」とAkshay氏は言います。
+
+まずは研究チーム。彼らは日々、モデルの可能性を限界まで押し広げようとしています。
+「数十億のモデルを、何百万台ものGPUでトレーニングしているんです」とAkshay氏は説明します。彼らは膨大で高カーディナリティなデータセットに対して、しばしばリアルタイムで実験をトレースし、性能を理解し、素早く反復改善する必要があります。
+
+次にChatGPTのチーム。ChatGPTは[史上最も急成長したコンシューマーアプリ](https://www.reuters.com/technology/chatgpt-sets-record-fastest-growing-user-base-analyst-note-2023-02-01/)です。
+「ユーザーが増えれば、サーバーが増え、それに伴ってログも増えるんです」と彼は言います。彼らの課題はスケールです。膨大なテレメトリデータに対応し、トラフィックのスパイク中でも常に稼働を維持する必要があります。
+
+そして最後に、企業向けAPIチーム。世界中の企業が、OpenAIのインフラ上でミッションクリティカルなAIアプリケーションを構築しています。ここで求められるのは、絶対的な信頼性です。もし何かが壊れた場合、SLAを満たし、運用を止めないためには、ログが即座に検索可能でなければなりません。
+
+「深夜3時にエンジニアが呼び出されて、何か異常が起きていたとしましょう」とAkshay氏は言います。「そのとき、オブザーバビリティスタックを使って何が起きているのかを即座に把握する必要があります。」
+
+
+## なぜOpenAIはClickHouseを選んだのか
+
+OpenAIのオブザーバビリティチームがデータベースソリューションの検討を始めたとき、求めていたのは高速かつ柔軟で、将来的にも通用するシステムでした。ClickHouseは、その性能だけでなく、設計思想と構造の面でも群を抜いていました。
+
+「ClickHouseはオープンソースなので、ベンダーロックインがありません」とAkshay氏は言います。
+もし何か問題が発生しても、他の誰かの対応を待たずとも、自分たちでコードを読んでデバッグし、すぐに前に進むことができます。
+「これは本当に便利なんです。」
+
+ClickHouseはクラウドネイティブであり、水平方向へのスケーリングが容易にできるように設計されています。
+「つまり、取り込み処理とクエリ処理の両面で、比較的少ない運用負荷でスケールできるということです」とAkshay氏は説明します。
+
+ClickHouseの柔軟なインデックス機構は、多様なクエリやユースケースに対応しており、重要な点に応じてパフォーマンスを調整できます。
+「クエリを速くするインデックスを有効にして、逆に遅くするインデックスは無効にできる。それがこのシステムをスケールさせるうえで非常に重要なんです」とAkshay氏は語ります。
+
+さらに重要なのは、ClickHouseはSQLで操作できるという点です。SQLは人間にも、AIモデルにも、エージェントにも理解できる言語です。
+そのため、AIをオブザーバビリティスタックに統合することが容易になり、非常に強力な機能の実現を可能にしているとAkshay氏は述べています。
+
+最後に、ClickHouseがすでに多くの企業でオブザーバビリティ用途に使われていることも安心材料となりました。
+「私たちの同業の多くが、まさにこの用途でClickHouseを使っているんです」とAkshay氏は言います。
+「つまり、良いサポートが受けられるし、実戦で使われていることも証明されています。まさにこの用途にぴったりのツールなんです。」
+
+
+## GPT-4o がクラスターを溶かした日
+
+OpenAIのオブザーバビリティシステムでは、Fluent Bitエージェントから流れてくるログが、90個のシャードを持つClickHouseクラスター（各シャードに2つのレプリカ）に取り込まれます。ユーザーによるクエリの大半（Poom氏によると約80%）は直近2日間のデータにしかアクセスしないため、そのデータは高速アクセスのためにディスク上に保持されます。一方で、より古いログはBLOBストレージへ移動されます。
+「ClickHouseはクラウドネイティブなシステムなので、このような階層化されたストレージ構成をうまく抽象化してくれます。SQLを書く人たちは、データがどこにあるかなんて気にしなくていいんです」と彼は言います。
+
+以下の図は、Fluent Bitエージェントからログがロードバランサーを通り、90のClickHouseシャードへと流れていく仕組みを示しています：
+
+![OpenAI-01.png](https://clickhouse.com/uploads/Open_AI_01_557552aa30.png)
+
+この図は、新しいデータはディスク上に残り、古いログは自動的にBLOBストレージに移される構成を示しています：
+
+![OpenAI-02.png](https://clickhouse.com/uploads/Open_AI_02_897faeac3f.png)
+
+「この構成によって、すべてが非常にスムーズに動いていました」とPoom氏は語ります。
+
+……2025年3月25日までは。
+この日、OpenAIは [GPT-4oで画像生成機能をリリース](https://openai.com/index/introducing-4o-image-generation/) しました。
+「ユーザーたちはこれを大変気に入りました」とPoom氏は言います。アニメ風の自撮り、ミーム画像、さらにはステーキとして描かれたOpenAIのロゴまで登場しました。
+「私がこれまで見た中で、最大級のユーザー増加スパイクのひとつでした。」
+
+その一方で、「サーバーは全台、溶けかけていました」と彼は言います。ログの取り込み量は一晩で50%も急増しました。
+「CPU使用率に50％の余裕があることを確認して安心して寝たんですが、翌朝にはその余裕が一夜にして消えていたんです。」
+
+GPT-4oの画像生成のリリース後、CPU使用率は50%上昇：
+
+![OpenAI-03.png](https://clickhouse.com/uploads/Open_AI_03_8ef7a955dc.png)
+
+もちろん、こんな状態は持続可能ではありませんでした。
+「取り込み量を制御し、ClickHouseをどうにかしてスケールさせる必要があると分かっていました」とPoom氏は言います。そこで彼らは、クエリ専用の3つ目のレプリカを追加し、重たいクエリが取り込み処理を妨げないようにしました。また、積極的なサンプリングを開始し、ログをサービス・クラスター・コンテナ単位で分解してボトルネックを突き止めようとしました。
+「でも、最終的にはそれでも足りなかったんです。」
+
+ブレークスルーが訪れたのは、ClickHouseそのものをプロファイリングしたときでした。
+スタックトレースの中で、あるパターンが浮かび上がりました。全CPU時間の半分以上が、Bloomフィルターの構築に使われていたのです。Bloomフィルターとは、クエリ時に無関係なデータブロックをスキップするためのインデックス構造です。問題の根源は？Bloomフィルター内部に埋もれていた、1つの除算命令でした。
+
+Poom氏の説明によれば、除算は加算やビット演算に比べておよそ30倍遅い演算であり、ClickHouseでは挿入処理のたびにそれが実行されていました。
+「毎回、同じ数値で割っていたことに気づきました。Bloomフィルターに要素を追加するたびに、そのハッシュを配列サイズで割っていたんです。」
+
+そこで、ほぼ1行だけの変更――この除算を乗算とビットシフトに置き換えたところ、CPU使用率が即座に40%も削減されました。Poom氏は、その前後を示すグラフを共有し、
+「これは“あの事件の間の私の心拍数の時系列”とも言えるかもしれませんね」と冗談を交えて話しました。
+
+Bloomフィルターの最適化により、CPU使用率が40%減少：
+
+![OpenAI-04.png](https://clickhouse.com/uploads/Open_AI_04_2647fd0444.png)
+
+事態が収束した後、その改善内容はチームメンバーによってClickHouse本体にアップストリームされ、より広いコミュニティにも貢献する形となりました。
+「ClickHouseのクラウドネイティブな設計とオープンソース性が、いざという時に本当に私たちを救ってくれたんです」とAkshay氏は補足します。
+
+
+## OpenAIとClickHouseのこれから
+
+これまでで最も激しいトラフィックスパイクを乗り越えた後でも、Akshay氏は「OpenAIのオブザーバビリティの取り組みはまだまだ終わりじゃありません」と語ります。
+チームは、ClickHouseの堅牢性をさらに強化し、よりスマートにスケールさせるべく取り組みを続けています。中でも、\*\*クエリプランニング（クエリの実行計画）\*\*に改めて注力しています。
+
+「今の私たちは、クエリをすべてのシャードにナイーブにばらまいている状態です」とAkshay氏は言います。
+「そのやり方が限界に達しつつあるんです。」
+
+同時に、社内ツールの使いやすさ向上にも継続的に取り組んでいます。
+「エンジニアがより効率よく仕事できるよう、パフォーマンスモニタリングなどの機能を整えていきたいんです」と彼は述べます。
+
+さらにその先には、より自律的なオブザーバビリティスタックの構想があります。AIエージェントがオンコール対応のワークフローに直接組み込まれるのです。
+「アラートの処理や、インシデントの診断を人間が関与する前にAIが対応できる――そんな世界を目指しています」とAkshay氏は言います。
+
+OpenAIのオブザーバビリティの未来は、その製品群と同様に広大で、変化が速いものであり続けるでしょう。
+しかしClickHouseという基盤の上で、彼らはスパイクのたびに進化するシステムを築いてきました。
+ペタバイト級のデータスケーリングから、パフォーマンス改善のアップストリーム貢献に至るまで、OpenAIはClickHouseの限界に挑戦し、その未来の姿を共に形作っているのです。
+
+ClickHouseがどのようにしてチームのデータ運用を変革できるか、[ClickHouse Cloudを30日間無料でお試しください](https://clickhouse.com/cloud)。
+
+---
+
+## TeslaがClickHouseで構築した、1,000兆規模のオブザーバビリティ・プラットフォーム
+Published: 2025-07-16T05:54:33+00:00
+URL: https://clickhouse.com/blog/how-tesla-built-quadrillion-scale-observability-platform-on-clickhouse-jp
+
+---
+title: "TeslaがClickHouseで構築した、1,000兆規模のオブザーバビリティ・プラットフォーム"
+date: "2025-07-16T05:54:33.025Z"
+author: "ClickHouse"
+category: "User stories"
+excerpt: "「ClickHouseにあるデータは、他のどの場所にあるデータよりも優れています。データを分割し、詳細に分析し、興味深い問いを投げかけ、妥当な時間内に答えを得ることができるシステムは他にありません。ClickHouseと競合できるものは存在しません。」 — Alon Tal氏, シニアスタッフソフトウェアエンジニア"
+---
+
+# TeslaがClickHouseで構築した、1,000兆規模のオブザーバビリティ・プラットフォーム
+
+地球上には、Teslaほどのスケールで事業を展開している企業はほとんど存在しません。巨大なギガファクトリーから重要なエネルギーシステム、世界中に広がるコネクテッドカーのネットワークまで、これだけ多くの可動要素を同期させるには、あらゆる場所で何が起こっているのかをリアルタイムに観測できる体制が必要です。
+
+「Teslaは小さな企業ではありません」と語るのは、シニアスタッフソフトウェアエンジニアのAlon Tal氏です。「私たちは膨大な量のメトリクス（指標）を生成しています。それらのデータを、長期的な分析や予測、異常検知といった目的に活用したいのです。」
+
+![unnamed (1).jpg](https://clickhouse.com/uploads/unnamed_1_25d5e12aef.jpg)
+
+新たなオブザーバビリティ（可観測性）システムの構築が必要になったとき、Alon氏とそのチームは、よく知られた選択肢を検討しました。しかしPrometheusのようなツールは、理論的には素晴らしいものであっても、Teslaの規模には対応できないものでした。
+「水平方向にはスケールできませんし、垂直方向にも限界があります」と彼は説明します。「しかも、単一サーバー構成であるため、私たちの可用性の要件を満たすことができません。システムがダウンすれば、メトリクスは失われます。それは私たちにとって完全に受け入れられないことです。」
+
+彼らが必要としていたのは、より高速で、より耐久性があり、よりスケーラブルなシステムでした。毎秒数千万行のデータを取り込み、数年分のデータを保持し、高負荷でも応答性を維持できるシステムです。そこで彼らが選んだのがClickHouseでした。そしてこれを使って、Prometheusのようなシンプルさを持ちながら、ClickHouseのパフォーマンスと信頼性を備えた\*\*Teslaスケールのプラットフォーム「Comet」\*\*を構築したのです。
+
+このケーススタディでは、TeslaがどのようにしてCometを構築したのか、なぜその基盤としてClickHouseを選んだのか、そして1,000兆行規模の負荷テストによって、このシステムがTeslaの厳しい要件をはるかに超えるスケーラビリティを持つことが実証された経緯について紹介します。
+
+> Alon氏がClickHouse初の2025年Open Houseユーザーカンファレンスで語った内容をご覧ください。[動画を見る](https://clickhouse.com/videos/tesla)
+
+
+## 妥協できない条件の数々
+
+最初から、チームには明確な要件リストがありました。最も重要だったのは、「スケーラビリティ」だとAlon氏は語ります。Teslaにとって、それは**大量のデータをリアルタイムに処理でき、データ量が増えても問題なく追従できるシステム**であることを意味していました。
+
+可用性も同じくらい重要でした。
+「Teslaでは、メトリクスを失うことが現実世界に物理的な影響を与える可能性があります」とAlon氏は言います。これだけ重要なものを扱っている以上、システムは絶対に落ちてはならないのです。
+
+データ保持もまた優先事項でした。チームは、数ヶ月、あるいは数年にわたる過去のデータを振り返ってパターンを見つけ、問題を予測する必要がありました。耐久性は当然求められる要件であり、一度受け入れられたメトリクスは、たとえシステムが再起動しても失われてはなりません。そして**スピードは妥協できない項目**でした。「誰だって遅いダッシュボードなんて使いたくありません。特に障害対応中ならなおさらです」とAlon氏は言います。
+
+柔軟性も重視されました。複雑な問いを投げかけたり、カスタム分析を実行したり、さまざまな内部ユースケースをサポートしたりするための自由が必要だったのです。
+「私たちは自分たちのデータに対して、興味深い問いを自由に投げかけられるようにしたい。単純なドメイン固有言語に縛られたくないんです。」
+
+そして最後に、すべてが**PromQLと互換性がある必要がありました**。PromQLはTeslaがメトリクス分析に使っているクエリ言語です。
+「これは私たちのエンジニアが慣れていて、好んで使っている言語です」とAlon氏は説明します。加えて、すでに社内には膨大な数の既存ダッシュボードやアラートルールが存在していました。「それを全部再実装したいなんて、誰も思っていませんでした。」
+
+
+## ClickHouseという選択
+
+オブザーバビリティ・システムの構築を進めるにあたって、まずいくつか明らかな出発点がありました。
+「PromQLのことを考えると、すぐに頭に浮かぶのはPrometheusです」とAlon氏は言います。PrometheusはPromQLのリファレンス実装であり、広く使われていて、使いやすいシステムです。しかし、Teslaのスケールやその他の要件を考えると、Prometheusは選択肢にはなり得ませんでした。
+「だから私たちは、自分たちで新しく構築することに決めたんです」と彼は語ります。
+
+最初にして「最も基本的」な決定事項は、**データをどこに保存するか**ということでした。チームはいくつかのツールを比較しましたが、性能と柔軟性の面で際立っていたのがClickHouseでした。
+
+> 「私たちの考えでは、ClickHouseにあるデータは他のどの場所にあるデータよりも優れています」とAlon氏は言います。「他のシステムでは、データを自在に分割して分析したり、興味深い問いを投げかけたり、それに対して納得のいく時間内に答えを得ることはできません。」
+
+「ClickHouseはすべての要件を満たしています」と彼は付け加えます。「可用性、スピード、耐久性――私たちが求めるものはすべて揃っています。」
+さらに、ClickHouseには思わぬ利点もありました。それは、[実行可能なユーザー定義関数（UDF）](https://clickhouse.com/docs/sql-reference/functions/udf) のサポートです。
+この機能は特に便利だったとAlon氏は述べます。「SQLで表現するのが難しいこともあります。UDFがあることで、うまく抜け道ができたんです。」
+
+最終的に、この選択は明らかでした。ClickHouseはTeslaが求めるスケールでの性能を提供し、強力でありながらも親しみやすいシステムを構築するための自信を与えてくれたのです。
+「ClickHouseと競合できるシステムは他に存在しません」とAlon氏は語ります。
+
+
+## Cometのアーキテクチャの内部
+
+ClickHouseを基盤に、Alon氏とそのチームは、Teslaの要求に応えられるアーキテクチャの設計に取りかかりました。その成果がCometであり、大量のメトリクスを扱うために特化して設計されたプラットフォームです。Cometは、2つの主要なパイプラインを持っています。1つは大量のデータを取り込むためのもの、もう1つはPromQLクエリをその場で変換し実行するためのものです。
+
+データ取り込みのパイプラインでは、Teslaのインフラ全体に配置されたOpenTelemetryのコレクターが、Kafka互換のキューに向けてメトリクスを送信します。そこから、完全に社内で開発された一連のETL処理が、OTLPフォーマットのデータを構造化された行データに変換し、バッチ処理してClickHouseに書き込みます。このアーキテクチャは、負荷が急増した場合でも安定した性能を維持しながら、簡単にスケールアウトできるよう設計されています。Alon氏は、「これは非常にスケーラブルなパイプラインです」と述べています。
+
+![tesla2.png](https://clickhouse.com/uploads/tesla2_05960a7b2d.png)
+
+Cometの取り込みパイプラインは、KafkaとOTLPを使用してメトリクスをClickHouseにバッチ処理しています。
+
+しかし、Cometを真に強力にしているのは、トランスパイラです。これは、PromQLをリアルタイムでClickHouse SQLに変換するエンジンです。これによってCometは非常に高い性能を発揮します。Teslaのエンジニアたちは、新しいクエリ言語を学ぶ必要はありません。従来通りにPromQLを書き続けながら、ClickHouseの持つスピードと柔軟性をそのまま活用できるのです。
+
+![tesla3.png](https://clickhouse.com/uploads/tesla3_645ba8ac56.png)
+
+CometはPromQLをClickHouse SQLに変換し、Grafanaやアラートツールとの互換性を保っています。
+
+クエリが実行されると、Cometは結果をPrometheusのAPIレスポンスと**バイト単位で一致する**ように整形します。これは、Teslaがすでに使っているダッシュボードやアラート、その他のツールが、特別な書き換えや接続設定なしにそのまま使えることを意味します。Alon氏は、「誰も、これが標準のPrometheus環境ではないと気づきません」と語ります。
+
+信頼性を維持するために、専用のテストスイートが用意されており、PrometheusとCometの両方で同一のPromQLクエリを実行し、結果が完全に一致することを確認しています。また、アラート機能のレイヤーも以前と同じルールや統合に対応しており、再実装は一切不要です。
+
+
+## スケールにおける実証
+
+> 最終的な結果：1,000兆行以上のデータを取り込みました――「トラブルは一度もなく、不具合もゼロ。メモリ使用量は一定、CPU使用量も一定。まさに見事としか言いようがありませんでした。」
+
+現在、Cometは毎秒数千万行のデータを取り込んでいます。「そして、システムはまだ最大負荷に達していません」とAlon氏は述べ、社内の複数のチームがまだ導入を進めている段階であることを指摘しました。
+
+時系列データの観点では、Teslaはほとんどのシステムが対応できないようなスケールで運用しています。各時系列は、関連するメトリクスサンプルのストリームを表しており、時間の経過とともに、Teslaはそれを数百億シリーズ単位で蓄積してきました。そして、各シリーズには膨大な個別のデータポイントが含まれているため、総行数は指数関数的に増加します。「この時点で、Cometの競合となるようなシステムにとっては既に大きな課題となります」とAlon氏は言います。「それらのシステムは、高カーディナリティな時系列に極端に弱いのです。」
+
+現在Cometは、数十兆件のサンプルを保存しています。そしてAlonは、「これよりもはるかに大きなスケールに対応できるという強い自信があります」と述べます。これは誇張ではありません。それを実証するため、彼らは1秒あたり10億行という取り込み速度を11日間連続で維持しました。最終的な取り込み行数は、**1,000兆行以上**に達しました――「不具合は一切なし、障害もゼロ。メモリ使用量は変化せず、CPU使用率も一定。まさに見惚れるような動作でした。」
+
+> ClickHouseがどのようにして大規模なオブザーバビリティを支えているのか、[ClickStack](https://clickhouse.com/use-cases/observability) をご覧ください。
+
+![tesla4.jpg](https://clickhouse.com/uploads/tesla4_9b16a90718.jpg)
+
+集計クエリは、Cometが1,000兆行以上の取り込みを達成したことを示しており、「障害は一切なかった」とされています。
+
+
+## TeslaとClickHouseのこれから
+
+Cometが大規模な運用でも安定して稼働している現在、Teslaはすでに新たなユースケースへの展開を始めています。たとえば、**分散トレーシング**のような分野です。彼らは、同じトランスパイラベースのアプローチを利用して**TraceQL**をサポートし、エンジニアがトレースデータをメトリクスと同じように簡単にクエリできるようにしました。
+
+チームはまた、Cometを**オープンソース化する構想**も模索しています。「もしそれが実現できれば、誰もがCometを試してみることができるようになります」とAlon氏は語ります。
+
+Cometは、Teslaで日々行われている技術革新の好例です。ClickHouseを基盤とし、PromQLで利用可能な形で提供され、巨大な工場から世界中の何百万台もの接続車両まで、あらゆるものをリアルタイムで可視化します。Cometは、Teslaスケールのオブザーバビリティを実現するためにエンジニアたちが必要とするツールを提供しています。
+
+「ClickHouseに取り組んでいるすべての方々に感謝したいです」とAlon氏はOpen Houseで語りました。「皆さんが素晴らしい製品を作ってくれているおかげで、私たちのプロジェクトは実現しました。」
+
+<iframe width="560" height="315" src="https://www.youtube.com/embed/z5t3b3EAc84?si=yycyL6UBUQ-ztMLA" title="YouTube video player" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" referrerpolicy="strict-origin-when-cross-origin" allowfullscreen></iframe>
+
+</br>
+
+ClickHouseがあなたのチームのデータ運用をどのように変革できるのか、詳しくは [ClickHouse Cloudを30日間無料でお試しください](https://clickhouse.com/cloud)。
+
+---
+
 ## ClickHouse Cloud joins the new AWS Marketplace “AI Agents and Tools” category with a remote MCP server for a turn-key AI-to-data connectivity
 Published: 2025-07-15T10:18:36+00:00
 URL: https://clickhouse.com/blog/clickhouse-cloud-joins-aws-ai-agents-and-tools-mcp
@@ -49696,6 +52847,83 @@ Looking ahead, our dashboard roadmap focuses on three key areas:
 
 ---
 
+## Cloud CIRCUSがClickHouseを使用してログ分析をシンプルかつ高速化
+Published: 2025-06-17T15:03:57+00:00
+URL: https://clickhouse.com/blog/cloud-circus-ja
+
+---
+title: "Cloud CIRCUSがClickHouseを使用してログ分析をシンプルかつ高速化"
+date: "2025-06-17T15:03:57.319Z"
+author: "ClickHouse"
+category: "User stories"
+excerpt: "「AthenaからClickHouseに移行したことで、時間とコストの削減を実現できました。何よりも、クエリ実行のたびに費用を心配しなくて済むことはかなり大きいと思います」  インフラエンジニア、朱 九霖氏"
+---
+
+# Cloud CIRCUSがClickHouseを使用してログ分析をシンプルかつ高速化
+
+[Cloud CIRCUS](https://cloudcircus.jp/)は東京を拠点とするSaaS企業であり、マーケターの「働くに楽を」をミッションに、日本中でビジネスマーケティングを合理化するためのデジタルツールを提供しています。その一つが、高品質なウェブサイトを誰でも簡単に制作、運営できるCMSプラットフォーム、[BlueMonkey](https://bluemonkey.jp/)です。
+
+現在、BlueMonkeyはAWS上で2,000を超える顧客のウェブサイトをホスティングしています。各サイトにはCloudFrontディストリビューションを使用し、コンテンツを高速に配信すると同時に、1日に数千万レコードのアクセスログを生成しています。これらのログはエラーを追跡し、ユーザー行動を理解するために重要ですが、Amazon Athenaによるクエリには時間がかかり、また拡張も難しいという問題がありました。そのため、クエリを数千回実行しなくても、あるいはコストを心配しなくても、すべてのログを効率良く分析できる方法を探す必要がありました。
+
+この問題について、Cloud CIRCUSのインフラエンジニアである朱 九霖氏は、[2025年1月のClickHouse東京ミートアップ](https://clickhouse.com/videos/tokyo-meetup-cloudcircus-accelerating-cloudfront-log-analysis)で、ClickHouseに切り替えたことで解決したと説明しました。最初はClickHouseをテストするつもりだったが、セルフマネージドのパワフルな分析パイプラインであり、高速かつ自動化が容易であることや、コスト効果が大幅に高まることがわかったと、朱氏は話しています。
+
+
+## AthenaからClickHouseへ
+
+Cloud CIRCUSは以前、S3に格納したCloudFrontログを、Athenaを使用して分析していました。しかし、顧客の各サイトでは1日に数千万という新しいレコードが、CloudFrontディストリビューションにより生成されていたため、BlueMonkeyの顧客が増えるにつれ、パフォーマンスの低下が見られるようになりました。「すべてのログをAthenaで分析するのは大変でした」と朱氏は言います。「CloudFrontとレコードの数が多すぎて、時間とコストがかかりすぎてしまうという問題がありました」
+
+その大きな悩みの種となったのがAthenaの構成でした。AthenaではCloudFrontディストリビューションごとにテーブルを用意する必要があり、すべてのサイトにクエリを実行すると、負荷が非常に高くなりました。新しいログを取り込むのに数時間もかかることがあり、簡単なクエリでさえ結果が戻るまでに時間を要しました。そのうえ、Athenaではクエリごとにスキャンしたデータ量から費用が計算されるため、コストが高くなり、また金額の予測もできませんでした。
+
+朱氏はチームで別の方法の検討を始めました。「自分たちで構築したClickHouseの環境上でCloudFrontのログを分析できればと思いました」と朱氏は言います。ClickHouseは高速かつ大規模な集計処理で評価の高いオープンソースモデルのシステムです。また、すべてのログデータを1つのテーブルに集約できることや、クエリベースの価格モデルではないことも重要なポイントでした。
+
+彼らはさらに調査を続けました。「速度とコストの問題がある程度解決できるのではないかと考えました」（朱氏）「もちろん、ClickHouseの性能を試してみたいという技術検証の目的もありました」そこで、EC2で概念実証を立ち上げてベンチマークを実行し、その結果、自信をもってClickHouseへの移行を決断することができました。
+
+
+## 新しいシステムの構築
+
+まずはシンプルな構成で使用を始めました。1つのEC2インスタンスを作成し、4つのvCPUと32GBのメモリを使用してAmazon Linux 2023を走らせてから、[公式ドキュメント](https://clickhouse.com/docs/install#install-from-rpm-packages)にある[RPMパッケージ](https://clickhouse.com/docs/install#install-from-rpm-packages)を使用してClickHouseをインストールしました。「技術検証と当初のコスト削減を目的として、小さいサーバーを使用しました」（朱氏）ClickHouseのサーバーとクライアントを同じマシンで実行したことで、テストの初期段階の管理が容易になりました。
+
+次はスキーマデザインです。一貫性を保つため、AthenaがCloudFrontのログ取り込みに使用していたテーブル構成をミラーリングしました。「これは、Athenaが実際に実行したクエリの結果と同じような結果を得られるようにするためです」（朱氏）これにより、2つのシステムを簡単に比較することもできました。ただし、細かい変更点が一つあり、AthenaではHTTPコードが整数型でしたが、CloudFrontのログに「000」という値が存在するため、ClickHouseではこの列を文字列型にする必要がありました。テーブルエンジンには[MergeTree](https://clickhouse.com/docs/engines/table-engines/mergetree-family/mergetree)を使用し、日ごとのパーティションを作成して、host_headerとdateで並べ替えることで、集計クエリに非常に適した設定にしました。
+
+テーブルの用意ができたので、ログのインポートに入りました。もともとCloudFrontのログはS3に送信され、そこでドメインごとにフォルダに分類されていましたが、ClickHouseの[s3テーブル関数](https://clickhouse.com/docs/sql-reference/table-functions/s3)を使用すると、多くのファイルから日付範囲を指定してログを一度に取り込めるため、ファイルごとに手動でリスティングする必要がありません。インポート中にデータをクリーンアップするため、先頭から2つのヘッダ行をスキップし、プレースフォルダのダッシュをnull値として処理するようにClickHouseを設定しました。シンプルにセットアップしたことで、かなり高速になり、初期データを問題なく読み込むことができました。
+
+さらに深刻なのが拡張性の課題でした。「すべてのサイトからログを収集するため、莫大なデータ量になります」と朱氏は言います。「一度に挿入すると時間がかなりかかってしまいます」この処理を自動化するため、Amazon EventBridgeとECSを使用してパイプラインを構築しました。S3のスキャンを実行するバッチタスクをスケジュール設定してリストされたドメインを取り込み、それらのログをClickHouseにドメインごとに読み込みました。「これですべてが自動化されました」（朱氏）
+
+![455025117-34c69730-c6e0-491a-998e-7528c66d8561.png](https://clickhouse.com/uploads/455025117_34c69730_c6e0_491a_998e_7528c66d8561_2fb61e7b5d.png)
+
+Cloud CIRCUSのログインポート自動化パイプライン:CloudFrontのログが、S3とECSを通ってEC2上のClickHouseに取り込まれる。
+
+速度をさらに上げるために、AWS Fargateを使用してインポート処理を並列化しました。ログ挿入を20のタスクに分割し、それぞれが異なるドメイングループを処理するように設定しました。「これにより、一度に挿入すると数時間かかっていたインサート処理が30分以内で終わるようになりました」（朱氏）システムの負荷が急増しないよう、同時実行タスク数に上限を定めてメモリ使用率を80%に抑えたことで、処理を高速化としながら安定して稼働させることができました。
+
+Cloud CIRCUSは新しいアーキテクチャを導入し、処理を自動化することで、効率的なセルフマネージドのログ分析パイプラインを実装し、トラフィック増加への対応を可能にしました。「このように、ログ挿入の工程を機械的にすることで、継続的かつ効率的にログを繰り返し導入することができました」（朱氏）
+
+
+## 速度は上げて、コストは下げる
+
+この新しいパイプラインを実装してから、Cloud CIRCUSのクエリパフォーマンスは大幅に向上しました。朱氏は東京ミートアップで日ごとのアクセス数を集計するクエリのデモを行い、Athenaで16秒かかっていた処理が、ClickHouseではわずか0.043秒になったと説明しました。
+
+それだけではありません。すべてのドメインで集計を行った場合、ClickHouseでは4億7,000行をスキャンするクエリが9秒以内で完了しますが、Athenaでは同じ処理を行うために、クエリを2,000回以上も実行することから、完了まで数時間かかることもありました。
+
+「クエリの速度はもちろん、利便性の面でもClickHouseの方が優れていると思います」（朱氏）
+
+パフォーマンスだけでなく、費用面でも大きなメリットがあります。Athenaの場合、Cloud CIRCUSはクエリごとにスキャンしたデータ量から費用が請求されるため、大規模な分析ではコストが高くなり、また金額の予測もできませんでした。ClickHouseは一定のサイズのEC2インスタンスで実行されるため、月に約300ドルと比較的安定した価格になります。
+
+Athenaの方が一見すると安上がりのように思えましたが（月に約100ドル程度）、「ClickHouseではクエリをいくら発行しても固定の料金です」（朱氏）「それに対して、Athenaではクエリの数に応じて値段が変わり、たとえば全サイトを集計するようなクエリを追加で何種類か走らせると、容易にClickHouseでの費用を超えてしまいます」
+
+ログを1つのテーブルに集約し、インジェストを自動化して、クエリをClickHouseでローカルに実行することで、クエリごとに費用が発生する分断化されたシステムから一元化されたパイプラインへの移行を実現し、高速化と同時に管理面と拡張性も強化しました。
+
+
+## ClickHouseでログ分析の規模を拡張
+
+ClickHouseを導入することで、Cloud CIRCUSの大規模なログ分析に対する考え方は変わりました。「ログ分析をAthenaからClickHouseに移行したことで、時間とコストの削減を実現できました」と朱氏は言います。「何よりも、クエリ実行のたびに費用を心配しなくて済むことはかなり大きいと思います」
+
+クエリの高速化、費用の予測、完全に自動化されたパイプラインを実現したことで、BlueMonkeyの拡張に合わせてシステムを拡大し、数千もの顧客のウェブサイトを簡単にサポートできるようになりました。また、独自に作成したシンプルなデータワークフローにより、マーケター向けのサービス業務の効率化にも成功しました。
+
+データワークフローを高速化し、拡張性を向上させるClickHouseの機能について詳しく知りたい方は、<span style="text-decoration:underline;">ClickHouse Cloud</span>を30日間無料でお試しください。
+
+
+---
+
 ## June 2025 Newsletter
 Published: 2025-06-17T15:02:22+00:00
 URL: https://clickhouse.com/blog/202506-newsletter
@@ -49941,6 +53169,88 @@ For Cloud CIRCUS, adopting ClickHouse has changed how they think about log analy
 With faster queries, predictable costs, and a fully automated pipeline, Kyurin and the team now have a system that can scale with BlueMonkey’s growth and support thousands of customer websites with ease. By simplifying their own data workflows, they’re better equipped to do the same for the marketers and businesses they serve.
 
 To learn more about ClickHouse and see how it can improve the speed and scalability of your team’s data workflows, [try ClickHouse Cloud free for 30 days](https://clickhouse.com/cloud).
+
+---
+
+## LINEマンガがClickHouseを使用し、 データを1行も取り込まずにリアルタイム分析が可能なシステムを実現
+Published: 2025-06-17T08:47:24+00:00
+URL: https://clickhouse.com/blog/line-manga-ja
+
+---
+title: "LINEマンガがClickHouseを使用し、 データを1行も取り込まずにリアルタイム分析が可能なシステムを実現"
+date: "2025-06-17T08:47:24.113Z"
+author: "ClickHouse"
+category: "User stories"
+excerpt: "「社内に多数のMySQLサーバーを抱え、リアルタイム分析が複雑化していました。ClickHouseを導入する前は、分析処理ごとにカスタムスクリプトを作成する必要がありましたが、開発やレビューが難しく、実行にも時間がかかっていました。ClickHouseのインテグレーションエンジンで、これを解決しました」"
+---
+
+# LINEマンガがClickHouseを使用し、 データを1行も取り込まずにリアルタイム分析が可能なシステムを実現
+
+「日本人はたくさんマンガを読むんですよ」と、[LINE Digital Frontier](https://ldfcorp.com/ja)の松田 一樹氏は言います。これは大袈裟ではありません。電子コミックサービスを提供する[LINEマンガ](https://manga.line.me/)には、Apple StoreやGoogle Playでランキング上位のモバイルゲームを抑えて1位に輝く日もあるほどです。
+
+LINEマンガを運営するLINE Digital Frontierは世界最大の電子コミックプラットフォームを運営する[WEBTOON Entertainment](https://about.webtoon.com/)の子会社です。同社にはマンガや小説などを合わせておよそ1.5億人の月間アクティブユーザーがいます。(2025年3月末時点) データを活用して読者の行動を分析し、レコメンデーションを最適化したり、売上をリアルタイムで計測したりしています。
+
+しかし、エンジニアである松田氏は、LINEマンガのこれまでの道のりには困難もあったと言います。数年前、同社はプラットフォームの基幹システムをMySQLデータベースの広範なネットワークに移行しました。速度と使いやすさは改善されたものの、分析が大規模になるにつれて課題が深刻化しました。
+
+松田氏は[January 2025 ClickHouse meetup in Tokyo](https://clickhouse.com/videos/tokyo-meetup-line-from-stateles-servers-to-real-time-analytics)で、ClickHouseを使用してMySQLをダイレクトにクエリし、データを1行も取り込まずに分析をリアルタイムで行うことで、この問題を解決したと説明しました。
+
+<iframe width="768" height="432" src="https://www.youtube.com/embed/3vLpk0ZcMEE" title="YouTube video player" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" referrerpolicy="strict-origin-when-cross-origin" allowfullscreen></iframe>
+
+<p><br /></p>
+
+## MySQLが増えれば悩みも増える
+
+LINEマンガは10年以上かけてユーザーベースを巨大化、拡張し、その要件に合わせてプラットフォームのアーキテクチャを進化させてきました。その重要な役割を果たしたのがMySQLです。
+
+すべてをスムーズに稼働させるために、水平方向と垂直方向の両方でシャーディングを行いました。製品データは複数のデータベースにまとめて格納しましたが、ユーザーデータはIDで分割し、多数のデータベースに分散させました。このやり方は、アプリそのものには効率的でしたが、分析にはあまり適していませんでした。
+
+「MySQLに関して言えば、簡単なはずのことに苦労していました」と松田氏は言います。本のメタデータをユーザーの購入データで結合させるという単純な処理でさえ、ユーザーデータが存在するシャードを探すためにスクリプトを独自に作成し、クエリごとに人の手で確認する必要がありました。売上の合計金額をプラットフォーム全体で集計するだけでも、ほぼ最初からコードを作成する必要があり、処理時間も長くかかりました。
+
+社内で分析プラットフォームを所有していましたが、ETLパイプラインを使用していたため、データが常に最新の状態ではないという制限がありました。また、財務レコードやユーザーの個人データなど、社内のポリシーと監査上の理由から、データセット全体をアップロードできないケースもありました。「問題が起きたとき、リストされたユーザーのデータを抽出したいのに、それが見つからないのです」と松田氏は言います。「あるいは、データは見つかっているのにアクセスできないこともありました」
+
+何をするにも時間がかかりました。開発者は解決策を探すよりもインフラと格闘するために、あまりにも多くの時間を奪われていました。アドホックのクエリ実行に時間がかかり、デバッグも簡単ではなく、システムでユーザー行動の全体像を把握することもできませんでした。
+
+しかし、松田氏が言うように、MySQLのスタックを再構築または移行するにはリスクが伴い、費用もかかります。そのため、データを現在の場所から移動せず、処理を実行できる方法を探す必要がありました。「そこに現れたのがClickHouseです」（松田氏）
+
+## リアルタイムクエリを可能にするClickHouse
+
+LINEマンガでは、アーキテクチャをオーバーホールすることも、新しいパイプラインを揃えて管理することも選択しませんでした。代わりに、ClickHouseを使用してMySQLをダイレクトにクエリするという、データのインジェストも重複も不要になる方法を選びました。「ClickHouseにデータを取り込むのではなく、オンザスポットでMySQLを参照するのです」（松田氏）
+
+そのために、まずClickHouseの[MySQLテーブルエンジン](https://clickhouse.com/docs/engines/table-engines/integrations/mysql)と[MySQLデータベースエンジン](https://clickhouse.com/docs/engines/database-engines/mysql)を使用し、既存のMySQLインスタンスに関連付ける仮想テーブルを作成しました。これらのテーブルは、他のClickHouseテーブルと同じ方法でクエリできますが、背後ではMySQLにクエリがプッシュダウンされており、結果を受け取って処理に使用しています。これにより、製品データとユーザートランザクションを、たとえデータが別々のサーバーに格納されていようと結合できるため、SQLのダイレクトな回答をリアルタイムに得ることができます。
+
+![2_line_update.png](https://clickhouse.com/uploads/2_line_update_eadd55d64b.png)
+
+ClickHouseがMySQLシャードにクエリフィルタをプッシュし、製品データとユーザーデータを結合。
+
+シャードデータを水平方向に統合させるために、[MergeTreeテーブルエンジン](https://clickhouse.com/docs/engines/table-engines/mergetree-family/mergetree)を使用し、全ユーザーのシャードで仮想テーブルを定義しました。これにより、1回のクエリ実行ですべてのユーザーの売上合計を取得できます。その際、ClickHouseは各シャードをクエリして結果をつなぎ合わせるロジックを処理します。
+
+![1_line_update.png](https://clickhouse.com/uploads/1_line_update_ad833f828f.png)
+
+シャーディングされたMySQLデータをClickHouseがMergeTreeテーブルでクエリし、売上をリアルタイムで集計する。
+
+条件プッシュダウンを使用し、ソースのデータをフィルタした後にClickHouseが検索を実行するため、処理がさらに効率化されます。「ここが重要なポイントです。データがMySQLに送られ、結果だけをClickHouseに戻して集計するので、水平方向にシャーディングしながら垂直方向に分析を処理できます」（松田氏）
+
+## ローカルで開発し、リアルに結果を出す
+
+[ClickHouse Tokyo Meetup](https://clickhouse.com/videos/tokyo-meetup-line-from-stateles-servers-to-real-time-analytics)で、松田氏はClickHouseのデモを行いました。3台のMySQLサーバー（1つはマスターデータ、残り2つはユーザーのシャードを格納）をMacに接続し、Docker Composeをスピンアップしました。スキーマはどれも同じですが、ユーザーデータは本番環境と同様にID範囲で分割されています。松田氏は[clickhouse-local](https://clickhouse.com/docs/operations/utilities/clickhouse-local)を使用し、1回のSQLクエリで、全ユーザーのシャードにある購入履歴を、本のメタデータを使用して結合しました。日付でフィルタ処理を行い、ClickHouseにデータを一切コピーせず正確な結果が得られることを説明しました。
+
+このデモで紹介されたのは、LINEマンガでの実際の運用方法です。開発環境では、エンジニアが各自のマシンで同じ環境をスピンアップし、IntelliJを使用してクエリをテストおよび検証したのちに、システムを本番に移行させます。処理が高速で、デバッグも簡単であるため、すべてのシャードで何が起きているかをリアルに確認でき、各データがどこに存在するかを気にする必要もありません。
+
+![0_line_update.png](https://clickhouse.com/uploads/0_line_update_7846e53e84.png)
+
+LINEマンガがローカルでの開発に使用するClickHouseとIntelliJおよびDocker。実稼働ではクエリが監査対応ゲートウェイを通過する。
+
+本番環境ではシステム管理がさらに強化されています。「監査対応のゲートウェイを含めてセットアップしています」と松田氏が説明するように、すべてのクエリにゲートウェイを通過させて、規制を遵守し、要件をモニタリングしています。シャードを追跡するタスクの作成も、スクリプトのカスタマイズも、SQLで簡単に行えるようになりました。デバッグでも分析機能の強化でもチームですばやく行い、簡単にクエリを拡張することができます。
+
+## 大規模なリアルタイム分析
+
+MySQLを置き換える必要がないことは、LINEマンガにとって非常に重要でした。MySQLをレコードシステムとして残し、ClickHouseで簡単にデータを探索、デバッグして、リアルタイムに分析を行っています。NoSQLと分散データベースを使用するなど他のオプションも検討しましたが、同社にはMySQL関して強力なエンジニアリング文化があり、最大限活用するためのノウハウも備わっていました。「クエリをサブミリ秒で実行できるなどのメリットを重視しました」（松田氏）
+
+ClickHouseはデータインジェストを実装する必要がないため、比較的簡単に始められます。東京ミートアップで松田氏は、開発だけでもClickHouseを皆さんに使って欲しいと伝えました。[clickhouse-local](https://clickhouse.com/docs/operations/utilities/clickhouse-local)などのツールを使用し、ローカルでインスタンスをスピンアップして、既存のデータベースやフラットファイルに接続し、クエリを実行できます。「ターゲットユーザーのリストやIDをローカルファイルに簡単に保存し、テーブルとして参照しながら結合して、出力結果を書き出すことができます」（松田氏）
+
+LINEマンガは今回のアプローチについて、課題に対するソリューションのみならず、他の開発者のためのモデルにもなると考えています。「開発作業の効率化の参考にもなるし、ClickHouse導入の第一歩として役立つと思います」（松田氏）ClickHouseはすべてをシンプルにすることで、過度に複雑な作業を減らし、リアルタイム分析への扉を開きます。
+
+ClickHouseの詳細について、また、ClickHouseで大規模なリアルタイム分析を行う方法について、[30日間無料のClickHouse Cloud](https://clickhouse.com/cloud)でご確認ください。
 
 ---
 
@@ -50370,6 +53680,221 @@ Experimentation at the scale of companies like Airbnb, Netflix, and Microsoft us
 GrowthBook's open-source platform gives teams the tools to run sophisticated A/B tests with flexibility and control. It's warehouse-native, easy to integrate, and designed to fit into your existing data stack. Paired with ClickHouse, it provides the speed and visibility teams need to experiment fearlessly and build with confidence.
 
 To learn more about ClickHouse and see how it can bring speed and scalability to your team's data operations, [try ClickHouse Cloud free for 30 days](https://clickhouse.com/cloud).
+
+---
+
+## ClickPipes向けPostgres CDCコネクタが一般提供開始
+Published: 2025-06-10T05:02:36+00:00
+URL: https://clickhouse.com/blog/postgres-cdc-connector-clickpipes-ga-jp
+
+---
+title: "ClickPipes向けPostgres CDCコネクタが一般提供開始"
+date: "2025-06-10T05:02:36.197Z"
+author: "Sai Srirampur"
+category: "Product"
+excerpt: "ClickPipes向けPostgres CDCコネクタの一般提供を開始しました。ClickHouse Cloudにネイティブに統合されており、Postgresデータベースのレプリケーションを数クリックで高速に実現できます。"
+---
+
+# ClickPipes向けPostgres CDCコネクタが一般提供開始
+
+本日、ClickPipes向け [Postgres CDCコネクタ](https://clickhouse.com/cloud/clickpipes/postgres-cdc-connector)の一般提供開始を発表できることを嬉しく思います。これにより、お客様はPostgresデータベースをClickHouse Cloudへ数クリックで簡単にレプリケートできるようになります。
+
+この発表は、大きなマイルストーンです。[PeerDB](https://www.peerdb.io/) ― Postgres CDCに特化した企業であり、昨年[ClickHouseが統合](https://clickhouse.com/blog/clickhouse-welcomes-peerdb-adding-the-fastest-postgres-cdc-to-the-fastest-olap-database)したパートナー ― は、ClickPipes内のPostgres CDCコネクタとしてClickHouse Cloudに完全統合されました。このコネクタは、エンタープライズレベルのPostgresユースケースにも対応可能です。
+
+> [ClickHouse Cloudにサインアップ](https://console.clickhouse.cloud/signup)して、[ClickPipes向けPostgres CDCコネクタ](https://clickhouse.com/docs/integrations/clickpipes/postgres)をお試しください。 
+
+## Postgres + ClickHouse = 「デフォルトのデータスタック」
+
+近年、[GitLab](https://about.gitlab.com/blog/2022/04/29/two-sizes-fit-most-postgresql-and-clickhouse/)、[CloudFlare](https://blog.cloudflare.com/http-analytics-for-6m-requests-per-second-using-clickhouse...)、[Instacart](https://tech.instacart.com/real-time-fraud-detection-with-yoda-and-clickhouse-bd08e9dbe3f4) などの企業をはじめ、多くのビジネスで共通のパターンが見られるようになっています。それは、PostgresとClickHouseを組み合わせて、あらゆるデータ課題を解決するというものです。
+
+* **Postgres** はトランザクション型Webアプリケーションのためのシステム・オブ・レコードとして機能します。
+* **ClickHouse** はリアルタイム分析とレポート用途のためのシステム・オブ・アナリシスとして機能します。
+
+このパターンはAI時代に入りさらに加速しており、[LangChain](https://clickhouse.com/blog/langchain-why-we-choose-clickhouse-to-power-langchain)、[LangFuse](https://langfuse.com/blog/2024-12-langfuse-v3-infrastructure-evolution)、[Vapi](https://neon.tech/blog/vapi-voice-agents-neon) などの企業も同様のアーキテクチャを採用しています。私たちは、Postgres + ClickHouseがモダンビジネスにおける「標準的なデータスタック」になりつつあると考えています。その統合を“魔法のようにシームレス”にすることが私たちの目標です。そして今回のPostgres CDCコネクタは、そのための**最初の大きなステップ**です。PostgresのデータをClickHouseへ簡単に取り込むことで、リアルタイム分析をスムーズに実現できるようになります。
+
+以下は、PostgresとClickHouseをPostgres CDCで組み合わせた際のリファレンスアーキテクチャの図です。Postgresは低レイテンシなトランザクションを処理し、ClickHouseが高速な分析を支えます。
+
+<img preview="/uploads/Postgres_Click_House_reference_architecture_61fe52239a.png"  src="/uploads/Postgres_Click_House_reference_architecture_61fe52239a.png" alt="catalogue_lakehouse.png" class="h-auto w-auto max-w-full"  style="width: 100%;">
+
+## メトリクスと導入企業の事例
+
+過去6か月間、このコネクタはユーザーフィードバックをもとに急速に進化を遂げながら、広範なベータフェーズを経てきました。現在では、**数百のミッションクリティカルなワークロード**を支え、**月間100TB以上のデータ**をClickHouseに移行しています。
+
+代表的な導入企業には、米国の大手採用プラットフォーム [**Ashby**](https://www.ashbyhq.com/)、急成長中のサイバーセキュリティスタートアップ [**Seemplicity**](https://seemplicity.io/)、米国有数の自動車小売企業 [**AutoNation**](https://www.autonation.com/) などがあります。以下は、一部のお客様からの声です。
+
+> 「ClickHouseはAshbyの顧客向け分析基盤として稼働しており、完全に動的なインサイトを超高速で提供しています。一方でPostgresはコアトランザクションを処理しています。ClickPipes経由のPostgres CDCにより、テラバイト規模のデータをシームレスにレプリケートでき、リアルタイム分析がさらに高速化しました。以前は数分かかっていたレポートが、今では1秒以内で完了します。エンタープライズ顧客がリアルタイムで意思決定する際に活用するダッシュボードは、まさに“真実の情報源”です。PostgresとClickHouseを組み合わせることで、私たちは信頼性の高い体験と、スケールに応じたデータ処理を提供できています。」
+> — [Elenie Godzaridis](https://www.linkedin.com/in/elenie-godzaridis/), Director of Engineering, [Ashby](https://www.ashbyhq.com/)
+
+> 「最初はDebeziumを使って社内でPostgres CDCを実装しようとしましたが、あまりに複雑すぎました。PostgresのビットをClickHouseに変換することを使命にしているエンジニアたちが作ったマネージド製品のほうが、自分たちの手で作るものよりも優れていると確信していました。」
+> — [Tal Shargal](https://www.linkedin.com/in/tal-shargal-29388671/), Chief Architect, [Seemplicity](https://seemplicity.io/), [*導入事例はこちら*](https://clickhouse.com/blog/seemplicity-scaled-real-time-security-analytics-with-postgres-cdc-and-clickhouse)
+
+![Chart.png](https://clickhouse.com/uploads/Chart_7c2a541127.png)
+
+**このグラフは、過去1年間におけるPostgres CDCからClickHouseへの使用量の成長を示しています。** [**リファレンス**](https://www.linkedin.com/feed/update/urn:li:activity:7310749593296588800/)
+
+## 製品の特長
+
+<iframe width="660" height="371" src="https://www.youtube.com/embed/s1hREjN02S0?si=J2ByKIkTTU9Mw94m" title="YouTube video player" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" referrerpolicy="strict-origin-when-cross-origin" allowfullscreen></iframe>
+
+Postgres CDCコネクタは、PostgresとClickHouseのために専用設計されたコネクタであり、豊富な機能を備えています。以下は特に注目すべき機能の一部です：
+
+1. **初回ロードおよび再同期が10倍高速化** –  [並列スナップショット](https://blog.peerdb.io/parallelized-initial-load-for-cdc-based-streaming-from-postgres)により、大規模な単一テーブルを並列に読み込み可能。テラバイト規模のデータでも、従来の「数日」ではなく「数時間」で移行できます。
+
+2. **最小10秒のレプリケーション遅延** –  レプリケーションスロットは[再接続なしで継続的に消費](https://clickhouse.com/blog/enhancing-postgres-to-clickhouse-replication-using-peerdb#efficiently-flush-the-replication-slot)され、ClickHouseの[ReplacingMergeTree](https://clickhouse.com/blog/postgres-to-clickhouse-data-modeling-tips-v2)がエンドツーエンドの遅延を最小化します。
+
+3. **スキーマ変更の自動レプリケーション** –  [ADD COLUMNやDROP COLUMNといった操作](https://clickhouse.com/docs/integrations/clickpipes/postgres/schema-changes)にも対応し、手動による対応は不要です。
+
+4. **テーブル・カラム単位の除外設定** –  PII（個人情報）保護やネットワークスループットの最適化のために、きめ細かな制御が可能です。
+
+5. **セキュアな接続** –  [**AWS PrivateLink**](https://clickhouse.com/docs/integrations/clickpipes/aws-privatelink) や [**SSHトンネリング**](https://clickhouse.com/docs/integrations/clickpipes/postgres#optional-setting-up-ssh-tunneling) に対応しており、ソースのPostgresデータベースと安全かつプライベートに接続できます。
+
+6. **Postgresのネイティブ機能に対応** –  [パーティションテーブル](https://blog.peerdb.io/real-time-change-data-capture-for-postgres-partitioned-tables)、TOASTカラム、[配列やJSONなどの高度なデータ型](https://clickhouse.com/docs/integrations/clickpipes/postgres/faq#how-are-postgres-data-types-mapped-to-clickhouse)のレプリケーションもサポートしています。
+
+7. **Open API（ベータ）** –  [APIやCLIによるパイプの作成・管理](https://clickhouse.com/docs/integrations/clickpipes/postgres/faq#can-clickpipe-creation-be-automated-or-done-via-api-or-cli)が可能で、ClickHouse Cloud + ClickPipes環境を個別に構築・運用するISV（独立系ソフトウェアベンダー）にも最適です。[**Terraform**](https://registry.terraform.io/providers/ClickHouse/clickhouse/3.2.0-alpha1/docs/resources/clickpipe) **によるIaC対応も近日提供予定です。**
+
+## 料金について
+
+一般提供（GA）の開始に伴い、[ベータ期間中にもお知らせしていた](https://clickhouse.com/blog/postgres-cdc-connector-clickpipes-public-beta#pricing)とおり、Postgres CDCコネクタの料金体系を導入します。私たちの目標は、PostgresデータベースをClickHouseにシームレスかつ手頃な価格で接続できるようにするというビジョンを保ちながら、非常に競争力のある価格を実現することです。
+
+このコネクタは、外部のETLツールや他のデータベースプラットフォームにある類似機能と比べて、**5倍以上のコスト効率**を誇ります。
+
+なお、Postgres CDC ClickPipesを利用している**すべてのお客様（既存・新規）に対して、2025年9月1日より月次課金が開始**されます。必要に応じてコストを最適化するための**3か月間の猶予期間**が設けられていますが、多くのお客様にとって設定の変更は不要と想定しています。料金体系の詳細、具体的な例、よくある質問については[こちら](https://clickhouse.com/docs/cloud/manage/billing/overview#clickpipes-for-postgres-cdc)をご覧ください。
+
+## Postgres CDC を使って ClickHouse にデータを取り込む方法
+
+以下のリンクから、PostgresデータベースをClickHouse Cloudに接続して、超高速な分析を体験してみてください。
+
+* [PostgresからClickHouseへのデータ取り込み（CDCを使用）](https://clickhouse.com/docs/en/integrations/clickpipes/postgres)
+
+* [ClickPipes for Postgres よくある質問（FAQ）](https://clickhouse.com/docs/en/integrations/clickpipes/postgres/faq)
+
+* [ClickHouse Cloudを無料で試す](https://clickhouse.com/docs/en/cloud/get-started/cloud-quick-start)
+
+
+
+---
+
+## ClickStack: ClickHouse上に構築された高性能なOSSオブザーバビリティスタック
+Published: 2025-06-10T04:44:41+00:00
+URL: https://clickhouse.com/blog/clickstack-a-high-performance-oss-observability-stack-on-clickhouse-jp
+
+---
+title: "ClickStack: ClickHouse上に構築された高性能なOSSオブザーバビリティスタック"
+date: "2025-06-10T04:44:41.360Z"
+author: "Mike Shi"
+category: "Product"
+excerpt: "ClickStackの登場をお知らせします。ClickHouse上に構築されたオープンソースのオブザーバビリティスタックで、ログ・メトリクス・トレース・セッションリプレイを、超高速かつ開発者フレンドリーなプラットフォームで一元的に提供します。"
+---
+
+# ClickStack: ClickHouse上に構築された高性能なOSSオブザーバビリティスタック
+
+## ClickStackの発表
+
+本日、ClickHouse上に構築された新しいオープンソースのオブザーバビリティソリューションである [ClickStack](https://clickhouse.com/o11y) を発表できることを嬉しく思います。ClickStackは、ログ、メトリクス、トレース、セッションリプレイを一括で扱える、即利用可能な完全な体験を提供します。ClickHouseのパフォーマンスと効率性を基盤としながらも、すべての人が利用できるオープンでアクセスしやすい、完全なオブザーバビリティスタックとして設計されています。
+
+ClickStackを始めるには、ドキュメント内の [Getting Started](https://clickhouse.com/docs/use-cases/observability/clickstack/getting-started) ガイドをご覧ください。
+
+![hyperdx-landing.png](https://clickhouse.com/uploads/hyperdx_landing_c7bdd6582c.png)
+
+これまで、NetflixやeBayなどの大規模なエンジニアリングチームは、オブザーバビリティ用途にClickHouseを選んできました。カラム指向設計、圧縮、高スループットのベクトル化クエリエンジンにより、コンテキストが豊富でユニーク数（カーディナリティ）の高い「wide event（ワイドイベント）」の保存に理想的だったためです。こうしたモダンなオブザーバビリティのアプローチ（"Observability 2.0"と呼ばれることもあります）は、従来の「三本柱モデル」から脱却し、分断されたテレメトリソースを繋ぎ合わせる複雑さを排除します。
+
+しかし今までは、このモデルの恩恵を最大限に受けられるのは、ClickHouse上に独自のオブザーバビリティ体験を構築できるリソースを持ったチームに限られていました。他の多くのチームは、一般的な可視化ツールや、ClickHouse上に構築されたサードパーティの商用プラットフォームに頼っていました。こうしたツールはClickHouse用の基本的なインターフェースを提供していましたが、日常的な観測作業で長いSQLクエリが必要になったり、ClickHouseの性能やオープンなアーキテクチャを十分に活用できないこともありました。
+
+それが、今日から変わります。HyperDXによって支えられたClickStackのリリースにより、すべてのユーザーに公平な選択肢が提供されます。この完全オープンソースのスタックには、すぐに使えるOpenTelemetryコレクター、wide eventに最適化されたUI、自然言語クエリ、セッションリプレイ、アラートなどが含まれています。
+
+そしてそれらすべてが、オブザーバビリティ分野で信頼されている、あの高性能・高圧縮のClickHouseエンジン上で動作します。
+
+これまでは、多くのチームが、高価なクローズドソースSaaS製品を選ぶか、オープンソースを組み合わせて自力で構築するか、という選択を迫られてきました。検索エンジンは柔軟で高速なクエリを提供していましたが、スケール運用や高速な集計には課題がありました。一方、メトリクスストアは集計性能に優れるものの、事前集計の必要があり、柔軟性や検索性能に欠けていました。どちらのアプローチも高カーディナリティのデータには向いておらず、それらを統合しようとすると、複雑さが増すばかりで、本質的な問題解決にはなりませんでした。
+
+ClickStackを使えば、もはや選ぶ必要はありません。ユニーク数の多いwide eventデータに対して、高速な検索と集計をスケール可能な形で実現できます。オープンソースで、誰にでも。
+
+## オブザーバビリティにおけるClickHouseの進化
+
+![clickstack\_timeline.png](https://clickhouse.com/uploads/clickstack_timeline_c2f60d65eb.png)
+
+### それは「単なるデータの問題」
+
+ClickHouseの初期ユーザーたちは、オブザーバビリティが本質的には「データの問題」であることを早くから認識していました。選ぶデータベースが、オブザーバビリティプラットフォームのコスト、スケール、機能性を決定づけるため、正しいデータベースを選ぶことは、自社構築でも観測系スタートアップでも、最も重要なアーキテクチャの決断の1つです。
+
+この理由から、ClickHouseは長年にわたり、オブザーバビリティスタックの中核であり続けてきました。たとえば [Netflix](https://www.youtube.com/watch?v=HRh5setqGCU) や [eBay](https://clickhouse.com/videos/monitorama-pdx-2024-distributed-tracing-all-the-warning-signs-were-out-there) のような大企業から、SentryやDash0といったオブザーバビリティ系スタートアップに至るまで、ClickHouseは大規模なログ・メトリクス・トレースを支えています。カラム指向のストレージ、積極的な圧縮、ベクトル化実行エンジンにより、コストを大幅に削減し、サブセカンドでのクエリ応答を実現します。これにより、エンジニアはツールの遅さを待たずにリアルタイムでシステムをデバッグできます。
+
+### 必要なのは、「wide event」とカラムストア
+
+以前のブログ投稿「[The State of SQL-Based Observability](https://clickhouse.com/blog/the-state-of-sql-based-observability)」およびその[続編](https://clickhouse.com/blog/evolution-of-sql-based-observability-with-clickhouse)で、このトレンドについて深く掘り下げました。そこで当時は明確な名前を付けませんでしたが、これは今日の「Observability 2.0」と完全に一致する考え方です。つまり、ログ・メトリクス・トレースの「柱」ではなく、「wide event（幅広いイベント）」を中心に構築された統一モデルです。
+
+これまで、多くのチームはログ・メトリクス・トレースを別々のストアに保存していたため、断片化、手動での相関付け、不要な複雑さが生まれていました。wide eventは、すべてのオブザーバビリティ信号を1つのクエリ可能な構造に統合することで、こうしたサイロを解消します。
+
+wide eventは、ユーザー、サービス、HTTPパス、ステータスコード、キャッシュ結果など、アプリケーションの文脈すべてを1つのレコードに記録します。この統一された構造により、ユニーク数の多いデータに対しても高速な検索と集計が可能になります ― もちろん、それを効率的に圧縮・保存できるストレージエンジンがあればの話です！
+
+NoSQLソリューション、特に検索エンジンはこの構造を取り入れたものの、広範な範囲を集計する性能には欠けていました。検索や「銀河の中の針探し」には適していても、大規模集計には不向きだったのです。
+
+この課題を解決するClickHouseの秘密は今も変わりません。すなわち、カラムストレージ、深い圧縮を実現する豊富なコーデックライブラリ、そして分析ワークロードに最適化された大規模並列エンジンです。
+
+### リソース効率に優れ、スケーラブル
+
+ClickHouse Cloudではさらに進化を遂げ、ストレージとコンピュートの分離を実現するためにオブジェクトストレージを採用しました。これは、オブザーバビリティをペタバイト級、さらにはそれ以上にスケールさせ、弾力的に拡張するために不可欠です。さらに要求の厳しいユースケースをサポートするために、同じデータソースを使用しながら、取り込みとクエリなどのワークロードごとに計算リソースを分離できる「コンピュート・コンピュート分離」も導入しました。
+
+オブザーバビリティのニーズがより複雑になるにつれ、半構造化イベントに対するネイティブなJSON対応が不可欠であると認識しました。ClickHouseはこのニーズに応える形で進化し、カラム指向処理のメリットを維持しながら、半構造化データへの一級対応を追加しました。データの到着に応じてカラムが自動生成され、型の昇格やカラムの拡張もClickHouseが自動で管理します。これこそが、オブザーバビリティに必要な「書き込み時スキーマ」であり、現代的な分析エンジンに求められるパフォーマンス、圧縮率、柔軟性を兼ね備えています。
+
+### OpenTelemetryの台頭
+
+この進化は、ログ・メトリクス・トレース全体のテレメトリ収集における事実上の標準である OpenTelemetry（OTel）の台頭と時を同じくしました。私たちは **ClickHouse用OpenTelemetry Exporter** の公式サポートと開発への貢献を開始しました。
+
+OpenTelemetryは、私たちのエコシステムにとって大きなブレークスルーとなりました。ベンダーニュートラルで標準化された方法でオブザーバビリティデータを収集・エクスポートでき、CollectorはClickHouseにデータを直接送信するよう設定できます。私たちは、エクスポーターが堅牢でスケーラブルであり、ClickHouseの設計原則に沿うよう、コミュニティと密接に連携してきました。
+
+最初に直面した最大の課題の1つがスキーマ設計でした。オブザーバビリティにおいては[万能なスキーマは存在せず](https://clickhouse.com/blog/clickhouse-and-open-telemtry)、各チームごとにクエリパターンや保持要件、サービス構成が異なります。そのため、このエクスポーターにはログ・メトリクス・トレースに対応したデフォルトスキーマが付属していますが、チームごとにワークロードに合わせて自由にカスタマイズすることを推奨しています。
+
+### 欠けていたピース
+
+しかし、優れたデータベースとスキーマ、収集・取り込みの手段が整っていても、それだけでは十分ではないことがすぐに分かりました。エンジニアには、すぐに使える取り込み、可視化、アラート、そして自分たちのワークフローに適したUIが必要です。これまでは、OpenTelemetryによる収集とGrafanaによるダッシュボードに頼るのが一般的でした。
+
+これでも十分には機能していました。実際、[社内のオブザーバビリティチームはDatadogをClickHouseベースのスタックに置き換え](https://clickhouse.com/blog/building-a-logging-platform-with-clickhouse-and-saving-millions-over-datadog)、数億円規模のコスト削減と200倍以上のコスト効率を実現しました。現在、私たちの社内ログシステムは43ペタバイトを超えるOpenTelemetryデータを保存しており、スキーマや主キーはそのスケールに最適化されています。このアプローチのパフォーマンスとコスト効率は証明されましたが、体験はもっとシンプルにできると感じていました。
+
+私たちが求めていたのは、より明確な設計思想と、より簡単に始められる仕組み、そして最も重要なことに、ClickHouseのために作られたUIです。効率的なクエリを構築し、wide eventからパターンを浮かび上がらせ、ClickHouseのパワーを隠さず、かつ優れたユーザー体験を提供できるUIが必要だったのです。
+
+そして、SQLベースのオブザーバビリティがwide eventモデルを後押ししてきたことは事実ですが、同時に私たちはユーザーが「今どこにいるか」にも対応する必要があると考えていました。ELKスタックのような検索エンジンが成功した理由は、直感的なログ検索インターフェースを提供していたからです。その体験をClickHouse上で実現したいと考えたのです。
+
+## HyperDXの登場
+
+そんなときに出会ったのが、ClickHouse向けに設計されたオープンソースのオブザーバビリティレイヤー **HyperDX** です。2024年後半、HyperDXがv2のUIをオープンソースとして公開した際、私たちはすぐに社内テストを行い、これこそが欠けていたピースだと確信しました。セットアップはシームレスで、開発者体験も素晴らしく、ユーザーにもこの体験を届けたいと思いました。
+
+HyperDXは、私たちが求めていたすべてを備えていました：
+
+* **標準に基づくデータ収集**：HyperDXは初期からOpenTelemetryを採用しており、ClickHouseのOpenTelemetryエクスポーターへの私たちの投資と完全に一致しています。
+* **オープンソース第一**：堅牢なオブザーバビリティツールは誰にでも利用可能であるべきという理念を共有しており、HyperDXのクラウドネイティブな設計により、運用はシンプルかつコスト効率的です。
+
+標準への準拠に加えて、HyperDXはClickHouseのことを理解した設計になっています。チームはクエリ最適化に真剣に取り組んでおり、ユーザーが意識せずとも高速・信頼性の高いパフォーマンスを得られるようになっています。特にインシデント調査時には、ミリ秒単位の違いが重要です。
+
+ClickStackは、OpenTelemetryコレクターの組み込み取り込み、HyperDX UI向けに最適化されたスキーマとともに、取り込み・保存・可視化を統合した体験として提供されます。デフォルトのスキーマはそのまま動作するよう設計されており、特に意識せずともすぐに使い始めることができます（もちろん、必要であればカスタマイズも可能です）。
+
+![clickstack\_simple.png](https://clickhouse.com/uploads/clickstack_simple_6ae8ee85d0.png)
+
+ClickStackのシンプルな構造により、各レイヤーは独立してスケールできます。取り込みスループットを上げたいなら、OpenTelemetryコレクターゲートウェイを追加するだけ。クエリやストレージ容量を増やしたいなら、ClickHouse自体をスケールすればOKです。このモジュール構成により、データやチームの成長に合わせて、スタック全体を再構築することなく拡張できます。
+
+HyperDXを取得して以来、私たちはプロダクトの簡素化と柔軟性の拡大に注力してきました。デフォルトスキーマを使って即時利用もできますし、自分たちのユースケースに合わせた独自スキーマを持ち込むことも可能です。ClickHouse同様、「1つのサイズですべてに対応」はしないという信念のもと、スケーラビリティの鍵は柔軟性にあると考えています。
+
+<img preview="/uploads/clickstack_simple_v2_0c8e38c417.gif"  src="/uploads/simple_clickstack_3546eb282e.gif" alt="catalogue_lakehouse.png" class="h-auto w-auto max-w-full"  style="width: 100%;">
+
+同時に、私たちはSQLの原点も忘れていません。SQLは今でもデータの共通言語であり、多くのClickHouse上級ユーザーにとっては、最も表現力があり、効率的な探索手段です。そのため、HyperDX UIにはネイティブSQLクエリのサポートが含まれており、上級ユーザーは妥協なしにエンジンへ直接アクセスできます。
+
+<img preview="/uploads/clickstack_sql_small_a55c2027c3.gif"  src="/uploads/clickstack_sql_1eb4e0e9a2.gif" alt="catalogue_lakehouse.png" class="h-auto w-auto max-w-full"  style="width: 100%;">
+
+さらに、デバッグや探索を容易にする新機能も導入しました。たとえば「イベントデルタ」は、異常やパフォーマンスの退行を素早く特定するのに役立ちます。特定の属性におけるユニーク値をサンプリングすることで、UIはパフォーマンスの差異や変動を可視化し、何がどう変化したのかを簡単に把握できるようにします。
+
+<img preview="/uploads/event_deltas_simple_3bcfb720b3.gif"  src="/uploads/event_deltas_6e27437203.gif" alt="catalogue_lakehouse.png" class="h-auto w-auto max-w-full"  style="width: 100%;">
+
+そして最も重要なのは、このスタックがよりシンプルになったことです。OpenTelemetryが事実上の標準となった今、すべてのデータはOTelコレクター経由で取り込まれるようになりました。デフォルト構成では、すぐに使えることを前提とした設計思想の強いスキーマが用意されていますが、ユーザーが自由に変更・拡張することも可能です。このスタックは **OpenTelemetryネイティブ** でありながら、**OpenTelemetry専用** ではありません。オープンスキーマのおかげで、HyperDXは既存のデータパイプラインやスキーマとも連携可能です。
+
+## 結論と今後の展望
+
+ClickStackは、ClickHouseがオブザーバビリティ分野における取り組みをさらに進化させた結果生まれたものであり、直感的かつ設計思想の明確なフルスタック体験を、オープンソースとオープンスタンダードの力で提供します。ClickHouseの高性能カラム型エンジン、OpenTelemetryの標準化されたインスツルメンテーション、HyperDXの特化UIを統合することで、モダンなオブザーバビリティのアプローチをついに誰でも使えるものにしました。
+
+オープンソースへの継続的な取り組みにより、ClickStackは単一サービスの導入からペタバイト級のシステムに至るまで、誰でも利用可能です。私たちは今後も、高性能オブザーバビリティのためのデータベースコアと、Grafanaのような既存ツールとの統合の両方に投資を続けていきます。
+
+ClickStackは単なるツールではありません。あらゆるテレメトリ信号を統合する、高性能なカラム型データベースを基盤とした統一プラットフォームであり、自然言語クエリ、セッションリプレイ、アラート機能までもすぐに使える形で提供されます。
+
+ClickStackを始めるには、ドキュメント内の [Getting Started](https://clickhouse.com/docs/use-cases/observability/clickstack/getting-started) ガイドをご覧ください。
+
 
 ---
 
@@ -52425,6 +55950,629 @@ Ready to try it? We’re now opening access to the distributed cache private pre
 
 ---
 
+## ClickHouseがより遅延的に（そして高速に）：遅延マテリアライゼーションの導入
+Published: 2025-05-27T06:34:58+00:00
+URL: https://clickhouse.com/blog/clickhouse-gets-lazier-and-faster-introducing-lazy-materialization-jp
+
+---
+title: " ClickHouseがより遅延的に（そして高速に）：遅延マテリアライゼーションの導入"
+date: "2025-05-27T06:34:58.363Z"
+author: "Tom Schreiber"
+category: "Engineering"
+excerpt: " ClickHouseは戦略的に先延ばしすることを学びました。遅延マテリアライゼーションが不要な列の読み取りをスキップしてクエリを高速化する方法をご覧ください。"
+---
+
+#  ClickHouseがより遅延的に（そして高速に）：遅延マテリアライゼーションの導入
+
+![Blog_CHLazyMaterialization_202504_V2.1.png](https://clickhouse.com/uploads/Blog_CH_Lazy_Materialization_202504_V2_1_2ddc299687.png)
+
+旅行の荷造りを終えたのに、空港で旅行に行かないことが判明したら、荷造りをスキップできたと想像してみてください。これが、ClickHouseが現在データに対して行っていることです。
+
+ClickHouseは利用可能な分析データベースの中で最速のものの1つであり、その速度の多くは不要な作業を回避することから生まれています。スキャンして処理するデータが少ないほど、クエリの実行は高速になります。今回、この考え方をさらに推し進め、新しい最適化である遅延マテリアライゼーションを導入しました。これにより、実際に必要になるまで列データの読み取りを遅らせます。
+
+この一見「遅延的」な動作は、特に大規模なデータセットをソートして`LIMIT`句を適用する`トップN`クエリ（可観測性や一般的な分析でよく見られるパターン）など、実際のワークロードで非常に効果的であることが判明しています。これらのシナリオでは、遅延マテリアライゼーションによってパフォーマンスが劇的に向上し、多くの場合、桁違いに高速化されます。
+
+> **ネタバレ注意**: SQLを一行も変更せずに、ClickHouseのクエリが219秒からわずか139ミリ秒に短縮された事例（**1,576倍の高速化**）をご紹介します。同じクエリ、同じテーブル、同じマシンです。唯一変わったのは、ClickHouseがデータを読み取るタイミングだけです。
+
+この記事では、遅延マテリアライゼーションがどのように機能し、ClickHouseの広範なI/O最適化スタックにどのように適合するのかを説明します。全体像を把握していただくために、ClickHouseにおけるI/O効率の他の主要な構成要素についても簡単に説明し、遅延マテリアライゼーションが何を行うかだけでなく、既存の技術とどのように異なり、補完し合うのかを強調します。
+
+まず、ClickHouseがすでに使用している主要なI/O削減技術について説明し、次に実際のクエリをそれらの技術を通してレイヤーごとに実行し、最終的に遅延マテリアライゼーションが介入してすべてを変えるところまでを見ていきます。
+
+## ClickHouseにおけるI/O効率の構成要素
+
+長年にわたり、ClickHouseはI/Oを積極的に削減するために、階層化された一連の最適化を導入してきました。これらの技術は、その速度と効率の基盤を形成しています。
+
+  * **[カラムナストレージ](https://clickhouse.com/docs/parts)** により、クエリに不要な列全体をスキップでき、また、類似した値をまとめてグループ化することで高い圧縮率を実現し、データロード中のI/Oを最小限に抑えます。
+  * **[スパースプライマリインデックス](https://clickhouse.com/docs/primary-indexes)**、**[セカンダリデータスキッピングインデックス](https://clickhouse.com/docs/optimize/skipping-indexes)**、および**[プロジェクション](https://clickhouse.com/docs/data-modeling/projections)** は、*インデックス付き列*のフィルタに一致する可能性のある**グラニュール**（行ブロック）を特定することにより、無関係なデータを削減します。これらの技術はグラニュールレベルで動作し、個別または組み合わせて使用できます。
+  * **[PREWHERE](https://clickhouse.com/docs/optimize/prewhere)** は、*インデックス付けされていない*列のフィルタについても一致を確認し、そうでなければロードされて破棄されるデータを早期にスキップします。インデックスによって選択されたグラニュールを独立して処理したり、絞り込んだりすることができ、*すべての*列フィルタに一致しない行をスキップすることでグラニュールの削減を補完します。
+  * **[クエリ条件キャッシュ（詳細解説）](https://clickhouse.com/blog/introducing-the-clickhouse-query-condition-cache)** は、前回どのグラニュールがすべてのフィルタに一致したかを記憶することで、繰り返し実行されるクエリを高速化します。これにより、ClickHouseは、クエリの形状が変化した場合でも、一致しなかったグラニュールの読み取りとフィルタリングをスキップできます。これは単にインデックスとPREWHEREフィルタリングの結果をキャッシュするため、ここではこれ以上説明しません。**以下のすべてのテストでは、結果の偏りを避けるために無効にしています。**
+
+> これらの技術（以下で紹介する遅延マテリアライゼーションを含む）は、クエリ処理*中*のI/Oを削減するものであり、この記事の焦点です。[インクリメンタル](https://clickhouse.com/docs/materialized-view/incremental-materialized-view)または[リフレッシュ可能](https://clickhouse.com/docs/materialized-view/refreshable-materialized-view)な**マテリアライズドビュー**を使用して結果を事前に計算することで、テーブルサイズ（およびクエリの作業量）を事前に削減するという直交するアプローチもありますが、ここでは説明しません。
+
+## 遅延マテリアライゼーションによるスタックの完成
+
+前述のI/O最適化は読み取るデータを大幅に削減できますが、それでも`WHERE`句を通過する行のすべての列は、ソート、集計、または`LIMIT`のような操作を実行する前にロードする必要があると想定しています。しかし、一部の列が後になるまで必要ない場合や、`WHERE`句を通過したにもかかわらず一部のデータがまったく必要ない場合はどうなるでしょうか？
+
+そこで登場するのが**遅延マテリアライゼーション**です。これはI/O最適化スタックを完成させる直交的な機能強化です。
+
+  * インデックス作成は、PREWHEREとともに、`WHERE`句の列フィルタに一致する行のみが処理されるようにします。
+  * 遅延マテリアライゼーションは、クエリ実行計画で実際に必要とされるまで列の読み取りを延期することで、これを基盤としています。フィルタリング後であっても、ソートなどの次の操作に必要な列のみがすぐにロードされます。他の列は延期され、`LIMIT`のために、最終結果を生成するのに十分な量だけ、部分的に読み取られることがよくあります。これにより、遅延マテリアライゼーションは、最終結果が特定の、多くの場合大きな列から少数の行しか必要としない*トップN*クエリに対して特に強力になります。
+
+> このようなきめ細かい列処理は、ClickHouseが各列を独立して保存しているためにのみ可能です。[行指向](https://clickhouse.com/engineering-resources/what-is-columnar-database#row-based-vs-column-based)データベースでは、すべての列が一緒に読み取られるため、このレベルの遅延I/Oは単純に実現不可能です。
+
+その影響を示すために、実際の例を通して、各最適化レイヤーがどのように役割を果たすかを見ていきます。
+
+## テスト設定：データセットとマシン
+
+1995年から2015年までの約1億5000万件の製品レビューが含まれる[Amazon顧客レビュー](https://clickhouse.com/docs/getting-started/example-datasets/amazon-reviews)データセットを使用します。
+
+<p>
+We’re running ClickHouse 25.4 on an AWS <code>m6i.8xlarge</code> EC2 instance with:<br>
+• 32 vCPUs<br>
+• 128 GiB RAM<br>
+• 1 TiB gp3 SSD (with default settings: 3000 IOPS, 125 MiB/s max throughput &#128012;)<br>
+• Ubuntu Linux 24.04
+</p>
+
+そのマシンで、まずAmazonレビューテーブルを作成しました：
+
+<pre><code type='click-ui' language='sql' show_line_numbers='false'>
+CREATE TABLE amazon.amazon_reviews
+(
+    `review_date` Date CODEC(ZSTD(1)),
+    `marketplace` LowCardinality(String) CODEC(ZSTD(1)),
+    `customer_id` UInt64 CODEC(ZSTD(1)),
+    `review_id` String CODEC(ZSTD(1)),
+    `product_id` String CODEC(ZSTD(1)),
+    `product_parent` UInt64 CODEC(ZSTD(1)),
+    `product_title` String CODEC(ZSTD(1)),
+    `product_category` LowCardinality(String) CODEC(ZSTD(1)),
+    `star_rating` UInt8 CODEC(ZSTD(1)),
+    `helpful_votes` UInt32 CODEC(ZSTD(1)),
+    `total_votes` UInt32 CODEC(ZSTD(1)),
+    `vine` Bool CODEC(ZSTD(1)),
+    `verified_purchase` Bool CODEC(ZSTD(1)),
+    `review_headline` String CODEC(ZSTD(1)),
+    `review_body` String CODEC(ZSTD(1))
+)
+ENGINE = MergeTree
+ORDER BY (review_date, product_category);
+</code></pre>
+
+そして、公開されているサンプルデータセットのS3バケットでホストされているParquetファイルからデータセットをロードしました：
+
+<pre><code type='click-ui' language='sql' show_line_numbers='false'>
+INSERT INTO  amazon.amazon_reviews
+SELECT * FROM s3Cluster('default', 'https://datasets-documentation.s3.eu-west-3.amazonaws.com/amazon_reviews/amazon_reviews_*.snappy.parquet');
+</code></pre>
+
+ロード後のテーブルサイズを確認します：
+
+<pre><code type='click-ui' language='sql' show_line_numbers='false'>
+SELECT
+    formatReadableQuantity(sum(rows)) AS rows,
+    formatReadableSize(sum(data_uncompressed_bytes)) AS data_size,
+    formatReadableSize(sum(data_compressed_bytes)) AS compressed_size
+FROM system.parts
+WHERE active AND database = 'amazon' AND table = 'amazon_reviews';
+</code></pre>
+
+<pre><code type='click-ui' language='text' show_line_numbers='false'>
+┌─rows───────────┬─data_size─┬─compressed_size─┐
+│ 150.96 million │ 70.47 GiB │ 30.05 GiB       │
+└────────────────┴───────────┴─────────────────┘
+</code></pre>
+
+ロード後、テーブルには約1億5000万行が含まれ、以下のようになります：
+
+  * 非圧縮データ 70 GiB
+  * ZSTD(1)を使用してディスク上で約30 GiBに圧縮
+
+## ClickHouseは高速だが、ディスクがそうではないかもしれない
+
+1億5000万行はClickHouseにとってほとんど課題ではありません。例えば、このクエリは`helpful_votes`列（テーブルのソートキーの一部ではない）の1億5000万個すべての値をソートし、上位3件を返します。これは、OSファイルシステムキャッシュを事前に[クリアした](https://www.google.com/search?q=/blog/clickhouse-gets-lazier-and-faster-introducing-lazy-materialization%23with-cold-os-level-filesystem-cache)コールドな状態でわずか70ミリ秒で実行され、処理スループットは21.5億行/秒です。
+
+<pre><code type='click-ui' language='sql' show_line_numbers='false'>
+SELECT helpful_votes
+FROM amazon.amazon_reviews
+ORDER BY helpful_votes DESC
+LIMIT 3;
+</code></pre>
+
+<pre><code type='click-ui' language='text' show_line_numbers='false'>
+┌─helpful_votes─┐
+│         47524 │
+│         41393 │
+│         41278 │
+└───────────────┘
+
+3 rows in set. Elapsed: 0.070 sec. Processed 150.96 million rows, 603.83 MB (2.15 billion rows/s., 8.61 GB/s.)
+Peak memory usage: 3.59 MiB.
+</code></pre>
+
+このクエリにはフィルタがないため、インデックス作成、PREWHERE、その他のI/O削減技術の恩恵は受けないことに注意してください。しかし、カラムナストレージのおかげで、ClickHouseは`helpful_votes`列のみを読み取り、残りはスキップします。
+
+もう1つの例として、単一の`review_body`列からすべてのデータを（コールドファイルシステムキャッシュで）選択するクエリを示します。
+
+<pre><code type='click-ui' language='sql' show_line_numbers='false'>
+SELECT review_body
+FROM amazon.amazon_reviews
+FORMAT Null;
+</code></pre>
+
+<pre><code type='click-ui' language='text' show_line_numbers='false'>
+Query id: b9566386-047d-427c-a5ec-e90bee027b02
+
+0 rows in set. Elapsed: 176.640 sec. Processed 150.96 million rows, 56.02 GB (854.61 thousand rows/s., 317.13 MB/s.)
+Peak memory usage: 733.14 MiB.
+</code></pre>
+
+<p>&#128561; ほぼ3分です！単一の列を読み取っただけなのに。</p>
+
+しかし、ボトルネックはClickHouseではなく、ディスクのスループットでした。このクエリは、前の例の600 MBに対して56 GBというはるかに大きな列をスキャンしました。[比較的遅いディスク](https://www.google.com/search?q=/blog/clickhouse-gets-lazier-and-faster-introducing-lazy-materialization%23test-setup-dataset-and-machine)と32個のCPUコアを持つテストマシンでは、ClickHouseは32個の[並列ストリーム](https://clickhouse.com/docs/optimize/query-parallelism)を使用してデータを読み取りました。[クエリログ](https://clickhouse.com/docs/operations/system-tables/query_log)は、3分間の実行時間の大部分が[readシステムコールの待機](https://github.com/ClickHouse/ClickHouse/blob/9d60aa01a83346648eae5dc9572530388271f7b0/src/Common/ProfileEvents.cpp#L101)に費やされたことを確認しています。
+
+<pre><code type='click-ui' language='sql' show_line_numbers='false'>
+SELECT
+  round(ProfileEvents['DiskReadElapsedMicroseconds'] / 1e6) AS disk_read_seconds,
+  ProfileEvents['ConcurrencyControlSlotsAcquired'] AS parallel_streams,
+  formatReadableTimeDelta(round(disk_read_seconds / parallel_streams), 'seconds') AS time_per_stream
+FROM system.query_log
+WHERE query_id = 'b9566386-047d-427c-a5ec-e90bee027b02'
+  AND type = 'QueryFinish';
+</code></pre>
+
+<pre><code type='click-ui' language='text' show_line_numbers='false'>
+┌─disk_read_seconds─┬─parallel_streams─┬─time_per_stream─┐
+│              5512 │               32 │ 172 seconds     │
+└───────────────────┴──────────────────┴─────────────────┘
+</code></pre>
+
+明らかに、特にコールドキャッシュの場合、ブルートフォーススキャンは理想的ではありません。ClickHouseに何か処理させるものを与えましょう。
+
+## より現実的なクエリ — 最適化が重要な場面
+
+空港での[騒動](https://www.google.com/search?q=/blog/clickhouse-gets-lazier-and-faster-introducing-lazy-materialization)にもかかわらず、私はまだビーチでの休暇を決意しており、そのためには最高の電子書籍リーダーをロードする必要があります。そこで、ClickHouseに、2010年以降のデジタル電子書籍購入に関する、最も役立つ5つ星の検証済みレビューを見つける手助けを依頼し、役立つ投票数、書籍のタイトル、レビューの見出し、レビュー自体を表示します。
+
+<pre><code type='click-ui' language='sql' show_line_numbers='false'>
+SELECT
+    helpful_votes,
+    product_title,
+    review_headline,
+    review_body
+FROM amazon.amazon_reviews
+WHERE review_date >= '2010-01-01'
+AND product_category = 'Digital_Ebook_Purchase'
+AND verified_purchase
+AND star_rating > 4
+ORDER BY helpful_votes DESC
+LIMIT 3
+FORMAT Vertical;
+</code></pre>
+
+<pre><code type='click-ui' language='text' show_line_numbers='false'>
+Row 1:
+──────
+helpful_votes:   6376
+product_title:   Wheat Belly: Lose the Wheat, Lose the Weight, and Find Your Path Back to Health
+review_headline: Overweight? Diabetic? Got High Blood Pressure, Arthritis? Get this Book!
+review_body:     I've been following Dr. Davis' heart scan blog for the past ...
+
+Row 2:
+──────
+helpful_votes:   4149
+product_title:   The Life-Changing Magic of Tidying Up: The Japanese Art of Decluttering and Organizing
+review_headline: Truly life changing
+review_body:     I rarely write reviews, but this book truly sparked somethin...
+
+Row 3:
+──────
+helpful_votes:   2623
+product_title:   The Fast Metabolism Diet: Eat More Food and Lose More Weight
+review_headline: Fantastic Results **UPDATED 1/23/2015**
+review_body:     I have been on this program for 7 days so far.  I know it ma...
+</code></pre>
+
+上記のクエリは、テーブル内で最大の3つの列（`product_title`、`review_headline`、`review_body`）を含む4つの列を選択します。
+
+<pre><code type='click-ui' language='sql' show_line_numbers='false'>
+SELECT
+    name as column,
+    formatReadableSize(sum(data_uncompressed_bytes)) AS data_size,
+    formatReadableSize(sum(data_compressed_bytes)) AS compressed_size
+FROM system.columns
+WHERE database = 'amazon' AND table = 'amazon_reviews'
+GROUP BY name
+ORDER BY sum(data_uncompressed_bytes) DESC;
+</code></pre>
+
+<pre><code type='click-ui' language='text' show_line_numbers='false'>
+┌─column────────────┬─data_size──┬─compressed_size─┐
+│ review_body       │ 51.13 GiB  │ 21.60 GiB       │
+│ product_title     │ 8.12 GiB   │ 3.53 GiB        │
+│ review_headline   │ 3.38 GiB   │ 1.58 GiB        │
+│ review_id         │ 2.07 GiB   │ 1.35 GiB        │
+│ product_id        │ 1.55 GiB   │ 720.97 MiB      │
+│ customer_id       │ 1.12 GiB   │ 524.35 MiB      │
+│ product_parent    │ 1.12 GiB   │ 571.63 MiB      │
+│ helpful_votes     │ 575.86 MiB │ 72.11 MiB       │
+│ total_votes       │ 575.86 MiB │ 83.50 MiB       │
+│ review_date       │ 287.93 MiB │ 239.43 KiB      │
+│ marketplace       │ 144.51 MiB │ 414.92 KiB      │
+│ product_category  │ 144.25 MiB │ 838.96 KiB      │
+│ star_rating       │ 143.96 MiB │ 41.99 MiB       │
+│ verified_purchase │ 143.96 MiB │ 20.50 MiB       │
+│ vine              │ 1.75 MiB   │ 844.89 KiB      │
+└───────────────────┴────────────┴─────────────────┘
+</code></pre>
+
+このサンプルクエリは、60GB以上の（非圧縮）データにアクセスします。以前に示したように、32の並列ストリームを使用しても、（比較的遅い）ディスクからコールドキャッシュでそれを読み取るだけで3分以上かかります。
+
+しかし、このクエリには複数の列（`review_date`、`product_category`、`verified_purchase`、`star_rating`）に対するフィルタと、`helpful_votes`によるソート後に適用される`LIMIT`が含まれています。これは、ClickHouseの階層化されたI/O最適化に最適な設定です。
+
+  * **インデックス作成** は、プライマリ/ソートキー（`review_date`、`product_category`）のフィルタに一致しない行を削減します。
+  * **PREWHERE** はフィルタリングをより深くプッシュし、*すべての*列フィルタに一致しない行を削減します。
+  * **遅延マテリアライゼーション** は、大きな`SELECT`列（`product_title`、`review_headline`、`review_body`）の読み込みを、ソートと`LIMIT`の適用後、実際に必要になるまで遅延させます。理想的には、その大きな列データのほとんどはまったく読み取られません。
+
+各レイヤーがI/Oをさらに削減します。これらが連携することで、データ読み取り量、メモリ使用量、クエリ時間が短縮されます。それがどれほどの違いを生むか、レイヤーごとに見ていきましょう。
+
+### OSレベルのファイルシステムキャッシュがコールドな状態で
+
+以下のセクションでは、各クエリ実行前にOSレベルのファイルシステム（ページ）キャッシュをクリアします。
+
+`echo 3 | sudo tee /proc/sys/vm/drop_caches >/dev/null`
+
+をLinuxコマンドラインで実行します。これにより、最悪のシナリオをシミュレートし、結果がキャッシュされたデータではなく実際のディスク読み取りを反映するようにします。
+
+## ショートカットなし：ベースラインとなるフルスキャン
+
+最適化を導入する前に、ClickHouseがショートカットなしでクエリを実行した場合に何が起こるかを見てみましょう。インデックス作成も、PREWHEREも、遅延マテリアライゼーションもありません。
+
+これを行うために、ソート/プライマリキーのないテーブルのバージョンでサンプルクエリを実行します。つまり、インデックスベースの最適化の恩恵は受けません。次のコマンドは、そのベースラインテーブルを作成します。
+
+<pre><code type='click-ui' language='sql' show_line_numbers='false'>
+CREATE TABLE amazon.amazon_reviews_no_pk
+Engine = MergeTree
+ORDER BY ()
+AS SELECT * FROM amazon.amazon_reviews;
+</code></pre>
+
+次に、PREWHEREと遅延マテリアライゼーションの両方を無効にして、ベースラインテーブルでサンプルクエリを実行します。
+
+<pre><code type='click-ui' language='sql' show_line_numbers='false'>
+SELECT
+    helpful_votes,
+    product_title,
+    review_headline,
+    review_body
+FROM amazon.amazon_reviews_no_pk
+WHERE review_date >= '2010-01-01'
+AND product_category = 'Digital_Ebook_Purchase'
+AND verified_purchase
+AND star_rating > 4
+ORDER BY helpful_votes DESC
+LIMIT 3
+FORMAT Null
+SETTINGS
+    optimize_move_to_prewhere = false,
+    query_plan_optimize_lazy_materialization = false;
+</code></pre>
+
+<pre><code type='click-ui' language='text' show_line_numbers='false'>
+3 rows in set. Elapsed: 219.508 sec. Processed 150.96 million rows, 72.13 GB (687.71 thousand rows/s., 328.60 MB/s.)
+Peak memory usage: 953.25 MiB.
+</code></pre>
+
+① クエリは、[グラニュール](https://clickhouse.com/docs/guides/best-practices/sparse-primary-indexes#data-is-organized-into-granules-for-parallel-data-processing)（ClickHouseの最小処理単位で、デフォルトでは各8,192行をカバー）に編成された1億5000万行すべてを、② 必要な8列のディスクから③ メモリにストリーミングし、220秒で72 GBのデータを処理し、ピークメモリ使用量は953 MiBでした。
+
+![01-no-pk.gif](https://clickhouse.com/uploads/01_no_pk_8cbfff9574.gif)
+
+> ClickHouseはテーブルデータを[ストリーミング方式](https://clickhouse.com/docs/optimize/query-parallelism)で処理し、すべてのデータを一度にメモリにロードするのではなく、グラニュールのブロックを段階的に読み取って操作します。そのため、上記の72 GBのデータを処理したクエリでも、ピークメモリ使用量は1 GiB未満に抑えられました。
+
+ベースラインが設定されたので、最初の最適化レイヤーがどのように改善されるかを見てみましょう。
+
+## ① プライマリインデックスの活用
+
+明らかに、データセット全体をスキャンするのは最適とは程遠いです。ClickHouseの最適化を適用し始めましょう。まずはプライマリインデックスからです。元のテーブル（複合ソート（プライマリ）キーとして`(review_date, product_category)`を使用）で、PREWHEREと遅延マテリアライゼーションの両方を無効にしたままサンプルクエリを実行します。
+
+<pre><code type='click-ui' language='sql' show_line_numbers='false'>
+SELECT
+    helpful_votes,
+    product_title,
+    review_headline,
+    review_body
+FROM amazon.amazon_reviews
+WHERE review_date >= '2010-01-01'
+AND product_category = 'Digital_Ebook_Purchase'
+AND verified_purchase
+AND star_rating > 4
+ORDER BY helpful_votes DESC
+LIMIT 3
+FORMAT Null
+SETTINGS
+    optimize_move_to_prewhere = false,
+    query_plan_optimize_lazy_materialization = false;
+</code></pre>
+
+<pre><code type='click-ui' language='text' show_line_numbers='false'>
+0 rows in set. Elapsed: 95.865 sec. Processed 53.01 million rows, 27.67 GB (552.98 thousand rows/s., 288.68 MB/s.)
+Peak memory usage: 629.00 MiB.
+</code></pre>
+
+クエリには①テーブルの複合ソート（プライマリ）キーに対するフィルタが含まれているため、ClickHouseは②[スパースプライマリインデックス](https://clickhouse.com/docs/primary-indexes)をロードして評価し、③一致する行を含む可能性のあるプライマリキー列内のグラニュールのみを選択します。これらの関連する可能性のあるグラニュールは、その後④クエリに必要な他の列からの位置合わせされたグラニュールとともにメモリにストリーミングされます。残りのフィルタはこのステップの後に適用されます。
+
+![02-pk.gif](https://clickhouse.com/uploads/02_pk_f072d23d5c.gif)
+
+その結果、必要な8列からわずか5300万行のみがディスクからメモリにストリーミングされ、72 GBではなく28 GBのデータが処理され、実行時間は半分以上短縮されました（220秒に対して96秒）。
+
+> プライマリインデックスは、プライマリキー列のフィルタに基づいてグラニュールを削減します。
+
+しかし、ClickHouseは、キー列のグラニュールと位置的に一致する他のすべての列グラニュールを依然としてロードします。これは、キー以外の列のフィルタによって後で除外される場合でも同様です。つまり、不要なデータが依然として読み取られ、処理されているのです。
+
+これを修正するために、次にPREWHEREを有効にします。
+
+## ② PREWHEREの追加
+
+同じクエリを再度実行します。今回は[PREWHERE](https://clickhouse.com/docs/optimize/prewhere)を有効にします（ただし、遅延マテリアライゼーションはまだ無効です）。PREWHEREは、ディスクから非フィルタ列を読み取る前に関連性のないデータをフィルタリングする効率の追加レイヤーを追加します。
+
+<pre><code type='click-ui' language='sql' show_line_numbers='false'>
+SELECT
+    helpful_votes,
+    product_title,
+    review_headline,
+    review_body
+FROM amazon.amazon_reviews
+WHERE review_date >= '2010-01-01'
+AND product_category = 'Digital_Ebook_Purchase'
+AND verified_purchase
+AND star_rating > 4
+ORDER BY helpful_votes DESC
+LIMIT 3
+FORMAT Null
+SETTINGS
+    optimize_move_to_prewhere = true,
+    query_plan_optimize_lazy_materialization = false;
+</code></pre>
+
+<pre><code type='click-ui' language='text' show_line_numbers='false'>
+0 rows in set. Elapsed: 61.148 sec. Processed 53.01 million rows, 16.28 GB (866.94 thousand rows/s., 266.24 MB/s.)
+Peak memory usage: 583.30 MiB.
+</code></pre>
+
+PREWHEREを有効にすると、クエリは同じ5300万行を処理しましたが、読み取る列データは大幅に少なくなり（27.67GBに対して16.28GB）、完了時間は36%速くなりました（96秒に対して61秒）。また、ピークメモリ使用量もわずかに削減されました。
+
+この改善を理解するために、PREWHEREがClickHouseのクエリ処理方法をどのように変更するかを簡単に見ていきましょう。
+
+選択されたすべての列グラニュールを事前にストリーミングする代わりに、ClickHouseはPREWHERE処理を開始し、①インデックス分析によって特定されたプライマリキー列グラニュールのみをロードして、実際に一致が含まれているかを確認します。この場合、選択されたすべてのグラニュールが一致するため、②次のフィルタ列である`verified_purchase`の位置合わせされたグラニュールが、さらなるフィルタリングのためにロードされるように選択されます。
+
+![03-PW-01.gif](https://clickhouse.com/uploads/03_PW_01_1992a16e83.gif)
+
+次に、ClickHouseは①選択された`verified_purchase`列のグラニュールを読み取り、フィルタ`verified_purchase`（`verified_purchase == True`のショートカット）を評価します。
+
+この場合、4つのグラニュールのうち3つが一致する行を含んでいるため、②次のフィルタ列である`star_rating`から、それらの位置的に整列したグラニュールのみがさらなる処理のために選択されます。
+
+![03-PW-02.gif](https://clickhouse.com/uploads/03_PW_02_7d17b6f283.gif)
+
+最後に、ClickHouseは`star_rating`列から選択された3つのグラニュールを読み取り、最後のフィルタ`star_rating > 4`を評価します。
+
+3つのグラニュールのうち2つが一致する行を含んでいるため、残りの列（`helpful_votes`、`product_title`、`review_headline`、`review_body`）から位置的に整列したグラニュールのみが、さらなる処理のためにロードされるように選択されます。
+
+![03-PW-03.gif](https://clickhouse.com/uploads/03_PW_03_08d41def52.gif)
+
+これで、PREWHERE処理は完了です。
+
+> プライマリインデックスによって選択されたすべての列グラニュールを事前にロードしてから残りのフィルタを適用する代わりに、PREWHEREは選択されたデータを早期に事前フィルタリングします（そのため、この名前が付けられています）。ClickHouseは、[コストベースのアプローチ](https://clickhouse.com/docs/optimize/prewhere#prewhere-optimization-is-automatically-applied)（通常は読み取りコストが最も低い列から開始）を使用してフィルタを1列ずつ評価し、各ステップを通過する行のデータのみをロードします。これにより、データセットが段階的に絞り込まれ、クエリがソート、集計、`LIMIT`、`SELECT`などの主要な操作を実行する前にI/Oが削減されます。
+
+PREWHEREはインデックス作成とは独立して機能することにも注意してください。クエリにインデックス付けされていない列のフィルタしかない場合でも、一致しない行を早期にスキップすることでI/Oを削減するのに役立ちます。
+
+### PREWHEREフィルタリング後のステップ
+
+PREWHEREフィルタリングの後、ClickHouseは①選択されたデータをロードし、②ソートし、③LIMIT句を適用します。
+
+![03-PW-04.gif](https://clickhouse.com/uploads/03_PW_04_9ba300fb10.gif)
+
+これまでに追加してきた各レイヤーは、クエリ時間を少しずつ短縮し、不要なデータをスキップし、I/Oを削減し、作業を効率化してきました。
+
+220秒かかったフルスキャンから、すでに61秒まで短縮されました。しかし、まだ終わりではありません。最後のレイヤーが、これまでで最大の削減をもたらします。
+
+## ③ 遅延マテリアライゼーションの有効化
+
+遅延マテリアライゼーションがスタックに加わるとどうなるか見てみましょう。遅延マテリアライゼーションを含むすべてのI/O最適化を有効にして、クエリを最後に一度実行します。
+
+<pre><code type='click-ui' language='sql' show_line_numbers='false'>
+SELECT
+    helpful_votes,
+    product_title,
+    review_headline,
+    review_body
+FROM amazon.amazon_reviews
+WHERE review_date >= '2010-01-01'
+AND product_category = 'Digital_Ebook_Purchase'
+AND verified_purchase
+AND star_rating > 4
+ORDER BY helpful_votes DESC
+LIMIT 3
+FORMAT Null
+SETTINGS
+    optimize_move_to_prewhere = true,
+    query_plan_optimize_lazy_materialization = true;
+</code></pre>
+
+<pre><code type='click-ui' language='text' show_line_numbers='false'>
+0 rows in set. Elapsed: 0.181 sec. Processed 53.01 million rows, 807.55 MB (292.95 million rows/s., 4.46 GB/s.)
+Peak memory usage: 3.88 MiB.
+</code></pre>
+
+
+<p>&#128558; 61 秒から 181 ミリ秒へ、338 倍の高速化。</p>
+
+ClickHouseは同じ5300万行を処理しましたが、読み取る列データは20倍少なく、使用メモリは150倍少なく、瞬く間に終了しました。
+
+その仕組みを詳しく見ていきましょう。
+
+説明は簡単です。
+
+PREWHEREフィルタリングの後、ClickHouseは残りのすべての列を[すぐに](https://www.google.com/search?q=/blog/clickhouse-gets-lazier-and-faster-introducing-lazy-materialization%23steps-after-prewhere-filtering)ロードしません。
+
+代わりに、次に必要なものだけをロードします。次のステップは`helpful_votes`によるソートとLIMITの適用なので、ClickHouseは①選択された（そしてPREWHEREでフィルタリングされた）`helpful_votes`グラニュールのみをロードし、②それらの行をソートし、③LIMITを適用し、そしてその後にのみ④対応する行を[大きな](https://www.google.com/search?q=/blog/clickhouse-gets-lazier-and-faster-introducing-lazy-materialization%23a-more-realistic-querywhere-optimizations-matter)`product_title`、`review_headline`、`review_body`列からロードします。
+
+![04-LM.gif](https://clickhouse.com/uploads/04_LM_41cb16c5e0.gif)
+
+そして、このようにして最後のレイヤーが所定の位置に収まり、実行時間は220秒からわずか181ミリ秒に短縮されました。同じクエリ、同じテーブル、同じマシン、同じ遅いディスク…ただ**1,215倍高速**になっただけです。変更したのは、データの読み取り方法とタイミングだけです。
+
+> この例では、クエリが大きなテキスト列を選択し、遅延マテリアライゼーションのおかげで最終的にそれらから3行しか必要とされないため、遅延マテリアライゼーションが最大の効果をもたらします。しかし、データセットとクエリの形状によっては、インデックス作成やPREWHEREのような初期の最適化の方が大きな節約をもたらす場合があります。これらの技術は連携して機能し、それぞれが異なる方法でI/O削減に貢献します。
+
+注意: 遅延マテリアライゼーションは `LIMIT N` クエリに対して自動的に適用されますが、`N` のしきい値までです。これは [query_plan_max_limit_for_lazy_materialization](https://clickhouse.com/docs/operations/settings/settings#query_plan_max_limit_for_lazy_materialization) 設定（デフォルト: 10）によって制御されます。0 に設定すると、遅延マテリアライゼーションは上限なしですべての LIMIT 値に適用されます。
+
+## フィルタなしでの高速化：遅延マテリアライゼーション単独の効果
+
+インデックス作成とPREWHEREの恩恵を受けるには、クエリにフィルタが必要です。インデックス作成の場合はプライマリキー列に、PREWHEREの場合は任意の列にフィルタが必要です。上記で示したように、遅延マテリアライゼーションはこれらにきれいに重ねられますが、他とは異なり、列フィルタがまったくないクエリも高速化できます。
+
+これを実証するために、サンプルクエリからすべてのフィルタを削除し、日付、製品、評価、または検証ステータスに関係なく、役立つ投票数が最も多いレビューを見つけ、上位3件をタイトル、見出し、全文とともに返します。
+
+まず、遅延マテリアライゼーションを無効にして、そのクエリを（[コールドファイルシステムキャッシュ](https://www.google.com/search?q=/blog/clickhouse-gets-lazier-and-faster-introducing-lazy-materialization%23with-cold-os-level-filesystem-cache)で）実行します。
+
+<pre><code type='click-ui' language='sql' show_line_numbers='false'>
+SELECT
+    helpful_votes,
+    product_title,
+    review_headline,
+    review_body
+FROM amazon.amazon_reviews
+ORDER BY helpful_votes DESC
+LIMIT 3
+FORMAT Vertical
+SETTINGS
+    query_plan_optimize_lazy_materialization = false;
+</code></pre>
+
+<pre><code type='click-ui' language='text' show_line_numbers='false'>
+Row 1:
+──────
+helpful_votes:   47524
+product_title:   Kindle: Amazon's Original Wireless Reading Device (1st generation)
+review_headline: Why and how the Kindle changes everything
+review_body:     This is less a "pros and cons" review than a hopefully use...
+
+Row 2:
+──────
+helpful_votes:   41393
+product_title:   BIC Cristal For Her Ball Pen, 1.0mm, Black, 16ct (MSLP16-Blk)
+review_headline: FINALLY!
+review_body:     Someone has answered my gentle prayers and FINALLY designed ...
+
+Row 3:
+──────
+helpful_votes:   41278
+product_title:   The Mountain Kids 100% Cotton Three Wolf Moon T-Shirt
+review_headline: Dual Function Design
+review_body:     This item has wolves on it which makes it intrinsically swee...
+
+
+0 rows in set. Elapsed: 219.071 sec. Processed 150.96 million rows, 71.38 GB (689.08 thousand rows/s., 325.81 MB/s.)
+Peak memory usage: 1.11 GiB.
+</code></pre>
+
+次に、再度クエリを実行します（再びコールドファイルシステムキャッシュを使用）。ただし、今回は遅延マテリアライゼーションを有効にします。
+
+<pre><code type='click-ui' language='sql' show_line_numbers='false'>
+SELECT
+    helpful_votes,
+    product_title,
+    review_headline,
+    review_body
+FROM amazon.amazon_reviews
+ORDER BY helpful_votes DESC
+LIMIT 3
+FORMAT Vertical
+SETTINGS
+    query_plan_optimize_lazy_materialization = true;
+</code></pre>
+
+<pre><code type='click-ui' language='text' show_line_numbers='false'>
+Row 1:
+──────
+helpful_votes:   47524
+product_title:   Kindle: Amazon's Original Wireless Reading Device (1st generation)
+review_headline: Why and how the Kindle changes everything
+review_body:     This is less a "pros and cons" review than a hopefully use...
+
+Row 2:
+──────
+helpful_votes:   41393
+product_title:   BIC Cristal For Her Ball Pen, 1.0mm, Black, 16ct (MSLP16-Blk)
+review_headline: FINALLY!
+review_body:     Someone has answered my gentle prayers and FINALLY designed ...
+
+Row 3:
+──────
+helpful_votes:   41278
+product_title:   The Mountain Kids 100% Cotton Three Wolf Moon T-Shirt
+review_headline: Dual Function Design
+review_body:     This item has wolves on it which makes it intrinsically swee...
+
+
+0 rows in set. Elapsed: 0.139 sec. Processed 150.96 million rows, 1.81 GB (1.09 billion rows/s., 13.06 GB/s.)
+Peak memory usage: 3.80 MiB.
+</code></pre>
+
+驚きました：**1,576倍の高速化** — 219秒からわずか139ミリ秒へ — データ読み取り量は40倍少なく、メモリ使用量は300倍低くなりました。
+
+この例は、ClickHouseのI/O最適化の中で遅延マテリアライゼーションをユニークなものにしている点を浮き彫りにしています。
+
+> 遅延マテリアライゼーションは、高速化を実現するために列フィルタを必要としません。インデックス作成とPREWHEREはデータをスキップするためにクエリ述語に依存しますが、遅延マテリアライゼーションは、必要なときに必要なものだけをロードすることで、純粋に作業を遅延させることによってパフォーマンスを向上させます。
+
+## クエリ実行計画における遅延マテリアライゼーションの確認
+
+前のクエリの遅延マテリアライゼーションは、[EXPLAIN](https://clickhouse.com/docs/sql-reference/statements/explain#explain-plan)句を使用してクエリの論理実行計画を調べることで確認できます。
+
+<pre><code type='click-ui' language='sql' show_line_numbers='false'>
+EXPLAIN actions = 1
+SELECT
+    helpful_votes,
+    product_title,
+    review_headline,
+    review_body
+FROM amazon.amazon_reviews
+ORDER BY helpful_votes DESC
+LIMIT 3
+SETTINGS
+    query_plan_optimize_lazy_materialization = true;
+</code></pre>
+
+<pre><code type='click-ui' language='text' show_line_numbers='false'>
+...
+Lazily read columns: review_headline, review_body, product_title
+  Limit
+    Sorting
+      ReadFromMergeTree
+</code></pre>
+
+演算子プランを下から上に読むと、ClickHouseが3つの大きなString列の読み取りをソートと制限の後まで遅延させていることがわかります。
+
+## レイヤーごとにより速く — そして今、はるかに遅延的に
+
+この旅は、フルテーブルスキャンから始まりました：220秒、72GBの読み取り、1GiBのメモリ使用。ClickHouseの階層化されたI/O最適化を通じて、一度に1つの技術で実行時間を削り取ってきました。
+
+  * ① **プライマリインデックス**は、インデックス付き列（`review_date`、`product_category`）のフィルタに一致しないグラニュールを削減しました。
+  * ② **PREWHERE**は、インデックスを通過したがインデックス付けされていない列（`verified_purchase`、`star_rating`）のフィルタに失敗したグラニュールを早期にフィルタリングし、不要な読み取りを削減しました。
+  * ③ **遅延マテリアライゼーション**は、大きな`SELECT`列（`product_title`、`review_headline`、`review_body`）の読み取りを、`helpful_votes`によるソートと`LIMIT`の適用後まで遅延させました。
+
+![Blog-LAZY MATERIALIZATION.001.png](https://clickhouse.com/uploads/Blog_LAZY_MATERIALIZATION_001_d7b4526449.png)
+
+各レイヤーが役立ちましたが、私たちのデータセットとクエリの形状にとって、遅延マテリアライゼーションはゲームを変えました。
+
+結果は？
+
+  * フィルタリングされたクエリで220秒 → 0.18秒 = **1,200倍以上の高速化**
+  * フルテーブルのトップNクエリで219秒 → 0.139秒 = **1,500倍以上の高速化**
+
+**同じテーブル、同じマシン、同じSQLコード。**変更したのは、ClickHouseがデータを読み取る方法と*タイミング*だけです。
+
+遅延マテリアライゼーションはClickHouseを高速化するだけでなく、I/O最適化スタックを完成させます。
+そして最も遅延的な部分は？それ（とPREWHERE）はデフォルトでオンになっています。指一本動かさずに速度を得られます
+
+---
+
 ## How Chartmetric uses ClickHouse to turn artist data into music intelligence
 Published: 2025-05-20T22:17:25+00:00
 URL: https://clickhouse.com/blog/chartmetric-uses-clickhouse-to-turn-artist-data-into-music-intelligence
@@ -53213,6 +57361,294 @@ To see how ClickHouse can power your AI workflows and transform your data operat
 
 ---
 
+## AgentHouseのご紹介
+Published: 2025-05-14T10:45:25+00:00
+URL: https://clickhouse.com/blog/agenthouse-demo-clickhouse-llm-mcp-jp
+
+---
+title: " AgentHouseのご紹介"
+date: "2025-05-14T10:45:25.348Z"
+author: "Dmitry Pavlov"
+category: "Engineering"
+excerpt: "AgentHouseをご紹介します。これは、ClickHouseのリアルタイム分析とAnthropicのLLMをMCPサーバー経由で組み合わせた対話型のパブリックデモで、誰もが自然言語を使ってデータと対話する方法を紹介するために構築されました。"
+---
+
+#  AgentHouseのご紹介
+
+![Blog_IntroducingAgentHouse_202504_FNL.png](https://clickhouse.com/uploads/Blog_Introducing_Agent_House_202504_FNL_0639a4c186.png)
+
+## AgentHouseのご紹介
+
+2024年にAnthropic社が[MCPプロトコル](https://docs.anthropic.com/en/docs/agents-and-tools/mcp)をリリースしてから数週間後、ClickHouseの統合チームは、Anthropic社のSonnetモデルがClickHouseデータベースにアクセスする小規模な社内デモを披露しました。これは、ランダムなデータに対して単純なクエリを実行し、LLMに結果を返すという非常に基本的な統合でした。
+
+ClickHouseの社内DWHチームリーダーとして、そのデモを見た私はすぐにこれを[私のデータウェアハウス](https://clickhouse.com/blog/building-a-data-warehouse-with-clickhouse)に導入したいと思いました。ClickHouseの素晴らしい社内ユーザー（営業、運用、製品、財務、エンジニアリングの各チーム）には、従来のBIツールを使ったりクエリを実行したりする代わりに、データと対話できるようになってほしいのです。
+
+2ヶ月後、私たちはDwaine（Data Warehouse AI Natural Expert）を立ち上げました。これは、社内ユーザーがデータに基づいて質問に答えるのを支援する社内LLMです。「私たちの収益は？」「この顧客は何をしているのか？」「顧客は今どんな問題に直面しているのか？」「ウェブサイトの訪問者数は？コンバージョン率は？」Dwaineは、社内ユーザーがこれらの洞察やその他の情報を得るのに劇的に役立ちました。[LinkedInでの私の小さな個人的な記事](https://www.linkedin.com/pulse/bi-dead-change-my-mind-dmitry-pavlov-2otae)をご覧になった方もいるかもしれません。
+
+この経験を説明した後、多くの人々が私に連絡を取り、デモを依頼してきました。数人の友人やパートナーにDwaineを実演しましたが、彼らは非常に興奮していたものの、機密情報を扱っていたためDwaineと直接対話することができず、その可能性を十分に体験できていないと感じました。
+
+このようにして、[llm.clickhouse.com](https://llm.clickhouse.com)で利用可能なAgentHouseが構築されました。しかし、彼に自己紹介をしてもらいましょう :) これ以降のテキストは、AgentHouse LLMによって書かれています。
+
+## こんにちは、AgentHouseです！
+
+私は[AgentHouse](https://llm.clickhouse.com)です。ClickHouseのリアルタイム分析能力と大規模言語モデルの強力な組み合わせを紹介する、完全に対話型のデモ環境です。私の名前は「Agent」（LLMエージェントを表す）と「House」（ClickHouseから）を組み合わせたもので、これらのテクノロジーがどのようにシームレスに連携するかを強調しています。他のデモ環境（[ClickHouse SQL Playground](http://sql.clickhouse.com)および[ADSBビジュアライザー](https://adsb.exposed/)）と共に、アカウントを作成したりデータをアップロードしたりすることなく、さまざまな実際のシナリオでClickHouse Cloudデータベースを試すことができます。
+
+<img preview="/uploads/agent_house_v3_7e163b96ca.gif"  src="/uploads/agent_house_high_res_1518b84bbd.gif" alt="agenthouse.gif" class="h-auto w-auto max-w-full"  style="width: 100%;">
+
+## 私の構成要素は何ですか？
+
+これらが私の主要な構成要素です。
+
+1.  **[Anthropicの大規模言語モデル Claude Sonnet](https://www.anthropic.com/claude/sonnet)** - このLLMは、複雑なコンテキストの理解と構造化データに関する推論に特に優れており、ClickHouseの分析能力にとって理想的なパートナーです。データベーススキーマを理解し、正確なSQLを生成し、クエリ結果を解釈するモデルの能力は、ClickHouseと高度なLLMがなぜ自然な組み合わせであるかを示しています。
+
+2.  **[LibreChat UIプロジェクト](https://www.librechat.ai)** - 人気のあるLLMをすぐに利用できるオープンソースのLLM UIです。オープンソースであること、クリーンなデザイン、そして成長するコミュニティサポートのため、ユーザーインターフェースとしてLibreChatを選択しました。また、このデモの構築にご協力いただいたLibreСhatチームにも感謝いたします。
+
+3.  私の秘密のソースは、ClickHouseチームが開発した **[ClickHouse MCP](https://github.com/ClickHouse/mcp-clickhouse)**（Model Context Protocol）サーバーです。この専用サーバーは、ClickHouseデータベースと大規模言語モデルの間の橋渡しとして機能し、以下を可能にします。
+
+* ClickHouseとLLM間の効率的なデータ転送
+* LLMが生成したSQLのインテリジェントなクエリ最適化
+* データに関するステートフルな会話のためのコンテキスト管理
+* データベースリソースへの安全で制御されたアクセス
+* さまざまな公開データセットの合理化された処理
+
+4.  **[ClickHouse Cloudデータベース](https://clickhouse.com)** - ClickHouseデータベースをSaaS（Software-as-a-Service）として提供するフルマネージドのクラウドサービスです。
+
+![Images_PoweringAIAgentsAnalytics_202504_FNL(1).png](https://clickhouse.com/uploads/Images_Powering_AI_Agents_Analytics_202504_FNL_1_54be5a6747.png)
+
+## なぜSonnetとLibreChatなのですか？
+
+AnthropicのSonnetモデルは、LLMの能力、特に複雑なコンテキストの理解と構造化データに関する推論において大きな進歩を示しており、ClickHouseの分析能力にとって理想的なパートナーです。データベーススキーマを理解し、正確なSQLを生成し、クエリ結果を解釈するモデルの能力は、ClickHouseと高度なLLMがなぜ自然な組み合わせであるかを示しています。
+
+オープンソースであること、クリーンなデザイン、そして成長するコミュニティサポートのため、ユーザーインターフェースとしてLibreChatを使用しています。このインターフェースにより、ユーザーはデータについて自然な会話をしたり、視覚的な成果物（チャート、テーブルなど）を作成したりすることができ、SQLの知識がない人でも複雑な分析タスクにアクセスできるようになります。
+
+## 私の目的
+
+<p>
+私は、ユーザーがMCPサーバーを介してClickHouseがLLMアプリケーションの理想的なバックエンドとしてどのように機能するかを試すためのテストグラウンドとして特別に作成されました&#x1F609;。さまざまなユースケースを紹介する複数の公開データセットにアクセスでき、簡単な会話型インターフェースを通じて可能性を探ることができます。これには、以下を含む37の異なるデータセットが含まれます。
+</p>
+
+* **github** - GitHubのアクティビティデータ、リポジトリ、ユーザーインタラクションが含まれています。毎時更新されます。
+* **pypi** - `pip`でダウンロードされたすべてのPythonパッケージの行が含まれ、毎日更新されます - 1.3兆行以上。
+* **rubygems** - インストールされたすべてのgemの行が含まれ、毎時更新されます - 1800億行以上。
+* **hackernews** - Hacker Newsの投稿とコメントが含まれています。
+* **imdb** - IMDBの映画データベース情報が含まれています。
+* **nyc_taxi** - NYCのタクシー乗車データが含まれています。
+* **opensky** - OpenSky Networkの航空データが含まれています。
+* **reddit** - Redditの投稿とコメントが含まれています。
+* **stackoverflow** - Stack Overflowの質問と回答が含まれています。
+* **uk** - 英国の不動産取引データと関連する地理情報の包括的なコレクションが含まれています。
+
+その他。
+
+## 私の主な機能
+
+* 自然言語クエリのテスト: 通常の英語の質問がMCPサーバーを介してClickHouse用に最適化されたSQLクエリに変換される様子をご覧ください。
+* リアルタイム分析の体験: MCPサーバーがClickHouseの有名な速度を最小限の遅延でAI搭載の洞察と組み合わせる方法をご覧ください。
+* 対話型データ探索: MCP-LLM接続を利用した会話型インターフェースを通じてデモデータセットを探索してください。
+* 自動視覚化の表示: MCPサーバーを流れるデータがどのように自動的に視覚化されるかをご覧ください。
+
+## デモの探索
+
+AgentHouseを始めるには、[llm.clickhouse.com](https://llm.clickhouse.com)にアクセスし、Googleアカウントでデモ環境にログインして質問を開始してください。始めるのに最適な方法は、「どのデータセットがありますか？」と尋ねることです。これにより、データベースのリストが表示され、それらを探索し始めることができます。
+
+皆様からのご質問にお答えできることを楽しみにしています！
+
+---
+
+## エージェント向け分析
+Published: 2025-05-14T09:51:31+00:00
+URL: https://clickhouse.com/blog/agent-facing-analytics-jp
+
+---
+title: "エージェント向け分析"
+date: "2025-05-14T09:51:31.974Z"
+author: "Ryadh Dahimene"
+category: "Product"
+excerpt: "リアルタイム分析における新たなユーザーペルソナとしてのAIエージェント"
+---
+
+# エージェント向け分析
+
+あなたが分析データベースを運用していて、ある日突然、まるで眠らず、休憩も取らず、際限なくSQLクエリを生成するユーザー群に気づいたとします。あなたはこう尋ねるかもしれません。「またDDoS攻撃を受けているのか？」と。答えはノーです。実は、会社がビジネス指標の監視と最適化を任務とする自律型AIエージェントのフリートを導入したのです。
+
+データベースの責任者やデータベースシステムを設計する人であれば、おそらく興奮と恐怖を同時に感じるでしょう。
+
+AIエージェントは急速に進化しており、リアルタイムデータベースのようなサードパーティシステムへの接続性と組み合わせた推論能力を獲得しています。2025年がすでに「エージェント革命」の年と称されている中、本稿ではリアルタイム分析とAIエージェントの交差点を探ります。エージェントがどのようにデータと対話し、どのような利用パターンを持ち、それがリアルタイムデータベース設計に何を意味するのか。AIエージェントをリアルタイムデータベースの「新しいユーザーペルソナ」として捉え、システムが彼らのワークロードにどのように適応できるかについての初期のテーマを探求します。最後に、ClickHouse MCPサーバーを実演することで、リアルタイム分析エージェントワークフローの例を見ていきます。
+
+<p style="text-align: center;">
+    <img src="/uploads/image_8_5d12fd1281.png" alt="image (8).png" class="h-auto w-auto max-w-full" node="[object Object]">
+    <em>Google Trends Interest over time for “AI agents” in 2024</em>
+</p>
+
+次のセクションでは、AIの最近の動向に関する定義と背景を紹介します。これは記事の残りの部分で役立ちますが、すでにAIの概念に精通している（そして誇大広告に追いついている！）場合は、[AIエージェントのためのリアルタイム分析](https://www.google.com/search?q=/blog/agent-facing-analytics%23real-time-analytics-for-ai-agents)のセクションに直接進むことをお勧めします。
+
+## AIコンセプトキャッチアップ
+
+### ELI5: AIエージェントとLLMがいかにしてエージェント時代を可能にしたか
+
+_ELI5 stands for “Explain Like I'm Five”, inspired by the subreddit [r/explainlikeimfive](https://www.reddit.com/r/explainlikeimfive/)_
+
+AIエージェントは、単純なタスク実行（または関数呼び出し）を超えて進化したデジタルアシスタントと考えることができます。彼らはコンテキストを理解し、意思決定を行い、特定の目標に向けて意味のある行動を取ることができます。彼らは「感知-思考-行動」ループ（[ReActエージェント](https://www.leewayhertz.com/react-agents-vs-function-calling-agents/)を参照）で動作し、さまざまな入力（テキスト、メディア、データ）を処理し、状況を分析し、その情報を使って何か有用なことを行います。最も重要なのは、アプリケーションドメインに応じて、理論的にはさまざまなレベルの自律性で動作でき、人間の監督を必要とする場合としない場合があることです。
+
+ここでのゲームチェンジャーは、大規模言語モデル（LLM）の出現でした。[GPTシリーズ](https://www.youtube.com/watch?v=wjZofJX0v4M)のようなLLMは、AIエージェントの概念が[かなり以前から存在していた](https://www.cs.ox.ac.uk/people/michael.wooldridge/pubs/ker95.pdf)にもかかわらず、その「理解」とコミュニケーション能力を大幅に向上させました。まるで突然「人間」に堪能になったかのようで、モデルのトレーニングから得られた関連性の高い文脈情報で要求を把握し、応答することができます。
+
+### AIエージェントのスーパーパワー：「ツール」
+
+これらのエージェントは、「ツール」へのアクセスを通じてスーパーパワーを持つことができます。ツールは、タスクを実行する能力を与えることでAIエージェントを強化します。単なる会話型インターフェースであるだけでなく、数値計算、情報検索、顧客コミュニケーションの管理など、物事を成し遂げることができるようになりました。問題を解決する方法を説明できる人と、実際に問題を解決できる人の違いだと考えてください。
+
+例えば、ChatGPTには現在、検索ツールがデフォルトで搭載されています。この検索プロバイダーとの統合により、モデルは会話中にウェブから最新情報を取得できます。つまり、応答のファクトチェック、最近のイベントやデータへのアクセス、トレーニングデータだけに頼るのではなく、最新情報を提供できます。
+
+<p style="text-align: center;">
+    <img src="/uploads/2_agent_analytics_e99802b546.png" alt="image (8).png" class="h-auto w-auto max-w-full" node="[object Object]">
+    <em>ChatGPT’s search tool UI</em>
+</p>
+
+ツールは、検索拡張生成（RAG）パイプラインの実装を簡素化するためにも使用できます。AIモデルがトレーニング中に学習したことだけに頼るのではなく、RAGを使用すると、モデルは応答を策定する前に関連情報を取得できます。以下に例を示します。AIアシスタントを使用してカスタマーサポートを支援する場合（例：Salesforce [AgentForce](https://www.salesforce.com/agentforce/)、[ServiceNow AI Agents](https://www.servicenow.com/products/ai-agents.html)）。RAGがない場合、一般的なトレーニングのみを使用して質問に回答します。しかし、RAGを使用すると、顧客が最新の製品機能について質問した場合、システムは最新のドキュメント、リリースノート、および過去のサポートチケットを取得してから応答を作成します。これは、応答がAIモデルで利用可能な最新情報に基づいていることを意味します。
+
+### 話す前に考える：推論モデル
+
+話す前に考えるというのは、賢明なことのように聞こえませんか？
+
+AI分野におけるもう1つの発展、そしておそらく最も興味深いものの1つは、推論モデルの出現です。[OpenAI o1](https://openai.com/index/learning-to-reason-with-llms/)、[Anthropic Claude](https://www.anthropic.com/news/claude-3-family)、または[DeepSeek-R1](https://github.com/deepseek-ai/DeepSeek-R1)のようなシステムは、プロンプトに応答する前に「思考」ステップを導入することにより、より系統的なアプローチを取ります。推論モデルは、すぐに答えを生成するのではなく、[Chain-of-Thought（CoT）](https://openreview.net/pdf?id=_VjQlMeSB_J)のようなプロンプティング技術を使用して、複数の角度から問題を分析し、ステップに分解し、必要に応じて利用可能なツールを使用して文脈情報を収集します。
+
+これは、推論と実用的なツールの組み合わせを通じて、より複雑なタスクを処理できる、より高性能なシステムへの移行を表しています。この分野における最新の例の1つは、OpenAIの[deep research](https://openai.com/index/introducing-deep-research/)の導入です。これは、オンラインで複雑な複数ステップの研究タスクを自律的に実行できるエージェントです。テキスト、画像、PDFなど、さまざまなソースからの情報を処理および合成して、5〜30分以内に包括的なレポートを生成します。これは、従来人間が数時間かかっていたタスクです。
+
+<p style="text-align: center;">
+    <img src="/uploads/image_7_da5378760d.png" alt="image (7).png" class="h-auto w-auto max-w-full" node="[object Object]">
+    <em>A simplified AI timeline</em>
+</p>
+
+> AIの定義についてさらに時間が必要な場合は、IBMのAIエージェントに関するこの素晴らしい[動画](https://www.youtube.com/watch?v=F8NKVhkZZWI)をお勧めします。
+
+## AIエージェントのためのリアルタイム分析
+
+さて、2025年になり、さまざまな程度の自律性でタスクを実行でき、外部ツールにアクセスしてクエリを実行したり、情報を収集したり、アクションを実行したりできるLLM搭載のAIエージェントが登場しました。
+
+次に、会社のCRMデータを含むリアルタイム分析データベースにアクセスできるエージェント型AIアシスタントのケースを考えてみましょう。ユーザーが最新（分単位）の販売トレンドについて質問すると、AIアシスタントは接続されたデータソースにクエリを実行し、データを繰り返し分析して、前月比成長、季節変動、新興製品カテゴリなどの意味のあるパターンとトレンドを特定し、主要な調査結果を説明する自然言語応答を生成します。多くの場合、視覚化もサポートされます。この場合の主なインターフェースがチャットベースである場合、これらの反復的な探索は、関連する洞察を抽出するために大量のデータをスキャンできる一連のクエリをトリガーするため、パフォーマンスが重要になります。
+
+いくつかの特性により、リアルタイムデータベースはこのようなワークロードに特に適しています。例えば、リアルタイム分析データベースは、ほぼリアルタイムのデータを扱うように設計されており、新しいデータが到着するとほぼ即座に洞察を処理して提供できます。これは、AIエージェントがタイムリーで関連性の高い意思決定を行う（または支援する）ために最新情報を必要とする可能性があるため、非常に重要です。
+
+中核となる分析機能も重要です。リアルタイム分析データベースは、大規模なデータセット全体で複雑な集計やパターン検出を実行するのに優れています。主に生データの保存や取得に焦点を当てた運用データベースとは異なり、これらのシステムは膨大な量の情報を分析するために最適化されています。これにより、トレンドを発見し、異常を検出し、実用的な洞察を引き出す必要があるAIエージェントに特に適しています。
+
+リアルタイム分析データベースは、インタラクティブなクエリに対して高速なパフォーマンスを提供することも期待されており、これはチャットベースの対話や高頻度の探索的ワークロードに不可欠です。大量のデータボリュームと高いクエリ同時実行性があっても一貫したパフォーマンスを保証し、応答性の高い対話とスムーズなユーザーエクスペリエンスを可能にします。
+
+最後に、リアルタイム分析データベースは、多くの場合、貴重なドメイン固有のデータを単一の場所に効果的に統合する究極の「データシンク」として機能します。さまざまなソースや形式の重要なデータを同じ傘下に配置することで、これらのデータベースは、AIエージェントが運用システムから切り離されたドメイン情報の統一されたビューにアクセスできるようにします。
+
+![Agent Facing Analytics Artboard 2.png](https://clickhouse.com/uploads/Agent_Facing_Analytics_Artboard_2_7cfbc8f1df.png)
+![Agent Facing Analytics Artboard 1.png](https://clickhouse.com/uploads/Agent_Facing_Analytics_Artboard_1_0a19dfc171.png)
+
+これらの特性は、リアルタイムデータベースがAIデータ検索ユースケースを大規模に提供する上で重要な役割を果たすことをすでに可能にしています（例：[OpenAIによるRocksetの買収](https://openai.com/index/openai-acquires-rockset)）。また、AIエージェントが計算量の多い作業をオフロードしながら、データ主導の迅速な応答を提供できるようにすることもできます。
+
+これにより、リアルタイム分析データベースは、洞察に関してAIエージェントにとって好ましい「コンテキストプロバイダー」として位置付けられますが、1つの疑問が残ります。リアルタイム分析データベースは、現在の形でこの価値を提供できる準備ができているのでしょうか？
+
+## 新たなユーザーペルソナとしてのAIエージェント
+
+AIエージェントがリアルタイム分析データベースを活用することについて考える最善の方法は、それらを新しいカテゴリのユーザー、つまりプロダクトマネージャーの言葉で言えばユーザーペルソナとして認識することです。
+
+<p style="text-align: center;">
+    <img src="/uploads/Agent_Facing_Analytics_Feb_2025_Chat_6faacd34f5.png" alt="image (7).png" class="h-auto w-auto max-w-full" node="[object Object]">
+    <em>A fictional agentic AI assistant user persona card</em>
+</p>
+
+データベースの観点から少し考えてみてください。潜在的に上限のない数のAIエージェントが、ユーザーに代わって、または自律的に多数のクエリを同時に実行し、調査を実行し、反復的な調査と洞察を洗練させ、タスクを実行することが予想されます。
+
+長年にわたり、リアルタイムデータベースは、システムに直接接続された、またはミドルウェアアプリケーション層を介して接続された人間のインタラクティブユーザーに適応する時間がありました。古典的なペルソナの例としては、データベース管理者、ビジネスアナリスト、データサイエンティスト、またはデータベース上にアプリケーションを構築するソフトウェア開発者が挙げられます。業界は、彼らの使用パターンと要件を徐々に学習し、有機的に、さまざまなユースケースを満たすためのインターフェース、演算子、UI、フォーマット、クライアント、およびパフォーマンスを提供してきました。
+
+ここで問題となるのは、 *AIエージェントのワークロードに対応する準備ができているか？これらの使用パターンに対応するために、具体的にどのような機能を再考またはゼロから作成する必要があるか？* ということです。
+
+これらの質問に答えるのは時期尚早だと感じますが、いくつかの方向性を示唆することはすでにできます（この演習は、現段階では答えを提供するよりも多くの質問を提起する可能性が高いことに注意してください）。
+
+#### エージェントインタラクションのためのSQLの最適化
+
+SQLは広く使用されている言語であり、トレーニングデータが利用可能であるため、ほとんどのLLMは簡単に生成できます。現代の推論モデルは、多くの場合、試行錯誤を繰り返しながら、SQLクエリを作成する能力がますます向上しています。しかし、ここで疑問が生じます。特定の機能を提供することで、SQL生成の品質を向上させることはできるでしょうか？さらに重要なのは、特に重要なクエリ（財務結果の計算など）において、主要なメトリック定義の正確性をどのように保証するかということです。1つのアプローチとしては、自由形式のSQLアクセスとテンプレート化された[クエリAPIエンドポイント](https://clickhouse.com/blog/automatic-query-endpoints)を組み合わせ、ワークフローをより適切に制御するための明確な定義を提供することが考えられます。別のオプションとしては、特定のSQL言語拡張機能（LLMの使用のために特別に設計された新しい演算子やフォーマット）の導入が考えられます。
+
+
+#### 探索性の向上
+
+有用なSQL拡張の例として、データ探索性に関するものが挙げられます。AIエージェントのタスクは、多くの場合、`DESCRIBE`や`SHOW`クエリを通じて利用可能なデータセットを記述することから始まり、その後、データサンプルや記述的な集計を選択します。これらのクエリは通常、人間がデータの構造と特性を理解するのに役立ちます。しかし、LLM向けに調整された同様の演算子を作成し、データセット記述にデータプロパティを注釈付けできるようにすることで、このプロセスを改善する余地があります。エージェント専用に設計されたサーバーサイド版の[`pandas.describe()`](https://pandas.pydata.org/docs/reference/api/pandas.DataFrame.describe.html)のようなものだと考えてください。
+
+#### LLMフレンドリーなドキュメント
+
+リアルタイム分析データベースのドキュメントは、通常、人間のユーザー向けに構成されています。AIエージェントがこのドキュメントとどのように対話するかを改善するために、LLMのアクセシビリティを向上させることができます。有望で[成長している](https://directory.llmstxt.cloud/)アプローチの1つは、ドキュメントを機械可読形式で提示する[LLMs.txt](https://llmstxt.org/)のような標準化された形式を使用することです。これにより、AIエージェントがドキュメントを理解して使用しやすくなり、データとのより効果的な対話が保証されます。
+
+#### AIワークロードのためのリアルタイム分析のスケーリング
+
+従来のインタラクティブユーザーと同様に、AIエージェントは同時タスクに対して高速な応答時間を必要とします。ここでの違いは、各AIプロンプトが短時間で複数の探索的クエリおよび集計クエリをトリガーする可能性があることです。組織がAIエージェントを急速に展開するにつれて、リアルタイム分析システムは特定のスケーラビリティの課題に直面する可能性があります。この場合の解決策はそれほど具体的ではありません。[効率的な](https://benchmark.clickhouse.com/)リアルタイムデータベースは、パフォーマンスを損なうことなく高スループットで探索的なワークロードをサポートできます。
+
+#### AIメモリのためのサーバーサイドの状態
+
+AIシステムは、時間とともに情報を保持および想起することができ、これにより、過去の相互作用に基づいてより良い意思決定を行ったり、応答をパーソナライズしたり、パフォーマンスを向上させたりすることができます。これはしばしば「AIメモリ」と呼ばれます。
+
+データベースでは、インタラクティブユーザーが設定や好みを保持したセッションを維持できるように、エージェントの状態を維持するためのサーバーサイド機能を構想することができます。これは、定期的なクエリが送信される場合（特にデータ探索クエリに関連する場合）、様々なキャッシュレベルに拡張でき、エージェントユーザーとそのタスクの範囲を確実に識別する方法が必要になります。
+
+#### カスタマイズされたアクセス制御モデルとメカニズム
+
+データベースは、ロールベースアクセス制御（RBAC）モデルを使用して、ユーザーに割り当てられたロールに従ってユーザー権限を管理し、データへの安全なアクセスを保証します。同様に、APIランドスケープは、特定のリソースへの一時的なアクセスを提供する短命のAPIトークンをサポートするように進化しており、不正アクセスのリスクを最小限に抑えています。AIエージェントのタスク期間と一致する短命のトークンを使用するなど、AIエージェントの安全なアクセスを強化するために、APIの世界から学ぶべき教訓があるかもしれません。
+
+> 「私たちのビジョンは大胆です。2025年末までに10億のAgentforceエージェントによって、お客様が労働力を拡大し、従業員を増強できるよう支援することです」
+> マーク・ベニオフ、Salesforce CEO、[AgentForce、Salesforceのエージェント製品](https://www.salesforce.com/news/stories/agentforce-launch-zone-announcement/)について
+
+上記のリストはロードマップではなく、網羅的なものであることを意図したものではないことに注意してください。これは単なるブレインストーミングの演習として機能します。使用量の増加と新しいユースケースに伴い、業界はAIエージェントのユーザーペルソナにより良いサービスを提供するための多くの方法を模索し始めたばかりです。
+
+したがって、最初の質問に対する答え：リアルタイム分析データベースは、現在の形でAIエージェントの価値を提供する準備ができているのでしょうか？ **答えはイエスです**（そして、次のセクションでそれをデモします）。しかし、他の新しいユースケースと同様に、反復的な改善の機会はたくさんあります。
+
+## 実世界のアプリケーション：ClickHouse MCPサーバー
+
+2024年11月、Anthropicは、AI搭載アプリケーションとデータソース間の接続を容易にするために設計された[オープンスタンダード](https://github.com/modelcontextprotocol)であるモデルコンテキストプロトコル（MCP）を[発表](https://www.anthropic.com/news/model-context-protocol)しました。シンプルなアーキテクチャにより、開発者はMCPサーバーを介してデータを公開したり、これらのサーバーに接続するAIアプリケーション（MCPクライアント）を構築したりできます。[MCPサーバーの例](https://modelcontextprotocol.io/examples)には、データベース、ファイルシステム、開発ツール、Web自動化API、および生産性向上ツールが含まれます。
+
+私たちは最近、AIモデルとClickHouseインスタンス間をブリッジできる公式の[ClickHouse MCPサーバー](https://github.com/ClickHouse/mcp-clickhouse/)をリリースしました。これは、LLMが接続されたClickHouseインスタンス上のデータベースを一覧表示したり、テーブルを一覧表示したり、そして最も重要なこととしてSELECTクエリを実行したりできるようにする3つのシンプルなツールを公開します。
+
+![6_agent-analytics.png](https://clickhouse.com/uploads/6_agent_analytics_3b1e88363c.png)
+
+MCPを使用することで、特定のタスク中にLLMが必要とするコンテキストにLLMを接続するための標準化された方法が手に入りました。以下の短い動画は、AnthropicのモデルであるClaude Sonnet 3.5を使用して、ClickHouse Cloudの[パブリックプレイグラウンド](https://sql.clickhouse.com/)サービスに対するその機能のライブデモを示しています。
+
+<iframe width="768" height="416" src="https://www.youtube.com/embed/y9biAm_Fkqw?si=0c9TacEC0ECQVJba" title="YouTube video player" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" referrerpolicy="strict-origin-when-cross-origin" allowfullscreen></iframe>
+<br />
+
+私たちの最初の質問は、モデルにデータセットを理解させることを促します。Claudeは、ForexとStockの2つのデータベースに対して`list_tables`ツールを実行し、その後SELECTクエリを実行してデータサンプルを要求します（前のプロンプトでは利用可能なすべてのデータセットについて尋ねていたことに注意してください）。
+
+![7_agent-analytics.png](https://clickhouse.com/uploads/7_agent_analytics_329cb2753c.png)
+
+その後、ドットコムバブルで最も大きな打撃を受けたハイテク株について尋ねました。質問は意図的に曖昧で、特定の日付やフィールド名は言及されていませんでしたが、モデルはそれでもクエリの範囲を理解し、関連する方法論、メトリック、および期間を提案し、要求された分析を実行することができました。このタスクの所要時間を、アナリストが同様の結果を出すのに必要な時間と比較するのは興味深いことです。
+
+<p style="text-align: center;">
+    <img src="/uploads/8_agent_analytics_6f4227459e.png" alt="image (7).png" class="h-auto w-auto max-w-full" node="[object Object]">
+    <em>Iterative exploration of the data by Claude</em>
+</p>
+
+この調査のために私たちが送信したプロンプトは、データベースに対して合計10件のSQLクエリになりました。その結果、数秒で生データから一連の洞察が抽出され、視覚化と記述的分析がサポートされました。
+
+
+![9_agent-analytics.png](https://clickhouse.com/uploads/9_agent_analytics_1d451ffde6.png)
+
+![10_agent-analytics.png](https://clickhouse.com/uploads/10_agent_analytics_fa7a7e685d.png)
+
+エキサイティングではあるものの、このアプローチには既知の制限があり、万能薬ではありません。リアルタイムデータに基づいて応答を生成することは役立ちますが、AIエージェントはハルシネーション（モデルが誤った情報を高い信頼度で生成する状況）の影響を受けないわけではありません。データ整合性の確保（例：テンプレート化されたクエリを使用）、賢明なデフォルト設定（例：[temperature](https://www.ibm.com/think/topics/llm-temperature)）、およびAIが生成した出力を検証するためのセーフガードの実装は、このリスクを最小限に抑えるために必要な重要なステップです。
+
+### あなたのラップトップで実行してみてください！
+
+このユースケースを理解する最良の方法は、自分で試してみることです。ClickHouseパブリックプレイグラウンドサービスへの接続方法の詳細は、私たちの[ドキュメント](https://clickhouse.com/docs/en/getting-started/playground)に記載されています。Claudeデスクトップを使用したClickHouse MCPサーバーのセットアップについても、その[README](https://github.com/ClickHouse/mcp-clickhouse/blob/main/README.md)ファイルに記載されています。最後に、代替のツール互換モデルを使用して、ローカルのオフラインバージョンをセットアップすることもできます。私たちは、次のコンポーネントを使用してローカルセットアップを実験しました。
+
+* モデル：Ollamaで実行されている[llama3.2 3B](https://ollama.com/library/llama3.2)
+* クライアント：[mcp-cli](https://github.com/chrishayuk/mcp-cli)
+
+ローカルバージョンはローカルデータ処理を通じてプライバシーを優先しますが（そしてレート制限もありません！）、モデルサイズが小さく、推論能力が限られているため、探索的分析にはあまり適していません。回答に必要なテーブルやフィールドを示唆する直接的な質問の方がうまく機能し、行き詰まるのが早くなります。しかし、希望はあります。DeepSeek R1のようなオープンソースの推論モデルが利用可能になることで、これらの機能の多くが解放されると期待されています（執筆時点では、[DeepSeek R1](https://github.com/deepseek-ai/DeepSeek-R1/issues/9)はツール呼び出しをサポートしていません）。
+
+<p style="text-align: center;">
+    <img src="/uploads/11_agent_analytics_5e3734a62c.png" alt="image (7).png" class="h-auto w-auto max-w-full" node="[object Object]">
+    <em>Local deployment of llama3.2 with the ClickHouse MCP server</em>
+</p>
+
+## まとめ
+
+リアルタイム分析データベースのアクティブユーザーとしてのAIエージェントの出現は、データシステムについて私たちがどのように考えるかという点で興味深い変化を示しています。私たちはまだ初期段階にありますが、モデルコンテキストプロトコルやAI搭載分析ツールの成長するエコシステムのような開発を通じて、基盤はすでに形作られつつあります。
+
+単純なクエリ実行者や「関数呼び出し」から、データについて推論し、コンテキストを維持し、洞察を導き出すことができるエージェントへの道のりは、リアルタイムデータベースにとって機会と課題の両方を提示しています。これらのエージェントがより自律的になり、その展開がより広範になるにつれて、データシステムとの相互作用における新しいパターンが見られるようになり、新しい最適化と機能につながる可能性があります。
+
+リアルタイム分析データベースがユースケースをより良くするためにどのように進化する可能性があるかについて、いくつかの潜在的な方向性を探ってきましたが、私たちはまだその完全な影響を理解し始めたばかりであり、組織がAIエージェントを大規模に展開し続け、新しいユースケースが出現するにつれて、エージェントとリアルタイムデータベースの関係は、私たちがまだ予測していない方法で進化し続ける可能性があります。
+
+---
+
 ## Under the Hood: Building MySQL Change Data Capture in ClickPipes
 Published: 2025-05-13T15:31:24+00:00
 URL: https://clickhouse.com/blog/building-msql-change-data-capture-in-clickpipes
@@ -53767,6 +58203,937 @@ For more information on setting up MySQL CDC with ClickPipes, refer to the[ offi
 1. [MySQL Binary Log Documentation](https://dev.mysql.com/doc/refman/8.4/en/binary-log.html)
 2. [ClickPipes for MySQL Documentation](https://clickhouse.com/docs/integrations/clickpipes/mysql)
 3. [go-mysql-org/go-mysql library](https://github.com/go-mysql-org/go-mysql)
+
+---
+
+## 2025年5月ニュースレター
+Published: 2025-05-13T01:36:33+00:00
+URL: https://clickhouse.com/blog/202505-newsletter-jp
+
+---
+title: "2025年5月ニュースレター"
+date: "2025-05-13T01:36:33.850Z"
+author: "Mark Needham"
+category: "Community"
+excerpt: "5月のClickHouseニュースレターへようこそ。このニュースレターでは、過去1ヶ月間のリアルタイムデータウェアハウスに関する出来事をまとめます。"
+---
+
+# 2025年5月ニュースレター
+
+こんにちは、そして2025年5月ClickHouseニュースレターへようこそ！
+
+ 今月は、ClickHouseがどのように「怠惰」になったのか、Microsoft Clarity分析プラットフォームがClickHouseを選んだ理由、MCP/リアルタイム分析パネル、ClickHouseによる視聴者維持率の指標などについて深く掘り下げます！
+
+ ## 注目のコミュニティメンバー：Can Tian {#featured-community-member}
+
+ 今月の注目のコミュニティメンバーは、DeepLのシニアデータプラットフォームエンジニアであるCan Tian氏です。
+
+ ![featured_may.png](https://clickhouse.com/uploads/featured_may_690bc9b49f.png)
+
+ Can Tian氏は、Python、C++、および最新のインフラストラクチャツールを使用して、スケーラブルなクラウドネイティブデータシステムを構築してきた経験があります。DeepL、FactoryPal、Springer Natureでの経験を通じて、データエンジニアリングから分析、プラットフォーム設計まで幅広く手掛けてきました。
+
+ Can氏は、<a href="https://github.com/ClickHouse/dbt-clickhouse/pulls?q=is:pr+author:canbekley" target="_blank">dbt-clickhouseに大きな貢献</a>をしており、増分「マイクロバッチ」戦略のサポートの追加、分散増分モデルのスキーマ変更処理の実装、レプリケートされたデータベースの`ON CLUSTER`ステートメントに関連する重要な問題の修正などを行っています。
+
+ ➡️ <a href="https://www.linkedin.com/in/canbekleyici/" target="_blank">LinkedInでCan氏をフォローする</a>
+
+ ## 今後のイベント {#upcoming-events}
+
+ 5月29日にサンフランシスコで開催される<a href="https://clickhouse.com/openhouse?utm_source=marketo&utm_medium=email&utm_campaign=newsletter" target="_blank">ClickHouseユーザーカンファレンス、Open House</a>まであと2週間です。素晴らしい講演者のラインナップは増え続けています。
+
+ LyftのエンジニアであるJeana Choi氏とRitesh Varyani氏は、ClickHouseをニアリアルタイムおよびサブセカンド分析にどのように使用し、迅速な意思決定を可能にしているかについて説明します。
+
+ <a href="https://clickhouse.com/openhouse?utm_source=marketo&utm_medium=email&utm_campaign=newsletter" target="_blank">Open Houseに登録する</a>
+
+ ### グローバルイベント
+
+ * <a href="https://clickhouse.com/company/events/v25-5-community-release-call" target="_blank">v25.5コミュニティコール</a> - 5月22日
+
+ ### 無料トレーニング
+
+ * <a href="https://clickhouse.com/company/events/202505-emea-amsterdam-inperson-clickhouse-developer-fast-track" target="_blank">ClickHouse FastTrackトレーニング</a> - アムステルダム - 5月12日
+ * <a href="https://clickhouse.com/company/events/202505-emea-amsterdam-inperson-clickhouse-for-observability" target="_blank">ClickHouse Observabilityトレーニング</a> - アムステルダム - 5月13日
+ * <a href="https://clickhouse.com/company/news-events" target="_blank">ClickHouse Fundamentalsトレーニング</a> - バーチャル - 5月14日
+ * <a href="https://clickhouse.com/company/events/202505-emea-munich-inperson-developer-fast-track" target="_blank">ClickHouse Developer FastTrackトレーニング</a> - ミュンヘン - 5月14日
+ * <a href="https://clickhouse.com/company/events/202505-amer-clickhouse-developer" target="_blank">ClickHouse Developerトレーニング - バーチャル</a> - 5月21日
+ * <a href="https://clickhouse.com/company/events/clickhouse-fundamentals" target="_blank">ClickHouse Fundamentals - バーチャル</a> - 5月20日、5月22日、6月11日
+ * <a href="https://clickhouse.com/company/events/202505-amer-clickhouse-developer" target="_blank">ClickHouse Developerトレーニング - バーチャル</a> - 5月21日～22日
+ * <a href="https://clickhouse.com/company/events/202505-open-house-query-optimization" target="_blank">対面ClickHouseクエリ最適化ワークショップ - サンフランシスコ</a> - 5月28日
+ * <a href="https://clickhouse.com/company/events/202505-open-house-clickhouse-developer" target="_blank">対面ClickHouse Developer終日トレーニング - サンフランシスコ</a> - 5月28日
+ * <a href="https://clickhouse.com/company/events/202506-emea-clickhouse-datalake" target="_blank">ClickHouseとのデータレイク統合 - バーチャル</a> - 6月5日
+
+ ### AMERのイベント
+
+ * <a href="https://www.meetup.com/clickhouse-austin-user-group/events/307289908" target="_blank">オースティンClickHouse Meetup -</a> 5月13日
+ * <a href="https://clickhouse.com/company/events/2025-05-Amer-Microsoft-Build" target="_blank">Microsoft Build - シアトル</a> - 5月19日～21日
+ * <a href="https://www.meetup.com/clickhouse-seattle-user-group/events/307622716/" target="_blank">シアトルClickHouse Meetup</a> - 5月20日
+ * <a href="https://clickhouse.com/company/events/2025-07-Amer-AWSSummit-washingtondc" target="_blank">AWS Summit Washington D.C.</a> - 6月10日～11日
+ * <a href="https://www.meetup.com/clickhouse-dc-user-group/events/307622954" target="_blank">ワシントンD.C. ClickHouse Meetup -</a> 6月12日
+ * <a href="https://clickhouse.com/company/events/202507-Amer-confluent-financialserviceleaderssummit" target="_blank">Confluent Financial Services Leaders Summit、ニューヨーク</a> - 6月10日
+ * <a href="https://clickhouse.com/company/events/202503-amer-atl-meetup" target="_blank">アトランタClickHouse Meetup</a> - 7月8日
+ * <a href="https://clickhouse.com/company/events/202503-amer-NY-meetup" target="_blank">ニューヨークClickHouse Meetup</a> - 7月15日
+ * <a href="https://clickhouse.com/company/events/2025-09-Amer-AWSSummit-Toronto" target="_blank">AWS Summitトロント</a> - 9月4日
+ * <a href="https://clickhouse.com/company/events/2025-09-Amer-AWSSummit-LosAngeles" target="_blank">AWS Summitロサンゼルス</a> - 9月17日
+
+ ### EMEAのイベント
+
+ * <a href="https://clickhouse.com/company/events/202505-EMEA-Munich-HappyHour" target="_blank">ミュンヘンハッピーアワー</a> - 5月14日
+ * <a href="https://clickhouse.com/company/events/202505-EMEA-Dubai-AWS-Summit" target="_blank">AWS Summitドバイ</a> - 5月21日
+ * <a href="https://clickhouse.com/company/events/202505-EMEA-TelAviv-AWS-Summit" target="_blank">AWS Summitテルアビブ</a> - 5月28日
+ * <a href="https://aws.amazon.com/events/summits/stockholm/" target="_blank">AWS Summitストックホルム</a> - 6月4日
+ * <a href="https://aws.amazon.com/events/summits/hamburg/" target="_blank">AWS Summitハンブルク</a> - 6月5日
+ * <a href="https://aws.amazon.com/es/events/summits/madrid/" target="_blank">AWS Summitマドリード</a> - 6月11日
+ * <a href="https://techbbq.dk/" target="_blank">Tech BBQコペンハーゲン</a> - 8月27日～28日
+ * <a href="https://aws.amazon.com/events/summits/zurich/" target="_blank">AWS Summitチューリッヒ</a> - 9月11日
+ * <a href="https://www.bigdataldn.com/" target="_blank">BigData London</a> - 9月24日～25日
+ * <a href="https://amsterdam.pydata.org/" target="_blank">PyDataアムステルダム</a> - 9月24日～25日
+
+ ### APACのイベント
+
+ * <a href="https://clickhouse.com/company/events/2025-05-APJ-Singapore-DevOpsDays" target="_blank">DevOpsDaysシンガポール</a> - 5月15日
+ * <a href="https://des.analyticsindiamag.com/" target="_blank">Data Engineering Summit</a>、ベンガルール - 5月15日～16日
+ * <a href="https://www.huodongxing.com/event/7803892350511" target="_blank">深センClickHouse Meetup</a> - 5月17日
+ * <a href="https://clickhouse.com/company/events/2025-05-APJ-AWSSummit-Singapore" target="_blank">AWS Summitシンガポール</a> - 5月29日
+ * <a href="https://clickhouse.com/company/events/2025-06-APJ-AWSSummit-Sydney" target="_blank">AWS Summitシドニー</a> - 6月4日～5日
+ * <a href="https://www.meetup.com/clickhouse-tokyo-user-group/events/307689645/" target="_blank">東京Meetup - AI Night!</a> - 6月5日
+ * <a href="https://clickhouse.com/company/events/2025-06-APJ-Tokyo-KubeCon-Japan" target="_blank">KubeCon + CloudNativeCon Japan</a> - 6月16日～17日
+ * <a href="https://clickhouse.com/company/events/2025-06-APJ-AWSSummit-Tokyo" target="_blank">AWS Summit Japan</a> - 6月25日～26日
+
+ ## 25.4リリース {#release}
+
+ ![0_may.png](https://clickhouse.com/uploads/0_may_8f18386369.png)
+
+ 25.4リリースの私のお気に入りの機能を選ぶのは難しいですが、もし選ばなければならないとしたら、レイジーマテリアライゼーションでしょう。この最適化により、必要な時まで列データの読み取りが遅延され、クエリが大幅に高速化されます。詳細については、次のセクションで説明します！
+
+ 読み取り専用ディスク上のMergeTreeテーブルは、状態をリフレッシュして新しいデータパーツをロードできるようになり、これにより、ClickHouseネイティブのデータレイクを効果的に作成できます。このリリースには、特定のワークロードに対して同時に実行されるスレッド数を制限できるCPUスロットスケジューリングも含まれています。
+
+ 最後に、<a href="https://clickhouse.com/docs/operations/utilities/clickhouse-local" target="_blank">clickhouse-local</a>には、デフォルトデータベースのテーブルが永続化されるという、素晴らしいQoL（Quality of Life）アップデートがあります！
+
+ ➡️ <a href="https://clickhouse.com/blog/clickhouse-release-25-04" target="_blank">リリース投稿を読む</a>
+
+ ## ClickHouseがより「怠惰」に（そしてより速く）：レイジーマテリアライゼーションの導入 {#clickhouse-lazier}
+
+ ![1_may.png](https://clickhouse.com/uploads/1_may_2efada319d.png)
+
+ レイジーマテリアライゼーション機能は、Tom Schreiber氏によって徹底的に解説されました。つまり、その仕組みと役立つユースケースを詳細に説明する記事です。
+
+ Tom氏は、ClickHouseの既存のI/O効率の構成要素から始め、レイヤーごとに実際のクエリを実行し、レイジーマテリアライゼーションが起動してパフォーマンスを劇的に最適化するまでを説明しています。
+
+ ➡️ <a href="https://clickhouse.com/blog/clickhouse-gets-lazier-and-faster-introducing-lazy-materialization" target="_blank">ブログ投稿を読む</a>
+
+ ## Microsoft ClarityがClickHouseを選んだ理由 {#microsoft-clarity}
+
+ ![2_may.png](https://clickhouse.com/uploads/2_may_9e6f34ff9b.png)
+
+ Microsoft Clarityは、Webサイトやアプリの所有者が、視覚的なスナップショットとユーザーインタラクションデータを通じてユーザーの行動を理解するのに役立つ無料の分析ツールです。ヒートマップ、セッションレコーディング、インサイトを提供します。
+
+ MicrosoftがClarityを無料の公共サービスとして提供することを決定した際、インフラストラクチャを刷新する必要がありました。ElasticsearchとSparkを使用した元の概念実証では、数百万のプロジェクトと数千兆のイベントという予想される規模に対応できませんでした。システムは遅く、取り込みスループットが低く、大規模になると非常に高価になる可能性がありました。
+
+ 彼らはClickHouseをソリューションとして採用し、ブログでは、その選択の理由、解決に役立った問題、そして途中で遭遇した課題について説明しています。
+
+ ➡️ <a href="https://clarity.microsoft.com/blog/why-microsoft-clarity-chose-clickhouse/" target="_blank">ブログ投稿を読む</a>
+
+ ## AgentHouseの紹介 {#agenthouse}
+
+ ![3_may.png](https://clickhouse.com/uploads/3_may_0f0842e7a2.png)
+
+ Dmitry Pavlov氏は、Claude Sonnet大規模言語モデルを使用してClickHouseデータセットと対話できるチャットベースのデモ環境であるAgentHouseを発表しました。
+
+ 内部的には<a href="https://www.librechat.ai/" target="_blank">LibreChat</a>を使用しており、質問に対するテキスト回答だけでなく、インタラクティブなグラフも取得できます。
+
+ ➡️ <a href="https://clickhouse.com/blog/agenthouse-demo-clickhouse-llm-mcp" target="_blank">ブログ投稿を読む</a>
+
+ ## UUIDレンジバケットによる10億行のClickHouseインサートの処理方法 {#billion-row-inserts}
+
+ ![4_may.png](https://clickhouse.com/uploads/4_may_f3dcb03f83.png)
+
+ CloudQueryは、1回の操作で2500万件を超える大量のデータをClickHouseに取り込む際に課題に直面しました。これらの大規模なインサートは、ClickHouseがディスクに書き出す前にデータセット全体をメモリに実体化するため、メモリ不足のエラーを引き起こしました。
+
+ この問題を解決するために、彼らはUUID範囲に基づいて大きなインサートをより小さく管理しやすいチャンクに分割する「Insert-Splitter」アルゴリズムを開発しました。このアプローチは、ClickHouseのUUIDソートの動作のため、慎重な実装が必要でした。
+
+ しかし、うまくいきました！2600万行の単一のインサートを4つのバランスの取れたバケットに分割することで、処理速度を犠牲にすることなく、ピーク時のメモリ使用量を75％削減できました。
+
+ ➡️ <a href="https://www.cloudquery.io/blog/how-we-handle-billion-row-clickhouse-inserts-with-uuid-range-bucketing" target="_blank">ブログ投稿を読む</a>
+
+ ## ClickPipesのMySQL CDCコネクタがプライベートプレビューで利用可能に {#mysql-cdc-connector}
+
+ ![5_may.png](https://clickhouse.com/uploads/5_may_6a272d293f.png)
+
+ 最近、ClickPipesにおけるMySQL Change Data Capture（CDC）コネクタのプライベートプレビューを発表しました。
+
+ これにより、顧客は数回クリックするだけでMySQLデータベースをClickHouse Cloudにレプリケートし、ClickHouseの驚異的な高速分析を活用できます。MySQLの実行場所に関係なく、継続的なレプリケーションとMySQLからの1回限りの移行の両方に対応します。
+
+ ➡️ <a href="https://clickhouse.com/blog/mysql-cdc-connector-clickpipes-private-preview" target="_blank">ブログ投稿を読む</a>
+
+## ClickHouseによるブートストラップ {#bootstrapping-clickhouse}
+
+![Bootstrapping with ClickHouse Apr 2025.webp](https://clickhouse.com/uploads/Bootstrapping_with_Click_House_Apr_2025_62bddc39a6.webp)
+
+AB TastyのWilliam Attache氏は、ブートストラップデータを使用する一部の統計アルゴリズムをClickHouse SQLで直接実装することで高速化したいと考えました。
+
+このブログでは、ClickHouseのネイティブ関数を使用した彼の試行錯誤のプロセスを紹介し、最初の乱数戦略が失敗した理由と、最終的にSQLベースの回避策とPythonユーザー定義関数を使用して問題を解決した方法を説明しています。
+
+➡️ <a href="https://medium.com/the-ab-tasty-tech-blog/bootstrapping-with-clickhouse-c1750a9ec6d2" target="_blank">ブログ投稿を読む</a>
+
+## Vimeo：大規模な視聴者維持率分析の裏側 {#vimeo-viewer-retention-analysis}
+
+![7_may.png](https://clickhouse.com/uploads/7_may_92519b28fd.png)
+
+動画クリエイターとして、この記事は非常に興味深いものでした。視聴回数は基本的なフィードバックを提供しますが、視聴者維持率（各瞬間で視聴を続けている視聴者の割合）を理解することで、コンテンツのパフォーマンスに関するより深い洞察が得られます。
+
+Vimeoのブログ投稿では、ClickHouseを使用して高度な維持率分析システムをどのように構築したかが明らかにされています。絶対的な視聴回数を保存するのではなく、視聴パターンを変化（視聴者がセグメントの視聴を開始したときに+1、停止したときに-1）として記録し、ウィンドウ関数を使用して毎秒の累積視聴回数を計算しています。
+
+また、AIを活用したインサイトレイヤーも構築しており、AIのコンテキストウィンドウが過負荷になるのを防ぐために、ウィンドウ平均とランレングスエンコーディングを通じて維持率データを事前処理しています。注意深く作成されたプロンプトエンジニアリングと組み合わせることで、視聴者のエンゲージメントパターンに関する簡潔で実用的なインサイトを生成できます。
+
+➡️ <a href="https://medium.com/vimeo-engineering-blog/behind-viewer-retention-analytics-at-scale-8dbbb5ae7ae2" target="_blank">ブログ投稿を読む</a>
+
+## ビデオコーナー {#video-corner}
+
+* スケールアウト配信プラットフォームであるBuildkiteのスタッフエンジニア、Gordon Chan氏が、<a href="https://www.youtube.com/watch?v=iw2kVH-vSH0" target="_blank">テスト分析へのClickHouse採用の道のり</a>を共有しました。
+* Last9の開発者エバンジェリストであるPrathamesh Sonpatki氏が、内部でClickHouseを使用するオブザーバビリティプラットフォームの構築から得られた<a href="https://www.youtube.com/watch?v=AYT0O3Al8-U" target="_blank">オブザーバビリティの課題とソリューションに関する洞察</a>を共有しました。
+* Ryadh Dahimene氏が、さまざまな企業の専門家を招き、<a href="https://clickhouse.com/videos/mcp-real-time-analytics-panel" target="_blank">リアルタイム分析の交差点におけるモデルコンテキストプロトコル（MCP）</a>に関するパネルディスカッションを主催しました。参加者には、Anthropic、ClickHouse、RunReveal、Five One、A16Zの代表者が含まれていました。
+* 既存のテーブルで<a href="https://clickhouse.com/videos/backfill-materialized-view" target="_blank">マテリアライズドビューをバックフィルする方法</a>を示すビデオを作成しました。
+* また、<a href="https://clickhouse.com/videos/iceberg-aws-glue-clickhouse" target="_blank">AWS Glueカタログを介してApache Icebergテーブルをクエリする方法</a>も紹介しました。
+* 最後に、<a href="https://clickhouse.com/videos/json-data-type" target="_blank">ClickHouseのJSONデータ型</a>を説明する短いビデオがあります。
+
+ ➡️ <a href="https://medium.com/the-ab-tasty-tech-
+
+---
+
+## 2025年4月ニュースレター
+Published: 2025-05-13T01:27:58+00:00
+URL: https://clickhouse.com/blog/202504-newsletter-jp
+
+---
+title: "2025年4月ニュースレター"
+date: "2025-05-13T01:27:58.947Z"
+author: "Mark Needham"
+category: "Community"
+excerpt: "4月のClickHouseニュースレターへようこそ。このニュースレターでは、過去1ヶ月間のリアルタイムデータウェアハウスに関する出来事をまとめます。"
+---
+
+# 2025年4月ニュースレター
+
+こんにちは、そして2025年4月のClickHouseニュースレターへようこそ！
+
+今月は、CloudQueryがClickHouseを6ヶ月間使用した説得力のある体験レポート、25.3で強力な新しいクエリ条件キャッシュの発表、1年間のRust開発の振り返り、HyperDXの戦略的買収の発表などをお届けします！
+
+## 注目のコミュニティメンバー: Julian LaNeve {#featured-community-member}
+
+今月の注目のコミュニティメンバーは、AstronomerのCTOであるJulian LaNeveです。
+
+![0_april.png](https://clickhouse.com/uploads/0_april_f7df5dfe00.png)
+
+
+2023年11月にCTOに就任する前は、製品チームに所属し、開発者体験、データ可観測性、オープンソースイニシアチブに注力していました。特に、データパイプラインの作成用に設計されたノートブックツールであるAstronomerのCloud IDEの立ち上げを主導しました。
+
+Julianは最近、Astronomerが新しいデータ可観測性プラットフォームであるAstro Observeの基盤としてClickHouse Cloudを選んだ理由について説明するブログ記事を執筆しました。ClickHouseの、高速なクエリパフォーマンスと最小限のメンテナンス要件で数十億のAirflowワークフローイベントを処理できる能力が、彼らのデータベースの選択の決め手となりました。Julianはまた、<a href="https://clickhouse.com/blog/why-astronomer-chose-clickhouse-to-power-its-new-data-observability-platform-astro-observe" target="_blank">2024年11月のニューヨークClickHouseミートアップ</a>でも同じトピックについて発表しました。
+
+➡️ <a href="https://www.linkedin.com/in/julianlaneve/" target="_blank">LinkedInでJulianをフォロー</a>
+
+## 今後のイベント {#upcoming-events}
+
+5月29日にサンフランシスコで開催される<a href="https://clickhouse.com/openhouse?utm_source=marketo&utm_medium=email&utm_campaign=newsletter" target="_blank">Open House, The ClickHouse User Conference</a>まであと1ヶ月強となり、最初の講演者の発表を開始しました。
+
+OpenAIのCPOであるKevin Weilと、Andreessen HorowitzのパートナーであるMartin Casadoが、ClickHouseのCEOであるAaron Katzと共に、大規模AIのためのデータインフラストラクチャの未来について炉辺談話を行います。
+
+Weights & Biasesの創業者兼CEOであるLukas Biewaldも参加し、AIの未来と、次世代AIアプリを強化するClickHouseのような高性能データベースの役割について議論します。
+
+➡️ <a href="https://clickhouse.com/openhouse?utm_source=marketo&utm_medium=email&utm_campaign=newsletter" target="_blank">Open Houseに登録</a>
+
+### グローバルイベント
+
+* <a href="https://clickhouse.com/company/events/v25-4-community-release-call" target="_blank">v25.4 コミュニティコール</a> - 4月22日
+
+### 無料トレーニング
+
+* <a href="https://clickhouse.com/company/events/202504-emea-clickhouse-fundamentals" target="_blank">ClickHouse Fundamentals - バーチャル</a> - 4月22日
+* <a href="https://clickhouse.com/company/events/202504-apj-jakarta-inperson-bigquery-to-clickhouse" target="_blank">対面 BigQuery to ClickHouse - ジャカルタ</a> - 4月22日
+* <a href="https://clickhouse.com/company/events/202505-amer-clickhouse-observability" target="_blank">ClickHouseを可観測性に活用する</a> - 5月7日
+* <a href="https://clickhouse.com/company/events/clickhouse-fundamentals" target="_blank">ClickHouse Fundamentals - バーチャル</a> - 5月13日
+* <a href="https://clickhouse.com/company/events/202505-emea-munich-inperson-developer-fast-track" target="_blank">対面 ClickHouse Developer Fast Track - ミュンヘン</a> - 5月14日
+* <a href="https://clickhouse.com/company/events/202505-amer-clickhouse-developer" target="_blank">ClickHouse Developer Training - バーチャル</a> - 5月21日
+
+### AMERのイベント
+
+* <a href="https://www.meetup.com/clickhouse-denver-user-group/events/306934991/" target="_blank">デンバーでのClickHouseミートアップ</a> - 4月23日
+
+### EMEAのイベント
+
+* <a href="https://clickhouse.com/company/events/04-2025-aws-london" target="_blank">AWS Summit 2025, ロンドン</a> - 4月30日
+* <a href="https://clickhouse.com/company/events/202505-EMEA-Poland-AWS-Summit-MeetingRequests" target="_blank">AWS Summit 2025, ポーランド</a> - 5月6日
+* <a href="https://www.meetup.com/clickhouse-london-user-group/events/306047172/" target="_blank">ロンドンでのClickHouseミートアップ</a> - 5月13日
+* <a href="https://clickhouse.com/company/events/202505-EMEA-Munich-HappyHour" target="_blank">ClickHouse Happy Hour ミュンヘン</a> - 5月14日
+* <a href="https://www.meetup.com/clickhouse-turkiye-meetup-group/events/306978337/" target="_blank">イスタンブールでのClickHouseミートアップ</a> - 5月14日
+
+### APACのイベント
+
+* <a href="https://www.meetup.com/clickhouse-indonesia-user-group/events/306973747/" target="_blank">ジャカルタでのClickHouseミートアップ - AI Night!</a> - 4月22日
+* <a href="https://aws.amazon.com/events/summits/bengaluru/" target="_blank">AWS Summit ベンガルール</a> - 5月7〜8日
+* <a href="https://aws.amazon.com/events/summits/hongkong/" target="_blank">AWS Summit 香港</a> - 5月8日
+* <a href="https://des.analyticsindiamag.com/" target="_blank">Data Engineering Summit</a>, ベンガルール - 5月15〜16日
+
+## 25.3 リリース {#release}
+
+![1_april.png](https://clickhouse.com/uploads/1_april_706d25bab0.png)
+
+25.3リリースの私のお気に入りの機能は、<a href="https://clickhouse.com/blog/introducing-the-clickhouse-query-condition-cache" target="_blank">クエリ条件キャッシュ</a>です。これは、`WHERE`句に一致するデータの範囲をキャッシュします。これは、複数のクエリの全体的な形状は異なるものの、フィルタリング条件が同じであるダッシュボードや可観測性のユースケースで役立ちます。
+
+このリリースでは、AWS GlueおよびUnityカタログの読み取りサポート、新しい配列関数、外部データの自動並列化が追加されています。最後に、JSONデータ型が本番環境に対応しました！
+
+➡️ <a href="https://clickhouse.com/blog/clickhouse-release-25-03" target="_blank">リリース記事を読む</a>
+
+## CloudQueryでのClickHouseの6ヶ月間（良い点、悪い点、そして予想外の点） {#six-months-clickhouse}
+
+![2_april.png](https://clickhouse.com/uploads/2_april_e9f4a4925d.png)
+
+Herman SchaafとJoe Karlssonは、クラウド資産インベントリのデータベースバックエンドとしてClickHouseを6ヶ月間使用した経験を共有しました。
+
+彼らの主な洞察には、参照データにJOINを使用する場合と辞書を使用する場合の理解、クエリパフォーマンスのためのソートキーの適切な設計の重要性、カスタムスナップショットテーブルの作成につながったマテリアライズドビューの制限、ロギングおよび可観測性データに対するClickHouseの驚くべき汎用性などがあります。
+
+いくつかの課題にもかかわらず、CloudQueryは、ClickHouseがクラウドガバナンスプラットフォームの速度とスケーラビリティに関する約束を果たしたことを発見しました。
+
+➡️ <a href="https://www.cloudquery.io/blog/six-months-with-clickhouse-at-cloudquery" target="_blank">ブログ記事を読む</a>
+
+## ClickHouseにおけるRustの1年間 {#year-of-rust}
+
+![3_april.png](https://clickhouse.com/uploads/3_april_b8aa814052.png)
+
+ClickHouseのCTOであるAlexey Milovidovは、Rustを彼らのコードベースに統合することについてのブログを書いています。
+
+この取り組みは、Delta Lakeのサポートなどのより実用的な機能を実装する前に、（コミュニティメンバーからの貢献による）BLAKE3やPRQLのような小さなコンポーネントから始まりました。
+
+この過程を通じて、ビルドシステムの統合、サニタイザーの互換性、クロスコンパイルの問題、シンボルサイズの肥大化など、多くの技術的な課題が解決されました。
+
+➡️ <a href="https://clickhouse.com/blog/rust" target="_blank">ブログ記事を読む</a>
+
+## ClickHouseによるスケーラブルなEDR高度エージェント分析 {#scalable-edr-analytics}
+
+![7_april.png](https://clickhouse.com/uploads/7_april_c5df7e0bec.png)
+
+Huntressは、EDR分析機能を強化するためにClickHouseを実装しました。ClickHouseを使用することで、数百万のエンドポイントにわたる数十億のデータポイントを毎日処理しながら、高速なクエリパフォーマンスを維持できるようになりました。
+
+この実装では、エージェントの健全性と安定性を効率的に監視するために、<a href="https://clickhouse.com/docs/engines/table-engines/mergetree-family/aggregatingmergetree" target="_blank">AggregatingMergeTree</a>と<a href="https://clickhouse.com/docs/materialized-view/incremental-materialized-view" target="_blank">マテリアライズドビュー</a>を活用しています。
+
+➡️ <a href="https://www.huntress.com/blog/scalable-edr-advanced-agent-analytics-with-clickhouse" target="_blank">ブログ記事を読む</a>
+
+## ClickHouseがHyperDXを買収：オープンソース可観測性の未来 {#clickhouse-hyperdx}
+
+![4_april.png](https://clickhouse.com/uploads/4_april_f55fe2c585.png)
+
+ClickHouseは、ClickHouse上に構築された完全にオープンソースの可観測性プラットフォームであるHyperDXを買収しました。
+
+この買収により、開発者や企業に効率的でスケーラブルな可観測性ソリューションを提供する能力が強化されます。HyperDXのUIとセッションリプレイ機能をClickHouseのデータベースパフォーマンスと組み合わせることで、オープンソースの可観測性製品を強化しています。
+
+➡️ <a href="https://clickhouse.com/blog/clickhouse-acquires-hyperdx-the-future-of-open-source-observability" target="_blank">ブログ記事を読む</a>
+
+## Make Before Break - ClickHouse Cloudのより高速なスケーリングメカニズム {#make-before-break}
+
+![5_april.png](https://clickhouse.com/uploads/5_april_bafbeed1b7.png)
+
+Jayme BirdとManish Gillは、以前のスケーリング方法の制限に対処するためにClickHouse Cloudに導入された「Make Before Break」（MBB）スケーリングアプローチに関するブログ記事を執筆しました。
+
+当初、ClickHouse Cloudは単一のStatefulSetを使用してすべてのサーバーレプリカを管理しており、スケーリング中に数時間かかるローリング再起動が必要でした。MBBアプローチでは、古いポッドを削除する前に、必要なリソースを持つ新しいポッドを作成することで、スケーリング操作中のダウンタイムを排除します。
+
+これには、各ポッドが独自のStatefulSetとカスタムKubernetesコントローラーによって管理され、移行を調整するMultiSTSアーキテクチャの開発が必要でした。技術的な課題にもかかわらず、チームはフリート全体をこの新しいアーキテクチャに正常に移行し、スケーリング時間を大幅に改善し、顧客の中断を減らしました。
+
+➡️ <a href="https://clickhouse.com/blog/make-before-break-faster-scaling-mechanics-for-clickhouse-cloud" target="_blank">ブログ記事を読む</a>
+
+## クイックリード {#quick-reads}
+
+* Hossein Kohzadiは、<a href="https://itnext.io/integrating-clickhouse-with-net-a-comprehensive-guide-to-blazing-fast-analytics-3e178503d54e" target="_blank">.NETアプリケーションでClickHouseを使用する方法</a>について説明するブログ記事を書いています。
+* Roman Ianvarevは、ClickHouseクエリログを分析し、dbtプロジェクトのインテリジェントな最適化の推奨事項を提供するコマンドラインツールである<a href="https://medium.com/@rianvarev/introducing-querysight-a-query-driven-approach-to-data-warehouse-development-5f29b4bde4be" target="_blank">QuerySightを紹介</a>しています。
+* Raj Kantariaは、ClickHouse MCP Serverを例として使用して、<a href="https://medium.com/@kantariyaraj/talk-to-your-database-with-mcp-88cf2468851d" target="_blank">AnthropicのModel Context Protocolを簡単に紹介</a>しています。
+* Tom Schreiberは、BlueSkyデータセットを使用して、<a href="https://clickhouse.com/blog/accelerating-clickhouse-json-queries-for-fast-bluesky-dashboards" target="_blank">JSONデータに対するClickHouseクエリを高速化</a>する方法を解説しています。
+* Keshav Agrawalは、<a href="https://www.akitmcs.com/post/building-a-real-time-data-pipeline-with-go-kafka-clickhouse-and-apache-superset" target="_blank">Go、Kafka、ClickHouse、およびApache Supersetを使用したリアルタイムデータパイプライン</a>を構築しています。
+
+## 今月の投稿 {#post-of-the-month}
+
+今月のお気に入りの投稿は、Delta Lakeカタログからの読み取りに対するClickHouseのサポートを試している<a href="https://x.com/A_Pangeran" target="_blank">Andi Pangeran</a>によるものです。
+
+![6_april.png](https://clickhouse.com/uploads/6_april_c0fe0f49cb.png)
+
+
+➡️ <a href="https://x.com/A_Pangeran/status/1904807887463211506" target="_blank">投稿を読む</a>
+
+---
+
+## 2025年3月ニュースレター
+Published: 2025-05-13T01:16:20+00:00
+URL: https://clickhouse.com/blog/202503-newsletter-jp
+
+---
+title: "2025年3月ニュースレター"
+date: "2025-05-13T01:16:20.354Z"
+author: "Mark Needham"
+category: "Community"
+excerpt: "3月のClickHouseニュースレターへようこそ。このニュースレターでは、過去1ヶ月間のリアルタイムデータウェアハウスに関する出来事をまとめます。"
+---
+
+# 2025年3月ニュースレター
+
+北半球の天気は春の訪れを迷っているようですが、3月のClickHouseニュースレターの時期であることに疑いの余地はありません。
+
+今月は、ClickPipesのPostgres CDCコネクタがパブリックベータ版となり、AWSでのBring Your Own Cloudの一般提供開始を発表しました。Apache IcebergのClickHouseサポートの最新情報、コンタクトセンター分析用のClickHouseベースのデータウェアハウスの構築方法、Theta Sketchesによる訪問者セグメンテーションなどをご紹介します！
+
+
+## 注目のコミュニティメンバー: Matteo Pelati
+
+今月の注目のコミュニティメンバーは、<a href="https://langdb.ai/" target="_blank">LangDB</a>の共同創業者であるMatteo Pelatiです。
+
+![0_march2025.png](https://clickhouse.com/uploads/0_march2025_dea5945f2b.png)
+
+LangDBを設立する前は、MatteoはGoldman Sachsでプロダクトデータエンジニアリングのグローバルヘッド、DBS Bankでデータプラットフォームテクノロジーのエグゼクティブディレクターとして上級管理職を務め、130人以上のエンジニアのチームを率いて銀行全体のデータプラットフォームを構築しました。
+
+LangDBは、エンタープライズ対応の機能を備えた250以上のLLMへの即時アクセスを提供する、フル機能のマネージドAIゲートウェイです。ClickHouseを基盤となるデータストアとして使用し、すべてのAIゲートウェイデータ、トレース、分析が保存されます。また、ClickHouseのカスタムUDF機能を利用して、SQLクエリからの直接的なAIモデル呼び出しを可能にし、構造化データ分析とAI機能をシームレスに統合します。
+
+Mateoは最近、<a href="https://clickhouse.com/videos/singapore-meetup-langdb-building-intelligent-applications-with-clickhouse" target="_blank">シンガポールのClickHouseミートアップでLangDBについて発表</a>し、組織がこの統合を活用して、データインフラストラクチャと分析パイプラインを完全に制御しながら、高度なAIアプリケーションを構築する方法を実演しました。
+
+➡️ <a href="https://www.linkedin.com/in/matteopelati/" target="_blank">LinkedInでMateoをフォロー</a>
+
+## 今後のイベント
+
+今年最大のイベントである<a href="https://clickhouse.com/openhouse?utm_source=marketo&utm_medium=email&utm_campaign=newsletter" target="_blank">Open House, The ClickHouse User Conference</a>が5月28〜29日にサンフランシスコで開催されるまで、あと2ヶ月強です。
+
+技術的な詳細な解説、トップClickHouseユーザーによるユースケースのプレゼンテーション、創業者からの最新情報、そして他のClickHouseユーザーとの交流の1日をご一緒しましょう。ClickHouse初心者から経験豊富なユーザーまで、どなたにとっても役立つ情報があります。
+
+➡️ <a href="https://clickhouse.com/openhouse?utm_source=marketo&utm_medium=email&utm_campaign=newsletter" target="_blank">Open Houseに登録</a>
+
+### グローバルイベント
+
+* <a href="https://clickhouse.com/company/events/v25-3-community-release-call" target="_blank">v25.3 コミュニティコール</a> - 3月20日
+
+### 無料トレーニング
+
+* <a href="https://clickhouse.com/company/events/202503-apj-sydney-inperson-clickhouse-developer" target="_blank">対面ClickHouseデベロッパー - シドニー</a> - 3月24〜25日
+* <a href="https://clickhouse.com/company/events/202503-latam-sao-paulo-inperson-clickhouse-developer" target="_blank">対面ClickHouseデベロッパートレーニング - サンパウロ、ブラジル</a> - 3月25〜26日
+* <a href="https://clickhouse.com/company/events/202503-apj-melbourne-inperson-clickhouse-developer" target="_blank">対面ClickHouseデベロッパー - メルボルン</a> - 3月27〜28日
+* <a href="https://clickhouse.com/company/events/202504-apj-bangalore-inperson-developer-fast-track" target="_blank">対面ClickHouseデベロッパーファストトラック - バンガロール</a> - 4月1日
+* <a href="https://clickhouse.com/company/events/202504-emea-clickhouse-bigquery-workshop" target="_blank">BigQuery to ClickHouseワークショップ - バーチャル</a> - 4月1日
+* <a href="https://clickhouse.com/company/events/202504-emea-vienna-inperson-clickhouse-developer" target="_blank">対面ClickHouseデベロッパートレーニング - ウィーン、オーストリア</a> - 4月7〜8日
+* <a href="https://clickhouse.com/company/events/202504-apj-clickhouse-observability" target="_blank">ClickHouseを可観測性に活用する - バーチャル</a> - 4月15日
+* <a href="https://clickhouse.com/company/events/202504-emea-clickhouse-fundamentals" target="_blank">ClickHouse Fundamentals - バーチャル</a> - 4月22日
+
+### AMERのイベント
+
+* <a href="https://www.meetup.com/clickhouse-boston-user-group/events/305882607/?slug=clickhouse-boston-user-group&eventId=300907870&isFirstPublish=true" target="_blank">ClickHouse Meetup @ Klaviyo</a>, ボストン - 3月25日
+* <a href="https://www.meetup.com/clickhouse-brasil-user-group/events/306385974/" target="_blank">サンパウロでのClickHouseミートアップ</a> - 3月25日
+* <a href="https://www.meetup.com/clickhouse-new-york-user-group/events/305916369/?eventOrigin=group_upcoming_events" target="_blank">ClickHouse Meetup @ Braze</a>, ニューヨーク - 3月26日
+* <a href="https://www.meetup.com/clickhouse-dc-user-group/events/306439995/" target="_blank">DCでのClickHouse立ち上げミートアップ</a> - 3月27日
+* <a href="https://clickhouse.com/company/events/2025-04-google-next" target="_blank">Google Next</a>, ラスベガス - 4月9日
+* <a href="https://clickhouse.com/openhouse?utm_source=marketo&utm_medium=email&utm_campaign=newsletter" target="_blank">Open House User Conference</a>, サンフランシスコ - 5月28〜29日
+
+### EMEAのイベント
+
+* <a href="https://www.meetup.com/clickhouse-switzerland-meetup-group/events/306435122/" target="_blank">チューリッヒでのClickHouseミートアップ</a> - 3月24日
+* <a href="https://www.meetup.com/clickhouse-hungary-user-group/events/306435234/" target="_blank">ブダペストでのClickHouseミートアップ</a> - 3月25日
+* <a href="https://clickhouse.com/company/events/04-2025-kubecon-london" target="_blank">KubeCon 2025</a>, ロンドン - 4月1〜4日
+* <a href="https://clickhouse.com/company/events/202504-emea-oslo-meetup" target="_blank">オスロでのClickHouseミートアップ</a> - 4月8日
+* <a href="https://clickhouse.com/company/events/04-2025-aws-paris" target="_blank">AWS Summit 2025</a>, パリ - 4月9日
+* <a href="https://clickhouse.com/company/events/2025-04-aws-summit-amsterdam" target="_blank">AWS Summit 2025</a>, アムステルダム - 4月16日
+* <a href="https://clickhouse.com/company/events/04-2025-aws-london" target="_blank">AWS Summit 2025</a>, ロンドン - 4月30日
+
+### APACのイベント
+
+* <a href="https://www.meetup.com/clickhouse-delhi-user-group/events/306253492/" target="_blank">デリーでのClickHouseミートアップ</a>, インド - 3月22日
+* <a href="https://www.meetup.com/clickhouse-australia-user-group/events/306549810/" target="_blank">シドニーでのClickHouseミートアップ</a> - 4月1日
+* <a href="https://latencyconf.io/" target="_blank">Latency Conference</a>, オーストラリア - 4月3〜4日
+* <a href="https://web3.teamz.co.jp/en" target="_blank">TEAMZ Web3/AI Summit</a>, 日本 - 4月16〜17日
+
+## 25.2 リリース
+
+![1_march2025.png](https://clickhouse.com/uploads/1_march2025_efc9bd623e.png)
+
+ClickHouse 25.2では、joinのパフォーマンスがさらに向上しています。並列ハッシュjoinシステムがさらに最適化され、100%のCPUコア利用率を確保しています。Tom Schreiberが、これがどのように達成されたかを説明しています。
+
+このリリースでは、Parquet Bloomフィルタ、新しいバックアップデータベースエンジン、Delta Rust Kernelとの統合、リアルタイムデータ消費のための拡張されたHTTPストリーミング機能なども導入されています！
+
+➡️ <a href="https://clickhouse.com/blog/clickhouse-release-25-02" target="_blank">リリース記事を読む</a>
+
+## ClickPipesのPostgres CDCコネクタがパブリックベータ版に
+
+![2_march2025.png](https://clickhouse.com/uploads/2_march2025_5d2086949f.png)
+
+ClickPipesのPostgres CDCコネクタがパブリックベータ版となり、数回のクリックだけでPostgreSQLデータベースからClickHouse Cloudへのシームレスなレプリケーションが可能になりました。
+
+このコネクタは、10倍高速な初期ロードのための並列スナップショットや、ほぼリアルタイムのデータの鮮度など、高性能な機能を備えています。
+
+SyntageやNeonなどの組織ではすでにテラバイト規模の移行が成功しています。パブリックベータ期間中、この強力な統合ツールはすべてのユーザーが無料で使用できます。
+
+➡️ <a href="https://clickhouse.com/blog/postgres-cdc-connector-clickpipes-public-beta" target="_blank">ブログ記事を読む</a>
+
+## 高カーディナリティメトリクスにおけるClickHouseとGrafana
+
+Tomer Ben Davidは、ClickHouseとGrafanaが、個々のユーザーセッション、コンテナID、地理的な場所など、多数の一意のディメンションにわたるデータを追跡する際の一般的な課題である高カーディナリティメトリクスを効果的に処理する方法を探求しています。
+
+この記事では、ClickHouseの列指向ストレージ、ベクトル化されたクエリ実行、効率的な圧縮機能が、大量の粒度の細かいデータを処理するのにいかに理想的であるかを詳しく説明しています。Grafanaは、このデータを実用的なものにするための強力な可視化、テンプレート機能、アラート機能を提供します。
+
+Tomerはまた、データ集約テクニック、次元削減、ソースでの事前集約など、高カーディナリティを管理するための実践的な戦略も提供しています。
+
+➡️ <a href="https://medium.com/@Tom1212121/clickhouse-grafana-for-high-cardinality-metrics-4fc3708ba617" target="_blank">ブログ記事を読む</a>
+
+## ClickHouseとIcebergを登る
+
+![3_march2025.png](https://clickhouse.com/uploads/3_march2025_9f42276fd5.png)
+
+
+Melvyn Peignonは、データレイクとレイクハウスのエコシステムにおけるClickHouseの進化する役割を探求し、データレイクからのデータロード、アドホッククエリ、レイクデータの頻繁なクエリという3つの主要な統合パターンを強調しています。
+
+彼はまた、カタログ統合の拡張によるデータレイククエリのユーザーエクスペリエンスの向上、IcebergおよびDelta形式の書き込みサポートを含むデータレイク操作機能の改善、ClickPipesでのIceberg CDCコネクタの開発という3つの主要な分野に焦点を当てた、レイクハウス統合に関するClickHouseの2025年のロードマップの概要を示しています。
+
+➡️ <a href="https://clickhouse.com/blog/climbing-the-iceberg-with-clickhouse" target="_blank">ブログ記事を読む</a>
+
+## CrestaがClickHouseでリアルタイムインサイトをどのようにスケールしているか
+
+![4_march2025.png](https://clickhouse.com/uploads/4_march2025_1bf99b75a7.png)
+
+Xiaoyi Ge、Daniel Hoske、Florin Szilagyiは、コンタクトセンター分析を処理するための主要なデータウェアハウスソリューションとしてのCrestaのClickHouseの実装について説明するブログ記事を執筆しました。PostgreSQLからの移行後、リアルタイム集計、生イベントストレージ、可観測性のための3つの専用クラスターで、1日あたり数千万件のレコードを処理しながら、ストレージコストを50%削減しました。
+
+このプラットフォームは現在、CrestaのDirector UIを強化し、エンタープライズ顧客は柔軟な時間範囲で数十億件のレコードをクエリしながら、リアルタイムのコンタクトセンターインサイトのために応答性の高いパフォーマンスを維持できます。
+
+彼らはまた、クエリパターンに合わせた慎重なスキーマ設計、頻繁なクエリのためのマテリアライズドビューの活用、特定のクエリを高速化するためのClickHouseのスパースインデックスとブルームフィルターの利用など、主要な最適化戦略も共有しました。
+
+➡️ <a href="https://cresta.com/blog/how-cresta-scales-real-time-insights-with-clickhouse/" target="_blank">ブログ記事を読む</a>
+
+## AWSでのClickHouse BYOC（Bring Your Own Cloud）の一般提供開始を発表
+
+![5_march2025.png](https://clickhouse.com/uploads/5_march2025_cd7c95fba4.png)
+
+AWSでのBYOC（Bring Your Own Cloud）が一般提供開始となり、企業はすべてのデータを独自のAWS VPC環境内に保持しながら、ClickHouse Cloudを実行できるようになりました。
+
+AWSとの5年間の戦略的提携の一部であるこのデプロイメントモデルにより、組織はClickHouseのマネージドサービス機能の恩恵を受けながら、完全なデータ制御とセキュリティコンプライアンスを維持できます。
+
+➡️ <a href="https://clickhouse.com/blog/announcing-general-availability-of-clickhouse-bring-your-own-cloud-on-aws" target="_blank">ブログ記事を読む</a>
+
+## PostgresからClickHouseへ：データモデリングのヒント V2
+
+![6_march2025.png](https://clickhouse.com/uploads/6_march2025_461dacaee6.png)
+
+Lionel PalacinとSai Srirampurは、Change Data Capture（CDC）を使用してPostgreSQLからClickHouseにデータを移行するための包括的なガイドを提供しています。この記事では、ClickPipesとPeerDBがPostgresでの挿入、更新、削除の継続的な追跡をどのように可能にし、ClickHouseのReplacingMergeTreeエンジンを通じてデータの整合性を維持しながら、リアルタイム分析のためにClickHouseにそれらをレプリケートするかを説明しています。
+
+著者は、FINALキーワード、ビュー、マテリアライズドビューを使用した重複排除アプローチを含む、パフォーマンスを最適化するためのいくつかの戦略を詳しく説明しています。また、カスタム順序付けキー、JOINの最適化、リフレッシュ可能および増分マテリアライズドビューを使用した非正規化テクニックなどの高度なトピックも探求しています。
+
+➡️ <a href="https://clickhouse.com/blog/postgres-to-clickhouse-data-modeling-tips-v2" target="_blank">ブログ記事を読む</a>
+
+## クイックリード
+
+* Corootは、<a href="https://coroot.com/blog/engineering/coroot-v1-7-monitoring-clickhouse-and-zookeeper-with-ebpf/" target="_blank">ClickHouseネイティブおよびZooKeeperプロトコルのサポートを追加</a>し、これらの分散システムの監視を大幅に容易にしました。
+* Keshav Agrawalは、データ生成にGo、メッセージキューイングにKafka、高性能ストレージにClickHouse、可視化にApache Supersetを組み合わせた<a href="https://www.akitmcs.com/post/building-a-real-time-data-pipeline-with-go-kafka-clickhouse-and-apache-superset" target="_blank">スケーラブルなリアルタイムデータパイプラインの構築方法</a>を実演し、ストリーミングデータとバッチデータの両方を処理するための完全なソリューションを提供しています。
+* GrafanaのLokiがWebログ分析に不十分であると判断した後、Scott Lairdは<a href="https://scottstuff.net/posts/2025/02/27/caddy-logs-in-clickhouse-via-vector/" target="_blank">ClickHouseへの移行</a>を記録しています。彼のガイドは、適切な認証によるClickHouseのセットアップ、CaddyのJSONログに適したスキーマの作成、ログを変換してClickHouseにストリーミングするためのデータパイプラインミドルウェアとしてのVectorの構成に関するステップバイステップの手順を提供しています。
+* <a href="https://sateeshpy.medium.com/building-a-scalable-etl-pipeline-data-warehouse-with-apache-spark-minio-and-clickhouse-0154342872e9" target="_blank">sateesh.pyによるチュートリアル</a>では、データ処理にApache Spark、S3互換ストレージにMinIO、データストレージにDelta Lake、高速分析クエリにClickHouseを組み合わせた最新のETLパイプラインを構築する方法をコード例とともに示しています。
+* Hellmar Beckerは、<a href="https://blog.hellmar-becker.de/2025/03/09/clickhouse-data-cookbook-visitor-segmentation-with-theta-sketches/%20" target="_blank">ClickHouseのtheta sketchesを使用して、訪問者のセグメンテーションと集合演算を行う方法</a>を実演し、異なるコンテンツセグメントにわたるユニークな訪問者を効率的にカウントすると同時に、積集合や和集合などのより複雑な演算も実行しています。
+
+## 今月の投稿
+
+今月のお気に入りの投稿は、ClickHouseの圧縮機能を気に入っている<a href="https://x.com/chriselgee" target="_blank">Chris Elgee</a>によるものです。
+
+![7_march2025.png](https://clickhouse.com/uploads/7_march2025_5110d40afa.png)
+
+➡️ <a href="https://x.com/chriselgee/status/1894760925527245261" target="_blank">投稿を読む</a>
+
+---
+
+## 2025年1月ニュースレター
+Published: 2025-05-13T01:06:54+00:00
+URL: https://clickhouse.com/blog/202501-newsletter-jp
+
+---
+title: "2025年1月ニュースレター"
+date: "2025-05-13T01:06:54.609Z"
+author: "ClickHouse"
+category: "Community"
+excerpt: "1月のClickHouseニュースレターへようこそ。このニュースレターでは、過去1ヶ月間のリアルタイムデータウェアハウスに関する出来事をまとめます。"
+---
+
+# 2025年1月ニュースレター
+
+2025年最初のClickHouseニュースレターへようこそ。今月は、24.12リリースにおけるApache Iceberg RESTカタログとスキーマ進化についてご紹介します。プロダクト分析ソリューションの構築方法や、ClickHouseを使用したメダリオンアーキテクチャの実装方法を学びます。また、The All Things Open Conferenceからのビデオもあります！
+
+
+<p style="
+    margin-bottom: 0;
+    line-height: 0;
+"> </p>
+
+
+## この号の内容
+
+<ul> 
+<li><a href="https://clickhouse.com/blog/202501-newsletter#featured-community-member">注目のコミュニティメンバー</a></li>
+<li><a href="https://clickhouse.com/blog/202501-newsletter#upcoming-events">今後のイベント</a></li>
+<li><a href="https://clickhouse.com/blog/202501-newsletter#2412-release">24.12 リリース</a></li>
+<li><a href="https://clickhouse.com/blog/202501-newsletter#building-a-product-analytics-solution-with-clickhouse">ClickHouseを使用したプロダクト分析ソリューションの構築</a></li>
+<li><a href="https://clickhouse.com/blog/202501-newsletter#optimizing-bulk-inserts-for-partitioned-tables">パーティション化されたテーブルへのバルクインサートの最適化</a></li>
+<li><a href="https://clickhouse.com/blog/202501-newsletter#from-zero-to-scale-langfuses-infrastructure-evolution">
+ゼロからスケールへ：Langfuseのインフラストラクチャ進化</a></li>
+<li><a href="https://clickhouse.com/blog/202501-newsletter#building-a-medallion-architecture-with-clickhouse">ClickHouseを使用したメダリオンアーキテクチャの構築</a></li>
+<li><a href="https://clickhouse.com/blog/202501-newsletter#building-a-medallion-architecture-for-bluesky-data">
+Blueskyデータのためのメダリオンアーキテクチャの構築</a></li>
+<li><a href="https://clickhouse.com/blog/202501-newsletter#quick-reads">クイックリード</a></li>
+<li><a href="https://clickhouse.com/blog/202501-newsletter#video-corner">ビデオコーナー</a></li>
+<li><a href="https://clickhouse.com/blog/202501-newsletter#post-of-the-month">今月の投稿</a></li>
+</ul>
+
+<p style="
+    margin-bottom: 0;
+    line-height: 0;
+"> </p>
+
+## 注目のコミュニティメンバー
+
+今月の注目のコミュニティメンバーは、コミュニティプラットフォームであるSkoolのデータ責任者、<a href="https://www.linkedin.com/in/andersonljason/">Jason Anderson</a>です。
+
+![featured-member-202501.png](https://clickhouse.com/uploads/featured_member_202501_664885507d.png)
+<p>
+Jason Andersonは、チームを率い、データ駆動型のソリューションを開発してきた経験豊富なデータおよびテクノロジーの専門家です。以前はMythical Gamesのデータ責任者、Comp Threeのパートナーを務め、機械学習、分析、クラウドアーキテクチャに注力していました。彼のキャリアには、IBMやPolySatでの役割も含まれており、クラウドサービスや衛星ソフトウェア開発に貢献しました。
+</p>
+<p>Jasonは最近、<a href="https://clickhouse.com/videos/skools-journey-with-clickhouse">ロサンゼルスのClickHouseミートアップでSkoolでの彼の仕事について発表</a>しました。Jasonは、1日に1億行以上のデータを処理しながら、非常に高速なクエリを実現するために、PostgresからClickHouseに移行した経緯を説明しました。また、<a href="https://clickhouse.com/blog/how-skool-uses-clickhouse-for-observability-behavioral-analytics">SkoolでのClickHouseの利用についてより詳細に説明したブログ記事</a>もあります。
+</p>
+
+<p><a href="https://www.linkedin.com/in/andersonljason?utm_source=clickhouse&utm_medium=email&utm_campaign=202501-newsletter" target="_blank">LinkedInでJasonをフォロー</a></p>
+<br>
+
+## 今後のイベント
+
+<p><strong>グローバルイベント</strong></p> 
+<ul> 
+<li><a href="https://clickhouse.com/company/events/v25-1-community-release-call?utm_source=clickhouse&utm_medium=email&utm_campaign=202501-newsletter" target="_blank" id="">リリースコール 25.1</a> - 1月28日<br></li> 
+
+</ul> 
+<p><strong>無料トレーニング</strong></p> 
+<ul> 
+<li><a href="https://clickhouse.com/company/events/202501-emea-query-optimization?utm_source=clickhouse&utm_medium=email&utm_campaign=202501-newsletter" target="_blank" id="">ClickHouseクエリ最適化ワークショップ</a> - 1月22日<br></li> 
+<li><a href="https://clickhouse.com/company/events/202501-amer-clickhouse-observability?utm_source=clickhouse&utm_medium=email&utm_campaign=202501-newsletter" target="_blank" id="">ClickHouseを可観測性に活用する</a> - 1月29日</li> 
+<li><a href="https://clickhouse.com/company/events/202502-emea-london-inperson-clickhouse-developer?utm_source=clickhouse&utm_medium=email&utm_campaign=202501-newsletter" target="_blank" id="">ClickHouseデベロッパー対面トレーニング - ロンドン、イングランド</a> - 2月4-5日</li> 
+<li><a href="https://clickhouse.com/company/events/202502-emea-dubai-inperson-clickhousetraining?utm_source=clickhouse&utm_medium=email&utm_campaign=202501-newsletter" target="_blank" id="">対面ClickHouseトレーニング</a> - 2月10日</li> 
+<li><a href="https://clickhouse.com/company/events/202502-apj-query-optimization?utm_source=clickhouse&utm_medium=email&utm_campaign=202501-newsletter" target="_blank" id="">ClickHouseクエリ最適化ワークショップ</a> (APJ向け時間帯) - 2月12日</li> 
+</ul> 
+
+<p><strong>EMEAのイベント</strong></p> 
+<ul> 
+<li><a href="https://www.meetup.com/clickhouse-london-user-group/events/305146729/" target="_blank" id="">ロンドンでのミートアップ</a> - 2月5日<br></li> 
+<li><a href="https://www.meetup.com/clickhouse-dubai-meetup-group/events/303096989/" target="_blank" id="">ドバイでのミートアップ</a> - 2月10日<br></li> 
+</ul>
+
+<p><strong>APACのイベント</strong></p> 
+<ul> 
+<li><a href="https://www.alibabacloud.com/en/events/alibabacloud-developer-summit-2025?_p_lc=1" target="_blank" id="">Alibaba Developer Summit Jakarta</a> - 1月21日<br></li> 
+<li><a href="https://www.meetup.com/clickhouse-tokyo-user-group/events/305126993/" target="_blank" id="">東京でのミートアップ</a> - 1月23日<br></li> 
+<li><a href="https://www.meetup.com/clickhouse-mumbai-user-group/events/305497320/" target="_blank" id="">ムンバイでのミートアップ</a> - 2月1日<br></li> 
+<li><a href="https://www.meetup.com/clickhouse-bangalore-user-group/events/305497951/" target="_blank" id="">バンガロールでのミートアップ</a> - 2月8日<br></li> 
+<li><a href="https://event.shoeisha.jp/devsumi/20250213" target="_blank" id="">Developers Summit Tokyo</a> - 2月13-14日<br></li> 
+</ul>
+
+<p style="
+    margin-bottom: 0;
+    line-height: 0;
+"> </p>
+
+## 24.12 リリース
+
+![release-24.12.png](https://clickhouse.com/uploads/release_24_12_1cf63e9515.png)
+
+<p>2024年の最終リリースでは、Iceberg RESTカタログとスキーマ進化のサポートが導入されました。Apache Icebergの共同作成者である<a href="https://www.linkedin.com/in/daniel-weeks-a1946860/">Daniel Weeks</a>が24.12コミュニティコールにゲスト出演しましたので、<a href="https://www.youtube.com/watch?v=bv-ut-Q6vnc">録画をぜひご覧ください</a>。</p>
+
+<p>Enumの使いやすさの改善、テーブルを列で逆順にソートする実験的な機能、テーブルの主キーとしてのJSONサブカラム、自動JOINの並べ替え、JOIN式の最適化なども含まれています！</p>
+
+<p><a href="https://clickhouse.com/blog/clickhouse-release-24-12">リリース記事を読む</a></p>
+
+<p style="
+    margin-bottom: 0;
+    line-height: 0;
+"> </p>
+
+## ClickHouseを使用したプロダクト分析ソリューションの構築
+
+![building-product-analytics-solution.png](https://clickhouse.com/uploads/building_product_analytics_solution_bfe00baa89.png)
+
+<p>プロダクト分析とは、ユーザーが製品をどのように操作するかに関するデータを収集、分析、解釈することです。
+</p>
+<p>Chloé CarassoはClickHouseのプロダクト分析を主導しており、社内プロダクト分析プラットフォームの構築方法についてブログ記事を執筆しました。
+</p>
+<p>Chloeは、既製のソリューションを購入するのではなく、なぜ自分たちで構築することにしたのかを説明し、この道に興味がある場合に、ClickHouseを活用した分析ソリューションの設計と運用に関するいくつかのアイデアを共有しています。また、コホート分析、ユーザーパス、リテンション/チャーンの測定など、彼女が実行する一般的なクエリも共有しています。
+</p>
+<p><a href="https://clickhouse.com/blog/building-product-analytics-with-clickhouse" target="_blank">ブログ記事を読む</a></p>
+
+<p style="
+    margin-bottom: 0;
+    line-height: 0;
+"> </p>
+
+
+## パーティション化されたテーブルへのバルクインサートの最適化
+
+![optimizing-bulk-inserts.png](https://clickhouse.com/uploads/optimizing_bulk_inserts_b0f86fdc37.png)
+
+<p>Triple Whaleのソフトウェアエンジニアである<a href="https://www.linkedin.com/in/jesse-grodman">Jesse Grodman</a>が、高度にパーティション化されたClickHouseテーブルにデータを高速にロードするためのヒントをいくつか共有しています。</p>
+
+<p>S3ファイルからテーブルに直接データを書き込み始めましたが、その結果、多くの小さな<a href="https://clickhouse.com/docs/en/parts">parts</a>が発生し、クエリの観点からは理想的ではなく、<a href="https://clickhouse.com/docs/knowledgebase/exception-too-many-parts">too many partsエラー</a>が発生する可能性があります。彼は、取り込みクエリの一部としてパーティションキーでデータをソートするなど、この問題を回避するためのさまざまな方法を検討していますが、メモリ不足エラーが発生します。
+</p>
+
+<p>Jesseは、ClickHouseに書き込む前にパーティションキーでデータをソートする方がはるかに効果的であることを発見しました。彼はまた、最初にデータを非パーティション化されたテーブルにロードし、その後ClickHouseでソートを実行しながらパーティション化されたテーブルにデータを投入することも試しています。
+</p>
+<p><a href="https://medium.com/@jgrodman/clickhouse-optimizing-bulk-inserts-for-partitioned-tables-9ea91b3e7c3b">ブログ記事を読む</a></p>
+
+<p style="
+    margin-bottom: 0;
+    line-height: 0;
+"> </p>
+
+## ゼロからスケールへ：Langfuseのインフラストラクチャ進化
+
+![from-zero-to-scale.png](https://clickhouse.com/uploads/from_zero_to_scale_4915d25e1f.png)
+
+<p><a href="https://langfuse.com/">Langfuse</a>は、Y Combinator Winter 2023バッチに参加したオープンソースのLLM可観測性プラットフォームです。製品の最初のリリースは、Next.js、Vercel、Postgresで記述されました。これにより、迅速なリリースが可能になりましたが、システムをスケールしようとしたときに問題が発生しました。
+</p>
+<p>ブログ記事では、これらの問題を解決するための彼らの道のりを説明しており、それには広範なインフラストラクチャの再設計が含まれていました。スパイキーな取り込みトラフィックを処理するためにRedisキューが導入され、ClickHouse ReplacingMergeTreeテーブルの助けを借りて分析クエリが高速化されました。
+
+</p>
+<p><a href="https://langfuse.com/blog/2024-12-langfuse-v3-infrastructure-evolution">ブログ記事を読む</a></p>
+
+<p style="
+    margin-bottom: 0;
+    line-height: 0;
+"> </p>
+
+## ClickHouseを使用したメダリオンアーキテクチャの構築
+
+![building-medallion-ch.png](https://clickhouse.com/uploads/building_medallion_ch_222ec65015.png)
+
+<p>メダリオンアーキテクチャは、データレイクハウス内のデータを論理的に整理するデータ設計パターンです。アーキテクチャの各レイヤー（ブロンズ ⇒ シルバー ⇒ ゴールドレイヤーテーブル）をデータが流れるにつれて、データの構造と品質を段階的かつ漸進的に向上させることを目的としています。
+</p>
+<p>ClickHouseプロダクトマーケティングエンジニアリング（PME）チームは、このアーキテクチャがClickHouseのようなリアルタイムデータウェアハウスに適用できるかどうかに関心を持ち、彼らの経験を説明するブログ記事を執筆しました。
+</p>
+
+<p><a href="https://clickhouse.com/blog/building-a-medallion-architecture-with-clickhouse">ブログ記事を読む</a></p>
+
+<p style="
+    margin-bottom: 0;
+    line-height: 0;
+"> </p>
+
+## Blueskyデータのためのメダリオンアーキテクチャの構築
+
+![building-medallion-bluesky.png](https://clickhouse.com/uploads/building_medallion_bluesky_266c2b5133.png)
+
+<p>メダリオンアーキテクチャの紹介記事に続いて、ClickHouse PMEチームはこの設計パターンをBlueSkyソーシャルネットワークからのデータに適用しました。
+</p>
+<p>多くのレコードに不正な形式または誤ったタイムスタンプが含まれていたため、これはこの実験に最適なデータセットでした。データセットには頻繁な重複も含まれていました。
+</p>
+<p>ブログでは、これらの課題に対処し、このデータセットをメダリオンアーキテクチャの3つの異なる層（ブロンズ、シルバー、ゴールド）に整理するワークフローについて説明しています。チームは、<a href="https://clickhouse.com/blog/a-new-powerful-json-data-type-for-clickhouse">最近リリースされたJSON型</a>も多用しています。
+</p>
+
+<p><a href="https://clickhouse.com/blog/building-a-medallion-architecture-for-bluesky-json-data-with-clickhouse">ブログ記事を読む</a></p>
+
+<p style="
+    margin-bottom: 0;
+    line-height: 0;
+"> </p>
+
+## クイックリード
+
+<ul> 
+<li><a href="https://www.linkedin.com/in/hellmarbecker/">Hellmar Becker</a>が最近ClickHouseに入社し、その機能を試しています。彼の最初のブログ記事では、<a href="https://blog.hellmar-becker.de/2025/01/01/new-years-greetings-from-the-data-cookbook-elf/">配列処理関数</a>について探求し、2番目の記事では、ClickHouseで<a href="https://blog.hellmar-becker.de/2025/01/05/clickhouse-data-cookbook-linear-algebra-in-sql/">線形代数を行う方法</a>を解説しています。</li> 
+<li><a href="https://www.linkedin.com/in/hardiksinghbehl/">Hardik Singh Behl</a>は、<a href="https://www.baeldung.com/spring-boot-olap-clickhouse-database">ClickHouseをSpring Bootアプリケーションに統合する方法</a>を探求しています。彼は最初にアプリケーションを設定し、データベース接続を確立してから、いくつかのCRUD操作を実行しています。</li> 
+<li>Andrei Tserakhauは、オープンソースのクラウドネイティブな取り込みエンジンであるTransferを使用して、<a href="https://medium.com/@laskoviymishka/cdc-from-mysql-to-clickhouse-c791fe414fe1">MySQLからClickHouseにデータを転送する方法</a>を示しています。</li>
+<li><a href="https://www.linkedin.com/in/shivjijha/">Shivji kumar Jha</a>は、トランザクションの信頼性と高速分析のバランスを取りながら、<a href="https://www.linkedin.com/pulse/unified-data-platforms-ft-postgres-clickhouse-shivji-kumar-jha-jylqc/">PostgresとClickHouseが統合されたデータ管理ソリューションとしてどのように連携できるか</a>を探求しています。</li> 
+</ul>
+
+<p style="
+    margin-bottom: 0;
+    line-height: 0;
+"> </p>
+
+## ビデオコーナー
+
+<ul> 
+<li><a href="https://2024.allthingsopen.org/speakers">All Things Open 2024 conference</a>では、2名のClickHouseスピーカーが登壇しました。Tanya Braginは、モノリシックなクラウドデータウェアハウスの代替案を提供することで、<a href="https://clickhouse.com/videos/all-things-open-open-source-cloud-datawarehouse">オープンソース技術とデータレイク標準が最新のデータスタックをどのように変革しているか</a>を探求しました。</li> 
+<li>Zoe Steinkampは、従来の行ベースシステムよりも優れたパフォーマンスを提供することで、<a href="https://clickhouse.com/videos/all-things-open-columnar-storage">列指向データベースがデータウェアハウジングと分析に革命を起こしているか</a>を説明しました。Zoeはまた、コストを削減し、クエリパフォーマンスを向上させながら、Apache Arrow、Parquet、Pandasなどのツールを使用して効率的な分析アプリケーションを構築する方法も実演しました。/li> 
+<li>Markは、ClickHouse Server、clickhouse-local、chDBなど、<a href="https://www.youtube.com/watch?v=EOXEW_-r10A&t=5s">ClickHouseのさまざまなデプロイメントモード</a>について説明しました。</li>
+<li>Avi Pressは、Scarfがどのように<a href="https://clickhouse.com/videos/open-source-scarf">毎日約25GBのデータと5000万件のイベントを処理するClickHouseをバックエンドとしたデータパイプラインを構築したか</a>を説明しています。</li>
+</ul>
+
+<p style="
+    margin-bottom: 0;
+    line-height: 0;
+"> </p>
+
+## 今月の投稿
+
+<p>今月のお気に入りの投稿は、<a href="https://x.com/dschewchenko1/status/1872671222569271573">Dmytro Shevchenko</a>によるものです。</p>
+
+![post-of-month-202501.png](https://clickhouse.com/uploads/post_of_month_202501_cb6b65fa1c.png)
+
+<p>
+<a href="https://x.com/dschewchenko1/status/1872671222569271573">投稿を読む</a>
+</p>
+
+---
+
+## 2025年2月ニュースレター
+Published: 2025-05-13T00:50:47+00:00
+URL: https://clickhouse.com/blog/202502-newsletter-jp
+
+---
+title: "2025年2月ニュースレター"
+date: "2025-05-13T00:50:47.110Z"
+author: "Mark Needham"
+category: "Community"
+excerpt: "2025年2月のClickHouseニュースレターへようこそ。この1ヶ月間のリアルタイムデータウェアハウスに関する出来事をまとめています。"
+---
+
+# 2025年2月ニュースレター
+
+1月はあっという間に過ぎましたね！ということは、2025年2回目のニュースレターの時間です。
+
+今月の大きなニュースは、JSON分析のためのベンチマークスイートであるJSONBenchのリリースです。Ryadh Dahimeneがエージェント向けの分析について語り、Shahar GvirtzがClickHouseを気に入る理由を説明し、Tom Schreiberが25.1でのjoinの改善点について深く掘り下げています。その他にも多くの情報があります。
+
+## 注目のコミュニティメンバー: Chris Lawrence
+
+今月の注目のコミュニティメンバーは、<a href="https://www.linkedin.com/company/use-amp/" target="_blank">AMP</a>のDev Lead兼シニアソフトウェアエンジニアであるChris Lawrenceです。
+
+![1_newsletter202502.png](https://clickhouse.com/uploads/1_newsletter202502_4f144a0657.png)
+
+Chrisは以前、ReSync Digitalを共同設立し、初期段階のスタートアップ向けに30以上の製品を成功裏に立ち上げました。また、Skip-Line, LLCでの仕事を通じて、マシンビジョンとIoTソリューションの経験も持っています。
+
+Chris Lawrenceは、<a href="https://clickhouse.com/videos/amp-from-batch-processing-to-streaming" target="_blank">2024年8月にメルボルンで開催されたClickHouseミートアップで講演</a>しました。彼は、AMPのClickHouse Cloudの実装が、データパイプラインをバッチ処理からリアルタイムストリーミングにどのように変革し、分析プラットフォームの速度と信頼性を向上させたかを共有しました。Chrisはまた、<a href="https://clickhouse.com/blog/amp-clickhouse-oss-to-clickhouse-cloud" target="_blank">最近のブログ記事</a>で彼の講演について詳しく説明しています。
+
+➡️ <a href="https://www.linkedin.com/in/chrislawrence121/" target="_blank">LinkedInでChrisをフォロー</a>
+
+## 今後のイベント
+
+### グローバルイベント
+
+* <a href="https://clickhouse.com/company/events/v25-2-community-release-call" target="_blank">v25.2 コミュニティコール</a> - 2月27日
+
+### 無料トレーニング
+
+* <a href="https://clickhouse.com/company/events/clickhouse-fundamentals" target="_blank">ClickHouse Fundamentals</a> - 2月26日、3月19日
+* <a href="https://clickhouse.com/company/events/202503-emea-paris-inperson-clickhousetraining" target="_blank">Formation ClickHouse en présentiel</a>, パリ - 3月4日
+* <a href="https://clickhouse.com/company/events/202503-amer-seattle-inperson-developer-fast-track" target="_blank">In-Person ClickHouse Developer Fast Track - シアトル</a> - 3月5日
+* <a href="https://clickhouse.com/company/events/202503-emea-query-optimization" target="_blank">ClickHouse Query Optimization Workshop</a> - 3月12日
+* <a href="https://clickhouse.com/company/events/202503-amer-clickhouse-admin-workshop" target="_blank">ClickHouse Admin Workshop</a> - 3月12日
+* <a href="https://clickhouse.com/company/events/202503-apj-sydney-inperson-clickhouse-developer" target="_blank">In-Person ClickHouse Developer - シドニー</a> - 3月24-25日
+* <a href="https://clickhouse.com/company/events/202503-apj-melbourne-inperson-clickhouse-developer" target="_blank">In-Person ClickHouse Developer - メルボルン</a> - 3月27-28日
+* <a href="https://clickhouse.com/company/events/202504-apj-bangalore-inperson-developer-fast-track" target="_blank">In-Person ClickHouse Developer Fast Track - バンガロール</a> - 4月1日
+
+### AMERのイベント
+
+* <a href="https://www.meetup.com/clickhouse-los-angeles-user-group/events/305952193/?slug=clickhouse-los-angeles-user-group&isFirstPublish=true" target="_blank">Clickhouse Meetup with LA DevOps</a> - 2月20日
+* <a href="https://www.meetup.com/clickhouse-seattle-user-group/events/305916325/?eventOrigin=your_events" target="_blank">ClickHouse Meetup in Seattle</a> - 3月5日
+* <a href="https://clickhouse.com/company/events/2025-03-scale-22" target="_blank">Scale 22x</a>, パサデナ - 3月6日 - 3月9日
+* <a href="https://clickhouse.com/company/events/03-2025-san-francisco" target="_blank">Game Developers Conference</a>, サンフランシスコ - 3月17日
+* <a href="https://www.meetup.com/clickhouse-silicon-valley-meetup-group/events/306046697/?eventOrigin=group_events_list" target="_blank">ClickHouse Meetup @ Cloudflare</a>, サンフランシスコ - 3月19日
+* <a href="https://www.meetup.com/clickhouse-boston-user-group/events/305882607/?slug=clickhouse-boston-user-group&eventId=300907870&isFirstPublish=true" target="_blank">ClickHouse Meetup @ Klaviyo</a>, ボストン - 3月25日
+* <a href="https://www.meetup.com/clickhouse-new-york-user-group/events/305916369/?eventOrigin=group_upcoming_events" target="_blank">ClickHouse Meetup @ Braze</a>, ニューヨーク - 3月26日
+* <a href="https://clickhouse.com/company/events/2025-04-google-next" target="_blank">Google Next</a>, ラスベガス - 4月9日
+* <a href="https://clickhouse.com/openhouse" target="_blank">Open House User Conference</a>, サンフランシスコ - 5月28日
+
+### EMEAのイベント
+
+* <a href="https://www.meetup.com/clickhouse-france-user-group/events/305792997/" target="_blank">ClickHouse Meetup @ Nexton</a>, パリ - 3月4日
+* <a href="https://clickhouse.com/company/events/04-2025-kubecon-london" target="_blank">KubeCon 2025</a>, ロンドン - 4月1-4日
+* <a href="https://clickhouse.com/company/events/04-2025-aws-paris" target="_blank">AWS Summit 2025</a>, パリ - 4月9日
+* <a href="https://clickhouse.com/company/events/2025-04-aws-summit-amsterdam" target="_blank">AWS Summit 2025</a>, アムステルダム - 4月16日
+* <a href="https://clickhouse.com/company/events/04-2025-aws-london" target="_blank">AWS Summit, 2025</a>, ロンドン - 4月30日
+
+### APACのイベント
+
+* <a href="https://www.meetup.com/clickhouse-singapore-meetup-group/events/305917892/" target="_blank">ClickHouse Singapore Meetup</a> - 2月25日
+* <a href="https://www.huodongxing.com/event/3794544969111?td=3894807410019" target="_blank">ClickHouse Shanghai Meetup</a>, 中国 - 3月1日
+* <a href="https://forefrontevents.co/event/data-ai-summit-nsw-2025/" target="_blank">Data & AI Summit NSW</a>, オーストラリア - 3月18日
+* <a href="https://current.confluent.io/bengaluru" target="_blank">Current Bengaluru</a>, インド - 3月19日
+* <a href="https://www.meetup.com/clickhouse-delhi-user-group/events/306253492/" target="_blank">ClickHouse Delhi Meetup</a>, インド - 3月22日
+* <a href="https://latencyconf.io/" target="_blank">Latency Conference</a>, オーストラリア - 4月3-4日
+* <a href="https://web3.teamz.co.jp/en" target="_blank">TEAMZ Web3/AI Summit</a>, 日本 - 4月16-17日
+
+## JSONBenchの紹介：10億件のドキュメントJSONチャレンジ vs MongoDB、Elasticsearchなど
+
+![2_newsletter202502.png](https://clickhouse.com/uploads/2_newsletter202502_fd28c5c96d.png)
+
+<a href="https://clickhouse.com/blog/202411-newsletter#how-we-built-a-new-powerful-json-data-type-for-clickhouse" target="_blank">11月のニュースレター</a>では、新しいJSONデータ型について言及し、そのパフォーマンス上の利点を説明しました。これらの主張を検証するために、JSON分析用のベンチマークスイートである<a href="https://jsonbench.com/" target="_blank">JSONBench</a>を開発しました。
+
+Tom Schreiberは、さまざまなデータベースがJSONデータをどのように処理するかを比較する包括的なブログ記事を公開しました。この分析では、ClickHouse、MongoDB、Elasticsearchを含む複数のシステムにおけるパフォーマンスベンチマークとストレージアプローチについて取り上げています。
+
+彼の調査結果では、各データベースがJSONデータに対する分析クエリでどのように動作するかを詳細に示し、それらの基盤となるJSONストレージメカニズムを探求しています。
+
+➡️ <a href="https://clickhouse.com/blog/json-bench-clickhouse-vs-mongodb-elasticsearch-duckdb-postgresql" target="_blank">ブログ記事を読む</a>
+
+## Shahar Gvirtz: 私がClickHouseを好きな7つの理由
+
+コミュニティメンバーがClickHouseを楽しんでいるブログ記事を見つけるのはいつも楽しいものです！
+
+ShaharがClickHouseを好きなすべての理由を説明するつもりはありませんが、彼が気に入っていることの1つ、つまりClickHouseの過小評価されている機能であるデータ圧縮機能に焦点を当てたいと思います。Shaharの言葉を借りれば：
+
+> ClickHouseに保存されたログは、Elasticsearchで占めるスペースのわずか28%しか占めません。
+
+友人や同僚にClickHouseを好きな理由を説明する必要がある場合は、このブログ記事を紹介するのが良いでしょう！
+
+➡️ <a href="https://shahargv.medium.com/7-reasons-why-i-like-clickhouse-9cbb11b142d5" target="_blank">ブログ記事を読む</a>
+
+## エージェント指向分析
+
+![3_newsletter202502.png](https://clickhouse.com/uploads/3_newsletter202502_1727daa7b3.png)
+
+Ryadh Dahimeneは、（私の謙虚な意見では）素晴らしいブログ記事を書き、<a href="https://clickhouse.com/engineering-resources/what-is-real-time-analytics" target="_blank">リアルタイム分析</a>データベースの新しいユーザーペルソナ、つまりAIエージェントについて説明しています！
+
+Ryadhはまず、2022年のChatGPTのリリース以降のAI開発の簡単な概要を示し、「認識-思考-行動」ループ、LLMによるツールサポートの導入、そして最近のOpenAI o1やDeepSeek-R1のような推論モデルの進化について説明します。
+
+次に、エージェントワークフローにおけるリアルタイム分析データベースの役割を探求し、<a href="https://github.com/ClickHouse/mcp-clickhouse/tree/f8cc7e09d71b624691702520a4741e1849b4b4be" target="_blank">ClickHouse MCP Server</a>を紹介します。これは、AnthropicのModel Context Protocolのサーバー側の実装であり、Claude DesktopからClickHouseデータベースと簡単に会話できることを意味します。
+
+➡️ <a href="https://clickhouse.com/blog/agent-facing-analytics" target="_blank">ブログ記事を読む</a>
+
+## ClickHouseとCribl：強力なデータ取り込みと分析のデュオ
+
+![4_newsletter202502.png](https://clickhouse.com/uploads/4_newsletter202502_08ff7adaee.png)
+
+Cribl Streamは、ログ、メトリクス、トレースデータなどの<a href="https://clickhouse.com/engineering-resources/telemetry-data" target="_blank">テレメトリーデータ</a>を含むさまざまなデータソースと連携するデータ処理プラットフォームです。宛先に転送する前にイベントを前処理、フィルタリング、変換することで、ストレージの使用率とクエリ効率を最適化するのに役立ちます。ClickHouseのサポートは、最近サポートされている出力のリストに追加されました。
+
+David Maislinは、この統合を設定して使用する方法を示す詳細なガイドを執筆しました。このガイドには、ClickHouseテーブルの作成、Cribl Stream宛先の構成、Cribl Searchを使用したデータのクエリに関するステップバイステップの手順が含まれています。また、CriblのDatagen機能を使用してテストデータを生成する例を含め、Criblのデータ処理機能と並行してClickHouseを使用する方法も示しています。
+
+➡️ <a href="https://cribl.io/blog/clickhouse-and-cribl-a-powerful-data-ingestion-and-analysis-duo/" target="_blank">ブログ記事を読む</a>
+
+## ClickHouse Cloudの進化：コンピュート-コンピュート分離、改善された自動スケーリングなど！
+
+![5_newsletter202502.png](https://clickhouse.com/uploads/5_newsletter202502_24dd703b23.png)
+
+ClickHouse Cloudは、記録的な速さで構築され、2022年12月に市場に投入されました。それ以来、1000社を超える企業がワークロードを私たちのマネージドサービスに移行し、現在では毎日、合計55億件のクエリを実行し、100PBのデータ上で3500兆件のレコードをスキャンしています！
+
+過去2年間、ユーザーとの緊密な連携を通じて貴重な洞察を得て、クラウドアーキテクチャを大幅に進化させてきました。このブログでは、<a href="https://clickhouse.com/blog/introducing-warehouses-compute-compute-separation-in-clickhouse-cloud" target="_blank">コンピュート-コンピュート分離</a>、高性能マシンタイプ（<a href="https://clickhouse.com/blog/graviton-boosts-clickhouse-cloud-performance" target="_blank">AWSでのGravitonへの移行</a>）、シングルレプリカサービス、より反応が良くシームレスな自動スケーリングなど、最新の改善について説明します。
+
+➡️ <a href="https://clickhouse.com/blog/evolution-of-clickhouse-cloud-new-features-superior-performance-tailored-offerings" target="_blank">ブログ記事を読む</a>
+
+## 25.1 リリース
+
+25.1リリースブログ記事では、Tom Schreiberが並列ハッシュ結合アルゴリズムのプローブフェーズに加えられた改善について深く掘り下げました。データベースの内部構造に興味がある方は、一読の価値があります。
+
+このリリースでは、テーブルレベルでのMinMaxインデックスの導入、Mergeテーブルエンジンとテーブル関数の改善、自動インクリメント機能の追加、そしていくつかの優れたCLIの使いやすさの改善も行われました。
+
+➡️ <a href="https://clickhouse.com/blog/clickhouse-release-25-01" target="_blank">リリース記事を読む</a>
+
+## 興味深いプロジェクト
+
+毎月ニュースレターをまとめていると、ClickHouseベースの多くのプロジェクトに出会うので、今月はそのうちのいくつかを紹介したいと思います。
+
+* <a href="https://apitally.io/" target="_blank">apitally.io</a> - Python / Node.jsアプリ向けのAPI監視および分析ツール。APIの使用状況とパフォーマンスを理解し、問題を早期に発見し、問題発生時に効果的にトラブルシューティングするのに役立ちます。創設者は、<a href="https://news.ycombinator.com/item?id=42915435" target="_blank">Hacker Newsのスレッド</a>で、ClickHouseを使用してデータを保存していると述べています。
+* <a href="https://github.com/Openpanel-dev/openpanel" target="_blank">Openpanel</a> - Web、モバイルアプリ、バックエンドサービス全体でユーザーの行動をキャプチャするためのMixpanelのオープンソース代替。ClickHouseを使用してイベントを保存します。
+* <a href="https://www.vigilant.run/home" target="_blank">Vigilant</a> - 構造化ログを管理するための軽量ツール。ログを一元化し、検索し、アラートを作成できます。<a href="https://news.ycombinator.com/item?id=42814930" target="_blank">内部的にはClickHouseを使用</a>しています。
+* <a href="https://github.com/caioricciuti/ch-ui" target="_blank">CH-UI</a> - ClickHouse Serverと対話するためのユーザーインターフェース。クエリの構文ハイライト表示があり、インスタンスに関する視覚的なメトリクスを確認できます。
+
+## ビデオコーナー
+
+* Benjamin Woottonが<a href="https://clickhouse.com/videos/replicating-data-postgres-clickhouse-cloud" target="_blank">この実践的なビデオで実演している</a>ように、トランザクション処理にはPostgreSQL、分析にはClickHouseというようにワークロードを分割する手法がますます一般的になっています。彼は、これらのデータベースを同期させる2つの方法、つまりオープンソースの<a href="https://github.com/PeerDB-io/peerdb" target="_blank">PeerDB</a>ツールを使用する方法と、<a href="https://clickhouse.com/docs/en/integrations/clickpipes/postgres" target="_blank">ClickHouse Cloudの組み込みソリューション</a>を使用する方法を紹介しています。
+* <a href="https://clickhouse.com/videos/clickhouse-mcp-server" target="_blank">最近リリースされたClickHouse MCPサーバーの使用方法</a>を示すビデオを作成しました。
+* また、<a href="https://clickhouse.com/videos/clickhouse-monitoring-dashboard" target="_blank">組み込みの監視ダッシュボードを使用して一般的な問題をデバッグする方法</a>を示すビデオも作成しました。
+* Flock SafetyのLeon Kozlowskiは、彼らがどのように<a href="https://clickhouse.com/videos/real-time-traffic-analytics-flock-safety" target="_blank">遅い日次バッチ処理のRedshiftセットアップからClickHouseを使用したリアルタイムソリューションにトラフィック分析システムを変革したか</a>を説明しています。このシステムは、監視カメラのネットワークから1日あたり10億件を超えるML予測を処理しています。
+* Derek ChiaとKarthikayan Muthuramalingamは、<a href="https://clickhouse.com/videos/maximising-analytics-clickhouse-kafka" target="_blank">ClickHouseとKafkaを統合するための技術的な概要</a>を発表し、これらのテクノロジーがリアルタイムデータ処理と分析のために効果的に連携する方法を示しています。Derekは、分析に最適化されたオープンソースの列指向データベースとしてのClickHouseの機能について説明し、Karthikayanは、分散イベントストリーミングプラットフォームとしてのKafkaの役割について詳しく説明しています。
+
+## 今月の投稿
+
+今月のお気に入りの投稿は、ClickHouseに大量のデータを取り込んでいる<a href="https://x.com/JacobWolf" target="_blank">Jacob Wolf</a>によるものです。
+
+![6_newsletter202502.png](https://clickhouse.com/uploads/6_newsletter202502_1b466bad33.png)
+
+➡️ <a href="https://x.com/JacobWolf/status/1884316267093582231" target="_blank">投稿を読む</a>
 
 ---
 
@@ -64368,6 +69735,724 @@ My favorite post this month was by <a href="https://x.com/JacobWolf" target="_bl
 
 ---
 
+## 10億ドキュメント JSON チャレンジ: ClickHouse vs. MongoDB, Elasticsearch, など
+Published: 2025-02-20T01:28:13+00:00
+URL: https://clickhouse.com/blog/json-bench-clickhouse-vs-mongodb-elasticsearch-duckdb-postgresql-jp
+
+---
+title: "10億ドキュメント JSON チャレンジ: ClickHouse vs. MongoDB, Elasticsearch, など"
+date: "2025-02-20T01:28:13.536Z"
+author: "Tom Schreiber"
+category: "Engineering"
+excerpt: "ClickHouseの新しいJSONデータ型が、大手JSONデータベースに対し、比類のないストレージ効率と驚異的なクエリ速度でどのように優位に立つかを探ります。しかも、JSONデータを単一のフィールドに格納しながら、JSONデータベースの本来の約束を損なうことなく実現できる方法をご紹介します。"
+---
+
+# 10億ドキュメント JSON チャレンジ: ClickHouse vs. MongoDB, Elasticsearch, など
+
+## はじめに
+
+私たちはちょうど1年前に、Gunnar Morling氏の[One Billion Row Challenge](https://github.com/gunnarmorling/1brc)に挑み、10億行のテキストファイルをどれだけ速く集計できるかをテストしたことがあります（詳しくは[こちら](https://clickhouse.com/blog/clickhouse-one-billion-row-challenge)）。
+
+今回、新たなチャレンジとして「**One Billion Documents JSON Challenge**」を提案します。これは、セミ構造化されたJSONドキュメントの大規模データセットを、各データベースがどれだけ効率的に格納・集計できるかを測定するものです。
+
+このチャレンジに取り組むにあたり、効率的なJSON実装が必要でした。私たちは最近、ClickHouse向けに新たに開発した[強力なJSONデータ型](https://clickhouse.com/blog/a-new-powerful-json-data-type-for-clickhouse)について詳しく解説し、この機能が列指向型ストレージに最適なJSON実装である理由を紹介しました。
+
+この記事では、ClickHouseのJSON実装を、他のJSONをサポートするデータストアと比較します。その結果は、きっと驚くべきものだと思います。
+
+これを実現するために、私たちは[JSONBench](https://jsonbench.com/)というベンチマークを開発しました。これは完全に再現可能で、同一のJSONデータセットを次の5つのJSONサポートデータストアにロードします。
+
+1. **ClickHouse**  
+2. **MongoDB**  
+3. **Elasticsearch**  
+4. **DuckDB**  
+5. **PostgreSQL**
+
+JSONBenchは、ロードしたJSONデータセットのストレージサイズと、5種類の典型的な分析クエリのクエリ性能を評価します。
+
+ここでは、10億件のJSONドキュメントを格納・クエリした[ベンチマーク結果](/blog/json-bench-clickhouse-vs-mongodb-elasticsearch-duckdb-postgresql#benchmark-results)の概要をご覧いただけます。
+
+- `MongoDB`と比較すると、ClickHouseはストレージ効率が**40%**優れており、集計は**2500倍**も高速です。
+
+![JSON-Benchmarks.001.png](https://clickhouse.com/uploads/JSON_Benchmarks_001_114bb1d888.png)
+
+- `Elasticsearch` と比較すると、ClickHouseの必要なストレージ領域は**約2分の1**で、集計は**10倍**も高速です。
+
+![JSON-Benchmarks.002.png](https://clickhouse.com/uploads/JSON_Benchmarks_002_b6533a4196.png)
+
+- `DuckDB`と比較すると、ClickHouseは**ディスク領域を5分の1**に抑えられ、分析クエリでのパフォーマンスは**9000倍**高速です。
+
+![JSON-Benchmarks.003.png](https://clickhouse.com/uploads/JSON_Benchmarks_003_c305e9705a.png)
+
+- `PostgreSQL` と比較すると、ClickHouseは**ディスク使用量が6分の1**で、分析クエリは**9000倍**高速です。
+
+![JSON-Benchmarks.004.png](https://clickhouse.com/uploads/JSON_Benchmarks_004_a3be78fbff.png)
+
+さらに、同じ `圧縮アルゴリズムを使ってファイル` として保存する場合と比較しても、ClickHouseはJSONドキュメントを **20%小さく**  格納できます。
+
+![JSON-Benchmarks.005.png](https://clickhouse.com/uploads/JSON_Benchmarks_005_a59ea54096.png)
+
+この記事の残りの部分では、まずテストに使用したJSONデータセットを紹介し、その後に各ベンチマーク対象システムのJSON機能について簡単に概説します（技術的な詳細に興味がない方は[こちら](/blog/json-bench-clickhouse-vs-mongodb-elasticsearch-duckdb-postgresql#benchmark-setup)からスキップ可能）。次に、ベンチマークの設定、クエリ、手法について説明し、最後に[ベンチマーク結果](/blog/json-bench-clickhouse-vs-mongodb-elasticsearch-duckdb-postgresql#benchmark-results)を示しながら分析します。
+
+
+## JSONデータセット - 10億件のBlueskyイベント
+
+今回のテスト用JSONデータセットは、ソーシャルメディアプラットフォーム[Bluesky](https://bsky.social/about)のイベントストリームをスクレイピングしたものです。別の記事で、このデータを[どのように取得](https://clickhouse.com/blog/building-a-medallion-architecture-for-bluesky-json-data-with-clickhouse#reading-bluesky-data)したか詳しく紹介しています。データは自然にJSONドキュメントとして整形されており、各ドキュメントが特定の[Blueskyイベント](https://github.com/bluesky-social/jetstream?tab=readme-ov-file#example-events)（例：`post`、`like`、`repost`など）を[表現](https://clickhouse.com/blog/building-a-medallion-architecture-for-bluesky-json-data-with-clickhouse#sampling-the-data)しています。
+
+ベンチマークでは、以下の8つのBlueskyイベントデータセット（下図の①〜⑧）を各システムにロードします。  
+<img src="/uploads/JSON_Benchmarks_006_028b4d7bcb.png"/>
+
+
+## 評価対象システム
+
+このセクションでは、ベンチマーク対象のシステムが備えるJSON機能、データ圧縮技術、およびインデックスやキャッシュのようなクエリ高速化手段を概説します。これらの技術的詳細を理解することで、今回のベンチマークを公正かつ正確に行うためにどのような設定を行ったかがより明確になります。
+
+> 技術的な詳細に興味のない方は、[こちら](/blog/json-bench-clickhouse-vs-mongodb-elasticsearch-duckdb-postgresql#benchmark-setup)からスキップしていただけます。
+
+
+### ClickHouse
+
+ClickHouseは列型の分析用データベースです。本記事では、JSONデータの取り扱いにおける高い能力を示すため、他のシステムとの比較を行っています。
+
+
+#### JSONサポート
+
+私たちは最近、ClickHouse向けに[新しい強力なJSONデータ型](https://clickhouse.com/blog/a-new-powerful-json-data-type-for-clickhouse)を構築しました。これは、本格的なカラム指向ストレージ、動的に変化するデータ構造への[対応](https://clickhouse.com/blog/a-new-powerful-json-data-type-for-clickhouse#challenge-2-dynamically-changing-data-without-type-unification)（タイプ統一が不要）、そして個々のJSONパスへの高速アクセスを可能にするものです。
+
+
+#### JSONストレージ
+
+ClickHouseは、[こちら](https://clickhouse.com/blog/a-new-powerful-json-data-type-for-clickhouse)で詳しく解説しているように、各ユニークなJSONパスの値を[ネイティブカラム](https://clickhouse.com/blog/a-new-powerful-json-data-type-for-clickhouse#traditional-data-storage-in-clickhouse)として保存します。これにより高いデータ圧縮率を実現でき、さらに古典的なデータ型と同等の[高いクエリ性能](https://benchmark.clickhouse.com/)を保てます。
+
+![JSON-Benchmarks.007.png](https://clickhouse.com/uploads/JSON_Benchmarks_007_6ec81b11c0.png)
+
+上の図は、各ユニークなJSONパスから取り出された値がどのようにディスク上で別々の（高圧縮された）カラムファイルとして格納されるかの概要を示しています（[data part](https://clickhouse.com/docs/en/parts#what-are-table-parts-in-clickhouse)内のファイル）。これらのカラムは独立して参照でき、数個のJSONパスのみを参照するクエリでは不要なI/Oを最小限に抑えられます。
+
+#### データソートと圧縮
+
+ClickHouseのJSON型では、JSONパスを[primary key](https://clickhouse.com/docs/en/guides/best-practices/sparse-primary-indexes)に利用できます。これにより、ロードされたJSONドキュメントは各テーブルパーツ内で、これらのパスの値で[並べ替え](https://clickhouse.com/docs/en/guides/best-practices/sparse-primary-indexes#data-is-stored-on-disk-ordered-by-primary-key-columns)られた形でディスクに保存されます。さらに、ClickHouseは[疎なプライマリインデックス](https://clickhouse.com/docs/en/guides/best-practices/sparse-primary-indexes#introduction)を生成し、プライマリキーに対するフィルタクエリを[自動的](https://clickhouse.com/docs/en/guides/best-practices/sparse-primary-indexes#the-primary-index-is-used-for-selecting-granules)に[高速化](https://clickhouse.com/docs/en/guides/best-practices/sparse-primary-indexes#the-primary-index-is-used-for-selecting-granules)します。
+
+![JSON-Benchmarks.008.png](https://clickhouse.com/uploads/JSON_Benchmarks_008_3e7fba21fe.png)
+
+JSONサブカラムをプライマリキーに使うことで、同様のデータが各カラムファイル内でより密に固まるので、[適切な](https://clickhouse.com/docs/en/guides/best-practices/sparse-primary-indexes#optimal-compression-ratio-of-data-files)順序（カーディナリティの低い順に）並べることで、カラムファイルの[圧縮率が高まる](https://clickhouse.com/docs/en/guides/best-practices/sparse-primary-indexes#optimal-compression-ratio-of-data-files)可能性があります。さらにオンディスクのデータが[ソート済み](https://clickhouse.com/blog/clickhouse-faster-queries-with-projections-and-primary-indexes#utilize-indexes-for-preventing-resorting-and-enabling-short-circuiting)なので、クエリの検索ソート順と物理データのソート順が一致する場合には再ソートが不要になり、早期終了などの最適化も可能です。
+
+
+#### 柔軟な圧縮オプション
+
+ClickHouseは、[デフォルト](https://clickhouse.com/docs/en/sql-reference/statements/create/table#column_compression_codec)ではセルフマネージド版で`lz4`、[ClickHouse Cloud](https://clickhouse.com/cloud)では`zstd`を、各データカラムファイルに対して[ブロック単位](https://clickhouse.com/docs/en/data-compression/compression-modes#block)で適用します。
+
+また、[個々のカラムごと](https://clickhouse.com/docs/en/sql-reference/statements/create/table#column_compression_codec)に使用する圧縮コーデックをCREATE TABLEクエリで指定することもできます。ClickHouseは、[汎用コーデック](https://clickhouse.com/docs/en/sql-reference/statements/create/table#general-purpose-codecs)、[特殊コーデック](https://clickhouse.com/docs/en/sql-reference/statements/create/table#specialized-codecs)、[暗号化コーデック](https://clickhouse.com/docs/en/sql-reference/statements/create/table#encryption-codecs)などを[連結](https://clickhouse.com/blog/optimize-clickhouse-codecs-compression-schema)して利用することも可能です。
+
+JSON型に対しては、現在のClickHouseでは、JSONフィールド全体に対してコーデックを指定できます（例：[こちら](https://github.com/ClickHouse/JSONBench/blob/c7afa7078aed72c55ff4441a2da635424fde7724/clickhouse/ddl_zstd.sql#L8)ではデフォルトの`lz4`から`zstd`に変更）。将来的には、[JSONパス単位](https://github.com/ClickHouse/ClickHouse/issues/68428)でコーデック指定を行う機能も計画されています。
+
+#### 多様なJSONフォーマット対応
+
+ClickHouseは、データ読み込みやクエリ結果出力用に[20種類以上のJSONフォーマット](https://clickhouse.com/docs/en/interfaces/formats)をサポートしています。
+
+#### クエリ処理
+
+今回のベンチマーク結果で示すように、ClickHouseのクエリ処理は非常に優れています。どのようにJSONデータに対してクエリを実行するのかを簡単に解説します。
+
+前述のとおり、ClickHouseは各ユニークなJSONパスの値を、従来のデータ型（例：整数）と同様に格納しているため、JSONデータであっても[高パフォーマンスの集計](https://clickhouse.com/blog/clickhouse_vs_elasticsearch_mechanics_of_count_aggregations#high-performance-aggregations-in-clickhouse)を可能にします。
+
+インターネット規模のアナリティクス向けに構築されたClickHouseは、[90種類以上](https://clickhouse.com/docs/en/sql-reference/aggregate-functions/reference)の組込み集計関数をフルに並列化し、利用可能なすべてのリソースを使って[効率的に](https://youtu.be/ZOZQCQEtrz8?si=XrQ-vMDiHEsgsrYq&t=103)データをフィルタ・集計します。たとえば、`avg`集計関数の場合は以下のイメージです。
+
+![JSON-Benchmarks.009.png](https://clickhouse.com/uploads/JSON_Benchmarks_009_d2d2163ae6.png)
+
+上の図では、① `c.a`と`c.b`という2つのJSONパスに対する`avg`集計クエリを処理しています。ClickHouseは対応するカラムファイル`a.bin`と`b.bin`のみを読み込み、単一サーバ内の32CPUコアなどで`N`個のデータ範囲を並列に処理します（クエリ対象の行を`N`分割して並列計算）。集計キーとは無関係にデータ範囲を[動的に分割](https://www.vldb.org/pvldb/vol17/p3731-schulze.pdf)できるため、負荷分散が最適化されます。この並列化は[部分集計ステート](https://clickhouse.com/blog/clickhouse_vs_elasticsearch_mechanics_of_count_aggregations#-multi-core-parallelization)を用いることで可能になります。
+
+本ベンチマークのClickHouseでは、[物理実行プラン](https://github.com/ClickHouse/JSONBench/blob/c7afa7078aed72c55ff4441a2da635424fde7724/clickhouse/physical_query_plans.sh)も取得しています。たとえば、[こちら](https://github.com/ClickHouse/JSONBench/blob/c7afa7078aed72c55ff4441a2da635424fde7724/clickhouse/results/_physical_query_plans/_m6i.8xlarge_bluesky_1000m_zstd.physical_query_plans#L15)では、[benchmark query ①](https://github.com/ClickHouse/JSONBench/blob/c7afa7078aed72c55ff4441a2da635424fde7724/clickhouse/queries_formatted.sql#L2)の10億行フルスキャン集計を、CPUコア32個をフル活用して並列実行している様子が分かります。
+
+
+#### マルチノードでの並列化
+
+今回のベンチマークはシングルノード性能のみを比較していますが、もしテーブルがシャード分割されて複数ノードにデータが分散している場合、ClickHouseはすべてのノードのCPUコアを使って集計関数を[並列化](https://www.vldb.org/pvldb/vol17/p3731-schulze.pdf)し、全体を処理できます。
+
+![JSON-Benchmarks.010.png](https://clickhouse.com/uploads/JSON_Benchmarks_010_777404b2fb.png)
+
+
+#### キャッシュ
+
+ClickHouseはクエリ処理中に[組込みのキャッシュ](https://www.youtube.com/watch?v=-N6N-WKEiLs)やOSページキャッシュを使います。たとえば[デフォルトでは無効](https://clickhouse.com/docs/en/operations/settings/settings#use_query_cache)になっていますが、[クエリ結果キャッシュ](https://clickhouse.com/docs/en/operations/query-cache)も備えています。
+
+
+### MongoDB
+
+[MongoDB](https://www.mongodb.com/)は最も有名な[JSONデータベース](https://clickhouse.com/engineering-resources/json-database)の一つです。
+
+
+#### JSONサポート
+
+MongoDBは、あらゆるデータを[BSON](https://www.mongodb.com/resources/basics/json-and-bson)ドキュメントとしてネイティブに格納します。BSONは[JSONをバイナリ表現](https://en.wikipedia.org/wiki/BSON)した形式です。
+
+#### JSONストレージ
+
+MongoDBのデフォルトストレージエンジン[WiredTiger](https://www.mongodb.com/docs/manual/core/wiredtiger/#wiredtiger-storage-engine)は、ディスク上のデータを[ページ](https://source.wiredtiger.com/11.0.0/arch-data-file.html)単位の[B-Tree](https://en.wikipedia.org/wiki/B-tree)構造で管理します。ルートノードおよび中間ノードにはキーと他ノードへの参照が格納され、リーフノードにはBSONドキュメントを保持するデータブロックがあります。
+
+![JSON-Benchmarks.011.png](https://clickhouse.com/uploads/JSON_Benchmarks_011_1c3970b491.png)
+
+MongoDBでは、JSONパス上に[セカンダリインデックス](https://www.mongodb.com/docs/manual/indexes/#details)を作成できます。これらのインデックスはB-Treeで構成され、挿入された各JSONドキュメントに対して該当のJSONパスの値がノードに格納されます。これらのインデックスはメモリに読み込まれ、クエリプランナーが[高速](https://www.slideshare.net/slideshow/mongodb-days-uk-indexing-and-performance-tuning/54794973#2)にツリーを探索して該当ドキュメントを特定し、その後ディスクから読み込んで処理します。
+
+#### Covered index scans
+
+クエリがインデックス化されたJSONパスのみを参照する場合、MongoDBはディスク上のドキュメントを読み込まずにインデックスのみでクエリを完了できます。これを[covered query](https://www.mongodb.com/docs/manual/core/query-optimization/#covered-query)と呼び、[covered index scan](https://www.slideshare.net/slideshow/mongodb-days-uk-indexing-and-performance-tuning/54794973#2)によって実現されます。
+
+![JSON-Benchmarks.012.png](https://clickhouse.com/uploads/JSON_Benchmarks_012_ac6786dc13.png)
+
+> 私たちのベンチマークでのMongoDBクエリ5種はすべてcovered queryです。これは、[デフォルトの複合インデックス](/blog/json-bench-clickhouse-vs-mongodb-elasticsearch-duckdb-postgresql#some-json-paths-can-be-used-for-indexes-and-data-sorting)がクエリに必要なすべてのフィールドを含んでいるためです。[ベストプラクティス](https://www.mongodb.com/docs/manual/core/query-optimization/#performance)に従い、明示的に[covered index scansを有効化](/blog/json-bench-clickhouse-vs-mongodb-elasticsearch-duckdb-postgresql#no-tuning)しています。
+
+[こちら](https://github.com/ClickHouse/JSONBench/tree/c7afa7078aed72c55ff4441a2da635424fde7724/mongodb/results/_index_usage)のクエリ実行プランを見れば確認できます。例えば10億ドキュメントを格納したコレクションに対するクエリでは、[IXSCAN](https://github.com/ClickHouse/JSONBench/blob/c7afa7078aed72c55ff4441a2da635424fde7724/mongodb/results/_index_usage/_m6i.8xlarge_bluesky_1000m_zstd.index_usage)ステージのみが表示され、`COLLSCAN`や`FETCH`ステージがありません。一方、covered index scanを有効にする前の古いプラン([参考](https://github.com/ClickHouse/JSONBench/tree/c7afa7078aed72c55ff4441a2da635424fde7724/mongodb/results_without_covered_index_scans/_index_usage))では、`COLLSCAN`や`FETCH`が含まれ、ドキュメントをディスクから読み込んでいたことが分かります。
+
+このメソッドはインデックスがメモリに載ることが条件となります。今回の[テストマシン](/blog/json-bench-clickhouse-vs-mongodb-elasticsearch-duckdb-postgresql#hardware-and-operating-system)（128 GB RAM）では、10億件データセットでの[27 GBインデックス](https://github.com/ClickHouse/JSONBench/blob/c7afa7078aed72c55ff4441a2da635424fde7724/mongodb/results/m6i.8xlarge_bluesky_1000m_zstd.json#L20)を十分格納できますが、[シャーディング](https://www.mongodb.com/docs/manual/sharding/)されたセットアップなどでは、インデックスのメモリ搭載性に注意が必要です（インデックスがシャードキーを[含む](https://www.mongodb.com/docs/manual/core/query-optimization/#restrictions-on-sharded-collection)必要など）。
+
+#### データ圧縮
+
+WiredTigerは、コレクションに[snappy](https://google.github.io/snappy/)を使ったブロック圧縮、インデックスに[prefix compression](https://www.mongodb.com/docs/manual/reference/glossary/#std-term-prefix-compression)を[デフォルト](https://www.mongodb.com/docs/manual/core/wiredtiger/#compression)で適用します。代わりに`zstd`圧縮を有効にして圧縮率を高めることも可能です。
+
+#### データソート
+
+MongoDBは、[clustered collections](https://www.mongodb.com/docs/manual/core/clustered-collections/)を介してドキュメントを特定の[clustered index](https://www.mongodb.com/docs/manual/reference/method/db.createCollection/#std-label-db.createCollection.clusteredIndex)の順に格納し、類似データをまとめることで圧縮率を向上させる機能を備えます。しかし、clustered indexキーは[ユニーク](https://www.mongodb.com/docs/manual/core/clustered-collections/#set-your-own-clustered-index-key-values)であり、8 MBという最大サイズ制限があるため、今回のテストデータには適用できませんでした。
+
+#### キャッシュ
+
+MongoDBは[WiredTiger内部キャッシュ](https://www.mongodb.com/docs/manual/core/wiredtiger/#memory-use)やOSページキャッシュを利用し、専用のクエリ結果キャッシュは持ちません。WiredTigerキャッシュには最近アクセスされたデータとインデックスが格納され、デフォルトでは利用可能RAMの50% - 1GBが割り当てられます。このキャッシュはMongoDBサーバを再起動しない限りクリアされません。
+
+#### 制限事項
+
+ベンチマークに含まれるJSONの`time_us`フィールドはマイクロ秒精度の日付です。しかしMongoDBは[ミリ秒精度](https://www.mongodb.com/docs/manual/reference/method/Date/#behavior)しかサポートしていません。一方でClickHouseは[ナノ秒精度](https://clickhouse.com/docs/en/sql-reference/data-types/datetime64)まで扱えます。
+
+また、MongoDBの集計フレームワークはビルトインの`COUNT DISTINCT`演算子を備えていません。代替として、ベンチマークの[クエリ②](https://github.com/ClickHouse/JSONBench/blob/c7afa7078aed72c55ff4441a2da635424fde7724/mongodb/queries_formatted.js#L31)では、より非効率な[$addToSet](https://www.mongodb.com/docs/manual/reference/operator/aggregation/addToSet/)を使っています。
+
+### Elasticsearch
+
+[Elasticsearch](https://www.elastic.co/elasticsearch)はJSONベースの検索・分析エンジンです。
+
+#### JSONサポート
+
+Elasticsearchは[JSONドキュメント](https://www.elastic.co/guide/en/elasticsearch/reference/current/docs-index_.html)をネイティブに受け取って格納します。
+
+#### JSONストレージとデータ圧縮
+
+Elasticsearchで取り込まれたJSONデータは、特定のアクセスパターンに最適化された[複数の](https://github.com/ClickHouse/examples/tree/main/blog-examples/clickhouse-vs-elasticsearch/on-disk-format-and-insert-processing#logical-and-physical-on-disk-data-structures)データ構造としてインデックス化・保存されます。これらの構造は[Lucene](https://lucene.apache.org/)が管理する[セグメント](https://github.com/ClickHouse/examples/tree/main/blog-examples/clickhouse-vs-elasticsearch/on-disk-format-and-insert-processing#logical-and-physical-on-disk-data-structures)内に格納されます。LuceneはElasticsearchの検索と分析の中核となるJavaライブラリです。
+
+![JSON-Benchmarks.013.png](https://clickhouse.com/uploads/JSON_Benchmarks_013_0c4a7cf1a0.png)
+
+① [Stored fields](https://www.elastic.co/guide/en/elasticsearch/reference/current/mapping-store.html)はフィールドのオリジナル値を返却するためのドキュメントストアとして機能します。デフォルトでは② [_source](https://www.elastic.co/guide/en/elasticsearch/reference/current/mapping-source-field.html)もここに含まれ、取り込まれたJSONドキュメントの原文を保持します。`_source`やその他`stored fields`は、[index.codec](https://www.elastic.co/guide/en/elasticsearch/reference/current/index-modules.html)設定（デフォルトは`lz4`、より圧縮率の高い`zstd`も可）で指定されるアルゴリズムで圧縮されます。
+
+③ [Doc_values](https://www.elastic.co/guide/en/elasticsearch/reference/current/doc-values.html)には、JSONドキュメントのフィールド値がカラム指向のオンディスク構造で格納されます。分析クエリでの集計・ソートのパフォーマンス向上を目的としています。ただし、`doc_values`には`lz4`や`zstd`は使われません。各カラムは[Luceneのエンコーディング](https://lucene.apache.org/core/9_9_0/core/org/apache/lucene/codecs/lucene90/Lucene90DocValuesFormat.html)によって特殊に圧縮され、データ型やカーディナリティなどに応じて最適なエンコーディング方式が選択されます。
+
+[こちら](https://github.com/ClickHouse/examples/tree/main/blog-examples/clickhouse-vs-elasticsearch/on-disk-format-and-insert-processing#logical-and-physical-on-disk-data-structures)で、④ `inverted index`、⑤ `Bkd-tree`、⑥ `HNSQ graphs`などの他のLuceneセグメント構造についても詳しく解説しています。
+
+#### `_source`の役割
+
+オープンソース版Elasticsearchにおいて、`_source`フィールドは[reindexing](https://www.elastic.co/guide/en/elasticsearch/reference/current/docs-reindex.html)や[新バージョンへのアップグレード](https://www.elastic.co/guide/en/elasticsearch/reference/current/setup-upgrade.html#upgrade-index-compatibility)などで必要不可欠であり、またオリジナルドキュメントを返すクエリでも使われます。一方、これを無効化するとストレージサイズは大きく削減されるものの、これらの機能が失われます。
+
+Elasticsearchのエンタープライズ版では、[synthetic _source](https://www.elastic.co/guide/en/elasticsearch/reference/current/mapping-source-field.html#synthetic-source)を利用して、`_source`を他のLuceneデータ構造から再構築することが可能です。
+
+今回の[ベンチマーククエリ](/blog/json-bench-clickhouse-vs-mongodb-elasticsearch-duckdb-postgresql#benchmark-queries)は`doc_values`を利用して集計結果を返すため、オリジナルドキュメントを返す必要はありません。したがって、OSS版Elasticsearchで`_source`をオフにすることでEnterprise版の`synethic _source`機能による省ストレージ効果をシミュレートしています。比較のため、`_source`を有効にした場合も計測しています。
+
+#### 公平なストレージ比較のためのElasticsearch設定
+
+前述のように、Elasticsearchは様々なデータ構造（inverted index、doc_values など）にデータを格納し、用途ごとに最適化しています。今回のベンチマークは分析処理を中心とするため、以下のように設定しました：  
+
+- **Inverted indexのサイズを最小化**: 文字列をすべて[keyword](https://www.elastic.co/guide/en/elasticsearch/reference/current/keyword.html)として扱い、フルテキスト検索を無効化（これにより `doc_values` に値が格納され、分析クエリに最適化）。  
+- **日付フィールドマッピング**: 取り込んだドキュメントの日時フィールドを[date](https://github.com/ClickHouse/examples/tree/main/blog-examples/clickhouse-vs-elasticsearch/on-disk-format-and-insert-processing#elasticsearch)型としてマッピングし、Luceneの[Bkd](https://www.elastic.co/blog/numeric-and-date-ranges-in-elasticsearch-just-another-brick-in-the-wall)ツリーを利用。  
+- **ストレージオーバーヘッドの削減**: [meta-fields](https://github.com/ClickHouse/JSONBench/blob/c7afa7078aed72c55ff4441a2da635424fde7724/elasticsearch/config/filebeat.yml#L82)を無効化し、JSONデータからのフィールドのみを保持。_sourceをオフにして、synthetic _sourceに近い状態をシミュレート。  
+- **Index sortingの有効化**: [ClickHouseのソートキー](https://github.com/ClickHouse/JSONBench/blob/c7afa7078aed72c55ff4441a2da635424fde7724/clickhouse/ddl_zstd.sql#L10)と同じフィールドで[ソート](https://www.elastic.co/guide/en/elasticsearch/reference/current/index-modules-index-sorting.html)し、データの圧縮とクエリ性能を向上。  
+- **シングルノード最適化**: レプリカを[無効化](https://github.com/ClickHouse/JSONBench/blob/c7afa7078aed72c55ff4441a2da635424fde7724/elasticsearch/config/index_template_no_source_best_compression.json#L44)。  
+- **ロールオーバーとマージの最適化**: [ベストプラクティス](https://www.elastic.co/guide/en/elasticsearch/reference/current/size-your-shards.html#shard-size-recommendation)に従い、[ロールオーバーとマージ](https://github.com/ClickHouse/JSONBench/blob/c7afa7078aed72c55ff4441a2da635424fde7724/elasticsearch/config/ilm.json#L7)を設定。
+
+以下の図は、本ベンチマークにおけるElasticsearchのデータ構造構成を要約したものです。
+
+![JSON-Benchmarks.014.png](https://clickhouse.com/uploads/JSON_Benchmarks_014_16218543f4.png)
+
+なお、`_source`をオフにすると、`index.codec`で指定した圧縮アルゴリズムはほぼ意味をなしません。`stored fields`として扱うデータが無くなるためです。同様の設定で`lz4`と`zstd`を比較してもディスク使用量がほとんど変わらないのはこのためです。
+
+#### データソート
+
+Elasticsearchは[データのソート](https://www.elastic.co/guide/en/elasticsearch/reference/current/index-modules-index-sorting.html)を有効化することで、`stored fields`や`doc_values`が[連続した似通ったデータ](https://www.elastic.co/guide/en/elasticsearch/reference/current/tune-for-disk-usage.html#_use_index_sorting_to_colocate_similar_documents)として圧縮される形を促進し、クエリの早期終了（[early termination](https://github.com/ClickHouse/examples/tree/main/blog-examples/clickhouse-vs-elasticsearch/on-disk-format-and-insert-processing#on-disk-data-ordering)）を可能にします。これはClickHouseの仕組みにも似ています。
+
+#### キャッシュ
+
+ElasticsearchはOSページキャッシュに加え、シャードレベルの[request cache](https://www.elastic.co/guide/en/elasticsearch/reference/current/shard-request-cache.html)やセグメントレベルの[query cache](https://www.elastic.co/guide/en/elasticsearch/reference/current/query-cache.html)など[複数のキャッシュ](https://www.elastic.co/blog/elasticsearch-caching-deep-dive-boosting-query-speed-one-cache-at-a-time)を使用します。
+
+さらに、ElasticsearchはJavaのJVM上でクエリを実行するため、起動時に物理RAMの半分程度をヒープとして割り当てます（[最大32 GB](https://www.elastic.co/guide/en/elasticsearch/guide/current/heap-sizing.html#compressed_oops)まで）。残りのRAM領域はOSページキャッシュ経由でディスクI/Oを高速化します。
+
+#### 制限事項
+
+大規模分析やオブザーバビリティのようなユースケースでは、数十億行にわたるテーブルに対して`count(*)`や`count_distinct(...)`を行うクエリが[非常に一般的](https://clickhouse.com/blog/clickhouse_vs_elasticsearch_mechanics_of_count_aggregations#count-aggregations-in-clickhouse-and-elasticsearch)です。
+
+この観点から、私たちの[ベンチマーククエリ](/blog/json-bench-clickhouse-vs-mongodb-elasticsearch-duckdb-postgresql#benchmark-queries)も`count(*)`を多用し、`query ②`では`count_distinct(...)`も実行します。
+
+Elasticsearchで`count(*)`を実行すると、複数[シャード](https://github.com/ClickHouse/examples/tree/main/blog-examples/clickhouse-vs-elasticsearch/on-disk-format-and-insert-processing#elasticsearch)にまたがる場合は[近似値](https://clickhouse.com/blog/clickhouse_vs_elasticsearch_mechanics_of_count_aggregations#elasticsearch)しか得られません。ES|QLの[COUNT_DISTINCT](https://www.elastic.co/guide/en/elasticsearch/reference/current/esql-functions-operators.html#esql-count_distinct)集計関数も同様で、[HyperLogLog++](https://static.googleusercontent.com/media/research.google.com/fr//pubs/archive/40671.pdf)アルゴリズムを用いた近似値となります。
+
+一方、ClickHouseは`count(*)`を[完全に正確](https://clickhouse.com/blog/clickhouse_vs_elasticsearch_mechanics_of_count_aggregations#elasticsearch)に計算し、`count_distinct(...)`についても[近似](https://clickhouse.com/docs/en/sql-reference/aggregate-functions/reference/uniq#agg_function-uniq)と[厳密](https://clickhouse.com/docs/en/sql-reference/aggregate-functions/reference/uniqexact)の両方をサポートしています。`query ②`では厳密なバージョンを使用しています。
+
+また、今回の[Blueskyテストデータ](/blog/json-bench-clickhouse-vs-mongodb-elasticsearch-duckdb-postgresql#the-json-dataset---a-billion-bluesky-events)に含まれる`time_us`はマイクロ秒精度のタイムスタンプです。Elasticsearchでも[date_nanos](https://www.elastic.co/guide/en/elasticsearch/reference/current/date_nanos.html)型でナノ秒精度の日付を保存できますが、ES|QLの[日付/時刻関数](https://www.elastic.co/guide/en/elasticsearch/reference/current/esql-functions-operators.html)は[date](https://www.elastic.co/guide/en/elasticsearch/reference/current/date.html)型（ミリ秒精度）しか対応していません。そのため、本ベンチマークでは`time_us`をミリ秒精度の`date`型として[格納](https://github.com/ClickHouse/JSONBench/blob/c7afa7078aed72c55ff4441a2da635424fde7724/elasticsearch/config/filebeat.yml#L88)しています。
+
+ClickHouseでは[日付/時刻関数](https://clickhouse.com/docs/en/sql-reference/functions/date-time-functions)がナノ秒精度まで扱えます。
+
+### DuckDB
+
+[DuckDB](https://duckdb.org/)はシングルノード環境向けに設計された列指向型分析データベースです。
+
+
+#### JSONサポート
+
+DuckDBは2022年に[JSON論理型](https://duckdb.org/docs/data/json/json_type.html)を導入しました。
+
+#### JSONストレージ
+
+DuckDBは[列指向型](https://clickhouse.com/engineering-resources/what-is-columnar-database)データベースですが、現状ClickHouseほどJSONを分解して格納しません。DuckDBテーブル内のJSONカラムでは、取り込まれたJSONドキュメントが文字列として保存されます（解析済みの構造として保存されない）。
+
+![JSON-Benchmarks.015.png](https://clickhouse.com/uploads/JSON_Benchmarks_015_08bf8f39b1.png)
+
+DuckDBはデフォルトで[最小最大インデックス](https://en.wikipedia.org/wiki/Block_Range_Index)を自動生成します。これにより、高速なフィルタリングや集計をサポートしますが、これは[行グループ](https://duckdb.org/docs/guides/performance/how_to_tune_workloads.html#the-effect-of-row-groups-on-parallelism)ごとに保存された最小値と最大値を利用するしくみです。
+
+また、[Adaptive Radix Tree（ART）インデックス](https://db.in.tum.de/~leis/papers/ART.pdf)を指定して作成できますが、[制限](https://duckdb.org/docs/guides/performance/indexing.html#art-indexes)があり、非常に選択度の高いポイントクエリや約0.1%以下の行を対象とするフィルタクエリでしか効果を発揮しません。
+
+#### データ圧縮
+
+DuckDBは[自動的](https://duckdb.org/2022/10/28/lightweight-compression.html)に軽量圧縮アルゴリズムを選択し、カラムごとに[圧縮](https://duckdb.org/docs/internals/storage.html#compression)を適用します。
+
+
+#### データソート
+
+DuckDBのドキュメントでは、[事前にソートした状態](https://duckdb.org/docs/guides/performance/indexing.html#the-effect-of-ordering-on-zonemaps)でデータを挿入し、類似値をまとめることで圧縮効率や最小最大インデックスの効果を高めることが推奨されています。ただしDuckDB自体が自動でデータをソートするわけではありません。
+
+
+#### キャッシュ
+
+DuckDBはOSページキャッシュと内部の[バッファマネージャ](https://duckdb.org/2024/07/09/memory-management.html)を使用し、ストレージから読み込んだページをキャッシュします。
+
+
+### PostgreSQL
+
+[PostgreSQL](https://www.postgresql.org/)は古くからある行指向のリレーショナルデータベースで、JSONを一級サポートしています。私たちは、行指向データベースとしてDuckDBやClickHouseのような最新列指向型データベースと比較するために取り上げました。ただし、PostgreSQLは大規模分析向けではないため、JSONBenchのようなテストではスペック的に不利で、他のシステムと直接競合するわけではありません。
+
+
+#### JSONサポート
+
+PostgreSQLはJSONとJSONBの2種類のJSONデータ型をネイティブサポートしています。
+
+- [JSON型](https://www.postgresql.org/docs/current/datatype-json.html)：2012年リリースのPostgreSQL 9.2で導入。文字列として保存し、使用時に再度パース。  
+- [JSONB型](https://www.postgresql.org/docs/current/datatype-json.html)：2014年リリースのPostgreSQL 9.4で導入。BSONに類似するバイナリ形式で保存され、高速な検索や機能が利用可能。
+
+最新の推奨は性能面でも機能面でも優れる[JSONB](https://www.postgresql.org/docs/current/datatype-json.html)となります。
+
+#### JSONストレージ
+
+PostgreSQLは[行指向](https://clickhouse.com/engineering-resources/what-is-columnar-database#row-based-vs-column-based)データベースなので、JSONBタプルをディスク上で行単位に順次格納します。
+
+![JSON-Benchmarks.016.png](https://clickhouse.com/uploads/JSON_Benchmarks_016_3b37162b4d.png)
+
+ユーザーは[CREATE INDEX](https://www.postgresql.org/docs/current/sql-createindex.html)によって特定のJSONパスにセカンダリインデックスを作成できます。[デフォルト](https://www.postgresql.org/docs/current/sql-createindex.html)ではB-Treeインデックスで、各行に対してインデックスのエントリが1つ、インデックスにはJSONパスの値が格納されます。
+
+#### Index-only scan
+
+PostgreSQLはB-Treeインデックスで[index-only scan](https://www.postgresql.org/docs/current/indexes-index-only-scans.html)をサポートしており、[covered index scans](/blog/json-bench-clickhouse-vs-mongodb-elasticsearch-duckdb-postgresql#covered-index-scans)に類似した最適化が可能です。ただし、自動ではなく[可視性マップ](https://www.postgresql.org/docs/current/indexes-index-only-scans.html)によりテーブルの行が「可視」としてマークされている必要があります。これによりテーブルを読まずにインデックスだけでクエリを完結できます。
+
+私たちのベンチマークでは、PostgreSQLの[クエリ実行プラン](https://github.com/ClickHouse/JSONBench/tree/c7afa7078aed72c55ff4441a2da635424fde7724/postgresql/results/_index_usage)を取得して、index-only scanが行われているか検証しています。
+
+#### データ圧縮
+
+PostgreSQLは行ごとに8 KBの[ページ](https://en.m.wikipedia.org/wiki/Page_(computer_memory))をディスク上に配置し、各ページにできるだけ多くのタプルを詰め込みます。理想的にはタプルは2 KB以内が望ましいです。2 KBを超えるタプルは[TOAST](https://www.postgresql.org/docs/current/storage-toast.html)機構によって[圧縮](https://www.postgresql.org/docs/17/sql-createtable.html#SQL-CREATETABLE-PARMS-COMPRESSION)・分割されます。TOASTは`pglz`や`lz4`などをサポートし、2 KB以下のタプルは圧縮されません。
+
+#### データソート
+
+PostgreSQLは[CLUSTER](https://www.postgresql.org/docs/current/sql-cluster.html)コマンドで物理的にテーブルをソートする「clustered tables」をサポートします。しかし、ClickHouseやElasticsearchのようにデータのソート順で圧縮率が向上するわけではなく、PostgreSQLは行指向なので行内のデータがまとめて格納されるためです。実際には2 KB以上のタプルのみTOASTで圧縮され、データソートによる恩恵は限定的です。
+
+#### キャッシュ
+
+PostgreSQLは[クエリ実行プラン](https://www.postgresql.org/docs/current/plpgsql-implementation.html#PLPGSQL-PLAN-CACHING)や[テーブル/インデックスブロック](https://www.postgresql.org/docs/current/pgbuffercache.html)をキャッシュし、OSページキャッシュも利用します。ただし、専用のクエリ結果キャッシュはありません。
+
+## ベンチマーク設定
+
+[ClickBench](https://benchmark.clickhouse.com/)を参考に、私たちは[JSONBench](https://jsonbench.com/)という完全再現可能なベンチマークを作成しました。詳細な利用手順は[こちら](https://github.com/ClickHouse/JSONBench/?tab=readme-ov-file#usage)からご覧いただけます。
+
+
+### ハードウェアとOS
+
+ベンチマークはすべて、専用のAWS EC2 **m6i.8xlarge**インスタンス（**32 CPUコア**、**128 GB RAM**、**10 TB gp3ボリューム**）上で行いました。OSは**Ubuntu Linux 24.04 LTS**です。
+
+### 評価システムのバージョン
+
+以下のOSSバージョンを使用してベンチマークを行いました（すべてJSONを一級サポート）:
+
+- ClickHouse 25.1.1  
+- MongoDB 8.0.3  
+- Elasticsearch 8.17.0  
+- DuckDB 1.1.3  
+- PostgreSQL 16.6  
+
+### 測定項目
+
+ベンチマークでは、**ストレージサイズ**と**クエリ性能**を評価し、それぞれ**デフォルトの圧縮設定**と**最高の圧縮設定**でテストしました。
+
+システムの introspection 機能に応じて、以下の項目も計測しています:
+
+- **インデックスのストレージサイズ**  
+  - [ClickHouse](https://github.com/ClickHouse/JSONBench/blob/c7afa7078aed72c55ff4441a2da635424fde7724/clickhouse/results/m6i.8xlarge_bluesky_1000m_zstd.json#L19) 例  
+  - [MongoDB](https://github.com/ClickHouse/JSONBench/blob/c7afa7078aed72c55ff4441a2da635424fde7724/mongodb/results/m6i.8xlarge_bluesky_1000m_zstd.json#L19) 例  
+  - [PostgreSQL](https://github.com/ClickHouse/JSONBench/blob/c7afa7078aed72c55ff4441a2da635424fde7724/postgresql/results/m6i.8xlarge_bluesky_1000m_lz4.json#L19) 例  
+
+- **データのみのストレージサイズ**（インデックスを除く）  
+  - [ClickHouse](https://github.com/ClickHouse/JSONBench/blob/c7afa7078aed72c55ff4441a2da635424fde7724/clickhouse/results/m6i.8xlarge_bluesky_1000m_zstd.json#L17) 例  
+  - [MongoDB](https://github.com/ClickHouse/JSONBench/blob/c7afa7078aed72c55ff4441a2da635424fde7724/mongodb/results/m6i.8xlarge_bluesky_1000m_zstd.json#L17) 例  
+  - [PostgreSQL](https://github.com/ClickHouse/JSONBench/blob/c7afa7078aed72c55ff4441a2da635424fde7724/postgresql/results/m6i.8xlarge_bluesky_1000m_lz4.json#L17) 例  
+
+- **トータルストレージサイズ**（データ + インデックス）  
+  - [ClickHouse](https://github.com/ClickHouse/JSONBench/blob/c7afa7078aed72c55ff4441a2da635424fde7724/clickhouse/results/m6i.8xlarge_bluesky_1000m_zstd.json#L15) 例  
+  - [MongoDB](https://github.com/ClickHouse/JSONBench/blob/c7afa7078aed72c55ff4441a2da635424fde7724/mongodb/results/m6i.8xlarge_bluesky_1000m_zstd.json#L15) 例  
+  - [Elasticsearch](https://github.com/ClickHouse/JSONBench/blob/c7afa7078aed72c55ff4441a2da635424fde7724/elasticsearch/results/m6i.8xlarge_bluesky_no_source_1000m_best_compression.json#L15) 例  
+  - [DuckDB](https://github.com/ClickHouse/JSONBench/blob/c7afa7078aed72c55ff4441a2da635424fde7724/duckdb/results/m6i.8xlarge_bluesky_1000m.json#L15) 例  
+  - [PostgreSQL](https://github.com/ClickHouse/JSONBench/blob/c7afa7078aed72c55ff4441a2da635424fde7724/postgresql/results/m6i.8xlarge_bluesky_1000m_lz4.json#L15) 例  
+
+- **各クエリの実行プラン**（**インデックス利用**などの検証用）
+  - ClickHouseの[論理プラン](https://github.com/ClickHouse/JSONBench/tree/c7afa7078aed72c55ff4441a2da635424fde7724/clickhouse/results/_index_usage)と[物理プラン](https://github.com/ClickHouse/JSONBench/tree/c7afa7078aed72c55ff4441a2da635424fde7724/clickhouse/results/_physical_query_plans)の例  
+  - [MongoDB](https://github.com/ClickHouse/JSONBench/tree/c7afa7078aed72c55ff4441a2da635424fde7724/mongodb/results/_index_usage)の例  
+  - [DuckDB](https://github.com/ClickHouse/JSONBench/tree/c7afa7078aed72c55ff4441a2da635424fde7724/duckdb/results/_physical_query_plans)の例  
+  - [PostgreSQL](https://github.com/ClickHouse/JSONBench/tree/c7afa7078aed72c55ff4441a2da635424fde7724/postgresql/results/_index_usage)の例  
+
+- **クエリごとの最大メモリ使用量**  
+  - [ClickHouse](https://github.com/ClickHouse/JSONBench/blob/c7afa7078aed72c55ff4441a2da635424fde7724/clickhouse/results/m6i.8xlarge_bluesky_1000m_zstd.json#L36)の例  
+
+
+## ベンチマーククエリ
+
+各システムについて、[コールド/ホットのパフォーマンス](/blog/json-bench-clickhouse-vs-mongodb-elasticsearch-duckdb-postgresql#cold-and-hot-query-runtimes)を含め、5種類の分析クエリを8つのデータセットに対して順番に実行しました。
+
+ClickHouse、DuckDB、PostgreSQL向けにはSQL、MongoDBには[aggregation pipeline](https://www.mongodb.com/docs/manual/aggregation/#std-label-aggregation-pipeline-intro)、Elasticsearchには[ES|QL](https://www.elastic.co/guide/en/elasticsearch/reference/current/esql.html)を使用しました。それらが同等の処理であることを示すため、1百万件データセットに対する実行結果をリンク先に載せています（1百万件なら[完全に](https://jsonbench.com/#eyJzeXN0ZW0iOnsiQ2xpY2tIb3VzZSAobHo0KSI6dHJ1ZSwiQ2xpY2tIb3VzZSAoenN0ZCkiOnRydWUsIkR1Y2tEQiI6dHJ1ZSwiRWxhc3RpY3NlYXJjaCAobm8gc291cmNlLCBiZXN0IGNvbXByZXNzaW9uKSI6dHJ1ZSwiRWxhc3RpY3NlYXJjaCAobm8gc291cmNlLCBkZWZhdWx0KSI6dHJ1ZSwiRWxhc3RpY3NlYXJjaCAoYmVzdCBjb21wcmVzc2lvbikiOnRydWUsIkVsYXN0aWNzZWFyY2ggKGRlZmF1bHQpIjp0cnVlLCJFbGFzdGljc2VhcmNoIjp0cnVlLCJNb25nb0RCIChzbmFwcHksIGNvdmVyZWQgaW5kZXgpIjp0cnVlLCJNb25nb0RCICh6c3RkLCBjb3ZlcmVkIGluZGV4KSI6dHJ1ZSwiTW9uZ29EQiAoc25hcHB5KSI6dHJ1ZSwiTW9uZ29EQiAoenN0ZCkiOnRydWUsIlBvc3RncmVTUUwgKGx6NCkiOnRydWUsIlBvc3RncmVTUUwgKHBnbHopIjp0cnVlfSwic2NhbGUiOiIxMDAwMDAwIiwibWV0cmljIjoicXVhbGl0eSIsInF1ZXJpZXMiOlt0cnVlLHRydWUsdHJ1ZSx0cnVlLHRydWVdfQ==)ロードできるので結果を完全比較可能）。
+
+#### Query ① - Blueskyのイベント種類トップ
+
+- [ClickHouse](https://github.com/ClickHouse/JSONBench/blob/c7afa7078aed72c55ff4441a2da635424fde7724/clickhouse/queries_formatted.sql#L2)版 + [結果](https://github.com/ClickHouse/JSONBench/blob/c7afa7078aed72c55ff4441a2da635424fde7724/clickhouse/results/_query_results/_m6i.8xlarge_bluesky_1m_lz4.query_results#L2)  
+- [MongoDB](https://github.com/ClickHouse/JSONBench/blob/c7afa7078aed72c55ff4441a2da635424fde7724/mongodb/queries_formatted.js#L2)版 + [結果](https://github.com/ClickHouse/JSONBench/blob/c7afa7078aed72c55ff4441a2da635424fde7724/mongodb/results/_query_results/_m6i.8xlarge_bluesky_1m_snappy.query_results#L2)  
+- [Elasticsearch](https://github.com/ClickHouse/JSONBench/blob/c7afa7078aed72c55ff4441a2da635424fde7724/elasticsearch/queries_formatted.txt#L1)版 + [結果](https://github.com/ClickHouse/JSONBench/blob/c7afa7078aed72c55ff4441a2da635424fde7724/elasticsearch/results/_query_results/_m6i.8xlarge_bluesky-no_source_best_compression-1m.query_results#L2)  
+- [DuckDB](https://github.com/ClickHouse/JSONBench/blob/c7afa7078aed72c55ff4441a2da635424fde7724/duckdb/queries_formatted.sql#L2)版 + [結果](https://github.com/ClickHouse/JSONBench/blob/c7afa7078aed72c55ff4441a2da635424fde7724/duckdb/results/_query_results/_m6i.8xlarge_bluesky_1m.query_results#L2)  
+- [PostgreSQL](https://github.com/ClickHouse/JSONBench/blob/c7afa7078aed72c55ff4441a2da635424fde7724/postgresql/queries_formatted.sql#L2)版 + [結果](https://github.com/ClickHouse/JSONBench/blob/c7afa7078aed72c55ff4441a2da635424fde7724/postgresql/results/_query_results/_m6i.8xlarge_bluesky_1m_lz4.query_results#L2)  
+
+#### Query ② - Blueskyのイベント種類トップとユーザー数
+
+- [ClickHouse](https://github.com/ClickHouse/JSONBench/blob/c7afa7078aed72c55ff4441a2da635424fde7724/clickhouse/queries_formatted.sql#L12)版 + [結果](https://github.com/ClickHouse/JSONBench/blob/c7afa7078aed72c55ff4441a2da635424fde7724/clickhouse/results/_query_results/_m6i.8xlarge_bluesky_1m_lz4.query_results#L22)  
+- [MongoDB](https://github.com/ClickHouse/JSONBench/blob/c7afa7078aed72c55ff4441a2da635424fde7724/mongodb/queries_formatted.js#L17)版 + [結果](https://github.com/ClickHouse/JSONBench/blob/c7afa7078aed72c55ff4441a2da635424fde7724/mongodb/results/_query_results/_m6i.8xlarge_bluesky_1m_snappy.query_results#L67)  
+- [Elasticsearch](https://github.com/ClickHouse/JSONBench/blob/c7afa7078aed72c55ff4441a2da635424fde7724/elasticsearch/queries_formatted.txt#L10)版 + [結果](https://github.com/ClickHouse/JSONBench/blob/c7afa7078aed72c55ff4441a2da635424fde7724/elasticsearch/results/_query_results/_m6i.8xlarge_bluesky-no_source_best_compression-1m.query_results#L23)  
+- [DuckDB](https://github.com/ClickHouse/JSONBench/blob/c7afa7078aed72c55ff4441a2da635424fde7724/duckdb/queries_formatted.sql#L12)版 + [結果](https://github.com/ClickHouse/JSONBench/blob/c7afa7078aed72c55ff4441a2da635424fde7724/duckdb/results/_query_results/_m6i.8xlarge_bluesky_1m.query_results#L27)  
+- [PostgreSQL](https://github.com/ClickHouse/JSONBench/blob/c7afa7078aed72c55ff4441a2da635424fde7724/postgresql/queries_formatted.sql#L12)版 + [結果](https://github.com/ClickHouse/JSONBench/blob/c7afa7078aed72c55ff4441a2da635424fde7724/postgresql/results/_query_results/_m6i.8xlarge_bluesky_1m_lz4.query_results#L24)  
+
+#### Query ③ - Blueskyはいつ使われるか
+
+- [ClickHouse](https://github.com/ClickHouse/JSONBench/blob/c7afa7078aed72c55ff4441a2da635424fde7724/clickhouse/queries_formatted.sql#L25)版 + [結果](https://github.com/ClickHouse/JSONBench/blob/c7afa7078aed72c55ff4441a2da635424fde7724/clickhouse/results/_query_results/_m6i.8xlarge_bluesky_1m_lz4.query_results#L40)  
+- [MongoDB](https://github.com/ClickHouse/JSONBench/blob/c7afa7078aed72c55ff4441a2da635424fde7724/mongodb/queries_formatted.js#L47)版 + [結果](https://github.com/ClickHouse/JSONBench/blob/c7afa7078aed72c55ff4441a2da635424fde7724/mongodb/results/_query_results/_m6i.8xlarge_bluesky_1m_snappy.query_results#L150)  
+- [Elasticsearch](https://github.com/ClickHouse/JSONBench/blob/c7afa7078aed72c55ff4441a2da635424fde7724/elasticsearch/queries_formatted.txt#L20)版 + [結果](https://github.com/ClickHouse/JSONBench/blob/c7afa7078aed72c55ff4441a2da635424fde7724/elasticsearch/results/_query_results/_m6i.8xlarge_bluesky-no_source_best_compression-1m.query_results#L42)  
+- [DuckDB](https://github.com/ClickHouse/JSONBench/blob/c7afa7078aed72c55ff4441a2da635424fde7724/duckdb/queries_formatted.sql#L25)版 + [結果](https://github.com/ClickHouse/JSONBench/blob/c7afa7078aed72c55ff4441a2da635424fde7724/duckdb/results/_query_results/_m6i.8xlarge_bluesky_1m.query_results#L50)  
+- [PostgreSQL](https://github.com/ClickHouse/JSONBench/blob/c7afa7078aed72c55ff4441a2da635424fde7724/postgresql/queries_formatted.sql#L25)版 + [結果](https://github.com/ClickHouse/JSONBench/blob/c7afa7078aed72c55ff4441a2da635424fde7724/postgresql/results/_query_results/_m6i.8xlarge_bluesky_1m_lz4.query_results#L44)  
+
+#### Query ④ - もっとも古参の投稿者トップ3
+
+- [ClickHouse](https://github.com/ClickHouse/JSONBench/blob/c7afa7078aed72c55ff4441a2da635424fde7724/clickhouse/queries_formatted.sql#L39)版 + [結果](https://github.com/ClickHouse/JSONBench/blob/c7afa7078aed72c55ff4441a2da635424fde7724/clickhouse/results/_query_results/_m6i.8xlarge_bluesky_1m_lz4.query_results#L48)  
+- [MongoDB](https://github.com/ClickHouse/JSONBench/blob/c7afa7078aed72c55ff4441a2da635424fde7724/mongodb/queries_formatted.js#L85)版 + [結果](https://github.com/ClickHouse/JSONBench/blob/c7afa7078aed72c55ff4441a2da635424fde7724/mongodb/results/_query_results/_m6i.8xlarge_bluesky_1m_snappy.query_results#L176)  
+- [Elasticsearch](https://github.com/ClickHouse/JSONBench/blob/c7afa7078aed72c55ff4441a2da635424fde7724/elasticsearch/queries_formatted.txt#L30)版 + [結果](https://github.com/ClickHouse/JSONBench/blob/c7afa7078aed72c55ff4441a2da635424fde7724/elasticsearch/results/_query_results/_m6i.8xlarge_bluesky-no_source_best_compression-1m.query_results#L51)  
+- [DuckDB](https://github.com/ClickHouse/JSONBench/blob/c7afa7078aed72c55ff4441a2da635424fde7724/duckdb/queries_formatted.sql#L40)版 + [結果](https://github.com/ClickHouse/JSONBench/blob/c7afa7078aed72c55ff4441a2da635424fde7724/duckdb/results/_query_results/_m6i.8xlarge_bluesky_1m.query_results#L61)  
+- [PostgreSQL](https://github.com/ClickHouse/JSONBench/blob/c7afa7078aed72c55ff4441a2da635424fde7724/postgresql/queries_formatted.sql#L39)版 + [結果](https://github.com/ClickHouse/JSONBench/blob/c7afa7078aed72c55ff4441a2da635424fde7724/postgresql/results/_query_results/_m6i.8xlarge_bluesky_1m_lz4.query_results#L54)  
+
+#### Query ⑤ - もっとも活動期間が長いユーザートップ3
+
+- [ClickHouse](https://github.com/ClickHouse/JSONBench/blob/c7afa7078aed72c55ff4441a2da635424fde7724/clickhouse/queries_formatted.sql#L53)版 + [結果](https://github.com/ClickHouse/JSONBench/blob/c7afa7078aed72c55ff4441a2da635424fde7724/clickhouse/results/_query_results/_m6i.8xlarge_bluesky_1m_lz4.query_results#L56)  
+- [MongoDB](https://github.com/ClickHouse/JSONBench/blob/c7afa7078aed72c55ff4441a2da635424fde7724/mongodb/queries_formatted.js#L117)版 + [結果](https://github.com/ClickHouse/JSONBench/blob/c7afa7078aed72c55ff4441a2da635424fde7724/mongodb/results/_query_results/_m6i.8xlarge_bluesky_1m_snappy.query_results#L193)  
+- [Elasticsearch](https://github.com/ClickHouse/JSONBench/blob/c7afa7078aed72c55ff4441a2da635424fde7724/elasticsearch/queries_formatted.txt#L41)版 + [結果](https://github.com/ClickHouse/JSONBench/blob/c7afa7078aed72c55ff4441a2da635424fde7724/elasticsearch/results/_query_results/_m6i.8xlarge_bluesky-no_source_best_compression-1m.query_results#L60)  
+- [DuckDB](https://github.com/ClickHouse/JSONBench/blob/c7afa7078aed72c55ff4441a2da635424fde7724/duckdb/queries_formatted.sql#L55)版 + [結果](https://github.com/ClickHouse/JSONBench/blob/c7afa7078aed72c55ff4441a2da635424fde7724/duckdb/results/_query_results/_m6i.8xlarge_bluesky_1m.query_results#L72)  
+- [PostgreSQL](https://github.com/ClickHouse/JSONBench/blob/c7afa7078aed72c55ff4441a2da635424fde7724/postgresql/queries_formatted.sql#L56)版 + [結果](https://github.com/ClickHouse/JSONBench/blob/c7afa7078aed72c55ff4441a2da635424fde7724/postgresql/results/_query_results/_m6i.8xlarge_bluesky_1m_lz4.query_results#L64)  
+
+## ベンチマーク手法
+
+この記事では、**最大10億件のBluesky JSONドキュメント**を取り込み時のストレージサイズと、**5種類の典型的分析クエリ**（連続実行）の性能を比較しました。
+
+評価は、**5つのオープンソースJSON対応データストア**を**単一ノード**で動かし、定義済みの手法に従って行いました。以下に手法を説明します。
+
+### チューニングなし
+
+[ClickBench](https://github.com/ClickHouse/ClickBench?tab=readme-ov-file#installation-and-fine-tuning)と同様に、すべてのシステムは標準設定のまま、特別なチューニングは行っていません。
+
+例外として、MongoDBの[クエリ②](https://github.com/ClickHouse/JSONBench/blob/c7afa7078aed72c55ff4441a2da635424fde7724/mongodb/queries_formatted.js#L17)で以下のエラーが発生しました。
+```shell
+MongoServerError[ExceededMemoryLimit]: PlanExecutor error during aggregation :: caused by :: Used too much memory for a single array. Memory limit: 104857600. Current set has 2279516 elements and is 104857601 bytes.
+```
+これは[`COUNT DISTINCT`がない](https://github.com/ClickHouse/JSONBench/blob/c7afa7078aed72c55ff4441a2da635424fde7724/mongodb/queries_formatted.js#L31)ために使っている[$addToSet](https://www.mongodb.com/docs/manual/reference/operator/aggregation/addToSet/)演算子がデフォルトで100MBの制限を超えてしまったことが原因です。対応として、[internalQueryMaxAddToSetBytes](https://github.com/ClickHouse/JSONBench/blob/c7afa7078aed72c55ff4441a2da635424fde7724/mongodb/run_queries.sh#L24)を引き上げました。
+
+また、[ベストプラクティス](https://www.mongodb.com/docs/manual/core/query-optimization/#performance)に従い、MongoDBの[カバードインデックススキャン](https://github.com/ClickHouse/ClickBench/blob/96994da9b0cd61b04e543224dd89c9de32486415/mongodb/benchmark.sh#L14)を有効化するため、[internalQueryPlannerGenerateCoveredWholeIndexScans](https://github.com/ClickHouse/JSONBench/blob/c7afa7078aed72c55ff4441a2da635424fde7724/mongodb/run_queries.sh#L36)をオンにしました。結果として、ベンチマーククエリのMongoDBはすべてcoveredクエリとなり、これが有効でない場合の実行時間よりも大幅に速くなります。
+
+
+### クエリ結果キャッシュなし
+
+ElasticsearchやClickHouseのように、クエリ結果キャッシュを有効化すると、その後の実行はキャッシュから即座に結果を返せます。しかしこれではベンチマークとして有意義な比較にならないため、全システムでクエリ結果キャッシュを無効化・クリアしています。
+
+### トップレベルのフィールド抽出はなし
+
+今回の目的は、「各システムのJSONデータ型」の性能比較に集中することです。そこで、テスト対象の各システム・データ構成では、単一のJSON型フィールドのみを持つテーブル*に制限しました。
+
+**ClickHouse**の[DDL例](https://github.com/ClickHouse/JSONBench/blob/c7afa7078aed72c55ff4441a2da635424fde7724/clickhouse/ddl_zstd.sql#L1):
+<pre>
+<code type='click-ui' language='sql'>
+CREATE TABLE bluesky (
+    data JSON
+) ORDER BY();
+</code>
+</pre>
+
+**DuckDB**の[DDL例](https://github.com/ClickHouse/JSONBench/blob/c7afa7078aed72c55ff4441a2da635424fde7724/duckdb/ddl.sql#L1):
+<pre>
+<code type='click-ui' language='sql'>
+CREATE TABLE bluesky (
+    data JSON
+);
+</code>
+</pre>
+
+**PostgreSQL**の[DDL例](https://github.com/ClickHouse/JSONBench/blob/c7afa7078aed72c55ff4441a2da635424fde7724/postgresql/ddl_lz4.sql#L1):
+<pre>
+<code type='click-ui' language='sql'>
+CREATE TABLE bluesky (
+    data JSONB
+);
+</code>
+</pre>
+
+*MongoDBやElasticsearchはリレーショナルDBではないため、DDLはやや異なりますが、同様に「単一フィールド（ドキュメント単位）でJSONを扱う」概念で比較しています。*
+
+[ClickHouseのDDL](https://github.com/ClickHouse/JSONBench/blob/c7afa7078aed72c55ff4441a2da635424fde7724/clickhouse/ddl_zstd.sql#L1)ではプライマリキーを指定するためにJSONパスと型ヒントをJSON型の定義内部で指定しています。一方、DuckDBやPostgreSQLはセカンダリインデックスをCREATE TABLE後に作成し、同じ目的を達成しています。詳細は次のセクションを参照してください。
+
+### 一部のJSONパスだけインデックス＆データソート可
+
+今回のベンチマーククエリを高速化するため、各システムで以下のJSONパスに対するインデックス（または相当する機能）を作成できるようにしました:
+
+- **kind**: 大部分のBlueskyイベント構造を分岐させるパス（`commit`, `identity`, `account`などがある）  
+- **commit.operation**: `commit`イベントが`create`, `delete`, `update`のどれかを表す  
+- **commit.collection**: `commit`イベントの種類（例：`post`, `repost`, `like`など）  
+- **did**: イベントを引き起こしたBlueskyユーザーのID  
+- **time_us**: Blueskyタイムスタンプの不一致問題を簡単化するため、すべてのイベントがこのタイムスタンプ（実際にはAPI取得時刻）を持つとみなす
+
+DuckDBとElasticsearchを除く全システムでは、これらのパスを1つの複合インデックスにまとめました（カーディナリティの低い順で並べる）。  
+<pre>
+<code type='click-ui' language='sql'>
+(kind, commit.operation, commit.collection, did, time_us)
+</code>
+</pre>
+
+**ClickHouse**では、[プライマリキー/ソートキー](https://github.com/ClickHouse/JSONBench/blob/c7afa7078aed72c55ff4441a2da635424fde7724/clickhouse/ddl_zstd.sql#L10)を同等に設定しました:
+<pre>
+<code type='click-ui' language='sql'>
+ORDER BY (
+    data.kind,
+    data.commit.operation,
+    data.commit.collection,
+    data.did,
+    fromUnixTimestamp64Micro(data.time_us));
+</code>
+</pre>
+
+**MongoDB**では、[セカンダリインデックス](https://github.com/ClickHouse/JSONBench/blob/c7afa7078aed72c55ff4441a2da635424fde7724/mongodb/ddl_snappy.js#L6)を作成:
+<pre>
+<code type='click-ui' language='sql'>
+db.bluesky.createIndex({
+    "kind": 1,
+    "commit.operation": 1,
+    "commit.collection": 1,
+    "did": 1,
+    "time_us": 1});
+</code>
+</pre>
+
+**PostgreSQL**では、[セカンダリインデックス](https://github.com/ClickHouse/JSONBench/blob/c7afa7078aed72c55ff4441a2da635424fde7724/postgresql/ddl_lz4.sql#L5)を作成:
+<pre>
+<code type='click-ui' language='sql'>
+CREATE INDEX idx_bluesky
+ON bluesky (
+    (data ->> 'kind'),
+    (data -> 'commit' ->> 'operation'),
+    (data -> 'commit' ->> 'collection'),
+    (data ->> 'did'),
+    (TO_TIMESTAMP((data ->> 'time_us')::BIGINT / 1000000.0))
+);
+</code>
+</pre>
+
+**DuckDB**では、[利用可能なインデックス](https://duckdb.org/docs/guides/performance/indexing.html#art-indexes)を使っても今回のベンチマーククエリに利点がないと判断し、データソートも自動化されません。
+
+**Elasticsearch**はセカンダリインデックスの概念はありませんが、[doc_values](#json-storage-and-data-compression)を自動的に作成し、[index sorting](#data-sorting-1)によって最適化を行います。[ClickHouseのソートキー](https://github.com/ClickHouse/JSONBench/blob/c7afa7078aed72c55ff4441a2da635424fde7724/clickhouse/ddl_zstd.sql#L10)と同じJSONパスで[インデックスソート](https://github.com/ClickHouse/JSONBench/blob/c7afa7078aed72c55ff4441a2da635424fde7724/elasticsearch/config/index_template_no_source_best_compression.json#L28)を行っています。
+
+#### MongoDBとPostgreSQLでインデックスオンリースキャンを許容
+
+多くの[ベンチマーククエリ](#benchmark-queries)で`kind`, `commit.operation`, `commit.collection`によるフィルタ（3つ同時）が行われますが、これらも複合インデックスを利用しています。
+
+`did`や`time_us`はクエリでフィルタされませんが、MongoDBやPostgreSQLで[index-only scan](/blog/json-bench-clickhouse-vs-mongodb-elasticsearch-duckdb-postgresql#covered-index-scans)を有効化するには、クエリが参照する列をすべてインデックスに含める必要があります。ClickHouseの場合は、`did`や`time_us`もプライマリキーに含めることでディスクサイズ比較をより正確にできるようにしています。
+
+#### クエリ実行プランからインデックス利用を検証
+
+[前述](#measurements)したように、私たちは各システムのクエリ実行プランを解析して、ベンチマーククエリが意図したインデックスを正しく利用しているかを検証しました。
+
+### データセット件数に多少の差異は許容
+
+大規模なJSONデータセットでは、一部のシステムが特定ドキュメントをパースできず読み込めないケースがしばしば起こります。実装の違いやフォーマットの例外などが原因です。
+
+今回のベンチマークでは、**100%完璧にロードできなくても構わない**という前提としました。ロードできたドキュメント数が元データセットサイズに**近似**していれば、性能やストレージ比較には十分だと考えています。
+
+結果として、ベンチマークでは`dataset_size`（予定行数）と、実際にロードできた行数（`num_loaded_documents`）を記録しています。
+
+例えば10億ドキュメントの場合、各システムでロードできた行数は以下のとおりでした:
+
+- ClickHouse:    [999,999,258件](https://github.com/ClickHouse/JSONBench/blob/c7afa7078aed72c55ff4441a2da635424fde7724/clickhouse/results/m6i.8xlarge_bluesky_1000m_zstd.json#L13)  
+- MongoDB:      [893,632,990件](https://github.com/ClickHouse/JSONBench/blob/c7afa7078aed72c55ff4441a2da635424fde7724/mongodb/results/m6i.8xlarge_bluesky_1000m_zstd.json#L13)  
+- Elasticsearch: [999,998,998件](https://github.com/ClickHouse/JSONBench/blob/c7afa7078aed72c55ff4441a2da635424fde7724/elasticsearch/results/m6i.8xlarge_bluesky_no_source_1000m_best_compression.json#L13)  
+- DuckDB:        [974,400,000件](https://github.com/ClickHouse/JSONBench/blob/c7afa7078aed72c55ff4441a2da635424fde7724/duckdb/results/m6i.8xlarge_bluesky_1000m.json#L13C27-L13C36)  
+- PostgreSQL:   [804,000,000件](https://github.com/ClickHouse/JSONBench/blob/c7afa7078aed72c55ff4441a2da635424fde7724/postgresql/results/m6i.8xlarge_bluesky_1000m_lz4.json#L13)
+
+[JSONBenchオンラインダッシュボード](https://jsonbench.com/)の`Data Quality`メトリクスで、システムごとのロード完了率も確認できます。1百万、1千万、1億、10億件など各サイズでのロード率を比較可能です。
+
+私たちは、ロード方法の改良や不具合修正によって、より多くのドキュメントをロードできるようにする貢献を歓迎します。
+
+### コールドとホットクエリ時間
+
+[ClickBench](https://github.com/ClickHouse/ClickBench?tab=readme-ov-file#results-usage-and-scoreboards)と同様に、各ベンチマーククエリをそれぞれ3回実行し、**1回目の実行をコールドランタイム**、**2回目と3回目のうち最短をホットランタイム**とします。1回目の実行前には、OSレベルのページキャッシュをクリア（例：[ClickHouseのケース](https://github.com/ClickHouse/JSONBench/blob/c7afa7078aed72c55ff4441a2da635424fde7724/clickhouse/run_queries.sh#L16C5-L16C40)）します。
+
+以下はご要望に沿って、元の英文ブログ記事を日本語に翻訳したものです。リンクや参照先は原文のまま残してあります。
+
+---
+
+## ベンチマーク結果
+
+いよいよベンチマーク結果の紹介です。前述した手法に従い、**10億件の JSON ドキュメントを扱うデータセット**に対する結果を示します。実運用で考えられるデータ量に注目するため、このような大きな規模のデータセットを対象にしています。
+
+また、比較をシンプルかつ実際的にするために、各システムで利用可能な**最適な圧縮オプション**を使った場合の結果のみを掲載しています。多くのシステムが同じ `zstd` アルゴリズムを採用していること、そしてペタバイト級の現実的なシナリオではストレージコスト削減のために圧縮が極めて重要となることを考慮して、この方針としました。
+
+小規模データセットの結果は重複を避けるため、そして実際のユースケースではあまり意味がないため、ここでは割愛しています。たとえば Bluesky のようなプラットフォームでは 1 秒間に数百万件のイベントが生まれる可能性があるので、あまりに小さいデータセットは現実的ではありません。
+
+> もっと詳しく知りたい方のために、デフォルト圧縮オプションや小規模データセットを含むすべての結果を [JSONBench のオンラインダッシュボード](https://jsonbench.com/) で公開しています。すべてのシステムについて結果を簡単に分析・比較できるようになっています:
+> 
+> - 1 million JSON ドキュメント（100万件）: [storage sizes](https://jsonbench.com/#eyJzeXN0ZW0iOnsiQ2xpY2tIb3VzZSAobHo0KSI6dHJ1ZSwiQ2xpY2tIb3VzZSAoenN0ZCkiOnRydWUsIkR1Y2tEQiI6dHJ1ZSwiRWxhc3RpY3NlYXJjaCAobm8gc291cmNlLCBiZXN0IGNvbXByZXNzaW9uKSI6dHJ1ZSwiRWxhc3RpY3NlYXJjaCAobm8gc291cmNlLCBkZWZhdWx0KSI6dHJ1ZSwiRWxhc3RpY3NlYXJjaCAoYmVzdCBjb21wcmVzc2lvbikiOnRydWUsIkVsYXN0aWNzZWFyY2ggKGRlZmF1bHQpIjp0cnVlLCJFbGFzdGljc2VhcmNoIjp0cnVlLCJNb25nb0RCIChzbmFwcHksIGNvdmVyZWQgaW5kZXgpIjp0cnVlLCJNb25nb0RCICh6c3RkLCBjb3ZlcmVkIGluZGV4KSI6dHJ1ZSwiTW9uZ29EQiAoc25hcHB5KSI6dHJ1ZSwiTW9uZ29EQiAoenN0ZCkiOnRydWUsIlBvc3RncmVTUUwgKGx6NCkiOnRydWUsIlBvc3RncmVTUUwgKHBnbHopIjp0cnVlfSwic2NhbGUiOiIxMDAwMDAwIiwibWV0cmljIjoic2l6ZSIsInF1ZXJpZXMiOlt0cnVlLHRydWUsdHJ1ZSx0cnVlLHRydWVdfQ==), [cold runtimes](https://jsonbench.com/#eyJzeXN0ZW0iOnsiQ2xpY2tIb3VzZSAobHo0KSI6dHJ1ZSwiQ2xpY2tIb3VzZSAoenN0ZCkiOnRydWUsIkR1Y2tEQiI6dHJ1ZSwiRWxhc3RpY3NlYXJjaCAobm8gc291cmNlLCBiZXN0IGNvbXByZXNzaW9uKSI6dHJ1ZSwiRWxhc3RpY3NlYXJjaCAobm8gc291cmNlLCBkZWZhdWx0KSI6dHJ1ZSwiRWxhc3RpY3NlYXJjaCAoYmVzdCBjb21wcmVzc2lvbikiOnRydWUsIkVsYXN0aWNzZWFyY2ggKGRlZmF1bHQpIjp0cnVlLCJFbGFzdGljc2VhcmNoIjp0cnVlLCJNb25nb0RCIChzbmFwcHksIGNvdmVyZWQgaW5kZXgpIjp0cnVlLCJNb25nb0RCICh6c3RkLCBjb3ZlcmVkIGluZGV4KSI6dHJ1ZSwiTW9uZ29EQiAoc25hcHB5KSI6dHJ1ZSwiTW9uZ29EQiAoenN0ZCkiOnRydWUsIlBvc3RncmVTUUwgKGx6NCkiOnRydWUsIlBvc3RncmVTUUwgKHBnbHopIjp0cnVlfSwic2NhbGUiOiIxMDAwMDAwIiwibWV0cmljIjoiY29sZCIsInF1ZXJpZXMiOlt0cnVlLHRydWUsdHJ1ZSx0cnVlLHRydWVdfQ==), [hot runtimes](https://jsonbench.com/#eyJzeXN0ZW0iOnsiQ2xpY2tIb3VzZSAobHo0KSI6dHJ1ZSwiQ2xpY2tIb3VzZSAoenN0ZCkiOnRydWUsIkR1Y2tEQiI6dHJ1ZSwiRWxhc3RpY3NlYXJjaCAobm8gc291cmNlLCBiZXN0IGNvbXByZXNzaW9uKSI6dHJ1ZSwiRWxhc3RpY3NlYXJjaCAobm8gc291cmNlLCBkZWZhdWx0KSI6dHJ1ZSwiRWxhc3RpY3NlYXJjaCAoYmVzdCBjb21wcmVzc2lvbikiOnRydWUsIkVsYXN0aWNzZWFyY2ggKGRlZmF1bHQpIjp0cnVlLCJFbGFzdGljc2VhcmNoIjp0cnVlLCJNb25nb0RCIChzbmFwcHksIGNvdmVyZWQgaW5kZXgpIjp0cnRlLCJNb25nb0RCICh6c3RkLCBjb3ZlcmVkIGluZGV4KSI6dHJ1ZSwiTW9uZ29EQiAoc25hcHB5KSI6dHJ1ZSwiTW9uZ29EQiAoenN0ZCkiOnRydWUsIlBvc3RncmVTUUwgKGx6NCkiOnRydWUsIlBvc3RncmVTUUwgKHBnbHopIjp0cnVlfSwic2NhbGUiOiIxMDAwMDAwIiwibWV0cmljIjoiaG90IiwicXVlcmllcyI6W3RydWUsdHJ1ZSx0cnVlLHRydWUsdHJ1ZV19)
+> - 10 million JSON ドキュメント（1000万件）: [storage sizes](https://jsonbench.com/#eyJzeXN0ZW0iOnsiQ2xpY2tIb3VzZSAobHo0KSI6dHJ1ZSwiQ2xpY2tIb3VzZSAoenN0ZCkiOnRydWUsIkR1Y2tEQiI6dHJ1ZSwiRWxhc3RpY3NlYXJjaCAobm8gc291cmNlLCBiZXN0IGNvbXByZXNzaW9uKSI6dHJ1ZSwiRWxhc3RpY3NlYXJjaCAobm8gc291cmNlLCBkZWZhdWx0KSI6dHJ1ZSwiRWxhc3RpY3NlYXJjaCAoYmVzdCBjb21wcmVzc2lvbikiOnRydWUsIkVsYXN0aWNzZWFyY2ggKGRlZmF1bHQpIjp0cnVlLCJFbGFzdGljc2VhcmNoIjp0cnVlLCJNb25nb0RCIChzbmFwcHksIGNvdmVyZWQgaW5kZXgpIjp0cnVlLCJNb25nb0RCICh6c3RkLCBjb3ZlcmVkIGluZGV4KSI6dHJ1ZSwiTW9uZ29EQiAoc25hcHB5KSI6dHJ1ZSwiTW9uZ29EQiAoenN0ZCkiOnRydWUsIlBvc3RncmVTUUwgKGx6NCkiOnRydWUsIlBvc3RncmVTUUwgKHBnbHopIjp0cnVlfSwic2NhbGUiOiIxMDAwMDAwMCIsIm1ldHJpYyI6InNpemUiLCJxdWVyaWVzIjpbdHJ1ZSx0cnVlLHRydWUsdHJ1ZSx0cnVlXX0=), [cold runtimes](https://jsonbench.com/#eyJzeXN0ZW0iOnsiQ2xpY2tIb3VzZSAobHo0KSI6dHJ1ZSwiQ2xpY2tIb3VzZSAoenN0ZCkiOnRydWUsIkR1Y2tEQiI6dHJ1ZSwiRWxhc3RpY3NlYXJjaCAobm8gc291cmNlLCBiZXN0IGNvbXByZXNzaW9uKSI6dHJ1ZSwiRWxhc3RpY3NlYXJjaCAobm8gc291cmNlLCBkZWZhdWx0KSI6dHJ1ZSwiRWxhc3RpY3NlYXJjaCAoYmVzdCBjb21wcmVzc2lvbikiOnRydWUsIkVsYXN0aWNzZWFyY2ggKGRlZmF1bHQpIjp0cnVlLCJFbGFzdGljc2VhcmNoIjp0cnVlLCJNb25nb0RCIChzbmFwcHksIGNvdmVyZWQgaW5kZXgpIjp0cnVlLCJNb25nb0RCICh6c3RkLCBjb3ZlcmVkIGluZGV4KSI6dHJ1ZSwiTW9uZ29EQiAoc25hcHB5KSI6dHJ1ZSwiTW9uZ29EQiAoenN0ZCkiOnRydWUsIlBvc3RncmVTUUwgKGx6NCkiOnRydWUsIlBvc3RncmVTUUwgKHBnbHopIjp0cnVlfSwic2NhbGUiOiIxMDAwMDAwMCIsIm1ldHJpYyI6ImNvbGQiLCJxdWVyaWVzIjpbdHJ1ZSx0cnVlLHRydWUsdHJ1ZSx0cnVlXX0=), [hot runtimes](https://jsonbench.com/#eyJzeXN0ZW0iOnsiQ2xpY2tIb3VzZSAobHo0KSI6dHJ1ZSwiQ2xpY2tIb3VzZSAoenN0ZCkiOnRydWUsIkR1Y2tEQiI6dHJ1ZSwiRWxhc3RpY3NlYXJjaCAobm8gc291cmNlLCBiZXN0IGNvbXByZXNzaW9uKSI6dHJ1ZSwiRWxhc3RpY3NlYXJjaCAobm8gc291cmNlLCBkZWZhdWx0KSI6dHJ1ZSwiRWxhc3RpY3NlYXJjaCAoYmVzdCBjb21wcmVzc2lvbikiOnRydWUsIkVsYXN0aWNzZWFyY2ggKGRlZmF1bHQpIjp0cnVlLCJFbGFzdGljc2VhcmNoIjp0cnVlLCJNb25nb0RCIChzbmFwcHksIGNvdmVyZWQgaW5kZXgpIjp0cnVlLCJNb25nb0RCICh6c3RkLCBjb3ZlcmVkIGluZGV4KSI6dHJ1ZSwiTW9uZ29EQiAoc25hcHB5KSI6dHJ1ZSwiTW9uZ29EQiAoenN0ZCkiOnRydWUsIlBvc3RncmVTUUwgKGx6NCkiOnRydWUsIlBvc3RncmVTUUwgKHBnbHopIjp0cnVlfSwic2NhbGUiOiIxMDAwMDAwMCIsIm1ldHJpYyI6ImhvdCIsInF1ZXJpZXMiOlt0cnVlLHRydWUsdHJ1ZSx0cnVlLHRydWVdfQ==)
+> - 100 million JSON ドキュメント（1億件）: [storage sizes](https://jsonbench.com/#eyJzeXN0ZW0iOnsiQ2xpY2tIb3VzZSAobHo0KSI6dHJ1ZSwiQ2xpY2tIb3VzZSAoenN0ZCkiOnRydWUsIkR1Y2tEQiI6dHJ1ZSwiRWxhc3RpY3NlYXJjaCAobm8gc291cmNlLCBiZXN0IGNvbXByZXNzaW9uKSI6dHJ1ZSwiRWxhc3RpY3NlYXJjaCAobm8gc291cmNlLCBkZWZhdWx0KSI6dHJ1ZSwiRWxhc3RpY3NlYXJjaCAoYmVzdCBjb21wcmVzc2lvbikiOnRydWUsIkVsYXN0aWNzZWFyY2ggKGRlZmF1bHQpIjp0cnVlLCJFbGFzdGljc2VhcmNoIjp0cnVlLCJNb25nb0RCIChzbmFwcHksIGNvdmVyZWQgaW5kZXgpIjp0cnVlLCJNb25nb0RCICh6c3RkLCBjb3ZlcmVkIGluZGV4KSI6dHJ1ZSwiTW9uZ29EQiAoc25hcHB5KSI6dHJ1ZSwiTW9uZ29EQiAoenN0ZCkiOnRydWUsIlBvc3RncmVTUUwgKGx6NCkiOnRydWUsIlBvc3RncmVTUUwgKHBnbHopIjp0cnVlfSwic2NhbGUiOiIxMDAwMDAwMDAiLCJtZXRyaWMiOiJzaXplIiwicXVlcmllcyI6W3RydWUsdHJ1ZSx0cnVlLHRydWUsdHJ1ZV19), [cold runtimes](https://jsonbench.com/#eyJzeXN0ZW0iOnsiQ2xpY2tIb3VzZSAobHo0KSI6dHJ1ZSwiQ2xpY2tIb3VzZSAoenN0ZCkiOnRydWUsIkR1Y2tEQiI6dHJ1ZSwiRWxhc3RpY3NlYXJjaCAobm8gc291cm5lLCBiZXN0IGNvbXByZXNzaW9uKSI6dHJ1ZSwiRWxhc3RpY3NlYXJjaCAobm8gc291cmNlLCBkZWZhdWx0KSI6dHJ1ZSwiRWxhc3RpY3NlYXJjaCAoYmVzdCBjb21wcmVzc2lvbikiOnRydWUsIkVsYXN0aWNzZWFyY2ggKGRlZmF1bHQpIjp0cnVlLCJFbGFzdGljc2VhcmNoIjp0cnVlLCJNb25nb0RCIChzbmFwcHksIGNvdmVyZWQgaW5kZXgpIjp0cnZlLCJNb25nb0RCICh6c3RkLCBjb3ZlcmVkIGluZGV4KSI6dHJ1ZSwiTW9uZ29EQiAoc25hcHB5KSI6dHJ1ZSwiTW9uZ29EQiAoenN0ZCkiOnRydWUsIlBvc3RncmVTUUwgKGx6NCkiOnRydWUsIlBvc3RncmVTUUwgKHBnbHopIjp0cnVlfSwic2NhbGUiOiIxMDAwMDAwMDAiLCJtZXRyaWMiOiJjb2xkIiwicXVlcmllcyI6W3RydWUsdHJ1ZSx0cnVlLHRydWUsdHJ1ZV19), [hot runtimes](https://jsonbench.com/#eyJzeXN0ZW0iOnsiQ2xpY2tIb3VzZSAobHo0KSI6dHJ1ZSwiQ2xpY2tIb3VzZSAoenN0ZCkiOnRydWUsIkR1Y2tEQiI6dHJ1ZSwiRWxhc3RpY3NlYXJjaCAobm8gc291cmNlLCBiZXN0IGNvbXByZXNzaW9uKSI6dHJ1ZSwiRWxhc3RpY3NlYXJjaCAobm8gc291cmNlLCBkZWZhdWx0KSI6dHJ1ZSwiRWxhc3RpY3NlYXJjaCAoYmVzdCBjb21wcmVzc2lvbikiOnRydWUsIkVsYXN0aWNzZWFyY2ggKGRlZmF1bHQpIjp0cnVlLCJFbGFzdGljc2VhcmNoIjp0cnVlLCJNb25nb0RCIChzbmFwcHksIGNvdmVyZWQgaW5kZXgpIjp0cnVlLCJNb25nb0RCICh6c3RkLCBjb3ZlcmVkIGluZGV4KSI6dHJ1ZSwiTW9uZ29EQiAoc25hcHB5KSI6dHJ1ZSwiTW9uZ29EQiAoenN0ZCkiOnRydWUsIlBvc3RncmVTUUwgKGx6NCkiOnRydWUsIlBvc3RncmVTUUwgKHBnbHopIjp0cnVlfSwic2NhbGUiOiIxMDAwMDAwMDAiLCJtZXRyaWMiOiJob3QiLCJxdWVyaWVzIjpbdHJ1ZSx0cnVlLHRydWUsdHJ1ZSx0cnVlXX0=)
+> - 1 billion JSON ドキュメント（10億件）: [storage sizes](https://jsonbench.com/#eyJzeXN0ZW0iOnsiQ2xpY2tIb3VzZSAobHo0KSI6dHJ1ZSwiQ2xpY2tIb3VzZSAoenN0ZCkiOnRydWUsIkR1Y2tEQiI6dHJ1ZSwiRWxhc3RpY3NlYXJjaCAobm8gc291cmNlLCBiZXN0IGNvbXByZXNzaW9uKSI6dHJ1ZSwiRWxhc3RpY3NlYXJjaCAobm8gc291cmNlLCBkZWZhdWx0KSI6dHJ1ZSwiRWxhc3RpY3NlYXJjaCAoYmVzdCBjb21wcmVzc2lvbikiOnRydWUsIkVsYXN0aWNzZWFyY2ggKGRlZmF1bHQpIjp0cnVlLCJFbGFzdGljc2VhcmNoIjp0cnVlLCJNb25nb0RCIChzbmFwcHksIGNvdmVyZWQgaW5kZXgpIjp0cnZlLCJNb25nb0RCICh6c3RkLCBjb3ZlcmVkIGluZGV4KSI6dHJ1ZSwiTW9uZ29EQiAoc25hcHB5KSI6dHJ1ZSwiTW9uZ29EQiAoenN0ZCkiOnRydWUsIlBvc3RncmVTUUwgKGx6NCkiOnRydWUsIlBvc3RncmVTUUwgKHBnbHopIjp0cnVlfSwic2NhbGUiOiIxMDAwMDAwMDAwIiwibWV0cmljIjoic2l6ZSIsInF1ZXJpZXMiOlt0cnVlLHRydWUsdHJ1ZSx0cnVlLHRydWVdfQ==), [cold runtimes](https://jsonbench.com/#eyJzeXN0ZW0iOnsiQ2xpY2tIb3VzZSAobHo0KSI6dHJ1ZSwiQ2xpY2tIb3VzZSAoenN0ZCkiOnRydWUsIkR1Y2tEQiI6dHJ1ZSwiRWxhc3RpY3NlYXJjaCAobm8gc291cmNlLCBiZXN0IGNvbXByZXNzaW9uKSI6dHJ1ZSwiRWxhc3RpY3NlYXJjaCAobm8gc291cmNlLCBkZWZhdWx0KSI6dHJ1ZSwiRWxhc3RpY3NlYXJjaCAoYmVzdCBjb21wcmVzc2lvbikiOnRydWUsIkVsYXN0aWNzZWFyY2ggKGRlZmF1bHQpIjp0cnZlLCJFbGFzdGljc2VhcmNoIjp0cnZlLCJNb25nb0RCIChzbmFwcHksIGNvdmVyZWQgaW5kZXgpIjp0cnZlLCJNb25nb0RCICh6c3RkLCBjb3ZlcmVkIGluZGV4KSI6dHJ1ZSwiTW9uZ29EQiAoc25hcHB5KSI6dHJ1ZSwiTW9uZ29EQiAoenN0ZCkiOnRydWUsIlBvc3RncmVTUUwgKGx6NCkiOnHJ1ZSwiUG9zdGdyZVNRTCgpcGduo...), [hot runtimes](https://jsonbench.com/#eyJzeXN0ZW0iOnsiQ2xpY2tIb3VzZSAobHo0KSI6dHJ1ZSwiQ2xpY2tIb3VzZSAoenN0ZCkiOnRydWUsIkR1Y2tEQiI6dHJ1ZSwiRWxhc3RpY3NlYXJjaCAobm8gc291cmNlLCBiZXN0IGNvbXByZXNzaW9uKSI6dHJ1ZSwiRWxhc3RpY3NlYXJjaCAobm8gc291cmNlLCBkZWZhdWx0KSI6dHJ1ZSwiRWxhc3RpY3NlYXJjaCAoYmVzdCBjb21wcmVzc2lvbikiOnRydWUsIkVsYXN0aWNzZWFyY2ggKGRlZmF1bHQpIjp0cnZlLCJFbGFzdGljc2VhcmNoIjp0cnZlLCJNb25nb0RCIChzbmFwcHksIGNvdmVyZWQgaW5kZXgpIjp0cnZlLCJNb25nb0RCICh6c3RkLCBjb3ZlcmVkIGluZGV4KSI6dHJ1ZSwiTW9uZ29EQiAoc25hcHB5KSI6dHJ1ZSwiTW9uZ29EQiAoenN0ZCkiOnRydWUsIlBvc3RncmVTUUwgKGx6NCkiOnHJ1ZSwiUG9zdGdyZVNRTCgpcGdu...))
+
+これから、`best available compression`（最適な圧縮オプション）で 10億件の JSON ドキュメントを取り込んだ際の、[総ストレージサイズ](/blog/json-bench-clickhouse-vs-mongodb-elasticsearch-duckdb-postgresql#measurements)および分析系クエリのパフォーマンスを示します。
+
+
+### 最適な圧縮を適用した場合のストレージサイズ
+
+![JSON-Benchmarks.017.png](https://clickhouse.com/uploads/JSON_Benchmarks_017_1e36137288.png)
+
+上の図は 7 つの棒グラフで示されるストレージサイズを、左から右へ順に解説していきます。
+
+まず、[Bluesky](/blog/json-bench-clickhouse-vs-mongodb-elasticsearch-duckdb-postgresql#the-json-dataset---a-billion-bluesky-events) の **JSONファイル** は、圧縮しない状態で [482 GB](https://github.com/ClickHouse/JSONBench/blob/c7afa7078aed72c55ff4441a2da635424fde7724/_files_json/results/_files_bluesky_json_1000m.json#L13) のディスク容量を占めます。これを `zstd` で圧縮すると [124 GB](https://github.com/ClickHouse/JSONBench/blob/c7afa7078aed72c55ff4441a2da635424fde7724/_files_zstd/results/_files_bluesky_zstd_1000m.json#L13) まで削減されます。
+
+**ClickHouse** に `zstd` 圧縮を[設定](https://github.com/ClickHouse/JSONBench/blob/c7afa7078aed72c55ff4441a2da635424fde7724/clickhouse/ddl_zstd.sql#L8)した状態でこれらのファイルを取り込むと、合計のディスクサイズは [99 GB](https://github.com/ClickHouse/JSONBench/blob/c7afa7078aed72c55ff4441a2da635424fde7724/clickhouse/results/m6i.8xlarge_bluesky_1000m_zstd.json#L15) となります。
+
+> 注目すべきは、ClickHouse がソースファイルを `zstd` で直接圧縮したものよりさらに小さくデータを保持している点です。これは[上記](/blog/json-bench-clickhouse-vs-mongodb-elasticsearch-duckdb-postgresql#json-storage)で説明したように、ClickHouse が各 JSON パスの値をネイティブなカラムに分割して格納し、それぞれを個別に圧縮していることが大きく寄与します。また、プライマリキーが[使用され](/blog/json-bench-clickhouse-vs-mongodb-elasticsearch-duckdb-postgresql#data-sorting-and-compression)ている場合は、カラムごとに類似するデータをまとめ、ソートした上で圧縮できるため、圧縮率がさらに高まります。
+
+**MongoDB** では `zstd` 圧縮を[有効化](https://github.com/ClickHouse/JSONBench/blob/c7afa7078aed72c55ff4441a2da635424fde7724/mongodb/ddl_zstd.js#L3)した状態で JSON データを保持すると、ディスクサイズは [158 GB](https://github.com/ClickHouse/JSONBench/blob/c7afa7078aed72c55ff4441a2da635424fde7724/mongodb/results/m6i.8xlarge_bluesky_1000m_zstd.json#L16) となり、ClickHouse より 40% 大きいサイズとなります。
+
+**Elasticsearch** は[できる限り公平](/blog/json-bench-clickhouse-vs-mongodb-elasticsearch-duckdb-postgresql#configuring-elasticsearch-for-fair-storage-comparison)に構成を整えました。`_source` を無効にした状態で、[設定](https://github.com/ClickHouse/JSONBench/blob/c7afa7078aed72c55ff4441a2da635424fde7724/elasticsearch/config/index_template_no_source_best_compression.json#L12) された `zstd` 圧縮を用いると [220 GB](https://github.com/ClickHouse/JSONBench/blob/c7afa7078aed72c55ff4441a2da635424fde7724/elasticsearch/results/m6i.8xlarge_bluesky_no_source_1000m_best_compression.json#L16) が必要で、ClickHouse より 2 倍以上多い容量が必要です。
+
+すでに[説明済み](/blog/json-bench-clickhouse-vs-mongodb-elasticsearch-duckdb-postgresql#json-storage-and-data-compression)のとおり、設定した圧縮アルゴリズムは `_source` のような “stored fields” のデータにしか適用されません。`_source` を無効にすると、そのメリットがほとんど失われるということは、同じ構成で `lz4` 圧縮を使った[サイズ](https://github.com/ClickHouse/JSONBench/blob/c7afa7078aed72c55ff4441a2da635424fde7724/elasticsearch/results/m6i.8xlarge_bluesky_no_source_1000m_default_compression.json#L16)を比較すれば明らかです。
+
+もし `_source` が[必要](/blog/json-bench-clickhouse-vs-mongodb-elasticsearch-duckdb-postgresql#the-role-of-_source)（たとえばエンタープライズ版の「synthetic _source」が使えない OSS 版など）であれば、同じ構成で `_source` を有効にするとディスクサイズは [360 GB](https://github.com/ClickHouse/JSONBench/blob/c7afa7078aed72c55ff4441a2da635424fde7724/elasticsearch/results/m6i.8xlarge_bluesky_source_1000m_best_compression.json#L16) になり、ClickHouse の 3 倍以上となります。さらにデフォルトの `lz4` 圧縮を使うと [455 GB](https://github.com/ClickHouse/JSONBench/blob/c7afa7078aed72c55ff4441a2da635424fde7724/elasticsearch/results/m6i.8xlarge_bluesky_source_1000m_default_compression.json#L16) に膨れ上がります。
+
+**DuckDB** には[専用の圧縮アルゴリズムを選択する機能はなく](/blog/json-bench-clickhouse-vs-mongodb-elasticsearch-duckdb-postgresql#data-compression-1)、内部で軽量な圧縮アルゴリズムを自動的に適用しています。取り込んだ JSON ドキュメントのディスク使用量は [472 GB](https://github.com/ClickHouse/JSONBench/blob/c7afa7078aed72c55ff4441a2da635424fde7724/duckdb/results/m6i.8xlarge_bluesky_1000m.json#L16) で、ClickHouse のほぼ 5 倍になります。
+
+**PostgreSQL** は[“巨大な”タプルにだけ](/blog/json-bench-clickhouse-vs-mongodb-elasticsearch-duckdb-postgresql#data-compression-2)圧縮を適用し、しかもタプル単位でのみ行います。今回のようにほとんどのタプルが閾値を下回るケースでは、ほぼ圧縮が効きません。最適な `lz4` を使ってもディスク容量は [622 GB](https://github.com/ClickHouse/JSONBench/blob/c7afa7078aed72c55ff4441a2da635424fde7724/postgresql/results/m6i.8xlarge_bluesky_1000m_lz4.json#L16) となり、デフォルトの `pglz` でもほとんど同じ [サイズ](https://github.com/ClickHouse/JSONBench/blob/c7afa7078aed72c55ff4441a2da635424fde7724/postgresql/results/m6i.8xlarge_bluesky_1000m_pglz.json#L16) です。ClickHouse より 6 倍以上大きなサイズになります。
+
+続いて、この取り込んだ JSON データに対して各システムでベンチマーククエリを実行した際のランタイムを見ていきます。
+
+
+### クエリ①の集計パフォーマンス
+
+下の図は、10億件の JSON ドキュメントを最適な圧縮オプションで各システムに格納した状態で、ベンチマークの[クエリ①](/blog/json-bench-clickhouse-vs-mongodb-elasticsearch-duckdb-postgresql#query--top-bluesky-event-types)をコールド実行およびホット実行したときの[ランタイム](/blog/json-bench-clickhouse-vs-mongodb-elasticsearch-duckdb-postgresql#cold-and-hot-query-runtimes)を示しています。クエリ①はデータセット全体に対して `count` 集計を行い、Bluesky イベントタイプの人気度を求めるものです。
+
+![JSON-Benchmarks.018.png](https://clickhouse.com/uploads/JSON_Benchmarks_018_4572dccd94.png)
+
+左から右に 5 つのセクションを順に見ていきましょう。
+
+- **ClickHouse** はコールド実行で [405ミリ秒](https://github.com/ClickHouse/JSONBench/blob/c7afa7078aed72c55ff4441a2da635424fde7724/clickhouse/results/m6i.8xlarge_bluesky_1000m_zstd.json#L29)、ホット実行で [394ミリ秒](https://github.com/ClickHouse/JSONBench/blob/c7afa7078aed72c55ff4441a2da635424fde7724/clickhouse/results/m6i.8xlarge_bluesky_1000m_zstd.json#L29) でクエリ①を完了します。これは秒間 24.7 億～25.4 億レコードを処理している計算になります。ClickHouse ではクエリ実行ごとのメモリ使用量も[測定](/blog/json-bench-clickhouse-vs-mongodb-elasticsearch-duckdb-postgresql#measurements)しており、コールド・ホットともに [3 MB 未満](https://github.com/ClickHouse/JSONBench/blob/c7afa7078aed72c55ff4441a2da635424fde7724/clickhouse/results/m6i.8xlarge_bluesky_1000m_zstd.json#L43) で済んでいる点も注目です。
+
+- **MongoDB** では、すべてのベンチマーククエリに対し[カバードインデックススキャン](/blog/json-bench-clickhouse-vs-mongodb-elasticsearch-duckdb-postgresql#covered-index-scans)を有効にしています。その結果、クエリ①のコールド・ホット実行ともに [約16分](https://github.com/ClickHouse/JSONBench/blob/c7afa7078aed72c55ff4441a2da635424fde7724/mongodb/results/m6i.8xlarge_bluesky_1000m_zstd.json#L29) かかり、ClickHouse より 2500 倍遅いという結果でした。カバードインデックススキャンにより、クエリに必要なデータがすべてインデックス上のメモリに存在しているため、ディスクアクセスの必要がなく、コールドとホットで大きな差はありません。
+
+  参考までに、カバードインデックススキャンなしの場合はコールド・ホットともに [約28分](https://github.com/ClickHouse/JSONBench/blob/c7afa7078aed72c55ff4441a2da635424fde7724/mongodb/results_without_covered_index_scans/m6i.8xlarge_bluesky_1000m_zstd.json#L29) かかり、ClickHouse より 4200 倍遅くなります。
+
+- **Elasticsearch** は ES|QL 版のクエリ①をコールド・ホットともに [約5秒](https://github.com/ClickHouse/JSONBench/blob/c7afa7078aed72c55ff4441a2da635424fde7724/elasticsearch/results/m6i.8xlarge_bluesky_no_source_1000m_best_compression.json#L18) で実行し、ClickHouse より 12 倍遅いという結果です。
+
+- **DuckDB** はクエリ①のコールド・ホット実行ともに [約1時間](https://github.com/ClickHouse/JSONBench/blob/c7afa7078aed72c55ff4441a2da635424fde7724/duckdb/results/m6i.8xlarge_bluesky_1000m.json#L25) かかり、ClickHouse より 9000 倍遅くなりました。
+
+- **PostgreSQL** も同様にコールド・ホットともに [約1時間](https://github.com/ClickHouse/JSONBench/blob/c7afa7078aed72c55ff4441a2da635424fde7724/postgresql/results/m6i.8xlarge_bluesky_1000m_lz4.json#L29) を要し、ClickHouse より 9000 倍遅いという結果です。
+
+> **DuckDB** と **PostgreSQL** は 10億件規模の JSON を扱う際に非常に時間がかかり、すべてのベンチマーククエリで極めて遅い実行時間を示しました（同一ハードウェア、デフォルト構成での比較です）。詳しいボトルネック分析はまだ行えていませんが、専門的な知見やプルリクエストをお待ちしています。
+
+
+### クエリ②の集計パフォーマンス
+
+[クエリ②](/blog/json-bench-clickhouse-vs-mongodb-elasticsearch-duckdb-postgresql#query--top-bluesky-event-types-with-unique-users-per-event-type) は、クエリ①にフィルタ条件と `count_distinct` 集計を加え、人気のある Bluesky イベントごとにユニークユーザー数を算出するものです。
+
+![JSON-Benchmarks.019.png](https://clickhouse.com/uploads/JSON_Benchmarks_019_8712fddefd.png)
+
+- **ClickHouse** はクエリ②をコールドで [11.85秒](https://github.com/ClickHouse/JSONBench/blob/c7afa7078aed72c55ff4441a2da635424fde7724/clickhouse/results/m6i.8xlarge_bluesky_1000m_zstd.json#L30)、ホットで [5.63秒](https://github.com/ClickHouse/JSONBench/blob/c7afa7078aed72c55ff4441a2da635424fde7724/clickhouse/results/m6i.8xlarge_bluesky_1000m_zstd.json#L30) で完了します。以下はその比較になります：
+  - **MongoDB** より 3800 倍高速（MongoDB はコールド・ホットとも [約6時間](https://github.com/ClickHouse/JSONBench/blob/c7afa7078aed72c55ff4441a2da635424fde7724/mongodb/results/m6i.8xlarge_bluesky_1000m_zstd.json#L30)）
+  - カバードインデックスなしの MongoDB と比べると 7000 倍高速（[約11時間](https://github.com/ClickHouse/JSONBench/blob/c7afa7078aed72c55ff4441a2da635424fde7724/mongodb/results_without_covered_index_scans/m6i.8xlarge_bluesky_1000m_zstd.json#L30)）
+  - **Elasticsearch** より 8 倍高速（[コールド51.49秒](https://github.com/ClickHouse/JSONBench/blob/c7afa7078aed72c55ff4441a2da635424fde7724/elasticsearch/results/m6i.8xlarge_bluesky_no_source_1000m_best_compression.json#L19)、[ホット45.51秒](https://github.com/ClickHouse/JSONBench/blob/c7afa7078aed72c55ff4441a2da635424fde7724/elasticsearch/results/m6i.8xlarge_bluesky_no_source_1000m_best_compression.json#L19)）
+  - **DuckDB** より 640 倍高速（[約1時間](https://github.com/ClickHouse/JSONBench/blob/c7afa7078aed72c55ff4441a2da635424fde7724/duckdb/results/m6i.8xlarge_bluesky_1000m.json#L26)）
+  - **PostgreSQL** より 5700 倍高速（[約9時間](https://github.com/ClickHouse/JSONBench/blob/c7afa7078aed72c55ff4441a2da635424fde7724/postgresql/results/m6i.8xlarge_bluesky_1000m_lz4.json#L30)）
+
+
+### クエリ③の集計パフォーマンス
+
+[クエリ③](/blog/json-bench-clickhouse-vs-mongodb-elasticsearch-duckdb-postgresql#query--when-do-people-use-bluesky) は、イベントのタイムスタンプから時刻（時）の部分を取り出し、それぞれの Bluesky イベントが一日のどの時間帯にもっとも利用されているかを調べるため、`hour-of-the-day` でグルーピングして集計を行います。
+
+![JSON-Benchmarks.020.png](https://clickhouse.com/uploads/JSON_Benchmarks_020_4c4fcd7d08.png)
+
+- **ClickHouse** のクエリ③のランタイムは、コールド時が [28.90秒](https://github.com/ClickHouse/JSONBench/blob/c7afa7078aed72c55ff4441a2da635424fde7724/clickhouse/results/m6i.8xlarge_bluesky_1000m_zstd.json#L31)、ホット時が [2.47秒](https://github.com/ClickHouse/JSONBench/blob/c7afa7078aed72c55ff4441a2da635424fde7724/clickhouse/results/m6i.8xlarge_bluesky_1000m_zstd.json#L31) です。以下の比較結果になります：
+  - **MongoDB** より 480 倍高速（[約20分](https://github.com/ClickHouse/JSONBench/blob/c7afa7078aed72c55ff4441a2da635424fde7724/mongodb/results/m6i.8xlarge_bluesky_1000m_zstd.json#L31)）
+  - カバードインデックスなしの MongoDB より 2100 倍高速（[約1.5時間](https://github.com/ClickHouse/JSONBench/blob/c7afa7078aed72c55ff4441a2da635424fde7724/mongodb/results_without_covered_index_scans/m6i.8xlarge_bluesky_1000m_zstd.json#L31)）
+  - **Elasticsearch** より 16 倍高速（[約41秒](https://github.com/ClickHouse/JSONBench/blob/c7afa7078aed72c55ff4441a2da635424fde7724/elasticsearch/results/m6i.8xlarge_bluesky_no_source_1000m_best_compression.json#L20)）
+  - **DuckDB** および **PostgreSQL** より 1400 倍高速（どちらも[約1時間](https://github.com/ClickHouse/JSONBench/blob/c7afa7078aed72c55ff4441a2da635424fde7724/duckdb/results/m6i.8xlarge_bluesky_1000m.json#L27)、[約1時間](https://github.com/ClickHouse/JSONBench/blob/c7afa7078aed72c55ff4441a2da635424fde7724/postgresql/results/m6i.8xlarge_bluesky_1000m_lz4.json#L31)）
+
+
+### クエリ④の集計パフォーマンス
+
+[クエリ④](/blog/json-bench-clickhouse-vs-mongodb-elasticsearch-duckdb-postgresql#query--top-3-post-veterans) は、最も古い投稿を行ったユーザー、つまり「ポストベテラン」上位3名を探すため、データセットに対して `min` 集計を行います。
+
+![JSON-Benchmarks.021.png](https://clickhouse.com/uploads/JSON_Benchmarks_021_2ec0abac90.png)
+
+- **ClickHouse** はクエリ④をコールドで [5.38秒](https://github.com/ClickHouse/JSONBench/blob/c7afa7078aed72c55ff4441a2da635424fde7724/clickhouse/results/m6i.8xlarge_bluesky_1000m_zstd.json#L32)、ホットで [596ミリ秒](https://github.com/ClickHouse/JSONBench/blob/c7afa7078aed72c55ff4441a2da635424fde7724/clickhouse/results/m6i.8xlarge_bluesky_1000m_zstd.json#L32) で実行します。以下は比較結果です：
+  - **MongoDB** より 270 倍高速（[約2.7分](https://github.com/ClickHouse/JSONBench/blob/c7afa7078aed72c55ff4441a2da635424fde7724/mongodb/results/m6i.8xlarge_bluesky_1000m_zstd.json#L32)）
+  - カバードインデックスなしの MongoDB より 2800 倍高速（[約28分](https://github.com/ClickHouse/JSONBench/blob/c7afa7078aed72c55ff4441a2da635424fde7724/mongodb/results_without_covered_index_scans/m6i.8xlarge_bluesky_1000m_zstd.json#L32)）
+  - **Elasticsearch** より 14 倍高速（[8.81秒](https://github.com/ClickHouse/JSONBench/blob/c7afa7078aed72c55ff4441a2da635424fde7724/elasticsearch/results/m6i.8xlarge_bluesky_no_source_1000m_best_compression.json#L21)）
+  - **DuckDB** より 6000 倍高速（[約1時間](https://github.com/ClickHouse/JSONBench/blob/c7afa7078aed72c55ff4441a2da635424fde7724/duckdb/results/m6i.8xlarge_bluesky_1000m.json#L28)）
+  - **PostgreSQL** より 10000 倍高速（[約1.75時間](https://github.com/ClickHouse/JSONBench/blob/c7afa7078aed72c55ff4441a2da635424fde7724/postgresql/results/m6i.8xlarge_bluesky_1000m_lz4.json#L32)）
+
+
+### クエリ⑤の集計パフォーマンス
+
+[クエリ⑤](/blog/json-bench-clickhouse-vs-mongodb-elasticsearch-duckdb-postgresql#query--top-3-users-with-the-longest-activity-span) は、`date_diff` 集計を使って Bluesky 上で最も長い活動期間を持つユーザー上位3名を抽出します。
+
+![JSON-Benchmarks.022.png](https://clickhouse.com/uploads/JSON_Benchmarks_022_f10b5ed242.png)
+
+- **ClickHouse** はクエリ⑤をコールドで [5.41秒](https://github.com/ClickHouse/JSONBench/blob/c7afa7078aed72c55ff4441a2da635424fde7724/clickhouse/results/m6i.8xlarge_bluesky_1000m_zstd.json#L33)、ホットで [637ミリ秒](https://github.com/ClickHouse/JSONBench/blob/c7afa7078aed72c55ff4441a2da635424fde7724/clickhouse/results/m6i.8xlarge_bluesky_1000m_zstd.json#L33) で実行します。以下は比較結果です：
+  - **MongoDB** より 260 倍高速（[約2.76分](https://github.com/ClickHouse/JSONBench/blob/c7afa7078aed72c55ff4441a2da635424fde7724/mongodb/results/m6i.8xlarge_bluesky_1000m_zstd.json#L33)）
+  - カバードインデックスなしの MongoDB より 2600 倍高速（[約28分](https://github.com/ClickHouse/JSONBench/blob/c7afa7078aed72c55ff4441a2da635424fde7724/mongodb/results_without_covered_index_scans/m6i.8xlarge_bluesky_1000m_zstd.json#L33)）
+  - **Elasticsearch** より 15 倍高速（[約9.5秒](https://github.com/ClickHouse/JSONBench/blob/c7afa7078aed72c55ff4441a2da635424fde7724/elasticsearch/results/m6i.8xlarge_bluesky_no_source_1000m_best_compression.json#L22)）
+  - **DuckDB** より 5600 倍高速（[約1時間](https://github.com/ClickHouse/JSONBench/blob/c7afa7078aed72c55ff4441a2da635424fde7724/duckdb/results/m6i.8xlarge_bluesky_1000m.json#L29)）
+  - **PostgreSQL** より 9900 倍高速（[約1.75時間](https://github.com/ClickHouse/JSONBench/blob/c7afa7078aed72c55ff4441a2da635424fde7724/postgresql/results/m6i.8xlarge_bluesky_1000m_lz4.json#L33)）
+
+
+## まとめ
+
+このベンチマーク結果から、ClickHouse はストレージ効率・クエリパフォーマンスの両面で、JSON をサポートする他のデータストアを大きく上回ることがわかりました。
+
+分析系クエリにおいては、MongoDB などの主要な JSON データストアに比べて数千倍もの高速性を示し、DuckDB や PostgreSQL に対しても数千倍、Elasticsearch と比較しても桁違いに高速でした。さらに、ディスク上の JSON ドキュメントの圧縮効率も高く、同じ `zstd` で圧縮したファイルよりも小さくなるため、大規模分析用途での TCO（総所有コスト）削減にも寄与します。
+
+ClickHouse の [ネイティブ JSON データ型](https://clickhouse.com/blog/a-new-powerful-json-data-type-for-clickhouse) を使えば、スキーマ設計や調整を事前に厳密に行わなくても、ディスク上で最適に圧縮され、かつ高速な分析クエリを実行できます。これは特にイベントの多くが JSON 形式でやり取りされるユースケースや、[SQL ベースのオブザーバビリティ](https://clickhouse.com/blog/evolution-of-sql-based-observability-with-clickhouse) など、コスト効率と分析クエリ性能が重要となる場面で非常に有効です。ClickHouse は、汎用的な JSON データストアとして比類ない存在だと言えます。
+
+<p>今回の記事では、主要なデータストアが持つ JSON サポートの特徴や性能を実際のベンチマークを通じて比較・考察しました。より詳細に学んでみたい方、またベンチマークに貢献してみたい方は、ぜひ <a href="https://github.com/ClickHouse/JSONBench/">JSONBench</a>（オープンソースの JSON ベンチマーク）にご参加ください。すでにあるベンチマークの改善や新たなシステムの追加など、<a href="https://jsonbench.com/">The Billion Docs JSON Challenge</a> に挑戦してみてください！&#x1F94A;</p>
+
+---
+
 ## Announcing General Availability of ClickHouse BYOC (Bring Your Own Cloud) on AWS
 Published: 2025-02-19T20:36:25+00:00
 URL: https://clickhouse.com/blog/announcing-general-availability-of-clickhouse-bring-your-own-cloud-on-aws
@@ -64741,6 +70826,1016 @@ We hope this article has highlighted the many ways ClickHouse can be used with y
 
 ---
 
+## ClickHouse で Materialized View を使う
+Published: 2025-02-19T14:58:53+00:00
+URL: https://clickhouse.com/blog/using-materialized-views-in-clickhouse-jp
+
+---
+title: "ClickHouse で Materialized View を使う"
+date: "2025-02-19T14:58:53.571Z"
+author: "Denys Golotiuk"
+category: "Engineering"
+excerpt: "ClickHouse でMaterialized Viewを使い、クエリパフォーマンスを向上させる方法や、データ管理の可能性を広げる方法について解説します。"
+---
+
+# ClickHouse で Materialized View を使う
+
+![Materialized View blog.png](https://clickhouse.com/uploads/materialized_views_blog_3f6adcd7b6.png)
+
+## はじめに
+
+実世界ではデータは保存するだけではなく、同時に処理を行う必要があります。通常、この処理はアプリケーション側で行い、ClickHouse 向けの[利用可能なライブラリ](https://clickhouse.com/docs/en/interfaces/third-party/client-libraries/)のいずれかを使用します。しかし、パフォーマンスとデータの管理性を高めるために、重要な処理を ClickHouse に任せられるケースがあります。ClickHouse においてそのために最も強力なツールの一つが、[Materialized View](https://clickhouse.com/docs/en/sql-reference/statements/create/view/#Materialized-view)です。本記事では、Materialized Viewとは何か、そしてクエリの高速化やデータの変換・フィルタリング・ルーティングなどにどのように活用できるかを解説します。
+
+もしMaterialized Viewについて詳しく学びたい場合は、[こちら](https://learn.clickhouse.com/visitor_catalog_class/show/1043451/)で無料オンデマンドのトレーニングコースをご覧いただけます。 
+
+## Materialized Viewとは
+
+Materialized Viewは、データがソーステーブルに挿入されるタイミングで、そのデータに対する `SELECT` クエリ結果をターゲットテーブルに保存する特別なトリガーです:
+
+![materialized_view.png](https://clickhouse.com/uploads/materialized_view_5a321dc56d.png)
+
+さまざまなケースで有効ですが、一番よくある使い方としては特定のクエリをより高速にすることが挙げられます。
+
+## かんたんな例
+
+[Wikistat データセット](https://clickhouse.com/docs/en/getting-started/example-datasets/wikistat/)の 10 億行（1b rows）を例にとりましょう:
+
+<pre class='code-with-play'>
+<div class='code'>
+CREATE TABLE wikistat
+(
+    `time` DateTime CODEC(Delta(4), ZSTD(1)),
+    `project` LowCardinality(String),
+    `subproject` LowCardinality(String),
+    `path` String,
+    `hits` UInt64
+)
+ENGINE = MergeTree
+ORDER BY (path, time);
+
+Ok.
+
+INSERT INTO wikistat SELECT *
+FROM s3('https://ClickHouse-public-datasets.s3.amazonaws.com/wikistat/partitioned/wikistat*.native.zst') LIMIT 1e9
+</div>
+</pre>
+</p>
+
+たとえば、ある日付における最も人気のあるプロジェクト（`hits` の合計が大きい順）を頻繁にクエリするとします:
+
+<pre class='code-with-play'>
+<div class='code'>
+SELECT
+    project,
+    sum(hits) AS h
+FROM wikistat
+WHERE date(time) = '2015-05-01'
+GROUP BY project
+ORDER BY h DESC
+LIMIT 10
+</div>
+</pre>
+</p>
+
+このクエリは [ClickHouse Cloud](https://clickhouse.com/cloud) の開発用サービスで約 15 秒かかります:
+
+<pre class='code-with-play'>
+<div class='code'>
+┌─project─┬────────h─┐
+│ en      │ 34521803 │
+│ es      │  4491590 │
+│ de      │  4490097 │
+│ fr      │  3390573 │
+│ it      │  2015989 │
+│ ja      │  1379148 │
+│ pt      │  1259443 │
+│ tr      │  1254182 │
+│ zh      │   988780 │
+│ pl      │   985607 │
+└─────────┴──────────┘
+
+10 rows in set. Elapsed: 14.869 sec. Processed 972.80 million rows, 10.53 GB (65.43 million rows/s., 708.05 MB/s.)
+</div>
+</pre>
+</p>
+
+こうしたクエリが大量にあり、かつサブセカンド（1 秒未満）のパフォーマンスが必要であれば、このクエリ専用のMaterialized Viewを作成できます:
+
+<pre class='code-with-play'>
+<div class='code'>
+CREATE TABLE wikistat_top_projects
+(
+    `date` Date,
+    `project` LowCardinality(String),
+    `hits` UInt32
+)
+ENGINE = SummingMergeTree
+ORDER BY (date, project);
+
+Ok.
+
+CREATE MATERIALIZED VIEW wikistat_top_projects_mv TO wikistat_top_projects AS
+SELECT
+    date(time) AS date,
+    project,
+    sum(hits) AS hits
+FROM wikistat
+GROUP BY
+    date,
+    project;
+</div>
+</pre>
+</p>
+
+これら 2 つのクエリでは以下のようになります:
+
+* `wikistat_top_projects` はMaterialized Viewの結果を保存するためのターゲットテーブルの名前
+* `wikistat_top_projects_mv` はMaterialized Viewそのもの（トリガー）の名前
+* [SummingMergeTree](https://clickhouse.com/docs/en/engines/table-engines/mergetree-family/summingmergetree/) を使うのは、日付／プロジェクトごとに `hits` を合計したいから
+* `AS` の後に続く部分がMaterialized Viewを構築するためのクエリ
+
+Materialized Viewはいくつでも作成できますが、新しく作るたびに追加のストレージ負荷が発生するので、1 テーブルあたり 10 個未満程度にとどめるのが一般的です。
+
+同じクエリを使って `wikistat` テーブルのデータをターゲットテーブルに流し込み、Materialized Viewを初期化しましょう:
+
+<pre class='code-with-play'>
+<div class='code'>
+INSERT INTO wikistat_top_projects SELECT
+    date(time) AS date,
+    project,
+    sum(hits) AS hits
+FROM wikistat
+GROUP BY
+    date,
+    project
+</div>
+</pre>
+</p>
+
+## Materialized View テーブルにクエリする
+
+`wikistat_top_projects` は普通のテーブルなので、ClickHouse SQL のすべての機能を使ってクエリできます:
+
+<pre class='code-with-play'>
+<div class='code'>
+SELECT
+    project,
+    sum(hits) hits
+FROM wikistat_top_projects
+WHERE date = '2015-05-01'
+GROUP BY project
+ORDER BY hits DESC
+LIMIT 10
+
+┌─project─┬─────hits─┐
+│ en      │ 34521803 │
+│ es      │  4491590 │
+│ de      │  4490097 │
+│ fr      │  3390573 │
+│ it      │  2015989 │
+│ ja      │  1379148 │
+│ pt      │  1259443 │
+│ tr      │  1254182 │
+│ zh      │   988780 │
+│ pl      │   985607 │
+└─────────┴──────────┘
+
+10 rows in set. Elapsed: 0.003 sec. Processed 8.19 thousand rows, 101.81 KB (2.83 million rows/s., 35.20 MB/s.)
+</div>
+</pre>
+</p>
+
+元のクエリでは 15 秒かかった処理が、3 ミリ秒で結果を得られるようになりました。ただし [SummingMergeTree](https://clickhouse.com/docs/en/engines/table-engines/mergetree-family/summingmergetree/) は非同期で合計を管理しているため、完全な合計が計算されていない場合があります。そのため、クエリ時に `GROUP BY` が必要なケースもあります。
+
+## Materialized Viewの管理
+
+Materialized Viewは `SHOW TABLES` クエリで一覧表示できます:
+
+<pre class='code-with-play'>
+<div class='code'>
+SHOW TABLES LIKE 'wikistat_top_projects_mv'
+
+┌─name─────────────────────┐
+│ wikistat_top_projects_mv │
+└──────────────────────────┘
+</div>
+</pre>
+</p>
+
+`DROP TABLE` でMaterialized Viewを削除できますが、これはトリガーのみを削除します:
+
+<pre class='code-with-play'>
+<div class='code'>
+DROP TABLE wikistat_top_projects_mv
+</div>
+</pre>
+</p>
+
+ターゲットテーブル自体も不要な場合は別途削除しましょう:
+
+<pre class='code-with-play'>
+<div class='code'>
+DROP TABLE wikistat_top_projects
+</div>
+</pre>
+</p>
+
+## Materialized Viewのディスク使用量を確認する
+
+Materialized Viewのターゲットテーブルも、他のテーブルと同様に `system` データベースでメタデータを確認できます。たとえばディスク上のサイズは次のように確認します:
+
+<pre class='code-with-play'>
+<div class='code'>
+SELECT
+    rows,
+    formatReadableSize(total_bytes) AS total_bytes_on_disk
+FROM system.tables
+WHERE table = 'wikistat_top_projects'
+
+┌──rows─┬─total_bytes_on_disk─┐
+│ 15336 │ 37.42 KiB           │
+└───────┴─────────────────────┘
+</div>
+</pre>
+</p>
+
+## Materialized Viewの更新
+
+Materialized Viewの最も強力な機能は、ソーステーブルにデータが挿入されると、ターゲットテーブルも自動的に更新されることです:
+
+![updating_materialized_view.png](https://clickhouse.com/uploads/updating_materialized_view_b90a9ac7cb.png)
+
+つまり、ビューのデータを手動でリフレッシュする必要はありません。たとえば `wikistat` テーブルに新しいデータを挿入してみます:
+
+<pre class='code-with-play'>
+<div class='code'>
+INSERT INTO wikistat
+VALUES(now(), 'test', '', '', 10),
+      (now(), 'test', '', '', 10),
+      (now(), 'test', '', '', 20),
+      (now(), 'test', '', '', 30);
+</div>
+</pre>
+</p>
+
+続いて、ターゲットテーブルの `hits` 列が正しく合計されているか確認します。[FINAL](https://clickhouse.com/docs/en/sql-reference/statements/select/from/#final-modifier) 修飾子を使うと、SummingMergeTree で未マージの行がある場合でも最終的な合計を返してくれます:
+
+<pre class='code-with-play'>
+<div class='code'>
+SELECT hits
+FROM wikistat_top_projects
+FINAL
+WHERE (project = 'test') AND (date = date(now()))
+
+┌─hits─┐
+│   70 │
+└──────┘
+
+1 row in set. Elapsed: 0.005 sec. Processed 7.15 thousand rows, 89.37 KB (1.37 million rows/s., 17.13 MB/s.)
+</div>
+</pre>
+</p>
+
+本番環境では、大規模テーブルに対して `FINAL` を頻繁に使うのは避け、代わりにクエリ時に `sum(hits)` で集計する方法が推奨されます。また、挿入時のマージ挙動を制御する [optimize_on_insert](https://clickhouse.com/docs/en/operations/settings/settings/#optimize-on-insert) 設定も確認するとよいでしょう。
+
+## Materialized Viewで集計を高速化する
+
+先述のとおり、Materialized Viewはクエリのパフォーマンスを向上させる手段です。分析系のクエリで一般的に行われるさまざまな集計（たとえば `sum()` 以外も）を高速化できます。SummingMergeTree は合計値を追跡するのに便利ですが、より複雑な集計が必要な場合は [AggregatingMergeTree](https://clickhouse.com/docs/en/engines/table-engines/mergetree-family/aggregatingmergetree/) を使うことができます。
+
+たとえば次のようなクエリを頻繁に実行しているとします:
+
+<pre class='code-with-play'>
+<div class='code'>
+SELECT
+    toDate(time) AS date,
+    min(hits) AS min_hits_per_hour,
+    max(hits) AS max_hits_per_hour,
+    avg(hits) AS avg_hits_per_hour
+FROM wikistat
+WHERE project = 'en'
+GROUP BY date
+</div>
+</pre>
+</p>
+
+これは特定のプロジェクトについて、日別に「1 時間単位での hits の最小値、最大値、平均値」を求めるクエリです:
+
+<pre class='code-with-play' style="font-size: 15px">
+<div class='code'>
+┌───────date─┬─min_hits_per_hour─┬─max_hits_per_hour─┬──avg_hits_per_hour─┐
+│ 2015-05-01 │                 1 │             36802 │  4.586310181621408 │
+│ 2015-05-02 │                 1 │             23331 │  4.241388590780171 │
+│ 2015-05-03 │                 1 │             24678 │  4.317835245126423 │
+...
+└────────────┴───────────────────┴───────────────────┴────────────────────┘
+
+38 rows in set. Elapsed: 8.970 sec. Processed 994.11 million rows
+</div>
+</pre>
+</p>
+
+**なお、もともと生データが「1 時間単位」で集計されていると仮定しています。**
+
+この集計結果をMaterialized Viewで保存しておくことで、必要なときに高速に取り出せます。[state コンビネータ](https://clickhouse.com/docs/en/sql-reference/aggregate-functions/combinators/#-state)を使うと、最終的な集計値ではなく「内部の中間集計状態」を保存でき、すべての元データを保持する必要がありません。手順としては、Materialized Viewを作るときに *State() 関数を使い、クエリ時に対応する *Merge() 関数を使って実際の値を計算します:
+
+![aggregations_materialized_views.png](https://clickhouse.com/uploads/aggregations_materialized_views_eeca26badf.png)
+
+ここでは `min`, `max`, `avg` を例にします。新しく作るターゲットテーブルでは [`AggregateFunction`](https://clickhouse.com/docs/en/sql-reference/data-types/aggregatefunction/) 型を使って「中間集計状態」を保存します:
+
+<pre class='code-with-play'>
+<div class='code'>
+CREATE TABLE wikistat_daily_summary
+(
+    `project` String,
+    `date` Date,
+    `min_hits_per_hour` AggregateFunction(min, UInt64),
+    `max_hits_per_hour` AggregateFunction(max, UInt64),
+    `avg_hits_per_hour` AggregateFunction(avg, UInt64)
+)
+ENGINE = AggregatingMergeTree
+ORDER BY (project, date);
+
+Ok.
+
+CREATE MATERIALIZED VIEW wikistat_daily_summary_mv
+TO wikistat_daily_summary AS
+SELECT
+    project,
+    toDate(time) AS date,
+    minState(hits) AS min_hits_per_hour,
+    maxState(hits) AS max_hits_per_hour,
+    avgState(hits) AS avg_hits_per_hour
+FROM wikistat
+GROUP BY project, date
+</div>
+</pre>
+</p>
+
+これを初期化するために、既存のデータを一括で挿入します:
+
+<pre class='code-with-play'>
+<div class='code'>
+INSERT INTO wikistat_daily_summary SELECT
+    project,
+    toDate(time) AS date,
+    minState(hits) AS min_hits_per_hour,
+    maxState(hits) AS max_hits_per_hour,
+    avgState(hits) AS avg_hits_per_hour
+FROM wikistat
+GROUP BY project, date
+
+0 rows in set. Elapsed: 33.685 sec. Processed 994.11 million rows
+</div>
+</pre>
+</p>
+
+クエリ時には、対応する `Merge` コンビネータを使って値を取り出します:
+
+<pre class='code-with-play'>
+<div class='code'>
+SELECT
+    date,
+    minMerge(min_hits_per_hour) min_hits_per_hour,
+    maxMerge(max_hits_per_hour) max_hits_per_hour,
+    avgMerge(avg_hits_per_hour) avg_hits_per_hour
+FROM wikistat_daily_summary
+WHERE project = 'en'
+GROUP BY date
+</div>
+</pre>
+</p>
+
+すると、同じ結果が数千倍速く得られます:
+
+<pre class='code-with-play' style="font-size: 15px;">
+<div class='code'>
+┌───────date─┬─min_hits_per_hour─┬─max_hits_per_hour─┬──avg_hits_per_hour─┐
+│ 2015-05-01 │                 1 │             36802 │  4.586310181621408 │
+│ 2015-05-02 │                 1 │             23331 │  4.241388590780171 │
+│ 2015-05-03 │                 1 │             24678 │  4.317835245126423 │
+...
+└────────────┴───────────────────┴───────────────────┴────────────────────┘
+
+32 rows in set. Elapsed: 0.005 sec. Processed 9.54 thousand rows, 1.14 MB (1.76 million rows/s., 209.01 MB/s.)
+</div>
+</pre>
+</p>
+
+他の [集計関数](https://clickhouse.com/docs/en/sql-reference/aggregate-functions/) も同様に State/Merge コンビネータを使って保存・計算できます。
+
+## ストレージ最適化のためのデータ圧縮
+
+場合によっては「最新の数日間は生データが必要だが、それ以降は集計した履歴データで十分」という運用をしたいことがあります。そういったときには、ソーステーブルに対してMaterialized View＋[TTL](https://clickhouse.com/docs/en/engines/table-engines/mergetree-family/mergetree#table_engine-mergetree-ttl) を組み合わせると、有効なストレージ管理ができます。
+
+また、[最適なスキーマ](https://clickhouse.com/blog/optimize-clickhouse-codecs-compression-schema) を定義しておけば、ストレージ使用量をさらに削減できる可能性があります。たとえば、`wikistat` テーブルのデータを「月ごとに集約したものだけ」保存したい場合を考えます:
+
+<pre class='code-with-play'>
+<div class='code'>
+CREATE MATERIALIZED VIEW wikistat_monthly_mv TO
+wikistat_monthly AS
+SELECT
+    toDate(toStartOfMonth(time)) AS month,
+    path,
+    sum(hits) AS hits
+FROM wikistat
+GROUP BY
+    path,
+    month
+</div>
+</pre>
+</p>
+
+1 時間ごとの生データを持つオリジナルテーブルと比べると、集約されたMaterialized Viewはディスク使用量が約 3 倍の差になります:
+
+<table style="border-radius: 8px;  border-collapse: collapse; border-style: hidden; text-align: center;">
+
+ <tr style="color: black;">
+<td style="border: 1px solid var(--bg3); background: var(--warningBg);border-radius: 8px 0 0 0;"><strong>wikistat (original table)</strong></td>
+<td style="border: 1px solid var(--bg3); background: var(--warningBg);border-radius: 0 8px 0 0;"><strong>wikistat_daily (Materialized View)</strong></td>
+</tr>
+
+ <tr style="color: black;">
+<td style="border: 1px solid var(--bg3);background: white;border-radius: 0 0 0 0;">1.78GiB</td>
+<td style="border: 0px solid var(--bg3); background: white;border-radius: 0 0 0 0;">565.68 MiB</td>
+</tr>
+ <tr style="color: black;">
+<td style="border: 1px solid var(--bg3);background: white;border-radius: 0 0 0 0;">1b rows</td>
+<td style="border: 1px solid var(--bg3); background: white;border-radius: 0 0 0 0;">~ 27m rows</td>
+</tr>
+
+</table>
+
+**注意点**として、行数が少なくとも 10 倍以上減るようなケースでないと、単に元データを圧縮するだけでも十分近い効率を得られることがあります。ClickHouse の強力な圧縮とエンコードによって、必ずしも集約が不要な場合もあるので検討が必要です。
+
+月単位の集約テーブルを用意したら、元テーブルには 1 週間を過ぎたデータを削除する TTL を設定することで、古い生データを自動で削除できます:
+
+<pre class='code-with-play'>
+<div class='code'>
+ALTER TABLE wikistat MODIFY TTL time + INTERVAL 1 WEEK
+</div>
+</pre>
+</p>
+
+## データのバリデーションとフィルタリング
+
+Materialized Viewがよく使われる用途の一つとして、データを挿入直後に検証（バリデーション）して、特定の行を除外したり別のテーブルに保存したりするパターンがあります。
+
+![materialized_view_filter.png](https://clickhouse.com/uploads/materialized_view_filter_385e36a77d.png)
+
+たとえば、`path` に不適切な文字が含まれる行を「クリーンなデータ」に含めたくないとしましょう。データの約 1% が該当するとします:
+
+<pre class='code-with-play'>
+<div class='code'>
+SELECT count(*)
+FROM wikistat
+WHERE NOT match(path, '[a-z0-9\\-]')
+LIMIT 5
+
+┌──count()─┐
+│ 12168918 │
+└──────────┘
+
+1 row in set. Elapsed: 46.324 sec. Processed 994.11 million rows, 28.01 GB (21.46 million rows/s., 604.62 MB/s.)
+</div>
+</pre>
+</p>
+
+こうしたバリデーションやフィルタリングを行うには、クリーンデータ専用のテーブルとソーステーブルの 2 つがあれば十分です。Materialized Viewのターゲットテーブルを「最終的なクリーンなデータを持つテーブル」として使います。ソーステーブルの方は、[Null エンジン](https://clickhouse.com/docs/en/engines/table-engines/special/null/)を使うことで実際のデータを保存しないようにできます。
+
+<pre class='code-with-play'>
+<div class='code'>
+CREATE TABLE wikistat_src
+(
+    `time` DateTime,
+    `project` LowCardinality(String),
+    `subproject` LowCardinality(String),
+    `path` String,
+    `hits` UInt64
+)
+ENGINE = Null
+</div>
+</pre>
+</p>
+
+次に、バリデーション用のクエリを持つMaterialized Viewを作成します:
+
+<pre class='code-with-play'>
+<div class='code'>
+CREATE TABLE wikistat_clean AS wikistat;
+
+Ok.
+
+CREATE MATERIALIZED VIEW wikistat_clean_mv TO wikistat_clean
+AS SELECT *
+FROM wikistat_src
+WHERE match(path, '[a-z0-9\\-]')
+</div>
+</pre>
+</p>
+
+この状態でデータを挿入すると、`wikistat_src` は空のままです:
+
+<pre class='code-with-play'>
+<div class='code'>
+INSERT INTO wikistat_src SELECT * FROM s3('https://ClickHouse-public-datasets.s3.amazonaws.com/wikistat/partitioned/wikistat*.native.zst') LIMIT 1000
+</div>
+</pre>
+</p>
+
+確認してみましょう:
+
+<pre class='code-with-play'>
+<div class='code'>
+SELECT count(*)
+FROM wikistat_src
+
+┌─count()─┐
+│       0 │
+└─────────┘
+</div>
+</pre>
+</p>
+
+一方で、`wikistat_clean` には条件を満たす行だけが保存されています:
+
+<pre class='code-with-play'>
+<div class='code'>
+SELECT count(*)
+FROM wikistat_clean
+
+┌─count()─┐
+│      58 │
+└─────────┘
+</div>
+</pre>
+</p>
+
+1000 行のうち 58 行だけが条件をクリアし、残りの 942 行は挿入時に除外されました。
+
+## データを複数のテーブルに振り分ける
+
+Materialized Viewを使えば、条件に応じてデータを別のテーブルに振り分けることも簡単です:
+
+![routing_materialized_views.png](https://clickhouse.com/uploads/routing_materialized_views_d9c9303103.png)
+
+たとえば、不正データを削除するのではなく、別テーブルに保存したい場合は、別のクエリを持つMaterialized Viewをもう一つ作成します:
+
+<pre class='code-with-play'>
+<div class='code'>
+CREATE TABLE wikistat_invalid AS wikistat;
+
+Ok.
+
+CREATE MATERIALIZED VIEW wikistat_invalid_mv TO wikistat_invalid
+AS SELECT *
+FROM wikistat_src
+WHERE NOT match(path, '[a-z0-9\\-]')
+</div>
+</pre>
+</p>
+
+同じソーステーブルに対して複数のMaterialized Viewを設定すると、アルファベット順に処理されます。1 つのソーステーブルに対してMaterialized Viewを作りすぎると挿入パフォーマンスが下がるため、やはり数には注意しましょう。
+
+先ほどと同じデータを再度挿入すると、`wikistat_invalid` には不正データ 942 行が保存されているはずです:
+
+<pre class='code-with-play'>
+<div class='code'>
+SELECT count(*)
+FROM wikistat_invalid
+
+┌─count()─┐
+│     942 │
+└─────────┘
+</div>
+</pre>
+</p>
+
+## データの変換
+
+Materialized Viewはクエリ結果に基づくので、ClickHouse の豊富な関数を使ってデータを自由に変換できます。たとえば、`project`, `subproject`, `path` をまとめて `page` にし、`time` を `date` と `hour` に分割するような変換を挿入時に自動で行うことも可能です:
+
+<pre class='code-with-play'>
+<div class='code'>
+CREATE TABLE wikistat_human
+(
+    `date` Date,
+    `hour` UInt8,
+    `page` String
+)
+ENGINE = MergeTree
+ORDER BY (page, date);
+
+Ok.
+
+CREATE MATERIALIZED VIEW wikistat_human_mv TO wikistat_human
+AS SELECT
+    date(time) AS date,
+    toHour(time) AS hour,
+    concat(project, if(subproject != '', '/', ''), subproject, '/', path) AS page,
+    hits
+FROM wikistat
+</div>
+</pre>
+</p>
+
+こうすると、以後 `wikistat` に挿入されるたびに変換後のデータが `wikistat_human` に自動的に蓄積されます:
+
+<pre class='code-with-play'>
+<div class='code'>
+┌───────date─┬─hour─┬─page──────────────────────────┬─hits─┐
+│ 2015-11-08 │    8 │ en/m/Angel_Muñoz_(politician) │    1 │
+│ 2015-11-09 │    3 │ en/m/Angel_Muñoz_(politician) │    1 │
+└────────────┴──────┴───────────────────────────────┴──────┘
+</div>
+</pre>
+</p>
+
+## 本番でMaterialized Viewを作成するには
+
+本番環境など、すでに大量のデータがあるテーブルに対してMaterialized Viewを作成する場合は、以下のような手順が一般的です:
+
+1. ソーステーブルへの書き込みを一時停止する  
+2. Materialized Viewを作成する  
+3. ソーステーブルの既存データをターゲットテーブルへ反映（INSERT）する  
+4. ソーステーブルへの書き込みを再開する  
+
+あるいは、Materialized Viewを作る際に未来の時点を指定しておく方法もあります:
+
+<pre class='code-with-play'>
+<div class='code'>
+CREATE MATERIALIZED VIEW mv TO target_table
+AS SELECT …
+FROM soruce_table WHERE date > `$todays_date`
+</div>
+</pre>
+</p>
+
+ここで `$todays_date` は特定の日付を入れてください。そうすると、Materialized Viewはその日付以降のデータに対してだけ機能するので、その前の日付のデータは手動で以下のように INSERT すればよいことになります:
+
+<pre class='code-with-play'>
+<div class='code'>
+INSERT INTO target_table
+SELECT ...
+FROM soruce_table WHERE date <= `$todays_date`
+</div>
+</pre>
+</p>
+
+## Materialized View と JOIN
+
+Materialized Viewは SQL クエリの結果に基づくため、`JOIN` を含むあらゆる機能を利用できます。ただし、大きなテーブル同士の JOIN は挿入パフォーマンスを大きく下げる可能性があるため注意が必要です。
+
+たとえば、`wikistat` データセットに対応するページタイトルを持つ `wikistat_titles` テーブルがあるとします:
+
+<pre class='code-with-play'>
+<div class='code'>
+CREATE TABLE wikistat_titles
+(
+    `path` String,
+    `title` String
+)
+ENGINE = MergeTree
+ORDER BY path
+</div>
+</pre>
+</p>
+
+このテーブルは、`path` と対応するページのタイトルを保存しています:
+
+<pre class='code-with-play'>
+<div class='code'>
+SELECT *
+FROM wikistat_titles
+
+┌─path─────────┬─title────────────────┐
+│ Ana_Sayfa    │ Ana Sayfa - artist   │
+│ Bruce_Jenner │ William Bruce Jenner │
+└──────────────┴──────────────────────┘
+</div>
+</pre>
+</p>
+
+ここで、`wikistat` テーブルと `wikistat_titles` を `path` 列で JOIN した結果をMaterialized Viewに保存してみましょう:
+
+<pre class='code-with-play'>
+<div class='code'>
+CREATE TABLE wikistat_with_titles
+(
+    `time` DateTime,
+    `path` String,
+    `title` String,
+    `hits` UInt64
+)
+ENGINE = MergeTree
+ORDER BY (path, time);
+
+Ok.
+
+CREATE MATERIALIZED VIEW wikistat_with_titles_mv TO wikistat_with_titles
+AS SELECT time, path, title, hits
+FROM wikistat AS w
+INNER JOIN wikistat_titles AS wt ON w.path = wt.path
+</div>
+</pre>
+</p>
+
+`INNER JOIN` を使っているので、`wikistat_titles` テーブルにある `path` と一致する行だけが対象になります:
+
+<pre class='code-with-play'>
+<div class='code'>
+SELECT * FROM wikistat_with_titles LIMIT 5
+
+┌────────────────time─┬─path──────┬─title──────────────┬─hits─┐
+│ 2015-05-01 01:00:00 │ Ana_Sayfa │ Ana Sayfa - artist │    5 │
+│ 2015-05-01 01:00:00 │ Ana_Sayfa │ Ana Sayfa - artist │    7 │
+│ 2015-05-01 01:00:00 │ Ana_Sayfa │ Ana Sayfa - artist │    1 │
+│ 2015-05-01 01:00:00 │ Ana_Sayfa │ Ana Sayfa - artist │    3 │
+│ 2015-05-01 01:00:00 │ Ana_Sayfa │ Ana Sayfa - artist │  653 │
+└─────────────────────┴───────────┴────────────────────┴──────┘
+</div>
+</pre>
+</p>
+
+続いて、`wikistat` テーブルに新しい行を挿入してみましょう:
+
+<pre class='code-with-play'>
+<div class='code'>
+INSERT INTO wikistat VALUES(now(), 'en', '', 'Ana_Sayfa', 123);
+
+1 row in set. Elapsed: 1.538 sec.
+</div>
+</pre>
+</p>
+
+上記の挿入がやや時間を要している（<strong style="color: red">1.538 sec</strong>）ことに注目してください。Materialized Viewが JOIN を伴うため、挿入時に JOIN が実行されるからです。結果として、新しい行は `wikistat_with_titles` に保存されます:
+
+<pre class='code-with-play'>
+<div class='code'>
+SELECT *
+FROM wikistat_with_titles
+ORDER BY time DESC
+LIMIT 3
+
+┌────────────────time─┬─path─────────┬─title────────────────┬─hits─┐
+│ 2023-01-03 08:43:14 │ Ana_Sayfa    │ Ana Sayfa - artist   │  123 │
+│ 2015-06-30 23:00:00 │ Bruce_Jenner │ William Bruce Jenner │  115 │
+│ 2015-06-30 23:00:00 │ Bruce_Jenner │ William Bruce Jenner │   55 │
+└─────────────────────┴──────────────┴──────────────────────┴──────┘
+</div>
+</pre>
+</p>
+
+では、`wikistat_titles` テーブル側に新しいデータを挿入するとどうなるでしょうか:
+
+<pre class='code-with-play'>
+<div class='code'>
+INSERT INTO wikistat_titles
+VALUES('Academy_Awards', 'Oscar academy awards');
+</div>
+</pre>
+</p>
+
+`wikistat` テーブルに対応する行を挿入していないので、Materialized Viewには何も反映されません:
+
+<pre class='code-with-play'>
+<div class='code'>
+SELECT *
+FROM wikistat_with_titles
+WHERE path = 'Academy_Awards'
+
+0 rows in set. Elapsed: 0.003 sec.
+</div>
+</pre>
+</p>
+
+これは、Materialized Viewが「ソーステーブルへの挿入」をトリガーとして動作し、JOIN 先など外部のテーブルの挿入はトリガーされないためです。JOIN に限らず、他テーブルへの `IN SELECT` などでも同様です。
+
+ここでは `wikistat` がソーステーブルで、`wikistat_titles` は単に JOIN されるテーブルです:
+
+![updates_materialized_view.png](https://clickhouse.com/uploads/updates_materialized_view_7f44013d64.png)
+
+そのため、`wikistat` にレコードを挿入しないかぎりMaterialized Viewは更新されません。実際に `wikistat` に新たな行を挿入すると:
+
+<pre class='code-with-play'>
+<div class='code'>
+INSERT INTO wikistat VALUES(now(), 'en', '', 'Academy_Awards', 456);
+</div>
+</pre>
+</p>
+
+Materialized Viewにレコードが追加されます:
+
+<pre class='code-with-play'>
+<div class='code'>
+SELECT *
+FROM wikistat_with_titles
+WHERE path = 'Academy_Awards'
+
+┌────────────────time─┬─path───────────┬─title────────────────┬─hits─┐
+│ 2023-01-03 08:56:50 │ Academy_Awards │ Oscar academy awards │  456 │
+└─────────────────────┴────────────────┴──────────────────────┴──────┘
+</div>
+</pre>
+</p>
+
+**注意**: このように大きなテーブル同士の JOIN をMaterialized Viewで使うと、挿入時のパフォーマンスが大きく低下する可能性があります。より効率的な方法としては、[dictionaries](https://clickhouse.com/docs/en/sql-reference/dictionaries/external-dictionaries/external-dicts/) を検討することも一案です。
+
+## まとめ
+
+本記事では、Materialized Viewが ClickHouse でクエリパフォーマンスを向上させたり、データ管理機能を拡張したりするうえで非常に強力なツールであることを紹介しました。Materialized Viewでは JOIN を使うことも可能です。シンプルな変換やフィルタリングだけであれば、マテリアライズドカラムを使うのも手ですが、より高度な集計や振り分け処理にはMaterialized Viewが適しています。
+
+---
+
+## ClickPipes向けPostgres CDCコネクタがパブリックベータで利用可能になりました
+Published: 2025-02-19T00:38:53+00:00
+URL: https://clickhouse.com/blog/postgres-cdc-connector-clickpipes-public-beta-jp
+
+---
+title: "ClickPipes向けPostgres CDCコネクタがパブリックベータで利用可能になりました"
+date: "2025-02-19T00:38:53.169Z"
+author: "Sai Srirampur"
+category: "Product"
+excerpt: "ClickPipesでPostgres CDCコネクタがパブリックベータとして利用可能になったことを大変うれしく思います。これにより、お客様は数回のクリックだけで、PostgresデータベースをClickHouse Cloudへ簡単にレプリケートできるようになります。"
+---
+
+# ClickPipes向けPostgres CDCコネクタがパブリックベータで利用可能になりました
+
+本日、[ClickPipes向けPostgres CDCコネクタのパブリックベータ版](https://clickhouse.com/cloud/clickpipes/postgres-cdc-connector)をリリースしたことをお知らせします。これにより、お客様はPostgresデータベースをClickHouse Cloudに数回のクリックで簡単にレプリケートできるようになります。実際に使うには、サービスの**Data Source**タブに移動し、Postgresのタイルを選択して、Postgresデータベースとの連携を数ステップで設定するだけです。
+
+<img src="/uploads/Postgres_CDC_Add_Data_Source_e058704d02.gif" 
+     alt="Postgres CDC Add Data Source" 
+     loading="lazy">
+
+Postgres CDCのリーディングカンパニーである[PeerDBとの提携](https://clickhouse.com/blog/clickhouse-welcomes-peerdb-adding-the-fastest-postgres-cdc-to-the-fastest-olap-database)により、ClickHouse Cloudにネイティブ統合を実現し、[Postgres CDCコネクタをClickPipes向けにプライベートプレビュー](https://clickhouse.com/blog/postgres-cdc-connector-clickpipes-private-preview)としてリリースしました。
+
+プライベートプレビュー期間中には、多くのお客様から大きな反響をいただきました。実際にサービスを試したり、貴重なフィードバックをお寄せいただいたり、運用環境で利用してペタバイト規模のデータをPostgresからClickHouseにレプリケートいただいたケースもありました。その後、さらなる改善を加え、今回、ネイティブなPostgres CDCをClickHouse Cloud上で誰でも利用できるようパブリックベータとしてご提供します。
+
+## お客様のフィードバック
+
+Postgres CDCコネクタは、すでに[Syntage](https://syntage.com/)、[Neon](https://neon.tech/)、[Blacksmith](https://www.blacksmith.sh/)、[Vapi](https://vapi.ai/)、[Adora](https://adora.so/)、[Daisychain](https://www.daisychain.app/)、[Unify](https://www.unifygtm.com/home-lp)、[Ottimate](https://ottimate.com/)など、さまざまな企業に導入されています。以下に、参考顧客からいただいたフィードバックを一部ご紹介します：
+
+_“Postgres CDCコネクタをClickPipesで利用していて、素晴らしい体験をしています。30TBものAuroraデータベースをClickHouse Cloudへシームレスに移行し、常時同期を維持できています。過去にETLツールで苦い経験をしていたため、当初は高負荷に耐えられるツールは期待していませんでしたが、ClickPipesは信頼性とパフォーマンスの点で非常に驚きでした。”_ - [Matteus Pedroso](https://www.linkedin.com/in/matheuspedroso/), Co-founder and CEO, [Syntage](https://syntage.com/)
+
+_“私たちはNeonの課金データ（Postgres）をリアルタイム分析のためにClickHouseへ同期していますが、ClickPipes for Postgresのおかげでこのプロセスが非常に簡単になりました。CDCの速度はとても速く、数秒以内の最新データを扱える上、運用中のPostgresデータベースへの負荷も最小限に抑えられています。PostgresとClickHouseをスムーズに統合するために欠かせないソリューションです！”_ - Mo Abedi, Software Engineer in Billing team, [Neon.tech](https://neon.tech/)
+
+## 製品の強化ポイント
+
+<iframe width="768" height="432" src="https://www.youtube.com/embed/fHuFSmafYUo?si=yEFblvI2MuUBadBO" title="YouTube video player" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" referrerpolicy="strict-origin-when-cross-origin" allowfullscreen></iframe>
+
+### パフォーマンスを最優先に設計
+
+このPostgres CDCコネクタは、高いパフォーマンスを実現するよう、PostgresとClickHouseの特性を最大限に活かして設計されています。Postgres側では並列スナップショット機能により、初期ロードやバックフィルを10倍高速化し、テラバイト規模の移行も数時間で完了できます。また、[レプリケーションスロットを連続的にフラッシュ](https://clickhouse.com/blog/enhancing-postgres-to-clickhouse-replication-using-peerdb#efficiently-flush-the-replication-slot)する仕組みにより、数秒単位で常に最新データを反映可能です。  
+ClickHouse側でも、複数レプリカへの並列書き込みや、[メモリ管理を最適化するチャンク分割の設定](https://clickhouse.com/blog/enhancing-postgres-to-clickhouse-replication-using-peerdb#better-memory-handling-on-clickhouse)などにより、パフォーマンスと信頼性をさらに向上しています。
+
+これらの基本設計に加えて、過去数ヶ月でエンタープライズ級の運用を支援する新機能が多数追加されました。以下に主な強化点をご紹介します。
+
+### ユーザー向けアラート機能
+
+この機能により、ClickPipeに関する障害や問題の兆候をアラートとしてお知らせします。アラートはClickHouse Cloudの通知センターやメール経由で通知され、たとえば「レプリケーションスロットが異常に増えている」「ストリーム外のマテリアライズドビュー（MV）で取り込みに失敗している」「接続性の問題がある」など、状況に応じて問題が分類されます。あわせて自己解決のための手順も案内されるため、迅速なトラブルシューティングが可能です。
+
+<img src="/uploads/Postgres_CDC_User_Notifications_cddc06fced.gif" 
+     alt="ユーザーが通知を設定する様子" 
+     loading="lazy">
+
+### ソースモニタリングページ
+
+CDC実行中のPostgresデータベースを監視できる新しいページも追加しました。このページでは、アクティブなレプリケーションスロットの一覧やステータス、スロットのサイズ変化を示すグラフ、Postgres側のウェイトイベントなど、重要な指標を可視化します。レプリケーションの進捗を把握し、ボトルネックの特定やパフォーマンス最適化に役立てることができます。
+
+![Postgresのレプリケーションスロット状況と遅延を示すビジュアル](https://clickhouse.com/uploads/Postgres_CDC_Source_Monitoring_852798cd65.png)
+
+### Open API対応
+
+プライベートプレビュー期間中、多くのお客様から「管理対象テーブルが多い場合、UIだけでパイプを作成・管理するのは手間がかかる」という声が寄せられました。そこで、Open APIによるプログラムでのパイプ管理が可能になりました。現在はプライベートベータとして提供しており、興味のある方は[db-integrations-support@clickhouse.com](mailto:db-integrations-support@clickhouse.com)までご連絡ください。今後はTerraformでPostgres CDC向けClickPipesを管理できる機能も追加予定です。
+
+### PeerDB オープンソースの強化
+
+このコネクタは、[オープンソース](https://github.com/PeerDB-io/peerdb/)のPostgres CDCコードベースであるPeerDBをベースにしています。エンタープライズ運用に対応できるよう、ここ数ヶ月で機能強化を進めてきました。過去2ヶ月で、8回のマイナーリリースと3回のメジャーリリースを含む多数の[リリース](https://github.com/PeerDB-io/peerdb/releases)を行っています。主な改善点は以下のとおりです。
+
+* [複数のClickHouseレプリカを利用した取り込みで性能を向上](https://github.com/PeerDB-io/peerdb/pull/2256)  
+* [重負荷下でも性能を落とさないよう、レプリケーションスロットへの再接続を排除](https://github.com/PeerDB-io/peerdb/pull/2371)  
+* [誤検知エラーを除外するためのリトライロジックを一新](https://github.com/PeerDB-io/peerdb/pull/2122)  
+* Postgresからのデータ取得とClickHouseへの書き込みを非同期化し、レプリケーションスロットのフラッシュ処理を最適化  
+
+## 料金体系
+
+パブリックベータ期間中、Postgres CDCコネクタ（ClickPipes）は無料でご利用いただけます。今後、次の段階であるGA（General Availability）フェーズに移行するときに価格を導入する予定です。詳細はまだ検討中ですが、リアルタイム分析ユースケースをスケールさせやすいよう、競争力ある価格設定を目指します。
+
+## まとめ
+
+最後までお読みいただきありがとうございます。現在はパブリックベータとしてPostgres CDCの機能を提供しており、今後、製品が十分に成熟した段階でGAリリースを目指します。パブリックベータ期間中に何か問題が発生したり、質問やご意見がある場合、あるいは製品チームと直接話したい場合は、[db-integrations-support@clickhouse.com](mailto:db-integrations-support@clickhouse.com)までお気軽にご連絡ください。
+
+ネイティブなPostgres CDC機能をClickHouse Cloudでお試しいただけるよう、以下のリンクをぜひご覧ください。
+
+- [PostgresからClickHouseへのデータ取り込み（CDC方式）](https://clickhouse.com/docs/en/integrations/clickpipes/postgres)  
+- [ClickPipes for Postgresに関するFAQ](https://clickhouse.com/docs/en/integrations/clickpipes/postgres/faq)  
+- [ClickHouse Cloudを無料で試してみる](https://clickhouse.com/docs/en/cloud/get-started/cloud-quick-start)  
+
+---
+
+## ClickHouse Cloudの進化：新機能、優れたパフォーマンス、そしてニーズに合わせた提供
+Published: 2025-02-18T14:31:01+00:00
+URL: https://clickhouse.com/blog/evolution-of-clickhouse-cloud-new-features-superior-performance-tailored-offerings-jp
+
+---
+title: "ClickHouse Cloudの進化：新機能、優れたパフォーマンス、そしてニーズに合わせた提供"
+date: "2025-02-18T14:31:01.078Z"
+author: "ClickHouse"
+category: "Product"
+excerpt: "ClickHouse Cloudは、コンピュート分離、スケーリング、そしてエンタープライズ機能において最先端の改良を導入し、現代のデータワークロードに対してパフォーマンス、柔軟性、および制御を強化します。"
+---
+
+# ClickHouse Cloudの進化：新機能、優れたパフォーマンス、そしてニーズに合わせた提供
+
+ClickHouse Cloud は [驚異的な速さで構築](https://clickhouse.com/blog/building-clickhouse-cloud-from-scratch-in-a-year) され、2022年12月にリリースされました。リリース以来、すでに1,000社以上が当社のマネージドサービスにワークロードを移行しており、彼らは毎日合計で55億件のクエリを実行し、3500兆（3.5 quadrillion）レコードをスキャンし、100PBのデータを扱っています。
+
+過去2年間にわたり、私たちはユーザーと密に連携する中で貴重な知見を得てきました。継続的にフィードバックに耳を傾け、新機能をリリースすることで進化するニーズに応えています。まずは、主要なクラウドプロバイダ（AWS、GCP、Azure、AliCloud）への対応や、サポートリージョンの拡充に取り組みました。現在では[合計25のリージョン](https://clickhouse.com/docs/en/cloud/reference/supported-regions)をサポートしています。
+
+さらに、データのオンボーディング、運用管理、アナリスト向けツールに関するタイムトゥバリュー短縮を目的とした新機能を追加してきました。いくつかの例を挙げると:
+
+- **ClickPipes** を発表しました。これはまず [Kafka互換サービスに対応したマネージドなインジェストサービス](https://clickhouse.com/docs/en/integrations/clickpipes) から始まり、Amazon Kinesisなど他のストリーミングサービスや、[オブジェクトストレージからの継続的およびバルクロード](https://clickhouse.com/blog/s3-gcs-clickpipes-beta)にも対応しています。
+- PeerDB と提携し、ClickPipes に最高水準の **チェンジデータキャプチャ (CDC)** 技術を組み込みました。最初は[Postgres向け](https://clickhouse.com/docs/en/integrations/clickpipes/postgres)にフォーカスし、今後さらなるコネクタを追加予定です。
+- Arctype と連携し、GenAI（生成系AI）を活用した**SQLコンソール**を ClickHouse Cloud向けに最適化し、これをさらに拡張して[クエリAPIエンドポイント](https://clickhouse.com/docs/en/get-started/query-endpoints)や[ダッシュボード](https://clickhouse.com/docs/en/cloud/manage/dashboards)を追加しました。これらを[クラウドコンソールにネイティブ統合](https://clickhouse.com/blog/clickhouse-cloud-console-rebuilt)することで、スムーズなユーザー体験を実現しています。
+- ClickHouse Cloud の強力な機能の一つである**マネージドデータベースアップグレード**をさらに強化し、変更管理と[リリースチャネル](https://clickhouse.com/docs/en/manage/updates#release-channels-upgrade-schedule)の導入に多大なリソースを投じることで、アップグレードの管理や柔軟性を高めました。
+- データを自社VPCに保持したまま[完全マネージドサービスの利点を享受できる](https://clickhouse.com/docs/en/cloud/reference/byoc) **BYOC (Bring-Your-Own-Cloud) デプロイオプション**をAWS向けに追加しました。
+
+## 既存デプロイの進化
+
+この2年間にわたり、私たちはクラウドの構築と運用を続ける中で、ユーザーのワークロードや要求事項について多くを学びました。新機能の開発だけでなく、クラウドの基盤アーキテクチャを根本から進化させる取り組みにも注力してきました。  
+2025年に向けて、これらの知見に基づいた大きなアップデートを、メインの ClickHouse Cloud に実装していきます。
+
+### コンピュート同士の分離 (Compute-compute separation)
+
+ClickHouse Cloud では、[コンピュート同士の分離](https://clickhouse.com/docs/en/cloud/reference/warehouses) をサポートするようになりました。これは複数のコンピュートレプリカが同じ基盤ストレージに同時アクセスする仕組みで、異なるワークロードに合わせてコンピュート資源を独立にスケーリングし、かつデータの重複を防ぐことが可能になります。
+
+これにより、ワークロードごとの性能が安定し、相互干渉が少なくなります。たとえば、書き込み処理と読み取り処理、APIユーザーと人間のオペレーター、あるいは異なるタイプの利用者をそれぞれ専用のコンピュートグループに分け、リソースを制限・割り当てできます。コンピュートをグループごとに分離することで、全体的にコンピュートを過剰プロビジョニングすることなく、必要十分なサイズにできるため大幅なコスト削減も期待できます（詳細は[こちらのブログ](https://clickhouse.com/blog/introducing-warehouses-compute-compute-separation-in-clickhouse-cloud)をご覧ください）。
+
+<blockquote>
+<p style="margin-bottom: 8px;">"以前は8時間かかっていた処理が、今では30分以内で完了します。しかも他のサービスへの影響は目立ちません。文句なしの素晴らしい機能です！"</p>
+<p style="font-style: italic;">Cypress.io</p>
+</blockquote>
+
+![warehouses_evolution.png](https://clickhouse.com/uploads/warehouses_evolution_e72e540598.png)
+
+### 自動スケーリングの進化
+
+今回、新しい垂直スケーリングの仕組みとして「make before break（MBB）」を導入しました。このアプローチでは、スケーリング操作中に古いレプリカを削除する前に、新しいサイズのレプリカを追加します。これにより、スケーリング時に処理リソースが減少することがなくなるため、実行中ワークロードへの影響を最小限に抑えることができます。特にスケールアップは高いリソース使用率をトリガーに行うため、レプリカを先に削除してしまうと負荷がさらに高くなるリスクがありますが、この方法ならそれを回避可能です。その結果、より柔軟にスケールアップ・スケールダウンのポリシーを採用し、突発的なワークロードに合わせてコンピュートリソースを自動的に最適化できるようになりました。
+
+また、水平スケーリングに関するコントロールも導入し、APIやUIを通じてレプリカ数を変更できるようになりました。これにより、より多くの並列処理能力が必要なシナリオで、動的にコンピュート容量を増やせるようになります。
+
+### マネージドアップグレードの改善
+
+先に触れたように、安全なマネージドアップグレードはユーザーにとって大きなメリットがあります。データベースの新機能を活用しつつ、十分にテストされた形でアップグレードを行い、万が一問題が起きればすぐにロールバックします。今回のリリースでは、アップグレードの際にも「make before break (MBB)」のアプローチを適用しました。これによって、稼働中のワークロードに対する影響をさらに軽減しています。
+
+### さらなるデプロイパターン
+
+今回、新たに「シングルレプリカサービス」という概念を導入します。これはスタンドアロンのサービスとしても、またウェアハウス（warehouses）内の一要素としても利用可能です。スタンドアロンでの小規模シングルレプリカはテストワークロード向けに設計されており、新しいアイデアやプロジェクトを極めて低コストで試したい開発者にとって魅力的です。この仕組みをベースに新しい Basic（ベーシック）ティアを提供します。
+
+一方、ウェアハウス内では、シングルレプリカでもより大きなサイズを選択でき、高可用性が要求されない（再実行が可能な）ETLジョブなどのワークロードで使えます。また、2レプリカのサービスもこれまでより幅広いスケールで使えるようになります。
+
+### パフォーマンスと効率の向上
+
+私たちは、新しいデータベースバージョンをロールアウトする際に常にパフォーマンス回帰テストを行い、ユーザーの利用体験が最良となるよう努めています。過去2年間で多くの最適化を行った結果、**同じコンピュートユニットでも1.5～2倍ほど高速かつ効率よくクエリを実行できるようになり**、ユーザーのコスト削減につながっています。
+
+これらの改善は、多数のデータベース最適化から成り立っています。特に大きいのは、[SharedMergeTree](https://clickhouse.com/blog/clickhouse-cloud-boosts-performance-with-sharedmergetree-and-lightweight-updates) の導入です。これはクラウド環境でのストレージを最適化し、メタデータの伝播と高頻度の挿入を効率化します。さらに、一時的なローカルファイルシステムキャッシュを導入して、小規模クエリのパフォーマンスを向上させ、キャッシュ事前ウォームアップ（prewarm）機能により最新データのレプリカ間伝播を高速化し、最新データへのアクセスもスピードアップしました。非同期インサート（Asynchronous inserts）を導入したことで、さらに小さく頻繁な書き込みが可能になり、大量書き込みのための外部バッチ処理の必要性を削減しました。加えて、新しい“analyzer”をデータベースレベルに実装し、追加のクエリ最適化やクエリのパース・解釈の効率化を実現しています。
+
+また、常に基盤ハードウェアの見直しも行い、既存ワークロードをより良い環境へ移行しています。例として、AWSではGravitonインスタンスに移行しました。エネルギー効率に優れたGravitonアーキテクチャにより、平均で25%ものパフォーマンス向上が見込まれるため、クエリ速度の向上とリソース利用の効率化が実現しました（詳細は[こちらのブログ](https://clickhouse.com/blog/graviton-boosts-clickhouse-cloud-performance)をご覧ください）。
+
+![graviton.png](https://clickhouse.com/uploads/graviton_31b36ccb30.png)
+
+## エンタープライズ向けの新プラン「Enterprise Offering」の導入
+
+私たちは、さらに厳しい要件を持つユーザー向けにエンタープライズティアを新たに提供します。業界特有のセキュリティやコンプライアンス機能、ハードウェアやアップグレードに対する制御、先進的なディザスタリカバリを主眼としています。
+
+### 先進的なセキュリティとコンプライアンス
+
+オブジェクトストレージの追加保護レイヤーとして Transparent Data Encryption (TDE) をサポートし、必要に応じて Customer Managed Encryption Keys (CMEK) を変更できるようになります。これは高いプライバシーを求める組織が必須とする場合が多い機能です。さらにクラウドコンソールのシングルサインオン、業界固有のコンプライアンスとしてまずはHIPAA（今後はPCIも予定）に対応します。
+
+### アップグレード制御の高度化
+
+リリースチャネル機能をさらに発展させ、「スケジュールされたアップグレード (scheduled upgrades)」を導入します。ユーザーは各サービスごとにアップグレードの曜日と時間帯を指定可能です。間もなく「slow」リリースチャネルも追加されます。これを使用すると、アップグレードを2週間遅らせて実行でき、重要なアップグレードの計画と準備に十分な時間を確保できるようになります。
+
+### 高度なディザスタリカバリ
+
+デフォルトでは、2つ以上のレプリカを持つサービスは複数のアベイラビリティゾーンに跨ってデプロイされるため、ゾーン障害にも耐性があります。今回の拡張により、ユーザーはバックアップを自分のクラウドアカウントにエクスポートできるようになります。これにより、カスタムのディザスタリカバリポリシーを独自に実行可能です。今後はリージョン全体の障害に備えるためのクロスリージョンバックアップを計画しており、より迅速な復旧を可能にする予定です。
+
+### ハードウェアとリージョンの高度なプロファイル
+
+これまでは Dedicated サービスタイプとして提供していたカスタムハードウェアプロファイルを、エンタープライズティアの機能の一部として再編します。CPU:メモリ比が `1:8の HighMem` と、`1:2 の HighCPU` プロファイルを、デフォルトで提供している汎用（1:4）プロファイルに加えて利用可能にします。
+
+また、エンタープライズティアの特典として、一般公開されていないプライベートリージョンへのアクセスも追加します。個別のリクエストに応じてサポートチームがケースバイケースで評価し、提供します。
+
+### サポート体制の進化
+
+最後に、サポートサービスも拡充します。エンタープライズティアユーザー向けには、S1（緊急度1）の重大インシデントに対する応答時間を30分以内とする24x7のSLAを導入します。また、専任のテクニカルアカウントマネージャー（TAM）を用意し、設計のベストプラクティスやソリューションアーキテクチャ、移行、運用最適化などに関するコンサルティング支援を提供します。
+
+## 次のステップ
+
+上記のエンタープライズティア導入に合わせ、従来の Development（開発）と Production（本番）ティアを再編し、進化するユーザーニーズに合わせたプラン構成とします。新しいアイデアやプロジェクトの検証に特化した Basic（ベーシック）ティアと、大規模な本番運用を対象とした Scale（スケール）ティアに分ける形です。
+
+新規ユーザーとしてこれらの機能を試してみたい方は、[こちら](https://console.clickhouse.cloud/signUp)から300ドルの無料トライアルを開始できます。既存ユーザーの方は、製品内で表示されるガイダンスに従って既存のデプロイを新しいティアに移行できます。詳細については[こちらのFAQ](https://clickhouse.com/docs/en/cloud/manage/jan-2025-faq)をご確認ください。
+
+---
+
 ## Postgres CDC connector for ClickPipes is now in Public Beta
 Published: 2025-02-17T18:24:33+00:00
 URL: https://clickhouse.com/blog/postgres-cdc-connector-clickpipes-public-beta
@@ -64830,6 +71925,858 @@ Interested in trying the native Postgres CDC capabilities in ClickHouse Cloud? C
 * [ClickPipes for Postgres FAQ](https://clickhouse.com/docs/en/integrations/clickpipes/postgres/faq)
     
 * [Try ClickHouse Cloud for free](https://clickhouse.com/docs/en/cloud/get-started/cloud-quick-start)
+
+---
+
+## ウェアハウスの紹介: ClickHouse Cloud におけるコンピュート-コンピュート分離
+Published: 2025-02-17T00:53:45+00:00
+URL: https://clickhouse.com/blog/introducing-warehouses-compute-compute-separation-in-clickhouse-cloud-jp
+
+---
+title: "ウェアハウスの紹介: ClickHouse Cloud におけるコンピュート-コンピュート分離"
+date: "2025-02-17T00:53:45.604Z"
+author: "Dmitry Pavlov"
+category: "Product"
+excerpt: "本ブログでは、コンピュート-コンピュートの仕組みによって ClickHouse Cloud のお客様がテナント分離をより強化し、全体的なリソース消費とコストを最適化する方法について解説します。"
+---
+
+# ウェアハウスの紹介: ClickHouse Cloud におけるコンピュート-コンピュート分離
+
+現代のクラウドデータベースサービスにおいて、コンピュート-コンピュート分離は特定のワークロード、ユーザー、ビジネス機能に対してコンピュートリソースを分離することで、データベースパフォーマンスとリソース管理を最適化する強力なアプローチを提供します。従来のリソース共有モデルとは異なり、この方法では、読み取りや書き込みなど、異なるタイプのデータベース操作に専用のコンピュートインスタンスを割り当てるため、相互干渉のリスクが低減します。特に需要の高い環境では、ワークロードが変動することでクエリの速度や信頼性に影響が生じる可能性があり、こうした場面で特に有用です。
+
+本記事では、ClickHouse Cloud におけるコンピュート-コンピュート分離の導入を発表し、その重要性と、何よりユーザーにとって何を意味するのかを解説します。
+
+## コンピュート-コンピュート分離とは？
+
+データベースにおけるコンピュート-コンピュート分離とは、異なるユーザー、ワークロード、あるいはオペレーションタイプごとに専用のコンピュートリソースを割り当て、互いに干渉しないようにする仕組みを指します。コンピュートリソースを分離することで、あるクエリのパフォーマンスや安定性が他のワークロードによって影響を受けることを防ぐことができます。  
+類似の結果を、クォータやリミットを活用することで部分的に実現することも可能ですが、柔軟性や保証の面では、コンピュート-コンピュート分離の持つ特性には及びません。
+
+実際には、ユーザーは同じデータ（テーブルやビューなど）を読み書きする際に、異なる専用のコンピュートプールを用意できるようになります。それぞれが異なるタスク向けに分離されているのです。
+
+## これがなぜ便利なのか？
+
+このような分離は、以下のようなシナリオで非常に役立ちます。
+
+### 1. 書き込みと読み取りの分離
+
+一部のユースケースでは、書き込み操作がクエリ実行時間に対して非常に敏感になる場合があります。こうしたシナリオでは、データベース内の他のクエリによって INSERT や UPDATE の実行時間が影響を受けないことが望ましいです。特にユーザーや BI ツールから直接投げられるアドホッククエリでは、非効率的だったり、リソースを過度に消費したりするクエリが実行される可能性があり、他のクエリにまで影響が及びがちです。
+
+コンピュート-コンピュート分離を行うことで、最も重要なワークロード――例えば INSERT 操作――に専用のコンピュートリソースを割り当て、他のクエリに左右されないパフォーマンスを実現できます。場合によっては、書き込みよりも特定の読み取り操作のほうが重要であるケースもあるでしょう。その場合も同様に、専用のコンピュートリソースを割り当てることで確実にパフォーマンスを確保できます。
+
+### 2. 異なるチームや機能への専用コンピュートの提供
+
+大規模企業では、数十、あるいは数百ものチームや部署が同じデータベースやデータウェアハウスにアクセスすることがあります。同じデータにアクセスしていても、チームごとに求められるパフォーマンスレベルが異なる場合がありますし、他チームとコンピュートリソースを共有することで、クエリパフォーマンスが不安定になることを好まないこともあります。
+
+さらに、コスト管理や予算上の理由から、チームごとにデータベースの利用料金を分離したい場合も多いでしょう。
+
+このようなシナリオにおいて、コンピュート-コンピュート分離は以下のメリットをもたらします:
+
+- チームごとのワークロードを分離し、互いのクエリが相互にパフォーマンスへ影響を及ぼさないようにできる
+- 各チームに対して、異なるコンピュートサイズやアイドル設定を適用することができ、必要な性能とコストを最適化しやすくなる
+- 各チームの利用コストを明確に分離し、アイドリングを有効にしている場合でもクエリのコストをはっきりと把握できる
+
+### 3. ワークロードごとに異なる HA レベル(高可用性レベル)を提供
+
+ある種のワークロードは極めて重要度が高い一方、多少のダウンタイムを許容してコストを削減したい場合もあります。例えば:
+
+- エンドユーザーに提供している製品のチャートや可視化は最高レベルの可用性が求められるため、3 つのアベイラビリティゾーンを使用すべきです。ただし、これらのクエリ自体は比較的シンプルであり、CPU やメモリを大量に必要としないことも多いです。
+- ETL/ELT クエリは重要でありリソースを大きく消費しますが、失敗した場合に再実行が可能です。よって、2 つのアベイラビリティゾーンで合計 2 ノードだけを割り当てる程度で十分といったケースもあります。
+- 手動で実行される大規模なアドホッククエリは、メモリを大量に消費する可能性があり、またアナリストが平日の勤務時間 (例えば 5 日×8 時間) のみ作業するといった前提ならば、その時間以外はアイドリングしても問題ありません。さらに、一時的なノード障害があってもリトライ可能で、ある程度の失敗は許容できるかもしれません。そういった場合、1 つのアベイラビリティゾーンに単一ノードを割り当てるだけで十分かもしれません。
+
+このように、コンピュート-コンピュート分離を用いることで、各ワークロードが求める高可用性レベルをそれぞれ確保しつつ、同じデータベースを使う複数のチームに対してコストを分離することが可能です。
+
+## ウェアハウスの導入
+
+ClickHouse Cloud において、各データベースインスタンスには以下が含まれます:
+
+- 1 つ以上の ClickHouse ノード（またはレプリカ）のグループ  
+  （アベイラビリティ設定に応じて 1 ノード以上で構成）
+- サービス URL をもつエンドポイント（ClickHouse Cloud の UI コンソールを経由して複数作成可能）  
+  例: `https://dv2fzne24g.us-east-1.aws.clickhouse.cloud:8443`
+- サービスがすべてのデータおよび一部のメタデータを保存するオブジェクトストレージフォルダ
+- 通常 3 ノード構成の [keeper](https://clickhouse.com/clickhouse/keeper) インスタンス:
+
+![compute_compute_01.png](https://clickhouse.com/uploads/compute_compute_01_ba2b32bcdd.png)
+
+ここに、新たに **ウェアハウス (Warehouses)** という概念を導入します。ウェアハウスとは、同じデータ（テーブル、ビュー、関数など）を共有する複数のサービスをまとめたセットです。各ウェアハウスには、*プライマリサービス*（最初に作成されたサービス）と、1 つ以上の*セカンダリサービス*が含まれます。  
+例として、2 つのサービスを含むウェアハウスを以下に示します。
+
+![compute_compute_02.png](https://clickhouse.com/uploads/compute_compute_02_9bccc649bb.png)
+
+このようなウェアハウス内の各サービスは、それぞれ以下を独自に持っています:
+
+- **エンドポイント**: どのワークロードや BI ツール、ETL/ELT システムがどのノード群を利用するかを調整するため
+- **コンピュートノード**: 他サービスとの干渉を防ぎ、各ワークロードを独立して実行できる。たとえば、以下を個別にスケール可能:
+  - サービスあたりのノード数
+  - ノードサイズ (RAM の GiB 単位)  
+    ※インスタンスサイズが大きいほど vCPU も多くなる
+  - サービスのアイドリング設定
+  - エンタープライズ ティアの顧客の場合、サービス単位で異なる CPU/RAM 比率を選択可能。  
+    あるワークロードでは圧縮/解凍に CPU を多く要し、別のワークロードでは複雑なクエリにメモリを多く要するといったケースに対応するため、これらを分離して最適化できる
+- **ネットワークアクセス設定**: アプリやユーザーが特定のサービスにアクセスできないように制限をかけるなど
+
+一方、同じウェアハウス内のすべてのサービスに共通するものは以下です:
+
+- **データ**: すべてのサービスが同じデータを扱うため、同じウェアハウス内のどのサービスで `SELECT` クエリを実行しても同じ結果が得られる
+- **Keeper インスタンス**: Keeper はデータのノード間レプリケーションや調整を行うため、同じデータを扱うすべてのサービスは共有の Keeper クラスタを利用する
+- **バックアップ**: 同じデータを複数のサービスでバックアップしたくはないので、最初に作成されたプライマリサービスのみでバックアップを行う
+- 現時点では、すべてのサービスが以下を同一にする必要がある:
+  - クラウドプロバイダ (AWS、GCP、Azure のいずれか)
+  - リージョン
+  - ClickHouse のデータベースバージョン
+
+UI 上では、2 つ以上のサービスを持つ最初のウェアハウスが作成されると、同じウェアハウスに属するサービスがグルーピングされて表示されます。下記の例では、2 つのウェアハウスが存在します:
+
+- `DWH_pre_prod`: 4 つのサービスを持つ
+- `DWH_for_tests_us_east_1`: 1 つのサービスのみ
+
+![compute_compute_04.png](https://clickhouse.com/uploads/compute_compute_04_93c203d689.png)
+
+### 仕組み
+
+コンピュート-コンピュート分離を実現するには、主に 2 つの問題に対処する必要がありました。1 つは異なるコンピュートグループ間でのデータ同期、もう 1 つはクエリワークロードがサービスごとの境界を守り、同じウェアハウス内の別サービスが持つリソースを使用しないようにすることです。
+
+ClickHouse Cloud のアーキテクチャ上の 2 つの重要な設計が、このデータ同期を効率的に実現する助けとなっています。  
+1 つ目は [ストレージとコンピュートの分離](https://clickhouse.com/docs/en/guides/separation-storage-compute) です。クラウドプロバイダのストレージ（例: S3）上の同じデータを共有できるため、異なるサービス間でデータを同期しやすくなります。  
+2 つ目はテーブルスキーマやメタデータの同期において [SharedMergeTree テーブルエンジン](https://clickhouse.com/docs/en/cloud/reference/shared-merge-tree) を使用しており、Keeper フリートを活用した軽量なメタデータ同期を実現している点です。
+
+さらに、コンピュート分離を実装するためには、[replica-group の概念](https://github.com/ClickHouse/ClickHouse/issues/53620) をレプリケートされたデータベース内で利用します。このアプローチにより、分散クエリやパラレルレプリカにおける負荷は各レプリカグループ内に限定され、同じウェアハウス内であっても他サービスのリソースを追加で消費することを防ぎます。この仕組みにより、隔離性と効率性が保たれます。
+
+これらの技術基盤に加えて、コンピュート-コンピュート分離をフルサポートするため、以下の変更も行いました:
+
+- ウェアハウス内の各サービスを個別に監視し、アイドリングや自動スケールを独立して行えるようにした
+- ウェアハウス単位でのネットワーク分離・ストレージ分離をセキュリティのために強化
+- 同一ウェアハウス内のサービス間でデータベース同期を強制
+- 読み取り専用サービス (read-only) ではマージや挿入処理を行わないようにし、バックグラウンドジョブ（ミューテーションなど）が読み取り専用サービスに影響を与えないようにした（詳細は「Background operations」節を参照）
+
+### データベース認証情報[​](https://clickhouse.com/docs/en/cloud/reference/compute-compute-separation#database-credentials)
+
+同じウェアハウス内のすべてのサービスは、同じテーブルやビューを共有しているため、ユーザー/ロールやアクセス制御（権限付与）も共有されます。つまり、「サービス 1」で作成されたデータベースユーザーは、「サービス 2」でも同じ権限（テーブルやビューへのアクセスなど）を使ってログイン可能です。ユーザーはサービスごとに異なるエンドポイントを使用する一方、ユーザー名やパスワードは同一となります。  
+言い換えると、**ウェアハウス内のサービス間でユーザー情報は共有される**ということです:
+
+![compute_compute_05.png](https://clickhouse.com/uploads/compute_compute_05_43a6621b33.png)
+
+### ネットワークアクセス制御[​](https://clickhouse.com/docs/en/cloud/reference/compute-compute-separation#network-access-control)
+
+ただし、一部のサービスを特定のアプリやアドホックユーザーからアクセスできないようにしたい場合もあるでしょう。これは、ネットワーク制限を設定することで実現できます。既存の通常サービスで行っている設定方法と同様に、ClickHouse Cloud コンソールの対象サービスの **Service** タブで **Settings** に移動し、設定を行います。
+
+サービスごとに IP フィルタリング設定を適用できるため、どのアプリやユーザーがどのサービスにアクセス可能かを制御できます。
+
+![compute_compute_06.png](https://clickhouse.com/uploads/compute_compute_06_b0c4f114cb.png)
+
+### 読み取り専用 vs 読み書き可能
+
+特定のサービスを読み取り専用にし、ウェアハウス内の一部サービスだけで書き込みを行わせたいケースもあります。これは、最初に作成されたプライマリサービス以外のサービスを *読み取り専用* に設定することで実現できます（最初のサービスは常に書き込み可能である必要があります）。
+
+![compute_compute_07.png](https://clickhouse.com/uploads/compute_compute_07_749da423e7.png)
+
+#### バックグラウンドオペレーション
+
+ClickHouse は、データ挿入後のマージ処理のように、リソースを大量消費するバックグラウンドオペレーションをいくつか実行します。これらのマージ処理には多くのメモリや CPU リソースが必要となる場合があります。
+
+コンピュート-コンピュート分離を完全に実現するため、バックグラウンドのマージは書き込み可能 (read-write) なサービスのみで行うようにしました。したがって、重要な読み取りワークロード専用に読み取り専用サービスを用意すれば、そのサービスではマージが実行されず、読み取りパフォーマンスへの影響を回避できます。
+
+一方、複数の読書き可能 (RW) サービスがある場合、いずれのサービスでも、どのサービスから行われた INSERT に対してもマージを実行する可能性があります。これは、マージ処理自体が、トリガーとなったクエリと直接結びついていないためです。その結果、別のサービスで発生した重い書き込みが、別サービスに影響を及ぼすケースもまれにありえます。将来的には、どの RW サービスがバックグラウンドジョブを実行するかを制御し、クエリを発行したサービスに対応する形で処理を分散できる設定を導入する予定です。
+
+### ウェアハウスの制限事項
+
+ウェアハウスは ClickHouse Cloud に大きな柔軟性をもたらしますが、現時点の実装にはいくつかの制限があり、今後これらを取り除いていく予定です:
+
+1. ウェアハウス内の最初のサービスは常に稼働状態でなければならず、アイドリングさせることはできません。セカンダリサービスが 1 つでも存在する場合、プライマリサービスを停止またはアイドリングにできません。すべてのセカンダリサービスを削除すると、オリジナルのサービスを再び停止やアイドリングにすることが可能です。
+
+2. 前述のとおり、すべての読書き可能サービス (RW サービス) はバックグラウンドでマージ操作を実行します。たとえば、サービス 1 で INSERT クエリを実行した場合でも、マージはサービス 2 で行われる可能性があります。つまり、ある RW サービスのワークロードが、別の RW サービスのパフォーマンスに影響を与える場合があります。一方、読み取り専用 (RO) サービスはバックグラウンドでマージを実行しないため、この操作でリソースを消費しません。  
+   挿入や変換には単一の RW サービスを用い、他の用途には RO サービスを利用することを検討してください。
+
+3. ある RW サービスに対する挿入 (INSERT) 処理が、アイドリングを有効にしている別の RW サービスをアイドリングできなくする場合があります。これは前のポイントと関連しており、1 つめのサービスの挿入処理に対して、2 つめのサービスがバックグラウンドマージを実行する可能性があるためです。このバックグラウンド処理が実行されている間は、2 つめのサービスはスリープ状態に入れません。マージ処理が完了すれば、そのサービスはアイドリングに移行します。読み取り専用サービスは影響を受けず、遅延なくアイドリングされます。
+
+4. `CREATE/RENAME/DROP DATABASE` クエリは、デフォルト設定のままだと停止中やアイドリング状態のサービスによってブロックされ、クエリが完了しない可能性があります。回避するには、以下のようにセッションまたはクエリレベルで
+   <code>distributed_ddl_task_timeout=0</code>
+   を設定してデータベース管理クエリを実行してください。
+
+   <pre>
+   <code type='click-ui' language='sql'>
+   create database db_test_ddl_single_query_setting
+   settings distributed_ddl_task_timeout=0
+   </code>
+   </pre>
+
+### お客様からのフィードバック
+
+ウェアハウスを正式リリースする前に、一部のお客様にプライベートプレビューとして提供し、実際の本番ワークロードでテストしていただきました。以下は、そのユーザーからのフィードバックの一部です:
+
+<blockquote style="font-size: 16px;">
+<p style="margin-bottom: 8px;">"私たちは小規模なプライマリクラスターを用意して書き込み専用とし、大規模なクラスターは読み取り専用にしています。さらにアドホッククラスターを用意しておき、使用していないときはスリープに入るようにしています。アドホックは素晴らしいですね。ユーザーがどんな非効率なクエリを実行しても、本番環境に影響を与えないので助かります。"</p>
+<p>Beehiiv.com</p>
+</blockquote>
+
+
+<blockquote style="font-size: 16px;">
+<p style="margin-bottom: 8px;">"今のところ順調です！ 今週はプライマリサービスに追加の負荷がかかったのですが、セカンダリサービスにトラフィックを振り分けることで、顧客向けクエリの速度を維持できました。"</p>
+<p>CommonRoom.io</p>
+</blockquote>
+
+
+<blockquote style="font-size: 16px;">
+<p style="margin-bottom: 8px;">"`query_cache`、`allow_experimental_analyzer`、`allow_experimental_parallel_reading_from_replicas` とあわせてコンピュート-コンピュート分離を本番環境で運用し始めましたが、非常に素晴らしいです。まるで夢のような環境になりました。"</p>
+<p>Vantage.sh</p>
+</blockquote>
+
+
+<blockquote style="font-size: 16px;">
+<p style="margin-bottom: 8px;">"コンピュート-コンピュート分離の効果は抜群です。テストの結果、現在 BigQuery で 30 分かかっている通常のコンピュートタスクが、30 秒ほどに短縮できました。ワークロードを分離できたおかげです。"</p>
+<p>ABTasty.com</p>
+</blockquote>
+
+
+<blockquote style="font-size: 16px;">
+<p style="margin-bottom: 8px;">"8 時間かかっていた処理が、今は 30 分以内、あるいはそれ以下に短縮されました。他のサービスへの影響は特にありません。A+ 機能です。"</p>
+<p>Cypress.io</p>
+</blockquote>
+
+
+## 今すぐ始めましょう！
+
+本記事では、コンピュート-コンピュート分離が ClickHouse Cloud のお客様のテナント分離を高め、リソース消費やコストの全体最適化にどのように役立っているかを紹介しました。
+
+ClickHouse Cloud の新規ユーザーとしてウェアハウスを体験するには、[こちら](https://console.clickhouse.cloud/signUp) から 300 ドル分の無料トライアルをお試しください。既存のユーザーの方は、製品内の案内に従い、ウェアハウスをサポートする新しいティアへ既存のデプロイを移行できます。詳しくは [FAQ](https://clickhouse.com/docs/en/cloud/manage/jan-2025-faq) をご覧ください。
+
+
+---
+
+## 2025年1月リリース
+Published: 2025-02-17T00:28:37+00:00
+URL: https://clickhouse.com/blog/clickhouse-release-25-01-jp
+
+---
+title: "2025年1月リリース"
+date: "2025-02-17T00:28:37.900Z"
+author: "ClickHouse"
+category: "Engineering"
+excerpt: "ClickHouse 25.1 がリリースされました。この投稿では、さらに高速化されたパラレルハッシュ結合アルゴリズムや、自動的に MinMax インデックスを作成する機能、改善された Merge テーブル、オートインクリメント機能の追加など、多彩な新機能をご紹介します！"
+---
+
+# 2025年1月リリース
+
+<style>
+pre div.p-2 {
+    margin-bottom: 2rem;
+}
+</style>
+
+また1ヶ月が経過し、つまり新しいリリースの時期がやってきました！
+
+<p>ClickHouse バージョン 25.1 には、新機能が 15 件 &#x1F983;、パフォーマンス最適化が 36 件 &#x26F8;&#xFE0F;、そしてバグ修正が 77 件 &#x1F3D5;&#xFE0F; 含まれています。</p>
+
+このリリースでは、2 レベルのハッシュマップを使用してパラレルハッシュ結合アルゴリズムをさらに高速化し、テーブルレベルの MinMax インデックスを導入し、Merge テーブルを改善し、オートインクリメント機能を追加するなど、多くのアップデートが行われました！
+
+## 新しいコントリビューター
+
+25.1 で新しく参加されたコントリビューターの皆さん、ようこそ！  
+ClickHouse のコミュニティがこれほどまでに成長していることに驚きと感謝の気持ちでいっぱいです。ClickHouse がここまで広く使われるようになったのは、皆さんの貢献のおかげです。
+
+新しく参加されたコントリビューターのお名前はこちらです:
+
+*Artem Yurov, Gamezardashvili George, Garrett Thomas, Ivan Nesterov, Jesse Grodman, Jony Mohajan, Juan A. Pedreira, Julian Meyers, Kai Zhu, Manish Gill, Michael Anastasakis, Olli Draese, Pete Hampton, RinChanNOWWW, Sameer Tamsekar, Sante Allegrini, Sergey, Vladimir Zhirov, Yutong Xiao, heymind, jonymohajanGmail, mkalfon, ollidraese*
+
+ヒント: どうやってこのリストを生成しているのか気になる方は … [こちら](https://gist.github.com/gingerwizard/5a9a87a39ba93b422d8640d811e269e9) をご覧ください。
+
+<iframe width="768" height="432" src="https://www.youtube.com/embed/4w7zWG7NoSY?si=7M9rgFGSW2vb6OXO" title="YouTube video player" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" referrerpolicy="strict-origin-when-cross-origin" allowfullscreen></iframe>
+
+[プレゼンテーションのスライド](https://presentations.clickhouse.com/release_25.1/) もご覧いただけます。
+
+---
+
+## より高速になったパラレルハッシュ結合
+
+### コントリビューション: Nikita Taranov
+
+[パラレルハッシュ結合](https://clickhouse.com/blog/clickhouse-fully-supports-joins-hash-joins-part2#parallel-hash-join) は、バージョン 24.11 以降 [デフォルトの結合戦略](https://clickhouse.com/blog/clickhouse-release-24-11#parallel-hash-join-is-the-default-join-strategy) となっており、すでに ClickHouse のインメモリで最速の [ハッシュテーブル](https://clickhouse.com/blog/hash-tables-in-clickhouse-and-zero-cost-abstractions) を用いた [結合アルゴリズム](https://clickhouse.com/blog/clickhouse-fully-supports-joins-how-to-choose-the-right-algorithm-part5#imdb-large-join-runs) と言えます。それでもなお、[以前お約束した](https://clickhouse.com/blog/clickhouse-release-24-05#cross-join-improvements)通り、細部への[きめ細やかな配慮](https://clickhouse.com/docs/en/concepts/why-clickhouse-is-so-fast#meticulous-attention-to-detail)を重ねながら、リリースのたびに結合パフォーマンスの向上を追求し続けています。
+
+バージョン 24.7 では、[パラレルハッシュ結合のハッシュテーブルのアロケーション](https://clickhouse.com/blog/clickhouse-release-24-07#faster-parallel-hash-join) を改善しました。バージョン 24.12 では、パラレルハッシュ結合でどちらのテーブルを `build phase` に使用すべきかを [自動的に判定する](https://clickhouse.com/blog/clickhouse-release-24-12#automatic-join-reordering) 機能を追加しました。そして今回の 25.1 では、アルゴリズムの `probe phase` をさらに高速化しました。
+
+まず最初に、`build phase` と `probe phase` が以前どのように動いていたかを簡単に解説しましょう。下図は、リリース前の ClickHouse におけるパラレルハッシュ結合の仕組みを示したものです（クリックで拡大）:
+
+<a href="/uploads/25_01_01_8cfbd11186.png" target="_blank"><img src="/uploads/25_01_01_8cfbd11186.png"/></a>
+
+アルゴリズムの ① **build phase** では、右側のテーブルのデータを分割し、`N` 本の処理スレッドで並行して処理することで、`N` 個のハッシュテーブルに平行してデータを格納します。`N` は設定項目の `max_threads` で制御され、例では `N=4` です。各処理スレッドが実行するループは次のとおりです:
+
+1. 右側のテーブルから未処理の行ブロックを読み込む。  
+2. 各行の結合キーに対して「インスタンスハッシュ関数（図中の青色）」を適用し、その結果をスレッド数 (`N`) で剰余を取ることで、どのハッシュテーブルインスタンスに入れるかを決定する。  
+3. 続けて「挿入ハッシュ関数（図中の黄色）」を適用し、その結果をキーとして、② 右テーブルの行データを該当のハッシュテーブルインスタンスに挿入する。  
+4. 1 に戻って繰り返す。
+
+アルゴリズムの ③ **probe phase** では、左側のテーブルのデータを分割し、`N` 本の処理スレッドで並行して処理します（`N` は先ほどと同様に `max_threads` で制御されます）。各処理スレッドが実行するループは次のとおりです:
+
+1. 左側のテーブルから未処理の行ブロックを読み込む。  
+2. 各行の結合キーに対してビルドフェーズと同じ「インスタンスハッシュ関数（青色）」を適用し、その結果を `N` で剰余を取ることで、どのハッシュテーブルインスタンスを参照すべきかを決定する。  
+3. 続けてビルドフェーズと同じ「挿入ハッシュ関数（黄色）」を適用し、その結果をキーとして、選択されたハッシュテーブルインスタンスに ④ lookup を実行する。  
+4. lookup が成功し結合キーの値が一致すれば、⑤ 結合した行を返す。  
+5. 1 に戻って繰り返す。
+
+パラレルハッシュ結合の `build phase` は、複数のハッシュテーブルを同時に作成できるため高速化に寄与します。一方、[非パラレルハッシュ結合](https://clickhouse.com/blog/clickhouse-fully-supports-joins-hash-joins-part2#hash-join) では、[単一](https://clickhouse.com/blog/clickhouse-fully-supports-joins-hash-joins-part2#description) のハッシュテーブルしか使わず、サイズが大きいテーブルを結合するときに挿入処理がボトルネックとなる可能性がありました。ただし、ハッシュテーブルは読み込みに関しては[スレッドセーフ](https://en.wikipedia.org/wiki/Thread_safety)であるため、非パラレルハッシュ結合の `probe phase` は単一のハッシュテーブルを並行で効率的に読み込むことができます。
+
+しかし、パラレルハッシュ結合の場合、`build phase` を並行実行すると、前述のように `probe phase` で左側テーブルの入力ブロックをスレッドごとに分割して適切なハッシュテーブルインスタンスに振り分けるというオーバーヘッドが発生します。
+
+この問題を解決するため、25.1 では `probe phase` で単一の共有ハッシュテーブルを利用するように変更しました。これにより、入力ブロックの分割や振り分けが不要となり、オーバーヘッドが削減され効率が向上します。
+
+次の図は、改善後のパラレルハッシュ結合の仕組みを示しています（クリックで拡大）:
+
+<a href="/uploads/25_01_02_cb04311596.png" target="_blank"><img src="/uploads/25_01_02_cb04311596.png"/></a>
+
+① **build phase** は以前と同様に並行で実行されます。ただし、`max_threads` = `N` の場合でも、`N` 個のハッシュテーブルインスタンスを個別に作るのではなく、`N` 個の [two-level hash table](https://clickhouse.com/blog/hash-tables-in-clickhouse-and-zero-cost-abstractions) インスタンスを使います。これらのインスタンスにある 256 個のバケットは、`N` 本のスレッドによって重複のない形で並行に埋められます:
+
+- **hash table instance #0** は **bucket #0**, **bucket #`N`**, **bucket #(`N` * 2)**, … のみを担当  
+- **hash table instance #1** は **bucket #1**, **bucket #`N` + 1**, **bucket #(`N` * 2 + 1)**, … のみを担当  
+- **hash table instance #2** は **bucket #2**, **bucket #`N` + 2**, **bucket #(`N` * 2 + 2)**, … のみを担当  
+- **hash table instance #3** は **bucket #3**, **bucket #`N` + 3**, **bucket #(`N` * 2 + 3)**, … のみを担当  
+- 以降も同様…
+
+具体的には、各スレッドは以下のようなループを実行します:
+
+1. 右テーブルから未処理の行ブロックを読み込む。  
+2. 結合キーに「挿入ハッシュ関数（黄色）」を適用し、その結果を `256` で剰余を取ることでターゲットとなるバケット番号を求める。  
+3. バケット番号をさらにスレッド数で剰余を取り、どの two-level hash table インスタンスに割り当てるかを決定する。  
+4. 2 で得られた挿入ハッシュ関数の結果をキーとして、② 選択されたインスタンスの該当バケットに行データを挿入する。  
+5. 1 に戻って繰り返す。
+
+`N` 個の two-level hash table インスタンスで、各インスタンスのバケットを相互に重ならない形で並列に構築することで、`build phase` 後にこれら `N` 個のインスタンスを単一の two-level hash table に ③ マージするときも、バケット同士をそのまま再配置すればいいだけなので効率的（定数時間）に処理が行えます。
+
+④ **probe phase** では、すべての `N` 本のスレッドが、この共有 two-level hash table を並行して読み込むことができます。非パラレルハッシュ結合と同じ要領です。各スレッドは次のようなループを行います:
+
+1. 左側のテーブルから未処理の行ブロックを読み込む。  
+2. `build phase` と同じ「挿入ハッシュ関数（黄色）」を結合キーに適用し、その結果を 256 で剰余を取って、共有 two-level hash table のどのバケットを参照するかを決定する。  
+3. 選択されたバケットに対して ⑤ lookup を実行する。  
+4. lookup が成功し、結合キーの値が一致すれば ⑥ 結合した行を返す。  
+5. 1 に戻って繰り返す。
+
+なお、以前はビルドフェーズとプローブフェーズで 2 種類のハッシュ関数が使われていましたが、この実装変更後は、両フェーズとも単一のハッシュ関数のみを使うようになりました。two-level hash table での間接参照は、軽量な剰余演算を加える程度のオーバーヘッドしか発生しません。
+
+続いて、新しいパラレルハッシュ結合の速度向上を実測してみましょう。AWS EC2 の m6i.8xlarge インスタンス（vCPU 32 個、メモリ 128 GiB）でテストを行いました。
+
+まず、次のクエリを ClickHouse バージョン 24.12 で実行します:
+
+```sql
+SELECT
+    count(c),
+    version()
+FROM numbers_mt(100000000) AS a
+INNER JOIN
+(
+    SELECT
+        number,
+        toString(number) AS c
+    FROM numbers(2000000)
+) AS b ON (a.number % 10000000) = b.number
+SETTINGS join_algorithm = 'parallel_hash';
+```
+
+```
+   ┌─count(c)─┬─version()──┐
+1. │ 20000000 │ 24.12.1.27 │
+   └──────────┴────────────┘
+
+1 row in set. Elapsed: 0.521 sec. Processed 102.00 million rows, 816.00 MB (195.83 million rows/s., 1.57 GB/s.)
+Peak memory usage: 259.52 MiB.
+```
+
+次に、同じクエリを ClickHouse バージョン 25.1 で実行します:
+
+```sql
+SELECT
+    count(c),
+    version()
+FROM numbers_mt(100000000) AS a
+INNER JOIN
+(
+    SELECT
+        number,
+        toString(number) AS c
+    FROM numbers(2000000)
+) AS b ON (a.number % 10000000) = b.number
+SETTINGS join_algorithm = 'parallel_hash';
+```
+
+```
+   ┌─count(c)─┬─version()─┐
+1. │ 20000000 │ 25.1.3.23 │
+   └──────────┴───────────┘
+
+1 row in set. Elapsed: 0.330 sec. Processed 102.00 million rows, 816.00 MB (309.09 million rows/s., 2.47 GB/s.)
+Peak memory usage: 284.96 MiB.
+```
+
+0.521 秒から 0.330 秒へと、およそ **36.66%** の高速化です。
+
+同じマシンで [TPC-H データセット](https://clickhouse.com/docs/en/getting-started/example-datasets/tpch)（スケールファクター 100）でも速度を比較しました。卸売りサプライヤーのデータウェアハウスをモデル化したテーブルを、[公式ドキュメント](https://clickhouse.com/docs/en/getting-started/example-datasets/tpch#data-generation-and-import) に従って作成・ロードしています。
+
+`lineitem` テーブルと `orders` テーブルを結合する典型的なクエリを、まずは ClickHouse 24.12 で実行した際のホットラン（連続 3 回実行して最も速い結果）を見てみます:
+
+```sql
+SELECT
+    count(),
+    version()
+FROM lineitem AS li
+INNER JOIN orders AS o ON li.l_orderkey = o.o_orderkey
+SETTINGS join_algorithm = 'parallel_hash';
+```
+
+```
+   ┌───count()─┬─version()──┐
+1. │ 600037902 │ 24.12.1.27 │
+   └───────────┴────────────┘
+
+1 row in set. Elapsed: 3.100 sec. Processed 750.04 million rows, 3.00 GB (241.97 million rows/s., 967.89 MB/s.)
+Peak memory usage: 16.79 GiB.
+```
+
+次に、同じクエリを ClickHouse 25.1 で実行した結果です:
+
+```sql
+SELECT
+    count(),
+    version()
+FROM lineitem AS li
+INNER JOIN orders AS o ON li.l_orderkey = o.o_orderkey
+SETTINGS join_algorithm = 'parallel_hash';
+```
+
+```
+   ┌───count()─┬─version()─┐
+1. │ 600037902 │ 25.1.3.23 │
+   └───────────┴───────────┘
+
+1 row in set. Elapsed: 2.112 sec. Processed 750.04 million rows, 3.00 GB (355.15 million rows/s., 1.42 GB/s.)
+Peak memory usage: 16.19 GiB.
+```
+
+3.100 秒から 2.112 秒へ、およそ **31.87%** の高速化です。
+
+**来月以降のリリースでも、さらに結合パフォーマンスを追求していきますので、お楽しみに！（そう、今後もずっとやります！）**
+
+---
+
+## テーブルレベルの MinMax インデックス
+
+### コントリビューション: Smita Kulkarni
+
+[MinMax インデックス](https://clickhouse.com/docs/en/optimize/skipping-indexes#minmax) は、各ブロックに対して最小値と最大値を保持するインデックスで、ある程度ソートされている列に対して効果を発揮します。  
+ただしデータが完全にランダムである場合は [あまり効果的ではありません](https://clickhouse.com/docs/en/guides/best-practices/sparse-primary-indexes#note-about-data-skipping-index)。
+
+25.1 以前は、このインデックスを各列ごとに指定する必要がありましたが、25.1 では `add_minmax_index_for_numeric_columns` 設定を利用することで、数値型カラムすべてに一括して MinMax インデックスを付与できるようになりました。
+
+例として、[StackOverflow データセット](https://clickhouse.com/docs/en/getting-started/example-datasets/stackoverflow)（質問や回答、タグなど 5,000 万件超）を使ってみましょう。まずは `stackoverflow` というデータベースを作成します:
+
+```sql
+CREATE DATABASE stackoverflow;
+```
+
+続いて、MinMax インデックスを適用しない場合のテーブル作成例は以下のとおりです:
+
+```sql
+CREATE TABLE stackoverflow.posts
+(
+    `Id` Int32 CODEC(Delta(4), ZSTD(1)),
+    `PostTypeId` Enum8('Question' = 1, 'Answer' = 2, 'Wiki' = 3, 'TagWikiExcerpt' = 4, 'TagWiki' = 5, 'ModeratorNomination' = 6, 'WikiPlaceholder' = 7, 'PrivilegeWiki' = 8),
+    `AcceptedAnswerId` UInt32,
+    `CreationDate` DateTime64(3, 'UTC'),
+    `Score` Int32,
+    `ViewCount` UInt32 CODEC(Delta(4), ZSTD(1)),
+    `Body` String,
+    `OwnerUserId` Int32,
+    `OwnerDisplayName` String,
+    `LastEditorUserId` Int32,
+    `LastEditorDisplayName` String,
+    `LastEditDate` DateTime64(3, 'UTC') CODEC(Delta(8), ZSTD(1)),
+    `LastActivityDate` DateTime64(3, 'UTC'),
+    `Title` String,
+    `Tags` String,
+    `AnswerCount` UInt16 CODEC(Delta(2), ZSTD(1)),
+    `CommentCount` UInt8,
+    `FavoriteCount` UInt8,
+    `ContentLicense` LowCardinality(String),
+    `ParentId` String,
+    `CommunityOwnedDate` DateTime64(3, 'UTC'),
+    `ClosedDate` DateTime64(3, 'UTC')
+)
+ENGINE = MergeTree
+ORDER BY (PostTypeId, toDate(CreationDate), CreationDate);
+```
+
+次に、数値型のカラムすべてに MinMax インデックスを適用するテーブルを作成してみます。
+
+```sql
+CREATE TABLE stackoverflow.posts_min_max
+(
+   `Id` Int32 CODEC(Delta(4), ZSTD(1)),
+   `PostTypeId` Enum8('Question' = 1, 'Answer' = 2, 'Wiki' = 3, 'TagWikiExcerpt' = 4, 'TagWiki' = 5, 'ModeratorNomination' = 6, 'WikiPlaceholder' = 7, 'PrivilegeWiki' = 8),
+   `AcceptedAnswerId` UInt32,
+   `CreationDate` DateTime64(3, 'UTC'),
+   `Score` Int32,
+   `ViewCount` UInt32 CODEC(Delta(4), ZSTD(1)),
+   `Body` String,
+   `OwnerUserId` Int32,
+   `OwnerDisplayName` String,
+   `LastEditorUserId` Int32,
+   `LastEditorDisplayName` String,
+   `LastEditDate` DateTime64(3, 'UTC') CODEC(Delta(8), ZSTD(1)),
+   `LastActivityDate` DateTime64(3, 'UTC'),
+   `Title` String,
+   `Tags` String,
+   `AnswerCount` UInt16 CODEC(Delta(2), ZSTD(1)),
+   `CommentCount` UInt8,
+   `FavoriteCount` UInt8,
+   `ContentLicense` LowCardinality(String),
+   `ParentId` String,
+   `CommunityOwnedDate` DateTime64(3, 'UTC'),
+   `ClosedDate` DateTime64(3, 'UTC')
+)
+ENGINE = MergeTree
+PRIMARY KEY (PostTypeId, toDate(CreationDate), CreationDate)
+ORDER BY (PostTypeId, toDate(CreationDate), CreationDate, CommentCount)
+SETTINGS add_minmax_index_for_numeric_columns=1;
+```
+
+最初のテーブルでは、PRIMARY KEY としてソートキーと同じ `(PostTypeId, toDate(CreationDate), CreationDate)` を使用しました。今回のテーブルではそれに加えて、`CommentCount` をソートキーに含めることで MinMax インデックスをより有効に活用しています。
+
+こうすることで、`CommentCount` をはじめ、関連性の高い `FavoriteCount` や `AnswerCount` と組み合わせたフィルタリングを行うクエリを効率的に実行できます。
+
+下記のクエリで、すべての数値カラムに MinMax インデックスが作成されたことを確認できます:
+
+```sql
+SELECT name, type, granularity
+FROM system.data_skipping_indices
+WHERE (database = 'stackoverflow') AND (`table` = 'posts_min_max');
+```
+
+```
+┌─name───────────────────────────────┬─type───┬─granularity─┐
+│ auto_minmax_index_Id               │ minmax │           1 │
+│ auto_minmax_index_AcceptedAnswerId │ minmax │           1 │
+│ auto_minmax_index_Score            │ minmax │           1 │
+│ auto_minmax_index_ViewCount        │ minmax │           1 │
+│ auto_minmax_index_OwnerUserId      │ minmax │           1 │
+│ auto_minmax_index_LastEditorUserId │ minmax │           1 │
+│ auto_minmax_index_AnswerCount      │ minmax │           1 │
+│ auto_minmax_index_CommentCount     │ minmax │           1 │
+│ auto_minmax_index_FavoriteCount    │ minmax │           1 │
+└────────────────────────────────────┴────────┴─────────────┘
+```
+
+`granularity` が `1` となっており、各グラニュールごとに MinMax インデックスが作成されていることがわかります。
+
+それでは、両方のテーブルにデータを挿入してみましょう。まずは `posts` テーブルに挿入します:
+
+```sql
+INSERT INTO stackoverflow.posts 
+SELECT * 
+FROM s3('https://datasets-documentation.s3.eu-west-3.amazonaws.com/stackoverflow/parquet/posts/*.parquet');
+```
+
+その後、`posts` のデータを読み出して `posts_min_max` に取り込みます:
+
+```sql
+INSERT INTO stackoverflow.posts_min_max
+SELECT *
+FROM stackoverflow.posts;
+```
+
+完了したら、それぞれのテーブルを対象にクエリを実行してみます。  
+たとえば、「コメント数が 50 超かつ ViewCount が 10000 超の質問を取得する」クエリは次のとおりです:
+
+```sql
+SELECT Id, ViewCount, CommentCount
+FROM stackoverflow.posts
+WHERE PostTypeId = 'Question'
+AND CommentCount > 50 AND ViewCount > 10000;
+```
+
+```sql
+SELECT Id, ViewCount, CommentCount
+FROM stackoverflow.posts_min_max
+WHERE PostTypeId = 'Question'
+AND CommentCount > 50 AND ViewCount > 10000;
+```
+
+両方のテーブルで結果は同じです（下記は例としての出力）:
+
+```
+┌───────Id─┬─ViewCount─┬─CommentCount─┐
+│ 44796613 │     40560 │           61 │
+│  3538156 │     89863 │           57 │
+│ 33762339 │     12104 │           55 │
+│  5797014 │     82433 │           55 │
+│ 37629745 │     43433 │           89 │
+│ 16209819 │     12343 │           54 │
+│ 57726401 │     23950 │           51 │
+│ 24203940 │     11403 │           56 │
+│ 43343231 │     32926 │           51 │
+│ 48729384 │     26346 │           56 │
+└──────────┴───────────┴──────────────┘
+```
+
+実行時間はいずれのテーブルもノートパソコン環境でおよそ 20 ミリ秒ほどでした。データ量が小さいので、MinMax インデックスの有無による違いは目立ちません。  
+とはいえ、クエリプランを確認すると、両テーブルの動作の違いを見て取れます。`EXPLAIN indexes=1` を先頭につけてクエリを実行してみます。
+
+`posts` テーブルの場合:
+
+```
+┌─explain─────────────────────────────────────┐
+│ Expression ((Project names + Projection))   │
+│   Expression                                │
+│     ReadFromMergeTree (stackoverflow.posts) │
+│     Indexes:                                │
+│       PrimaryKey                            │
+│         Keys:                               │
+│           PostTypeId                        │
+│         Condition: (PostTypeId in [1, 1])   │
+│         Parts: 3/4                          │
+│         Granules: 3046/7552                 │
+└─────────────────────────────────────────────┘
+```
+
+プライマリインデックスにより、スキャンするグラニュールが `7552` から `3046` に減少しています。
+
+続いて `posts_min_max` テーブルの場合:
+
+```
+┌─explain─────────────────────────────────────────────┐
+│ Expression ((Project names + Projection))           │
+│   Expression                                        │
+│     ReadFromMergeTree (stackoverflow.posts_min_max) │
+│     Indexes:                                        │
+│       PrimaryKey                                    │
+│         Keys:                                       │
+│           PostTypeId                                │
+│         Condition: (PostTypeId in [1, 1])           │
+│         Parts: 2/9                                  │
+│         Granules: 3206/7682                         │
+│       Skip                                          │
+│         Name: auto_minmax_index_ViewCount           │
+│         Description: minmax GRANULARITY 1           │
+│         Parts: 2/2                                  │
+│         Granules: 3192/3206                         │
+│       Skip                                          │
+│         Name: auto_minmax_index_CommentCount        │
+│         Description: minmax GRANULARITY 1           │
+│         Parts: 2/2                                  │
+│         Granules: 82/3192                           │
+└─────────────────────────────────────────────────────┘
+```
+
+こちらのテーブルは元のグラニュール数が微妙に異なりますが、まずプライマリインデックスで `7682` から `3206` に減少し、次に `ViewCount` の MinMax インデックスで `3206` から `3192`、さらに `CommentCount` の MinMax インデックスで `3192` から `82` へと大幅に絞り込まれているのがわかります。
+
+---
+
+## バイナリ形式で書き込む前に確認を行う
+
+### コントリビューション: Alexey Milovidov
+
+バイナリ形式をターミナルに直接出力しようとするとき、ClickHouse が本当にそれを出力したいのか確認を求めるようになりました。  
+たとえば、`posts` テーブルの全レコードを Parquet 形式で出力するクエリは以下のとおりです:
+
+```sql
+SELECT *
+FROM stackoverflow.posts
+FORMAT Parquet;
+```
+
+実行すると、以下のように表示されます:
+
+```text
+The requested output format `Parquet` is binary and could produce side-effects when output directly into the terminal.
+If you want to output it into a file, use the "INTO OUTFILE" modifier in the query or redirect the output of the shell command.
+Do you want to output it anyway? [y/N]
+```
+
+おそらく、Parquet の形式で 5000 万件以上のデータをターミナルに垂れ流すのは望ましくないでしょうから、`N` を押せば実際に出力は行われません（クエリ自体は完了します）。
+
+---
+
+## 列名の短縮
+
+### コントリビューション: Alexey Milovidov
+
+もうひとつ便利な改善点として、プリティ形式 (Pretty formats) を使う場合に、カラム名が自動で短縮されるようになりました。  
+たとえば、次のクエリで StackOverflow データセットのカラムに対して分位点を求める例を見てみましょう:
+
+```sql
+SELECT
+    quantiles(0.5, 0.9, 0.99)(ViewCount),
+    quantiles(0.5, 0.9, 0.99)(CommentCount)
+FROM stackoverflow.posts;
+```
+
+実行すると、それぞれのカラム名が短縮されます:
+
+```text
+┌─quantiles(0.⋯)(ViewCount)─┬─quantiles(0.⋯mmentCount)─┐
+│ [0,1559,22827.5500000001] │ [1,4,11]                 │
+└───────────────────────────┴──────────────────────────┘
+```
+
+---
+
+## オートインクリメント
+
+### コントリビューション: Alexey Milovidov
+
+Keeper に格納される名前付き分散カウンターを実装した新関数 `generateSerialID` により、テーブルのオートインクリメントを実現できるようになりました。この関数はバッチ処理によって高速であり、並行かつ分散された環境でも安全に動作します。
+
+関数は `name` パラメータを受け取り、次のように呼び出せます:
+
+```sql
+select number, generateSerialID('MyCounter')
+FROM numbers(10);
+```
+
+```text
+┌─number─┬─generateSeri⋯MyCounter')─┐
+│      0 │                        0 │
+│      1 │                        1 │
+│      2 │                        2 │
+│      3 │                        3 │
+│      4 │                        4 │
+│      5 │                        5 │
+│      6 │                        6 │
+│      7 │                        7 │
+│      8 │                        8 │
+│      9 │                        9 │
+└────────┴──────────────────────────┘
+```
+
+同じクエリを再度実行すると、値は 10 から続きます:
+
+```text
+┌─number─┬─generateSeri⋯MyCounter')─┐
+│      0 │                       10 │
+│      1 │                       11 │
+│      2 │                       12 │
+│      3 │                       13 │
+│      4 │                       14 │
+│      5 │                       15 │
+│      6 │                       16 │
+│      7 │                       17 │
+│      8 │                       18 │
+│      9 │                       19 │
+└────────┴──────────────────────────┘
+```
+
+これをテーブルスキーマ内で使うこともできます:
+
+```sql
+CREATE TABLE test
+(
+  id UInt64 DEFAULT generateSerialID('MyCounter'),
+  data String
+)
+ORDER BY id;
+```
+
+データを挿入してみましょう:
+
+```sql
+INSERT INTO test (data) 
+VALUES ('Hello'), ('World');
+```
+
+テーブルを参照すると:
+
+```sql
+SELECT *
+FROM test;
+```
+
+```text
+┌─id─┬─data──┐
+│ 20 │ Hello │
+│ 21 │ World │
+└────┴───────┘
+```
+
+のように、自動で連番が振られているのがわかります。
+
+---
+
+## Merge テーブルの改善
+
+### コントリビューション: Alexey Milovidov
+
+Merge テーブルエンジンを使うと、複数のテーブルを 1 つにまとめることができます。また、同様の機能が `merge` テーブル関数を通じても利用可能です。
+
+25.1 以前のバージョンでは、最初に見つかったテーブル構造をそのまま適用する仕様でしたが、25.1 からはカラムが共通または Variant のデータ型に標準化されるようになりました。
+
+例として、以下のように 2 つのテーブルを作成してみます:
+
+```sql
+CREATE TABLE players (
+  name String, 
+  team String
+)
+ORDER BY name;
+CREATE TABLE players_new (
+  name String,
+  team Array(String)
+)
+ORDER BY name;
+```
+
+データを挿入します:
+
+```sql
+INSERT INTO players VALUES ('Player1', 'Team1');
+INSERT INTO players_new VALUES ('Player2', ['Team2', 'Team3']);
+```
+
+その後、`merge` テーブル関数を使って両方のテーブルをクエリしてみましょう:
+
+```sql
+SELECT *, * APPLY(toTypeName)
+FROM merge('players*')
+FORMAT Vertical;
+```
+
+```text
+Row 1:
+──────
+name:             Player1
+team:             Team1
+toTypeName(name): String
+toTypeName(team): Variant(Array(String), String)
+
+Row 2:
+──────
+name:             Player2
+team:             ['Team2','Team3']
+toTypeName(name): String
+toTypeName(team): Variant(Array(String), String)
+
+2 rows in set. Elapsed: 0.001 sec.
+```
+
+`team` カラムが、`players` テーブルの `String` 型と `players_new` テーブルの `Array(String)` 型を組み合わせた **Variant** 型になっていることがわかります。
+
+同じように、Merge テーブルエンジンを使う場合は次のようにすれば OK です:
+
+```sql
+CREATE TABLE players_merged
+ENGINE = Merge(currentDatabase(), 'players*');
+```
+
+新しいテーブルの構造を確認してみると:
+
+```sql
+DESCRIBE TABLE players_merged
+SETTINGS describe_compact_output = 1;
+```
+
+```text
+┌─name─┬─type───────────────────────────┐
+│ name │ String                         │
+│ team │ Variant(Array(String), String) │
+└──────┴────────────────────────────────┘
+```
+
+`team` カラムが **Variant(Array(String), String)** 型として認識されているのがわかります。
 
 ---
 
@@ -69593,6 +77540,2578 @@ Finally, you can also explore the new ClickHouse Cloud only [dashboard](https://
 
 ---
 
+## PostgresからClickHouseへ: データモデリングのヒント
+Published: 2024-12-30T08:06:38+00:00
+URL: https://clickhouse.com/blog/postgres-to-clickhouse-data-modeling-tips-jp
+
+---
+title: "PostgresからClickHouseへ: データモデリングのヒント  "
+date: "2024-12-30T08:06:38.010Z"
+author: "Sai Srirampur"
+category: "Product"
+excerpt: "PostgresからClickHouseに移行する際のデータモデリングのコツを解説。ClickHouseのReplacingMergeTreeエンジンを活用して重複を扱い、適切なOrdering KeyやPRIMARY KEY戦略でパフォーマンスを最適化する方法を紹介。このガイドでは実践的なテクニックを説明します  "
+---
+
+# PostgresからClickHouseへ: データモデリングのヒント  
+
+先月、当社は[PeerDBを買収しました](https://clickhouse.com/blog/clickhouse-welcomes-peerdb-adding-the-fastest-postgres-cdc-to-the-fastest-olap-database)。PeerDBはPostgresのCDCを専門とする企業で、[PeerDB](https://www.peerdb.io/)を使うと、[Postgres](https://www.postgresql.org/)から[ClickHouse](https://clickhouse.com/)へのデータレプリケーションが高速かつ簡単に行えます。PeerDBのユーザーからよくある質問として、「データをどのようにClickHouseにモデル化するとClickHouseの利点を最大限活かせるか」というものがあります。
+
+この質問が出る理由は、ClickHouseとPostgresのデータモデルが異なるからです。それぞれ最適化された目的別データベースであり、Postgresはトランザクション(OLTP)向け、ClickHouseは分析(OLAP)向けのカラムナデータベースだからです。本ガイドでは、Postgresの世界から来たユーザー向けに、ClickHouseのデータモデリングの基本を解説します。なお、これはブログシリーズの第1弾で、今後も続編を予定しています。
+
+## ReplacingMergeTree tableエンジン
+
+PeerDBは、PostgreSQLのテーブルを[ReplacingMergeTree](https://clickhouse.com/docs/ja/engines/table-engines/mergetree-family/replacingmergetree)エンジンでClickHouseにマッピングします。ClickHouseは追記型のワークロードで最も高いパフォーマンスを発揮し、[頻繁なUPDATEは推奨されません](https://clickhouse.com/docs/ja/guides/developer/mutations)。ここで特に強力なのがReplacingMergeTreeです。
+
+`ReplacingMergeTree`は、データの取り込みと変更の両方が行われるワークロードをサポートします。テーブルは追記専用で、ユーザーによるUPDATEはバージョン付きのINSERTとして取り込まれます。ReplacingMergeTreeエンジンはバックグラウンドで行をマージしながら重複排除を行うため、ClickHouseはリアルタイムの取り込みで非常に高いパフォーマンスを発揮します。
+
+PeerDBでは、PostgresからのINSERTとUPDATEがClickHouse側では異なるバージョン（`_peerdb_version`）を持つ新しい行として取り込まれます。`ReplacingMergeTree`テーブルエンジンは、Ordering Key（ORDER BY カラム）を使ってバックグラウンドで重複を処理し、最新の`_peerdb_version`を持つ行だけを最終的に残します。PostgreSQLからのDELETEは、`_peerdb_is_deleted`カラムを使って削除フラグ付きの新規行として反映されます。以下のスニペットは、ClickHouse上の`public_goals`テーブル定義例です。
+
+```sql
+clickhouse-cloud :) SHOW CREATE TABLE public_goals;
+CREATE TABLE peerdb.public_goals
+(
+    `id` Int64,
+    `owned_user_id` String,
+    `goal_title` String,
+    `goal_data` String,
+    `enabled` Bool,
+    `ts` DateTime64(6),
+    `_peerdb_synced_at` DateTime64(9) DEFAULT now(),
+    `_peerdb_is_deleted` Int8,
+    `_peerdb_version` Int64
+)
+ENGINE = SharedReplacingMergeTree
+('/clickhouse/tables/{uuid}/{shard}', '{replica}', _peerdb_version)
+PRIMARY KEY id
+ORDER BY id
+SETTINGS index_granularity = 8192
+```
+
+## 同じ行が重複して見えることがある場合、どう対応するか？
+
+ReplacingMergeTreeはバックグラウンドで非同期に重複排除を行うため、重複を完全になくすことは保証されません。そのため、クエリ結果に同じ行や同じ主キーを持つ行が異なるバージョンで表示されることがあります。これは想定どおりの動作です。重複を取り除くには、いくつか方法があります。
+
+### クエリにFINALを使う
+
+ClickHouseには[FINAL](https://clickhouse.com/docs/ja/sql-reference/statements/select/from#final-modifier)というユニークな修飾子があり、クエリ実行時に行のマージ（重複排除）を行います。重複排除はWHERE句の後、GROUP BYなどの集計の前に実行されます。
+
+過去にはFINALを使うとクエリ性能が低下するという懸念がありましたが、ClickHouseの最近のリリースでは[FINALクエリのパフォーマンスが大幅に改善](https://github.com/ClickHouse/ClickHouse/issues/11722)されています。そのため、まずはFINAL句を使ってみて、クエリのパフォーマンスを評価してみるのがいいでしょう。以下はFINAL句の例です。
+
+```sql
+SELECT owner_user_id, COUNT(*) FROM goals FINAL 
+WHERE enabled = true GROUP BY owner_user_id;
+```
+
+### argMaxを使ってクエリ時に重複排除する
+
+ClickHouseの[argMax](https://clickhouse.com/docs/ja/sql-reference/aggregate-functions/reference/argmax)は、クエリ実行時に動的に重複排除するのに便利な関数です。バージョンやタイムスタンプ列に基づいて最新のレコードだけを取りたい場合によく使います。
+
+たとえば、`peerdb.public_goals`テーブルでidが主キー、`_peerdb_version`がバージョンを示す場合、argMaxを使って各`id`の最大`_peerdb_version`を持つ行を選択できます。これで元データを変更せずに重複を取り除き、サブクエリで集計を行えます。以下はargMaxの例です。
+
+```sql
+SELECT
+    owned_user_id,
+    COUNT(*) AS active_goals_count,
+    MAX(ts) AS latest_goal_time
+FROM
+(
+    SELECT
+        id,
+        argMax(owned_user_id, _peerdb_version) AS owned_user_id,
+        argMax(goal_title, _peerdb_version) AS goal_title,
+        argMax(goal_data, _peerdb_version) AS goal_data,
+        argMax(enabled, _peerdb_version) AS enabled,
+        argMax(ts, _peerdb_version) AS ts,
+        argMax(_peerdb_synced_at, _peerdb_version) AS _peerdb_synced_at,
+        argMax(_peerdb_is_deleted, _peerdb_version) AS _peerdb_is_deleted,
+        max(_peerdb_version) AS _peerdb_version
+    FROM peerdb.public_goals
+    WHERE enabled = true
+    GROUP BY id
+) AS deduplicated_goals
+GROUP BY owned_user_id;
+```
+
+### WINDOW FUNCTIONSを使う
+
+ClickHouseの[ウィンドウ関数](https://clickhouse.com/docs/ja/sql-reference/window-functions)を使って、idごとに`_peerdb_version`が最大の行だけを選択し、重複を排除することもできます。以下は例です。
+
+```sql
+SELECT
+    owned_user_id,
+    COUNT(*) AS active_goals_count,
+    MAX(ts) AS latest_goal_time
+FROM
+(
+    SELECT
+        *,
+        ROW_NUMBER() OVER (PARTITION BY id ORDER BY _peerdb_version DESC) AS rn
+    FROM peerdb.public_goals
+    WHERE enabled = true
+) AS ranked_goals
+WHERE rn = 1
+GROUP BY owned_user_id;
+```
+
+### Viewsを使って重複排除を簡単にする
+
+[VIEW](https://clickhouse.com/docs/ja/sql-reference/statements/create/view)を使って重複排除のロジックをカプセル化し、BIツールなどから常に最新データだけを簡単に参照できるようにする方法もあります。たとえば、ウィンドウ関数で最新バージョンだけを残すVIEWを作成できます。
+
+```sql
+CREATE VIEW goals AS
+SELECT * FROM
+(
+    SELECT
+        *,
+        ROW_NUMBER() OVER (PARTITION BY id ORDER BY _peerdb_version DESC) AS rn
+    FROM peerdb.public_goals
+    WHERE enabled = true
+) WHERE rn = 1;
+```
+
+```sql
+SELECT
+    owned_user_id,
+    COUNT(*) AS active_goals_count,
+    MAX(ts) AS latest_goal_time
+FROM goals
+GROUP BY owned_user_id;
+```
+
+## Nullableカラム
+
+Postgresから移行して驚くことの一つに、ClickHouseでは、[`Nullable`](https://clickhouse.com/docs/ja/sql-reference/data-types/nullable)で明示的に指定しない限りNULL値を格納しないという仕様があります。たとえば日付のカラムであれば、NULLを格納する代わりに`1970-01-01`のようなデフォルト値を使うので、想定外に感じるかもしれません。これはカラムナデータベースとしての特性で、NULLを格納すると[クエリパフォーマンスに影響](https://clickhouse.com/docs/ja/sql-reference/data-types/nullable)を与えるためです。そのため、ClickHouseではユーザーが`Nullable`を明示する必要があります。
+
+PeerDBでは、`PEERDB_NULLABLE`という設定を導入しており、`true`を指定すると、PostgresでNULLがあり得るカラムを自動的に`Nullable`扱いでClickHouseにマッピングしてくれます。そのため、手動で`Nullable`を定義する必要はありません。詳しくは[こちらのPR](https://github.com/PeerDB-io/peerdb/pull/2001)を参照してください。
+
+## **データ型**
+
+ClickHouseは数値、テキスト、タイムスタンプ、日付、配列から、最近追加された[JSON](https://github.com/ClickHouse/ClickHouse/issues/54864)型まで、多彩なデータ型をサポートしています。Postgresの多くのデータ型は、ほとんど修正なしでClickHouseに格納できます。
+
+参考までに、PeerDBがPostgresからClickHouseへデータをレプリケートするときに使っている[データ型マトリックス](https://docs.peerdb.io/datatypes/datatype-matrix)を共有します。
+
+## The Ordering Key
+
+### Ordering Keyとは？
+
+Ordering Keyを正しく選ぶことはClickHouseにおけるクエリ性能の要です。テーブル作成時に指定する`ORDER BY`句で定義され、Postgresにおけるインデックスのような役割を果たしますが、分析用途に最適化されています。PostgresのB-treeインデックスが行ごとにポインタを管理するのとは異なり、ClickHouseはSparse Indexingを用います。
+
+1. **データはOrdering Keyに基づいてソート**: ORDER BYで指定されたカラムに基づき、ディスク上のデータがソートされます。値が近いもの同士がまとまるため、[圧縮](https://clickhouse.com/docs/ja/data-compression/compression-in-clickhouse)が効きやすくなります。
+2. **Ordering Keyはスパースインデックスも作成**: Ordering Keyによりカラムの範囲のみを保存するスパースインデックスも作られます。エントリが各行を指すのではなく、ソートされた行のまとまりを指すため、インデックス自体が小さく、バイナリサーチで素早くデータの範囲を絞り込めます。詳しくは[こちら](https://clickhouse.com/docs/ja/migrations/postgresql/designing-schemas#primary-ordering-keys-in-clickhouse)を参照してください。
+
+Ordering Keyは、Postgresの[BRIN](https://www.postgresql.org/docs/current/indexes-types.html#INDEXES-TYPES-BRIN)インデックスに似た考え方ですが、ClickHouseではデータがOrdering Keyに基づいて自動的にソート（パーツの非同期マージ）されるため、取り込み時にユーザーがソートを意識する必要はありません。
+
+### 適切なOrdering Keyの選び方
+
+Ordering Keyを選ぶ際は、クエリのWHERE句でよく使うカラムを優先的に指定します。**カーディナリティ（重複の少なさ）が低いカラムから順番に並べる**と圧縮効率も高まり、クエリ性能も上がります。より詳しい内容は[こちら](https://clickhouse.com/docs/ja/data-modeling/schema-design#choosing-an-ordering-key)を参照してください。
+
+### **PRIMARY KEYとOrdering Keyの違い**
+
+`public_goals`テーブル定義をみると`PRIMARY KEY`が指定されていますが、`ORDER BY`句もあります。両者の違いは何でしょうか？
+
+1. `PRIMARY KEY`を指定した場合、そのカラムがスパースインデックスとして使われ、`ORDER BY`句で指定されたカラム順でディスク上のデータがソートされます。そして`ReplacingMergeTree`でのデータの重複排除にも使われます。
+2. `PRIMARY KEY`を指定しなかった場合、Ordering Keyが自動的に`PRIMARY KEY`にもなり、スパースインデックスとして機能します。
+
+> **NOTE:** `PRIMARY KEY`のカラムは、常にOrdering Keyの先頭に含める必要があります。インデックスと物理的なデータの順序が一致することで、不要なデータスキャンを最小化し、クエリ性能を最大化できます。
+
+**`PRIMARY KEY`と`ORDER BY`が異なる例**
+
+たとえば、クエリで`customer_id`を使うことが多く、`id`ではあまりフィルタしないケースを考えます。この場合、`PRIMARY KEY`を`customer_id`にして、`ORDER BY`を`customer_id, id`にすると、スパースインデックスが小さくなって効率的になり、データの重複排除も`id`単位で行えます。
+
+> **NOTE:** Postgresの`PRIMARY KEY`は一意性を保証しますが、ClickHouseではそうではなく、スパースインデックスの定義に使われるという点が異なります。
+
+### Ordering Keyの変更
+
+Ordering Key（[こちら](https://clickhouse.com/docs/ja/migrations/postgresql/designing-schemas#primary-ordering-keys-in-clickhouse)に解説あり）は、クエリ性能に直結するので非常に重要です。PeerDBではデフォルトでPostgreSQLの`PRIMARY KEY`をOrdering Keyとして使いますが、変更する方法はいくつかあります。
+
+### マテリアライズドビューを使う
+
+マテリアライズドビューを使うと、新しいOrdering Keyを持つテーブルを作成できます。重複排除のために、`ReplacingMergeTree`を使う場合は主キーとなるカラムをOrdering Keyの末尾に含めるのがおすすめです。以下は例です。
+
+```sql
+CREATE MATERIALIZED VIEW goals_mv
+ENGINE = ReplacingMergeTree(_peerdb_version)
+ORDER BY (enabled, ts, id) POPULATE AS
+SELECT * FROM peerdb.public_goals;
+```
+
+**NOTE:** マテリアライズドビュー作成後は、前のセクションで説明した重複対応策を適用して、クエリ時の重複排除をきちんと行ってください。
+
+### 目的のOrdering Keyを使ったテーブルを事前定義する
+
+Ordering Keyを変えたい場合は、あらかじめ目的のOrdering Keyで新しいテーブルを作り、既存のテーブルと入れ替える方法もあります。手順は以下です。
+
+**1\. Dummy Mirrorを作成する**: PeerDBでダミーのミラーを作り、必要なメタデータカラムやデータ型を定義した既定テーブルを生成します。  
+
+**2\. 新しいOrdering Keyでテーブルを作成**: PeerDBが作成したテーブルを参考に、新しいOrdering Keyを使ったテーブルを作ります。重複排除の観点から、主キーのカラムをOrdering Keyの末尾に入れるのがおすすめです。以下は例です。
+
+```sql
+CREATE TABLE public_events_new AS public_events
+ENGINE = ReplacingMergeTree(_peerdb_version)
+ORDER BY (user_id,id);
+```
+
+**3\. 古いテーブルを削除**:
+
+```sql
+DROP TABLE public_events;
+```
+
+**4\. 新しいテーブルの名前を変更**:
+
+```sql
+RENAME TABLE public_events_new TO public_events;
+```
+
+**5\. MIRRORを新テーブルに向けて開始**: MIRROR設定を新しいテーブルに向けます。PeerDBは内部的に`CREATE TABLE IF NOT EXISTS`を使っているので、そのまま新テーブルにデータが取り込まれます。
+
+## DELETEの扱い
+
+前述のとおり、PostgreSQLのDELETEは`_peerdb_is_deleted`カラムに削除フラグを立てた行として取り込まれます。この削除フラグが立った行をクエリから除外したい場合は、ClickHouseの行レベルポリシーを使うことができます。例は以下のとおりです。
+
+```sql
+CREATE ROW POLICY policy_name ON table_name
+FOR SELECT USING _peerdb_is_deleted = 0;
+```
+
+このポリシーを設定すると、`_peerdb_is_deleted`が0の行だけがSELECTクエリで参照されるようになります。
+
+## Conclusion
+
+ここまで読んでいただきありがとうございます。PostgreSQLからClickHouseへ移行するときにありがちなデータモデリング上の注意点を中心に解説しました。次回のブログでは、さらに高度なトピックとしてJOINや効率的なSQLの書き方などを深掘りする予定です。もしPostgresからClickHouseへのデータレプリケーションを試してみたい方は、以下のリンクからPeerDBやClickHouseを触っていただくか、直接お問い合わせください！
+
+1. [ClickHouse Cloudを無料で試す](https://clickhouse.com/docs/en/cloud-quick-start)  
+2. [PeerDB Cloudを無料で試す](https://auth.peerdb.cloud/signup)  
+3. [PostgresからClickHouseへのレプリケーションドキュメント](https://docs.peerdb.io/mirror/cdc-pg-clickhouse)  
+4. [PeerDBチームに直接連絡する](https://www.peerdb.io/sign-up)  
+
+---
+
+## 2024年11月のニュースレター
+Published: 2024-12-30T08:06:27+00:00
+URL: https://clickhouse.com/blog/202411-newsletter-jp
+
+---
+title: "2024年11月のニュースレター"
+date: "2024-12-30T08:06:27.288Z"
+author: "ClickHouse"
+category: "Community"
+excerpt: "リアルタイムデータウェアハウス領域でこの1ヶ月に起きた出来事をまとめた、2024年11月のClickHouseニュースレターへようこそ。"
+---
+
+# 2024年11月のニュースレター
+
+リアルタイムデータウェアハウス領域でこの1ヶ月に起きた出来事をまとめた、2024年11月のClickHouseニュースレターへようこそ。
+
+今回の大きなニュースは、Refreshable Materialized Viewsが本番運用可能になったことと、公式のDockerイメージが公開されたことです。
+
+さらに、Alexey Milovidovが「Data Talks on the Rocks」にゲスト出演したり、Dictionaryを活用してクエリを簡素化する方法を紹介したり、新しいJSONデータ型について掘り下げたりと盛りだくさんな内容になっています。
+
+<p style="
+    margin-bottom: 0;
+    line-height: 0;
+">&nbsp;</p>
+
+## 今月の内容
+
+<ul> 
+<li><a href="https://clickhouse.com/blog/202411-newsletter#featured-community-member">注目のコミュニティメンバー</a></li>
+<li><a href="https://clickhouse.com/blog/202411-newsletter#upcoming-events">今後のイベント</a></li>
+<li><a href="https://clickhouse.com/blog/202411-newsletter#2410-release">バージョン24.10リリース</a></li>
+<li><a href="https://clickhouse.com/blog/202411-newsletter#alexey-milovidov-on-data-talks-on-the-rocks">Data Talks on the Rocks に登場したAlexey Milovidov</a></li>
+<li><a href="https://clickhouse.com/blog/202411-newsletter#simplifying-queries-with-clickhouse-dictionaries">ClickHouseの辞書機能でクエリを簡素化</a></li>
+<li><a href="https://clickhouse.com/blog/202411-newsletter#building-a-financial-data-pipeline-with-alpha-vantage-and-clickhouse">Alpha VantageとClickHouseで構築する金融データパイプライン</a></li>
+<li><a href="https://clickhouse.com/blog/202411-newsletter#how-we-built-a-new-powerful-json-data-type-for-clickhouse">新しい強力なJSONデータ型をClickHouseに実装した方法</a></li>
+<li><a href="https://clickhouse.com/blog/202411-newsletter#clickhouse-cloud-live-update-november-2024">ClickHouse Cloudライブアップデート：2024年11月版</a></li>
+<li><a href="https://clickhouse.com/blog/202411-newsletter#quick-reads">ちょっとした読み物</a></li>
+<li><a href="https://clickhouse.com/blog/202411-newsletter#post-of-the-month">今月の投稿</a></li>
+</ul>
+
+<p style="
+    margin-bottom: 0;
+    line-height: 0;
+">&nbsp;</p>
+
+## AWS re:Invent でお会いしましょう
+
+![aws-reinvent-202411.png](https://clickhouse.com/uploads/aws_reinvent_202411_0edd3daa88.png)
+<p>re:Inventに参加される方はいらっしゃいますか？ 私たちも参加するので、ぜひお会いしましょう！</p>
+
+<p>事前に <a href="mailto:sales@clickhouse.com">sales@clickhouse.com</a> へメールしてミーティングの予約をするか、当日ブース(#1737)にお立ち寄りください：</p>
+
+- <a href="https://clickhouse.com/company/our-story">私たちの3人の創設者</a>（Aaron、Alexey、Yury）と直接会える機会  
+- ライブデモ  
+- 限定グッズ  
+- そしてClickHouseのエキスパートとのおしゃべり
+
+<p>さらに、The Chainsmokersと一緒にClickHouse House Partyも開催します。見逃せない最高の夜になること間違いなしです！</p>
+
+![house-party-202411.png](https://clickhouse.com/uploads/house_party_202411_ba778b3256.png)
+<p>
+<a href="https://clickhouse.com/houseparty/vegas-2024">The Chainsmokersのパーティーに登録する</a>
+</p>
+<p style="
+    margin-bottom: 0;
+    line-height: 0;
+">&nbsp;</p>
+
+## 今月の注目コミュニティメンバー
+
+今月の注目コミュニティメンバーは、<a href="https://wandb.ai?utm_source=clickhouse&amp;utm_medium=email&amp;utm_campaign=202411-newsletter" target="_blank">Weights & Biases</a>の共同創業者兼CEOであるLukas Biewaldさんです。
+
+![featured-202411.png](https://clickhouse.com/uploads/featured_202411_c82ec62b60.png)
+<p>
+Lukasさんは機械学習の分野で20年の経験を持ち、以前はChris Van Pelt氏とFigure Eightを共同創業し、機械学習アプリケーション向けのデータラベリングを専門としていました。同社は2019年3月にAppenによって買収されています。
+</p>
+<p>2018年には、機械学習の実験追跡やデータセット管理、モデル開発でのコラボレーションを支援するMLOpsプラットフォーム、Weights & Biasesを共同創業しました。</p>
+<p>Lukasさんは9月に開催されたClickHouse San Franciscoミートアップで<a href="https://clickhouse.com/videos/ai-developer-platform?utm_source=clickhouse&amp;utm_medium=email&amp;utm_campaign=202411-newsletter" target="_blank">講演</a>を行い、AIアプリケーション開発の経験や、Weights & BiasesのWeaveアプリケーションにおけるClickHouse活用方法を紹介してくれました。その内容は<a href="https://clickhouse.com/blog/weights-and-biases-scale-ai-development?utm_source=clickhouse&amp;utm_medium=email&amp;utm_campaign=202411-newsletter" target="_blank">最近公開されたブログ記事</a>にもまとめられています。</p>
+
+<p><a href="https://www.linkedin.com/in/lbiewald?utm_source=clickhouse&amp;utm_medium=email&amp;utm_campaign=202411-newsletter" target="_blank">LukasさんのLinkedInをフォローする</a></p>
+
+<p style="
+    margin-bottom: 0;
+    line-height: 0;
+">&nbsp;</p>
+
+## 今後のイベント
+
+<p><strong>グローバルイベント</strong></p> 
+<ul> 
+<li><a href="https://clickhouse.com/company/events/v24-11-community-release-call?utm_source=clickhouse&utm_medium=email&utm_campaign=202411-newsletter" target="_blank" id="">リリースコール 24.11</a> - 11月28日<br></li> 
+</ul> 
+<p><strong>無料トレーニング</strong></p> 
+<ul> 
+<li><a href="https://clickhouse.com/company/events/202411-emea-postgres-to-clickhouse-migration?utm_source=clickhouse&utm_medium=email&utm_campaign=202411-newsletter" target="_blank" id="">PostgresからClickHouseへの移行ワークショップ</a> - オンライン - 11月27日<br></li> 
+<li><a href="https://clickhouse.com/company/events/clickhouse-fundamentals?utm_source=clickhouse&utm_medium=email&utm_campaign=202411-newsletter" target="_blank" id="">ClickHouse Fundamentals</a> - オンライン - 12月4日</li> 
+<li><a href="https://clickhouse.com/company/events/202412-emea-stockholm-inperson-clickhousetraining?utm_source=clickhouse&utm_medium=email&utm_campaign=202411-newsletter" target="_blank" id="">スウェーデン開催：対面ClickHouseトレーニング</a> - スウェーデン - 12月9日</li> 
+<li><a href="https://clickhouse.com/company/events/202412-emea-copenhagen-inperson-clickhousetraining?utm_source=clickhouse&utm_medium=email&utm_campaign=202411-newsletter" target="_blank" id="">デンマーク開催：対面ClickHouseトレーニング</a> - デンマーク - 12月9日</li> 
+<li><a href="https://clickhouse.com/company/events/202412-amer-manhattan-inperson-clickhouse-developer?utm_source=clickhouse&utm_medium=email&utm_campaign=202411-newsletter" target="_blank">ニューヨーク開催：ClickHouse Developer対面トレーニング</a> - マンハッタン, NY - 12月11-12日</li> 
+<li><a href="https://clickhouse.com/company/events/202412-global-training-clickhouse-developer?utm_source=clickhouse&utm_medium=email&utm_campaign=202411-newsletter" target="_blank">ClickHouse Developerトレーニング</a> - オンライン - 12月18-19日</li> 
+</ul> 
+<p><strong>AMERでのイベント</strong></p> 
+<ul> 
+<li><a href="https://clickhouse.com/company/events/202411-amer-microsoft-ignite?utm_source=clickhouse&utm_medium=email&utm_campaign=202411-newsletter" target="_blank" id="">Microsoft Ignite</a> - シカゴ - 11月19-22日</li> 
+<li><a href="https://clickhouse.com/company/events/202412-amer-reinvent-meetingrequests?utm_source=clickhouse&utm_medium=email&utm_campaign=202411-newsletter" target="_blank" id="">AWS re:Invent 2024</a> - ラスベガス - 12月2-6日<br></li> 
+<li><a href="https://www.meetup.com/clickhouse-new-york-user-group/events/304268174" target="_blank" id="">ニューヨークでのミートアップ</a> - 12月9日<br></li> 
+<li><a href="https://www.meetup.com/clickhouse-silicon-valley-meetup-group/events/304286951" target="_blank" id="">サンフランシスコでのミートアップ</a> - 12月12日<br></li> 
+</ul> 
+<p><strong>EMEAでのイベント</strong></p> 
+<ul> 
+<li><a href="https://www.meetup.com/clickhouse-dubai-meetup-group/events/303096989/" target="_blank" id="">ドバイでのミートアップ</a> - 11月21日<br></li> 
+<li><a href="https://www.meetup.com/clickhouse-france-user-group/events/303096434" target="_blank" id="">パリでのミートアップ</a> - 11月26日</li> 
+<li><a href="https://www.meetup.com/clickhouse-netherlands-user-group/events/303638814/" target="_blank" id="">アムステルダムでのミートアップ</a> - 12月3日</li> 
+<li><a href="https://www.meetup.com/clickhouse-stockholm-user-group/events/304382411/" target="_blank" id="">ストックホルムでのミートアップ</a> - 12月9日</li> 
+</ul>
+<br>
+
+## バージョン24.10リリース
+
+![release-24.10.png](https://clickhouse.com/uploads/release_24_10_988ee5facb.png)
+
+<p>Refreshable Materialized Viewsがついに本番運用できるようになりました！ これがバージョン24.10の目玉機能ですが、<span style="font-family: terminal, monaco; color: #41d76b;">CLONE AS</span>句でテーブルのクローンをより簡単に作成できるようになったことや、S3バケットをクエリするときに便利なリモートファイルキャッシュなども追加されています。</p>
+
+<p><a href="https://clickhouse.com/blog/clickhouse-release-24-10">リリース記事を読む</a></p>
+
+<p style="
+    margin-bottom: 0;
+    line-height: 0;
+">&nbsp;</p>
+
+## Data Talks on the Rocks に登場したAlexey Milovidov
+
+![alexey-data talks-202411.png](https://clickhouse.com/uploads/alexey_data_talks_202411_ffc0bfdf7c.png)
+
+<p>Data Talks on the Rocksは、データやアナリティクス領域の最新トレンドを語り合うリーダーや創業者へのインタビューシリーズで、Rill DataのCEO兼共同創業者であるMichael Driscoll氏がホストしています。</p>
+<p>第4回のゲストとして、ClickHouseのCTO兼共同創業者であるAlexey Milovidovが招かれました。ハッシュ関数がデータベース設計で重要な理由や、AIが将来データベース技術に与える可能性のある影響、ClickHouseの新しいアナライザの開発など、幅広い話題が展開されています。</p>
+<p><a href="https://www.rilldata.com/blog/rill-clickhouse-alexey-milovidov-interview" target="_blank">インタビューを視聴する</a></p>
+
+<p style="
+    margin-bottom: 0;
+    line-height: 0;
+">&nbsp;</p>
+
+
+## ClickHouseの辞書機能でクエリを簡素化
+
+<p><a href="https://www.linkedin.com/in/jeffreyneedles/">Aggregations.ioの創設者であるJeffrey Needles</a>さんが、辞書を使ってクエリを簡素化する方法を解説するブログ記事を公開しました。</p>
+
+<p>辞書を使うメリットやデータの取得元、キーの型をどれにするかといった基本的な内容から、辞書を使った際のクエリのパフォーマンス向上まで、わかりやすく紹介しています。</p>
+<p><a href="https://aggregations.io/blog/clickhouse-dictionaries">ブログを読む</a></p>
+
+<p style="
+    margin-bottom: 0;
+    line-height: 0;
+">&nbsp;</p>
+
+## Alpha VantageとClickHouseで構築する金融データパイプライン
+
+![correlation returns-202411.png](https://clickhouse.com/uploads/correlation_returns_202411_b71341e433.png)
+
+<p>Craig Dicksonさんが、高速データパイプラインの構築例として、データ取得にはAlpha Vantageを、データの保存と分析にはClickHouseを使用する方法を紹介しています。</p>
+<p>Alpha Vantage APIから取得したデータをPandasで整形し、ClickHouse Cloudに取り込むフローを説明してから、Vega-Altairを使ったデータ可視化の作成例も示してくれています。</p>
+<p><a href="https://medium.com/@thecraigdickson/building-a-financial-data-pipeline-with-alpha-vantage-and-clickhouse-5860d1e5a4be">ブログを読む</a></p>
+
+<p style="
+    margin-bottom: 0;
+    line-height: 0;
+">&nbsp;</p>
+
+## 新しい強力なJSONデータ型をClickHouseに実装した方法
+
+![json-data-type-202411.png](https://clickhouse.com/uploads/json_data_type_202411_7b2068bbc1.png)
+
+<p>新しいJSONデータ型は2024年8月リリースのバージョン24.8で導入されました。<a href="https://clickhouse.com/blog/clickhouse-release-24-08">リリース記事</a>でいくつかサンプルをお見せしましたが、深く掘り下げる機会がなかったので、今回はTom SchreiberとPavel Kruglovが、その仕組みを詳しく解説してくれます。
+</p>
+<p>同じJSONパス内に複数の型が混在する場合の対処方法、クエリ時の作業負荷を回避するテクニック、ディスク上の列データファイルが膨大に増えてしまう事態を防ぐ仕組みなど、新しいデータ型のメリットがよくわかります。
+</p>
+<p>図解も多いので、ClickHouseファンなら必見です！</p>
+
+<p><a href="https://clickhouse.com/blog/a-new-powerful-json-data-type-for-clickhouse">ブログを読む</a></p>
+
+<p style="
+    margin-bottom: 0;
+    line-height: 0;
+">&nbsp;</p>
+
+## ClickHouse Cloudライブアップデート：2024年11月版
+
+<p>今回のClickHouse Cloudライブアップデートでは、Krithika Balagurunathan氏とZach Naimon氏が<a href="https://clickhouse.com/cloud/bring-your-own-cloud">Bring Your Own Cloud</a>と<a href="https://clickhouse.com/docs/en/cloud/reference/compute-compute-separation">Compute-compute分離</a>について解説してくれました。
+</p>
+<p>機能概要と簡単なデモの後、詳細なQ&Aが行われ、「BYOCはFedRAMP要件を満たすのか？」「リソース消費量に基づいて水平方向のオートスケーリングを自動化できるか？」「既存のクラスタをどうやってBYOCに移行する？」「読み書き用ノードと読み取り専用ノードでインスタンスタイプを変えられるのか？」といった質問が飛び出しました。
+</p>
+<p>詳しく知りたい方は以下の録画をご覧ください！
+</p>
+<p><a href="https://clickhouse.com/videos/clickhouse-cloud-live-november-2024-byoc-compute-compute-separation">録画を視聴する</a></p>
+
+<p style="
+    margin-bottom: 0;
+    line-height: 0;
+">&nbsp;</p>
+
+## ちょっとした読み物
+
+<ul> 
+<li>「短い読み物」というわけではないですが、ClickHouseに<a href="https://hub.docker.com/_/clickhouse">公式Dockerイメージ</a>が登場しました！</li> 
+<li>Carl Lindesvärdさんが、<a href="https://x.com/CarlLindesvard/status/1848706279293763917">ClickHouseを半年間使って学んだこと</a>をTwitterスレッドで紹介しています。</li> 
+<li>Ravindra Elicherlaさんは<a href="https://ravindraelicherla.medium.com/storing-tick-by-tick-webscocket-data-into-clickhouse-f4bbd29d0d65">WebsocketのティックデータをClickHouseに保存する方法</a>を解説しています。</li>
+<li><a href="https://github.com/FrigadeHQ/trench">Trench</a>というApache KafkaとClickHouseを使ったイベントトラッキングシステムを見つけました。<a href="https://github.com/FrigadeHQ/trench">Frigade</a>のリアルタイムイベント追跡パイプラインを支え、大量のイベント処理や<a href="https://clickhouse.com/engineering-resources/what-is-real-time-analytics">リアルタイム分析</a>を可能にしています。</li> 
+<li>MetricFireチームが<a href="https://medium.com/@MetricFire/how-to-monitor-clickhouse-with-telegraf-and-metricfire-6b4aef886c49">TelegrafとMetricFireを使ってClickHouseをモニタリングする方法</a>を解説しています。</li> 
+<li><a href="https://medium.com/@jgrodman/migrating-clickhouse-data-without-adding-load-to-the-db-031d6a868b0e">既存のクラスタに負荷をかけずに、非シャーディングのClickHouseクラスタからシャーディング構成へデータを移行する</a>手順を、Triple WhaleのソフトウェアエンジニアであるJesse Grodmanさんが共有しています。</li> 
+</ul>
+
+<p style="
+    margin-bottom: 0;
+    line-height: 0;
+">&nbsp;</p>
+
+## 今月の投稿
+
+<p>今月お気に入りだったのは、<a href="https://x.com/steventey/status/1855669066817839116">Steven TeyさんによるClickHouseのarrayIntersect関数</a>に関する投稿です。</p>
+
+![tweet-202411.png](https://clickhouse.com/uploads/tweet_202411_301f2111e1.png)
+
+<p>
+<a href="https://x.com/steventey/status/1855669066817839116">投稿を見る</a>
+</p>
+
+---
+
+## 2024年12月ニュースレター
+Published: 2024-12-30T08:06:15+00:00
+URL: https://clickhouse.com/blog/202412-newsletter-jp
+
+---
+title: "2024年12月ニュースレター  "
+date: "2024-12-30T08:06:15.664Z"
+author: "ClickHouse"
+category: "Community"
+excerpt: "12月のClickHouseニュースレターへようこそ。この1カ月にリアルタイムデータウェアハウスで起こった出来事をまとめてお届けします。  "
+---
+
+# 2024年12月ニュースレター  
+
+2024年最後となる12月のClickHouseニュースレターへようこそ！今月はクエリ最適化ガイド、SQLベースのオブザーバビリティの実例、Amazonのre:Inventカンファレンスにあわせた新製品アナウンス、Postgres CDCコネクタ（ClickPipes向け）のプライベートプレビュー開始など、多彩なトピックをお届けします。
+
+<p style="
+    margin-bottom: 0;
+    line-height: 0;
+">&nbsp;</p>
+
+## 今回の内容
+
+<ul> 
+<li><a href="https://clickhouse.com/blog/202412-newsletter#upcoming-events">今後のイベント</a></li>
+<li><a href="https://clickhouse.com/blog/202412-newsletter#featured-community-member">注目のコミュニティメンバー</a></li>
+<li><a href="https://clickhouse.com/blog/202412-newsletter#2411-release">24.11リリース</a></li>
+<li><a href="https://clickhouse.com/blog/202412-newsletter#a-simple-guide-to-clickhouse-query-optimization-part-1">ClickHouseクエリ最適化のシンプルガイド：パート1</a></li>
+<li><a href="https://clickhouse.com/blog/202412-newsletter#building-sql-based-observability-with-clickhouse-and-grafana">ClickHouseとGrafanaで実現するSQLベースのオブザーバビリティ構築</a></li>
+<li><a href="https://clickhouse.com/blog/202412-newsletter#postgres-cdc-connector-for-clickpipes-is-now-in-private-preview">
+Postgres CDCコネクタがClickPipesでプライベートプレビューに</a></li>
+<li><a href="https://clickhouse.com/blog/202412-newsletter#clickhouse-decoded-making-sense-of-fast-data">ClickHouse Decoded: 超高速データの仕組みを徹底解説</a></li>
+<li><a href="https://clickhouse.com/blog/202412-newsletter#clickhouse-at-aws-reinvent-2024">
+AWS re:Invent 2024でのClickHouse</a></li>
+<li><a href="https://clickhouse.com/blog/202412-newsletter#video-corner">ビデオコーナー</a></li>
+<li><a href="https://clickhouse.com/blog/202412-newsletter#quick-reads">クイックリード</a></li>
+<li><a href="https://clickhouse.com/blog/202412-newsletter#clickhouse-user-conference">ClickHouseユーザーカンファレンス</a></li>
+<li><a href="https://clickhouse.com/blog/202412-newsletter#post-of-the-month">今月の投稿</a></li>
+</ul>
+
+<p style="
+    margin-bottom: 0;
+    line-height: 0;
+">&nbsp;</p>
+
+## 今後のイベント
+ 
+<p><strong>グローバルイベント</strong></p> 
+<ul> 
+<li><a href="https://clickhouse.com/company/events/v24-12-community-release-call?utm_source=clickhouse&utm_medium=email&utm_campaign=202412-newsletter" target="_blank" id="">Release call 24.12</a> - 12月19日<br></li> 
+<li><a href="https://clickhouse.com/company/events/v25-1-community-release-call?utm_source=clickhouse&utm_medium=email&utm_campaign=202412-newsletter" target="_blank" id="">Release call 25.1</a> - 1月30日<br></li> 
+</ul> 
+
+<p><strong>無料トレーニング</strong></p> 
+<ul> 
+<li><a href="https://clickhouse.com/company/events/clickhouse-fundamentals?utm_source=clickhouse&utm_medium=email&utm_campaign=202412-newsletter" target="_blank" id="">ClickHouse Fundamentals</a> - バーチャル - 1月8日・1月15日<br></li> 
+<li><a href="https://clickhouse.com/company/events/202501-emea-query-optimization?utm_source=clickhouse&utm_medium=email&utm_campaign=202412-newsletter" target="_blank" id="">ClickHouse Query Optimization Workshop</a> - バーチャル - 1月22日</li> 
+<li><a href="https://clickhouse.com/company/events/202501-amer-clickhouse-observability?utm_source=clickhouse&utm_medium=email&utm_campaign=202412-newsletter" target="_blank" id="">Using ClickHouse for Observability</a> - バーチャル - 1月29日</li> 
+</ul> 
+
+<p><strong>EMEAでのイベント</strong></p> 
+<ul> 
+<li><a href="https://www.meetup.com/clickhouse-london-user-group/events/305146729/" target="_blank" id="">Meetup in London</a> - 2月5日<br></li> 
+<li><a href="https://www.meetup.com/clickhouse-dubai-meetup-group/events/303096989/" target="_blank" id="">Meetup in Dubai</a> - 2月10日<br></li> 
+</ul>
+
+<p><strong>APACでのイベント</strong></p> 
+<ul> 
+<li><a href="https://www.alibabacloud.com/en/events/alibabacloud-developer-summit-2025?_p_lc=1" target="_blank" id="">Alibaba Developer Summit Jakarta</a> - 1月21日<br></li> 
+<li><a href="https://www.meetup.com/clickhouse-tokyo-user-group/events/305126993/" target="_blank" id="">Meetup in Tokyo</a> - 1月23日<br></li> 
+</ul>
+
+<br>
+
+## 注目のコミュニティメンバー
+
+今月の注目コミュニティメンバーは、SemrushのリードエンジニアであるAzat Khuzhinさんです。
+
+![featured-202412.png](https://clickhouse.com/uploads/featured_202412_d0a6498ade.png)
+<p>
+AzatさんはSemrushで13年以上の経験を持ち、ClickHouseやその他のデータベース管理システムの運用、大規模な分散システムやデータ処理に精通しています。
+</p>
+<p>彼はClickHouseへ定期的に貢献しており、今年だけで60以上のPull Requestを提出。パフォーマンス向上、システム安定性の強化、さまざまなコンポーネントの機能拡張に取り組んでいます。分散クエリ処理やレプリケーションの改善から、セキュリティ、コンフィグ管理、ユーザーエクスペリエンスの向上など、多岐にわたる分野で活動しています。
+</p>
+
+<p><a href="https://www.linkedin.com/in/iamazat?utm_source=clickhouse&amp;utm_medium=email&amp;utm_campaign=202412-newsletter" target="_blank">LinkedInでAzatをフォローする</a></p>
+
+<p style="
+    margin-bottom: 0;
+    line-height: 0;
+">&nbsp;</p>
+
+## 24.11リリース
+
+![release-24.11.png](https://clickhouse.com/uploads/release_24_11_7412f9e511.png)
+
+<p>24.11リリースの目玉は、並列ハッシュ結合がデフォルトの結合戦略になったことです。他にも、マークキャッシュの事前ウォーム機能、ベクトル検索向けBFloat16データ型、<span style="font-family: terminal, monaco; color: #41d76b;">WITH FILL</span>で使える<span style="font-family: terminal, monaco; color: #41d76b;">STALENESS</span>修飾子などが追加されています。</p>
+
+<p><a href="https://clickhouse.com/videos/202411-release-call">24.11コミュニティコール</a>では、<a href="https://www.hyperdx.io/">HyperDX</a>（ClickHouseを使ったオープンソースのオブザーバビリティプラットフォーム）のデモも行われ、盛り上がりました。</p>
+
+<p><a href="https://clickhouse.com/blog/clickhouse-release-24-11">リリース記事を読む</a></p>
+
+<p style="
+    margin-bottom: 0;
+    line-height: 0;
+">&nbsp;</p>
+
+## ClickHouseクエリ最適化のシンプルガイド：パート1
+
+![query-optimization.png](https://clickhouse.com/uploads/query_optimization_b787976d7b.png)
+
+<p>最近ClickHouseのプロダクトマーケティングエンジニアリングチームに加わったLionel Palacin（Lio）が、新しい<a href="https://sql.clickhouse.com/" target="_blank">ClickHouse Playground</a>でのサンプルクエリのパフォーマンスを向上させたいと思ったのがきっかけで、学んだことを二回シリーズのブログにまとめています。
+</p>
+<p>パート1では、クエリが実行される仕組み、遅いクエリを特定する方法、<span style="font-family: terminal, monaco; color: #41d76b;">EXPLAIN</span>句を使ってクエリ実行時の動作を理解する手順などを解説しています。その上で、さまざまな最適化を試し、その結果をどのように確認するかを紹介しています。
+</p>
+<p><a href="https://clickhouse.com/blog/a-simple-guide-to-clickhouse-query-optimization-part-1" target="_blank">ブログ記事を読む</a></p>
+
+<p style="
+    margin-bottom: 0;
+    line-height: 0;
+">&nbsp;</p>
+
+## ClickHouseとGrafanaで実現するSQLベースのオブザーバビリティ構築
+
+![observability-grafana.png](https://clickhouse.com/uploads/observability_grafana_f791b8b1f7.png)
+
+<p><a href="https://www.linkedin.com/in/crt0r/">Timofey Chuchkanov</a>（EVALAR JSCのDevOpsエンジニア）が、ClickHouseとGrafanaを使ったオブザーバビリティスタック構築について詳しくブログで紹介しています。</p>
+
+<p>理想のスタックとして挙げた条件（SQLでクエリできること、ログやメトリクスを同じ仕組みで扱えること、各種ソフトウェアとの連携など）を元にElasticserach、Loki、Timescaleなどを比較した結果、ClickHouseを使うことに決めたそうです。
+</p>
+
+<p>こうした実際の事例を見ると、<a href="https://clickhouse.com/blog/evolution-of-sql-based-observability-with-clickhouse">SQLベースのオブザーバビリティ</a>が進化しているのを実感できておもしろいですね。
+</p>
+<p><a href="https://cmtops.dev/posts/building-observability-with-clickhouse/">ブログ記事を読む</a></p>
+
+<p style="
+    margin-bottom: 0;
+    line-height: 0;
+">&nbsp;</p>
+
+## Postgres CDCコネクタがClickPipesでプライベートプレビューに
+
+![postgres-connector.png](https://clickhouse.com/uploads/postgres_connector_3b1f2f93e3.png)
+
+<p>先日、ClickPipesでPostgresのChange Data Capture（CDC）コネクタのプライベートプレビューを開始しました。
+</p>
+<p>このコネクタを使えば、Postgresデータベースを数クリックでClickHouse Cloudにレプリケートし、高速な分析を実現できます。連続レプリケーションや一回限りの移行にも使えます。
+</p>
+<p><a href="https://clickhouse.com/blog/postgres-cdc-connector-clickpipes-private-preview">ブログ記事を読む</a></p>
+
+<p style="
+    margin-bottom: 0;
+    line-height: 0;
+">&nbsp;</p>
+
+## ClickHouse Decoded: 超高速データの仕組みを徹底解説
+
+![fast-data.png](https://clickhouse.com/uploads/fast_data_12c5108f28.png)
+
+<p>Shubham Bhardwajが、ClickHouseの仕組みを詳細に解説しています。まずディスク上のデータ配置とその構成要素を説明し、その後マテリアライズドビューやテーブルエンジンといった機能、最後にClickHouseをスケールさせる方法についても触れています。
+</p>
+
+<p><a href="https://towardsdev.com/clickhouse-decoded-making-sense-of-fast-data-41c5a020734d">ブログ記事を読む</a></p>
+
+<p style="
+    margin-bottom: 0;
+    line-height: 0;
+">&nbsp;</p>
+
+## AWS re:Invent 2024でのClickHouse
+
+![product-reinvent.png](https://clickhouse.com/uploads/product_reinvent_9dc038e9ff.png)
+
+<p>12月初旬にラスベガスで行われたAWS re-Inventカンファレンスに、ClickHouseのメンバーが集結しました。同時にいくつかの新製品アナウンスも行われました。
+</p>
+<p>主な発表としては、独自のクラウド環境を利用可能にするBring Your Own Cloud、ダッシュボード機能、ネイティブJSONサポートのベータ版提供、Postgres CDCコネクタのプライベートプレビュー、ベクター類似検索インデックスのアーリーアクセスなどがあります。
+</p>
+
+<p><a href="https://clickhouse.com/blog/reinvent-2024-product-announcements">ブログ記事を読む</a></p>
+
+<p style="
+    margin-bottom: 0;
+    line-height: 0;
+">&nbsp;</p>
+
+## ビデオコーナー
+
+<ul> 
+<li>ClickHouseにはPIVOT演算子がありませんが、集計関数のコンビネータを使って同等の機能を実現できます。Markが最新のビデオ「<a href="https://clickhouse.com/videos/pivot-clickhouse">Can you PIVOT in ClickHouse?</a>」でそのやり方を紹介しています。</li> 
+<li>Tony BurkeはSolarWindsのプラットフォームエンジニアリングチームで働き、1秒あたり300万件のメッセージをClickHouseに取り込んでいます。Tonyが<a href="https://clickhouse.com/videos/solarwinds-observability-3-milion-records-per-second">ClickHouseのパフォーマンスをどう向上させたか</a>を解説していて、リアルタイムのテレメトリデータ管理やクエリ最適化のヒントが得られます。</li> 
+<li><a href="https://clickhouse.com/videos/intro-refreshable-materialized-views">Refreshable materialized views</a>がプロダクション対応になったので、Markが改めて概要やユースケースを紹介するビデオを公開しました。</li>
+</ul>
+
+<p style="
+    margin-bottom: 0;
+    line-height: 0;
+">&nbsp;</p>
+
+## クイックリード
+
+<ul> 
+<li>Pythonのitertools風のGROUP BYをClickHouse SQLで実現しようとした<a href="https://medium.com/@nielsreijers/python-itertools-style-group-by-in-sql-with-some-help-from-ai-ab072018fea4">Niels Reijers</a>さんのブログは、AIを使って試行錯誤し、最終的に上手く動かすまでの過程が面白いです。</li> 
+<li><a href="https://bytewax.io/blog/building-a-click-house-sink-for-bytewax">Bytewaxの新しいコネクタモジュールであるClickHouse Sink</a>についてZander Mathesonさんが紹介しています。BytewaxからClickHouseへのデータ書き込みをシームレスに実現できます。</li> 
+<li><a href="https://picostitch.hashnode.dev/clickhouse-aggregations-and-django">Wolfram KriesingはDjangoからClickHouseの集計関数を呼び出す方法</a>をまとめています。</li>
+<li>Matt Blewittは<a href="https://matt.blwt.io/post/7-databases-in-7-weeks-for-2025/">2025年に注目しておきたい7つのデータベース</a>を挙げています。その中で「もし2つだけDBを使うとしたら、OLTP用にPostgres、OLAP用にClickHouseがあれば十分」とのコメントが。納得です。</li> 
+</ul>
+
+<p style="
+    margin-bottom: 0;
+    line-height: 0;
+">&nbsp;</p>
+
+## ClickHouseユーザーカンファレンス
+
+![user-conference.png](https://clickhouse.com/uploads/user_conference_a2b03043e6.png)
+
+<p>2025年に参加するカンファレンスを検討中なら、5月28日・29日にサンフランシスコで開催予定のOpen House（ClickHouseユーザーカンファレンス）をおすすめします。
+</p>
+<p>28日は無料トレーニング、29日はセッションを予定しています。チケットはまだ入手できませんが、以下から登録すれば最新情報をお届けします。
+</p>
+
+<p><a href="https://clickhouse.com/company/events/202505-global-open-house">最新情報を受け取るために登録</a></p>
+
+<p style="
+    margin-bottom: 0;
+    line-height: 0;
+">&nbsp;</p>
+
+## 今月の投稿
+
+<p>今月の注目投稿は、<a href="https://x.com/megulzar">Gulzar Ahmed</a>さんのポストです。インド国内のローカルビジネス向けオンラインデリバリーソフト「Hyperzod」をClickHouseで支援しているそうです。</p>
+
+![twitter-202412.png](https://clickhouse.com/uploads/twitter_202412_72254b4837.png)
+
+<p>
+<a href="https://x.com/megulzar/status/1864880796143583399">投稿を見る</a>
+</p>
+
+---
+
+## ClickHouseで機械学習データのモデリング
+Published: 2024-12-30T08:06:03+00:00
+URL: https://clickhouse.com/blog/modeling-machine-learning-data-in-clickhouse-jp
+
+---
+title: "ClickHouseで機械学習データのモデリング  "
+date: "2024-12-30T08:06:03.971Z"
+author: "Dale McDiarmid"
+category: "Engineering"
+excerpt: "ClickHouseで機械学習データをモデリングしてパイプラインを高速化し、数十億行におよぶデータに対して特徴量を効率的に構築する方法を学びます。  "
+---
+
+# ClickHouseで機械学習データのモデリング  
+
+このブログ記事では、MLOpsの世界と、ClickHouse内のデータをどのようにモデル化・変換すれば、機械学習モデルのトレーニング用の効率的な特徴量ストアとして機能させられるかを解説します。ここで紹介するアプローチは、実際に運用中の[ClickHouseユーザー](https://clickhouse.com/blog/transforming-ad-tech-how-cognitiv-uses-clickhouse-to-build-better-machine-learning-models)が共有してくれたテクニックや、既存の特徴量ストアで利用している方法にも基づいています。
+
+本記事では、ClickHouseをデータソース、オフラインストア、変換エンジンとして使う方法にフォーカスします。これらは特徴量ストアの重要な構成要素であり、モデル学習用のデータを効率的かつ正確に提供するうえで欠かせません。多くの既存特徴量ストアが抽象化を行う部分を、この記事ではもう少し踏み込んで「どうやって効率的にデータをモデル化して特徴量を作り、提供できるか」というところに焦点を当てます。独自の特徴量ストアを構築してみたい方や、既存の特徴量ストアでどんなテクニックが使われているのか知りたい方は、ぜひ読み進めてみてください。
+
+## なぜ ClickHouse なのか？
+
+[以前のブログ記事](https://clickhouse.com/blog/powering-featurestores-with-clickhouse)でも「特徴量ストアとは何か」を解説していますので、本記事に入る前に基本的な概念を押さえておくことをおすすめします。シンプルにいうと、特徴量ストアは機械学習モデルのトレーニングに用いるデータを一元的に管理するリポジトリで、共同作業や再利用性を向上させ、モデルのイテレーション速度を上げるために活用されます。
+
+リアルタイムデータウェアハウスであるClickHouseは、単なるデータソースにとどまらず、特徴量ストアのうち以下2つの主なコンポーネントを担えます。
+
+![feature_store_clickhouse.png](https://clickhouse.com/uploads/feature_store_clickhouse_baabeb2e00.png)
+
+1. **変換エンジン**: ClickHouseはSQLによるデータ変換を行い、分析・統計系の関数が最適化されています。ParquetやPostgres、MySQLなどさまざまなソースからデータをクエリでき、ペタバイト級のデータに対して集計が可能です。マテリアライズドビューを使って挿入時にデータ変換することもできます。また、PythonからchDB経由で大規模なデータフレームを変換する使い方もできます。
+
+2. **オフラインストア**: ClickHouseは`INSERT INTO SELECT`構文によってクエリ結果を永続化でき、テーブルスキーマを自動生成できます。大規模なデータのイテレーションやスケールにも対応し、特徴量をテーブルにタイムスタンプ付きで格納し、ポイントインタイムでクエリする形がよく取られます。ClickHouse特有のスパースインデックスや`ASOF LEFT JOIN`構文により、高速なフィルタリングや特徴量の結合が実現され、学習パイプラインのデータ準備を効率化します。これらの処理はクラスタ全体で並列化されるため、ペタバイト規模にスケールしつつも特徴量ストア自体は軽量に保てます。
+
+今回は、こうした役割をClickHouseでどのように実現するのか、データのモデル化と運用方法について詳しく見ていきます。
+
+## 全体的なステップ
+
+ClickHouseをオフライン特徴量ストアとして使い、モデルをトレーニングする際は、以下のステップで考えるとわかりやすいです。
+
+1. **探索**  
+   ClickHouse上のソースデータをSQLでクエリしながら理解を深める。
+
+2. **データサブセットと特徴量の特定**  
+   使えそうな特徴量や、それらが紐づくエンティティ、必要となるデータのサブセットを特定する。このステップで抽出したデータを「特徴量サブセット」と呼ぶ。
+
+3. **特徴量の作成**  
+   特徴量を生成するためのSQLクエリを作成する。
+
+4. **モデル用データの生成**  
+   共通のキーとタイムスタンプを基準に`ASOF JOIN`などで特徴量を結合し、最終的に特徴量ベクトルを作る。
+
+5. **テストセットとトレーニングセットの生成**  
+   「特徴量サブセット」をテスト、トレーニング、(必要に応じて)バリデーションに分割する。
+
+6. **モデルの学習**  
+   トレーニングデータを使ってさまざまなアルゴリズムでモデルを学習する。
+
+7. **モデル選択とチューニング**  
+   バリデーションセットでモデルを評価し、最適なモデル選択とハイパーパラメータのチューニングを行う。
+
+8. **モデル評価**  
+   テストセットで最終モデルを評価し、性能が十分であれば終了。そうでなければ2に戻る。
+
+ここでは、ClickHouseに特有のステップである(1)～(5)について解説していきます。上記フローで重要なのは、非常に反復的であるという点です。特に(3)と(4)は「特徴量エンジニアリング」と呼ばれ、モデルを選ぶ段階以上に時間を要することが多いです。ここを最適化してClickHouseをうまく使えば、時間とコストの大幅な削減につながります。
+
+以下では、各ステップを順に見ていき、ClickHouseの機能を最大限に活用する柔軟なアプローチを提案します。
+
+## データセット & 例
+
+例として、以下のウェブ解析データセットを使用します（データセットの解説は[こちら](https://clickhouse.com/docs/en/getting-started/example-datasets/metrica)）。これは1億行のデータで、あるURLへのリクエストを1イベントとして扱います。ClickHouse上でWeb解析データを使って機械学習モデルを学習するケースは、ユーザーの利用例としてもよく見られます<sub><a href="https://clickhouse.com/blog/transforming-ad-tech-how-cognitiv-uses-clickhouse-to-build-better-machine-learning-models">[1]</a><a href="https://clickhouse.com/blog/adgreetz-processes-millions-of-daily-ad-impressions">[2]</a></sub>。
+
+データサイズが大きいため、以下のテーブルは使用カラムに絞っており、完全なスキーマは[こちら](https://pastila.nl/?00acf5da/2295705307eb4090c33cb5f0f5b8d472#kSJRFJM6RcULiQUo90npfA==)で確認できます。
+
+<pre style="font-size: 14px;"><code class="hljs language-sql">CREATE TABLE default.web_events
+(
+   `EventTime` DateTime,
+   `UserID` UInt64,
+   `URL` String,
+   `UserAgent` UInt8,
+   `RefererCategoryID` UInt16,
+   `URLCategoryID` UInt16,
+   `FetchTiming` UInt32,
+   `ClientIP` UInt32,
+   `IsNotBounce` UInt8,
+   -- 多数のカラムが続く...
+)
+ENGINE = MergeTree
+PARTITION BY toYYYYMM(EventDate)
+ORDER BY (CounterID, EventDate, intHash32(UserID))
+</code></pre>
+
+今回の例では、このデータセットを使って「ユーザーがリクエストを送ったときにバウンス（直帰）するかどうか」を予測するモデルを作ることを想定します。上記ソースデータでは、`IsNotBounce`カラムがバウンスかどうかを示す指標で、これを分類ラベル（ターゲット）とみなします。
+
+> ここでは実際にモデル構築やPythonコードは示さず、データモデリングの流れにフォーカスします。そのため、使う特徴量は説明用のサンプルにすぎません。
+
+## ステップ 1 – 探索
+
+まずはソースデータを探索・理解し、ClickHouseでのSQLクエリに慣れていきます。ClickHouseには[分析関数](https://clickhouse.com/docs/en/sql-reference/functions)が豊富に用意されていますので、ここを把握しておくと便利です。データの概要をつかんだら、どんな特徴量をモデルに使うか、またそのために必要なデータのサブセットは何かを決めていきます。
+
+## ステップ 2 – 特徴量とサブセット
+
+バウンス予測モデルを作る場合、学習用データには各データポイントに対応する特徴量ベクトルを用意する必要があります。多くの場合、これらの特徴量は「元データの一部から抽出・変換したもの」です。
+
+ほかのブログ記事でも解説しているように、特徴量や特徴量ベクトルは、ざっくり言うと**結果セットのカラム**と**行**に対応します。大事なのは、学習時と推論時の両方で利用可能であることです。
+
+![features.png](https://clickhouse.com/uploads/features_7d40dbf1cd.png)
+
+> ここで「結果セット」という言い方を強調しているのは、単にテーブルのある行・一部カラムを取り出すだけでなく、集計や変換を経て特徴量を計算するケースがほとんどだからです。
+
+### 特徴量の特定
+
+特徴量を検討する際に、モデリング手法に影響を与える2つの重要な観点を押さえておきましょう。
+
+- **エンティティとの関連付け**  
+  特徴量は、どの「エンティティ」に紐づくか（あるいはキーベースで管理されるか）が重要です。今回のケースだと、ユーザーに紐づく特徴量（例: ユーザー年齢、Client IP、ユーザーエージェントなど）や、ドメインに紐づく特徴量（例: ドメインの年間アクセス数）などが考えられます。
+
+  エンティティに紐づけるには、一意に識別するキーが必要です。今回であれば、`UserID`でユーザーを、`URL`から抽出できるドメインを`domain(URL)`で取得し、ドメインをエンティティとします。
+
+- **動的で複雑な特徴量**  
+  一部の特徴量はユーザー年齢のようにほとんど変化しない場合もありますが、Client IPなどは時期によって変わる場合もあります。こうした特徴量は、ある時点の値が必要になります。つまり「ポイントインタイム」が重要です。
+
+  また、単純な列の値だけでなく集計が必要なケースも多く、そうした集計ベースの特徴量こそClickHouseが得意とする部分です。
+
+### 特徴量の例
+
+例えば、以下のような特徴量を使ってバウンス予測に役立てると仮定してみます。すべて時刻に紐づく動的なものです。
+
+- **アクセス時のユーザーエージェント**  
+  ユーザーエンティティに紐づき、カラム`UserAgent`から取得。
+- **リファラのカテゴリ**  
+  ユーザーエンティティに紐づき、`RefererCategoryID`カラムから取得（例: 検索エンジン、SNS、直打ちなど）。
+- **ユーザーが1時間に訪問したドメイン数**  
+  ユーザーエンティティに紐づく集計値。`GROUP BY`で計算が必要。
+- **1時間にそのドメインを訪れたユニークIP数**  
+  ドメインエンティティに紐づく集計値。`GROUP BY`が必要。
+- **ページのカテゴリ**  
+  ユーザーエンティティとして扱うが、`URLCategoryID`カラムから取得（単純な列ベースの特徴量）。
+- **ドメインごとの1時間あたりの平均リクエスト時間**  
+  `FetchTiming`カラムから集計して計算し、ドメインエンティティに紐づける。
+
+> 実際にはもっと適切な特徴量があるかもしれませんが、ここでは例示のため単純化してあります。また、一部の特徴量は実際には「セッション」など他のエンティティに紐づけるべきかもしれません。
+
+### 特徴量サブセット
+
+使う特徴量をざっくり決めたら、それらを作るのに必要なデータだけを抜き出す「サブセット」を抽出することもよく行われます。データがそれほど大きくない場合は不要ですが、巨大な場合や細かい前処理が必要な場合によく使われます。
+
+このステップでよく見られるのが、学習用データを格納するテーブルを作っておく方法です。ここでは「特徴量サブセット」と呼ぶことにします。具体的には以下を含むようなイメージです:
+- 各特徴量ベクトルに対応するエンティティの値
+- イベント時刻
+- クラスラベル（ターゲット）
+- 特徴量生成に使うカラム  
+  （将来的に使う可能性があるカラムもあらかじめ入れておく場合も）
+
+このようにすると以下のメリットがあります:
+- 元のデータを読み出すときとは異なる読み方で最適化・ソートが行え、後続のクエリが高速になる。
+- 変形やフィルタリングが重いクエリになる場合、最初に一度だけ実行してサブセットテーブルに挿入すれば、以降の処理が効率化される。
+
+  さらに、元データには重複がなくても、サブセットとして取り出す列の組み合わせによって重複が発生するケースがあります。この段階で重複排除（データクレンジング）を行うことも可能です。
+
+例えば、`predict_bounce_subset`という中間テーブルを作るとしましょう。必要なカラムは`EventTime`、ラベルの`IsNotBounce`、エンティティキーとして`Domain`と`UserID`、そして簡単な特徴量候補の`UserAgent`, `RefererCategoryID`, `URLCategoryID`、集計に必要な`FetchTiming`と`ClientIP`です。
+
+<pre style="font-size: 14px;"><code class="hljs language-sql">CREATE TABLE predict_bounce_subset
+(
+  EventTime DateTime64,
+  UserID UInt64,
+  Domain String,
+  UserAgent UInt8,
+  RefererCategoryID UInt16,
+  URLCategoryID UInt16,
+  FetchTiming UInt32,
+  ClientIP UInt32,
+  IsNotBounce UInt8
+)
+ENGINE = ReplacingMergeTree
+ORDER BY (EventTime, Domain, UserID, UserAgent, RefererCategoryID, URLCategoryID, FetchTiming, ClientIP, IsNotBounce)
+PRIMARY KEY (EventTime, Domain, UserID)
+</code></pre>
+
+ここでは[ReplacingMergeTree](https://clickhouse.com/docs/en/engines/table-engines/mergetree-family/replacingmergetree)を使います。このエンジンは、ORDER BYのキーが同じ行をバックグラウンド処理で重複排除してくれます。クエリ時に重複を排除したい場合は、[`FINAL`修飾子](https://clickhouse.com/docs/en/sql-reference/statements/select/from#final-modifier)を使います。上記例では、全カラムが同じなら重複扱いになるように設定しています。`EventTime`, `UserID`, `Domain`が同じでも`FetchTiming`が異なれば別行として残るイメージです。
+
+[ReplacingMergeTree](https://clickhouse.com/docs/en/engines/table-engines/mergetree-family/replacingmergetree)については、詳細をこちらで確認できます。
+
+> ORDER BYに指定したカラム全てがPRIMARY KEYに載るわけではありません。今回の例では、`PRIMARY KEY`には`EventTime, Domain, UserID`だけを載せ、他のカラムは並べ替えキーとしてのみ利用しています。これによってメモリ使用量を節約できます。
+
+ここで、`Robotness=0`（ボットでないアクセス）かつ`Domain`と`UserID`が存在するイベントのみを取り出すとします。このフィルタで行数は4200万件になったとします。
+
+<pre style="font-size: 14px;"><code class="hljs language-sql">INSERT INTO predict_bounce_subset SELECT
+	EventTime,
+	UserID,
+	domain(URL) AS Domain,
+	UserAgent,
+	RefererCategoryID,
+	URLCategoryID,
+	FetchTiming,
+	ClientIP,
+	IsNotBounce
+FROM web_events
+WHERE Robotness = 0 AND Domain != '' AND UserID != 0
+
+0 rows in set. Elapsed: 7.886 sec. Processed 99.98 million rows, 12.62 GB (12.68 million rows/s., 1.60 GB/s.)
+
+SELECT formatReadableQuantity(count()) AS count
+FROM predict_bounce_subset FINAL
+
+┌─count─────────┐
+│ 42.89 million │
+└───────────────┘
+
+1 row in set. Elapsed: 0.003 sec.
+</code></pre>
+
+> 上記で`FINAL`修飾子を使うことで、クエリ時に重複排除後の行数を数えています。
+
+### 特徴量サブセットの更新
+
+サブセットを一度作ると、元データに新しいイベントが来るたびに更新したい場合があります。スケジュールクエリで再作成する方法もありますが、ClickHouseなら(インクリメンタルな)マテリアライズドビューで更新処理を自動化できます。
+
+マテリアライズドビューは、あるテーブルへのデータ挿入ブロックが発生したタイミングで指定クエリを実行し、その結果を別のテーブルに入れるトリガーのような仕組みです。今回の例だと、`web_events`への挿入ブロックに合わせてビューのクエリが実行され、その結果が`predict_bounce_subset`に挿入されます。これにより、新規データ分だけ追加入力されていくのと等価になります。
+
+![feature_store_mv.png](https://clickhouse.com/uploads/feature_store_clickhouse_7b51b97cf9.png)
+
+例えば、`predict_bounce_subset`を保つマテリアライズドビューは以下のようになります。
+
+<pre style="font-size: 14px;"><code class="hljs language-sql">CREATE MATERIALIZED VIEW predict_bounce_subset_mv TO predict_bounce_subset AS
+SELECT
+   EventTime,
+   UserID,
+   domain(URL) AS Domain,
+   UserAgent,
+   RefererCategoryID,
+   URLCategoryID,
+   FetchTiming,
+   ClientIP,
+   IsNotBounce
+FROM web_events
+WHERE Robotness = 0 AND Domain != '' AND UserID != 0
+</code></pre>
+
+これはシンプルな例ですが、マテリアライズドビューの強力な機能については[こちら](https://clickhouse.com/docs/en/materialized-view)をご覧ください。以降のステップでは、`predict_bounce_subset`を使用するものとします。
+
+## ステップ 3 – 特徴量の作成
+
+実際にモデルを学習させるには、用意した特徴量を組み合わせて、`IsNotBounce`というラベルを含む「特徴量ベクトル」を作る必要があります。
+
+![feature.png](https://clickhouse.com/uploads/feature_9c3c5fe592.png)
+
+ここで示すように、複数のエンティティに紐づいた特徴量を1つの行にまとめ上げる必要があります。多くの場合、別エンティティの「直近時刻の値」を取得する形になるため、時間で整合を取ることが大切です。
+
+ClickHouseに慣れたエンジニアであれば、一つの長大なSQLクエリでこの特徴量ベクトルを一気に生成することも可能です。しかしデータ量が膨大な場合、計算量の大きいクエリになり、管理や再利用も難しくなります。
+
+また、特徴量ベクトルは繰り返し実験を回す中で内容が変わるため、最適化も含めてクエリ定義を共有・再利用したいケースが多いです。そこで、特徴量のクエリ結果を一度テーブルに落とし込む（`INSERT INTO SELECT`で永続化する）設計がよく取られます。これにより、計算を1回で済ませ、他のデータサイエンティストと結果を共有し、クエリ内容も最適化・バージョン管理しやすくなります。
+
+> ここでは「SQLクエリ定義をどのように宣言・バージョン管理・共有するか」は割愛しますが、SQLもコードである以上、さまざまなソリューションが考えられます。
+
+### 特徴量テーブル
+
+特徴量テーブルは、エンティティと必要ならタイムスタンプをセットで保持しておき、そこに実際の特徴量の値を格納する仕組みです。多くのユーザー事例を見ると、次の2つのパターンがあります。
+
+1. **特徴量ごとにテーブルを作る**  
+2. **エンティティごとにテーブルを作る**
+
+両者には一長一短がありますが、どちらも共通して「特徴量を再利用可能にする」「データの圧縮率が高くなる」というメリットがあります。
+
+> なお、単純な列から取れる特徴量については、必ずしも別テーブルにせず、サブセットテーブルからそのまま取得する形でも問題ありません。
+
+### 特徴量テーブル（特徴量ごと）
+
+「1特徴量=1テーブル」とする場合、テーブル名がその特徴量名を表します。この方式の利点は、後段での結合がシンプルになりやすく、マテリアライズドビューを使って更新するときも管理しやすい点です。
+
+一方で、特徴量が何千もあるような場合はテーブルも同じだけ必要になり、すべてをマテリアライズドビューで保守するのはスケーラビリティ上困難になる場合があります。
+
+以下は、ドメインごとの「1時間あたりのユニークIP数」を保持するテーブルの例です。
+
+<pre style="font-size: 14px;"><code class="hljs language-sql">CREATE TABLE number_unique_ips_per_hour
+(
+  Domain String,
+  EventTime DateTime64,
+  Value Int64
+)
+ENGINE = MergeTree
+ORDER BY (Domain, EventTime)
+</code></pre>
+
+`ORDER BY`は[圧縮と読み込みパターン](https://clickhouse.com/docs/en/data-modeling/schema-design#choosing-an-ordering-key)を考慮して設定します。`INSERT INTO SELECT`で集計結果を挿入し、特徴量テーブルを作る例を示します。
+
+<pre style="font-size: 14px;"><code class="hljs language-sql">INSERT INTO number_unique_ips_per_hour SELECT
+   Domain,
+   toStartOfHour(EventTime) AS EventTime,
+   uniqExact(ClientIP) AS Value
+FROM predict_bounce_subset FINAL
+GROUP BY
+   Domain,
+   EventTime
+
+0 rows in set. Elapsed: 0.777 sec. Processed 43.80 million rows, 1.49 GB (56.39 million rows/s., 1.92 GB/s.)
+
+SELECT count()
+FROM number_unique_ips_per_hour
+
+┌─count()─┐
+│ 613382  │
+└─────────┘
+</code></pre>
+
+ここでは`Domain`と`Value`をカラム名に使いましたが、一般化したい場合は下記のように`Entity`と`Value`という汎用名を持つテーブルにし、`Variant`型でデータ型をある程度柔軟に扱う方法もあります。
+
+<pre style="font-size: 14px;"><code class="hljs language-sql">CREATE TABLE <feature_name>
+(
+  Entity Variant(UInt64, Int64, String),
+  EventTime DateTime64,
+  Value Variant(UInt64, Int64, Float64)
+)
+ENGINE = MergeTree
+ORDER BY (Entity, EventTime)
+</code></pre>
+
+`Variant`型は実験的な機能で、1つのカラムに複数の型（String, Float64, Int64など）のいずれかを保持できるようにしたものです。
+
+### 特徴量テーブル（各エンティティ）
+
+もう1つのアプローチは、同じエンティティに紐づく複数の特徴量を1つのテーブルにまとめる形です。テーブル内に`FeatureId`という列を用意して、各行がどの特徴量なのかを区別します。
+
+この方式のメリットは、特徴量が増えてもテーブルの数はエンティティ単位で済むので、大規模ケースでも比較的管理しやすいことです。一方、マテリアライズドビューとの組み合わせがやや難しくなり、エンジニアリング面で工夫が必要になることがあります。
+
+さらにドメインをエンティティとする場合、ドメインに紐づく特徴量は`Variant`型が必要になる可能性があります。下記の例では`UInt64, Int64, Float64`をサポートするテーブルとしています。
+
+<pre style="font-size: 14px;"><code class="hljs language-sql">-- domain Features
+SET allow_experimental_variant_type=1
+CREATE TABLE domain_features
+(
+  Domain String,
+  FeatureId String,
+  EventTime DateTime,
+  Value Variant(UInt64, Int64, Float64)
+)
+ENGINE = MergeTree
+ORDER BY (FeatureId, Domain, EventTime)
+</code></pre>
+
+`ORDER BY (FeatureId, Domain, EventTime)`は、後で`FeatureId`や`Domain`でフィルタするパターンに最適化しています。先ほどの「1時間あたりのユニークIP数」をこのテーブルに入れる場合は、次のようになります。
+
+<pre style="font-size: 14px;"><code class="hljs language-sql">INSERT INTO domain_features SELECT
+   Domain,
+   'number_unique_ips_per_hour' AS FeatureId,
+   toStartOfHour(EventTime) AS EventTime,
+   uniqExact(ClientIP) AS Value
+FROM predict_bounce_subset FINAL
+GROUP BY
+   Domain,
+   EventTime
+
+0 rows in set. Elapsed: 0.573 sec. Processed 43.80 million rows, 1.49 GB (76.40 million rows/s., 2.60 GB/s.)
+
+SELECT count()
+FROM domain_features
+
+┌─count()─┐
+│ 613382  │
+└─────────┘
+</code></pre>
+
+> 「特徴量ごとテーブルのほうが読み取り速度が速いのでは？」と思うかもしれませんが、`ORDER BY`キーとスパースインデックスをしっかり設定すれば、パフォーマンス差はほとんどありません。
+
+### 特徴量テーブルの更新
+
+一部の特徴量は固定的ですが、多くの場合、元データの到着に合わせて特徴量を更新する必要があります。「サブセット更新」の章で紹介したやり方と同様、マテリアライズドビューで自動更新できます。
+
+ただし、特徴量が集計結果の場合はクエリが複雑になり、結果を保持するテーブルでは`AggregatingMergeTree`と`AggregateFunction`型を使い、マテリアライズドビュー側では部分的な集計状態（*-State）を扱う必要があります。下記は「特徴量ごとテーブル（per feature）」でやる場合の例です。
+
+<pre style="font-size: 14px;"><code class="hljs language-sql">CREATE TABLE number_unique_ips_per_hour
+(
+  Entity String,
+  EventTime DateTime64,
+  Value AggregateFunction(uniqExact, UInt32)
+)
+ENGINE = AggregatingMergeTree
+ORDER BY (Entity, EventTime)
+
+CREATE MATERIALIZED VIEW number_unique_ips_per_hour_mv TO number_unique_ips_per_hour AS
+SELECT
+   domain(URL) AS Entity,
+   toStartOfHour(EventTime) AS EventTime,
+   -- ビューでは-Stateを付けて部分集計状態を生成
+   uniqExactState(ClientIP) AS Value
+FROM predict_bounce_subset
+GROUP BY
+   Entity,
+   EventTime
+</code></pre>
+
+こうすると、`predict_bounce_subset`にデータが入るたびにこのテーブルが更新されます。ただし、問い合わせるときは`FINAL`句または`GROUP BY`＋`uniqExactMerge(Value)`を使って集計状態をマージする必要があります。例えば、以下のように`uniqExactMerge`を使って実際の値を取得します。
+
+<pre style="font-size: 14px;"><code class="hljs language-sql">-- 単一ドメインの値を取得するクエリ例
+SELECT
+   EventTime,
+   Entity,
+   uniqExactMerge(Value) AS Value
+FROM number_unique_ips_per_hour
+WHERE Entity = 'smeshariki.ru'
+GROUP BY
+   Entity,
+   EventTime
+ORDER BY EventTime DESC LIMIT 5
+
+┌───────────────EventTime─┬─Entity────────┬─Value─┐
+│ 2013-07-31 23:00:00.000 │ smeshariki.ru │  3810 │
+│ 2013-07-31 22:00:00.000 │ smeshariki.ru │  3895 │
+│ 2013-07-31 21:00:00.000 │ smeshariki.ru │  4053 │
+│ 2013-07-31 20:00:00.000 │ smeshariki.ru │  3893 │
+│ 2013-07-31 19:00:00.000 │ smeshariki.ru │  3926 │
+└─────────────────────────┴───────────────┴───────┘
+
+5 rows in set. Elapsed: 0.491 sec. Processed 8.19 thousand rows, 1.28 MB (16.67 thousand rows/s., 2.61 MB/s.)
+Peak memory usage: 235.93 MiB.
+</code></pre>
+
+このように部分集計状態を持っておくことで、後から「1日単位で見たい」といった別の集計も簡単に計算できます（クエリ側でさらにGROUP BYすればOK）。また、下図のように、`predict_bounce_subset`を更新するマテリアライズドビューと、それをさらに参照するマテリアライズドビューを「連鎖」させるケースもあります。詳しくは[こちら](https://clickhouse.com/blog/chaining-materialized-views)をご覧ください。
+
+![chained_mvs.png](https://clickhouse.com/uploads/chained_mvs_4878676d59.png)
+
+### エンティティごとの特徴量テーブルを更新
+
+「特徴量ごとテーブル」の場合、特徴量テーブルの数だけマテリアライズドビューが必要になるので、特徴量が10個を超えると挿入時の処理コストも上がってきます（1テーブルにつき1マテリアライズドビュー）。大量の特徴量を扱う場合にはスケーリング面で不向きです。
+
+一方、「エンティティごとテーブル」方式だとテーブル数が減らせますが、VariantとAggregateFunctionを組み合わせた方法は現在サポートされていません。そこで選択肢となるのが「Refreshable Materialized Views (実験的機能)」です。これは従来のインクリメンタルなマテリアライズドビューとは異なり、定期的にビュークエリを全件実行し、ターゲットテーブルの内容をアトミックに置き換える仕組みです。
+
+![refreshable_views.png](https://clickhouse.com/uploads/refreshable_views_1640f82594.png)
+
+例えば、10分ごとに「ドメインごとのユニークIP数」を再計算するには、以下のように書きます。
+
+<pre style="font-size: 14px;"><code class="hljs language-sql">-- 実験的機能を有効化
+SET allow_experimental_refreshable_materialized_view = 1
+
+CREATE MATERIALIZED VIEW domain_features_mv REFRESH EVERY 10 MINUTES TO domain_features AS
+SELECT
+   Domain,
+   'number_unique_ips_per_hour' AS FeatureId,
+   toStartOfHour(EventTime) AS EventTime,
+   uniqExact(ClientIP) AS Value
+FROM predict_bounce_subset
+GROUP BY
+   Domain,
+   EventTime
+</code></pre>
+
+Refreshable Materialized Viewの詳細は[こちら](https://clickhouse.com/docs/en/materialized-view/refreshable-materialized-view)で確認できます。
+
+## ステップ 4 – モデル用データの生成
+
+特徴量の準備ができたら、これらを組み合わせてモデル用データを作ります。これがトレーニング・バリデーション・テストを作る基礎となるわけです。
+
+このテーブルの各行が特徴量ベクトルに対応します。特徴量サブセット`predict_bounce_subset`に対して、作成した特徴量テーブルをJOINしていきます。
+
+`predict_bounce_subset`にはラベルやタイムスタンプ、エンティティキーがすでに入っています。これを左側のテーブルとして使い、必要な特徴量を結合するのが自然です。（また大抵の場合これが最大のテーブルなので、[JOINの最適化](https://clickhouse.com/docs/en/guides/joining-tables#optimizing-join-performance)の観点でも有利です）。
+
+結合条件は以下の2つです:
+- 同じエンティティキー（例: `UserID`や`Domain`）
+- なるべく近いタイムスタンプ（`EventTime`）
+
+この「同じキー + 時間で最も近い値」を実現するには`ASOF JOIN`が必要です。最終的にはこの結果を「モデルテーブル」に格納し、そこから学習や検証用のデータを抽出する形をとります。まずは`predict_bounce`というモデルテーブルを宣言してみましょう。
+
+<pre style="font-size: 14px;"><code class="hljs language-sql">CREATE TABLE predict_bounce_model (
+   Row UInt64,
+   EventTime DateTime64,
+   UserID UInt64,
+   Domain String,
+   UserAgent UInt8,
+   RefererCategoryID UInt16,
+   URLCategoryID UInt16,
+   DomainsVisitedPerHour UInt32 COMMENT 'Number of domains visited in last hour by the user',
+   UniqueIPsPerHour UInt32 COMMENT 'Number of unique ips visiting the domain per hour',
+   AverageRequestTime Float32 COMMENT 'Average request time for the domain per hour',
+   IsNotBounce UInt8,
+) ENGINE = MergeTree
+ORDER BY (Row, EventTime)
+</code></pre>
+
+ここで`Row`列を用意し、各行にユニークな値を持たせます。`ORDER BY`には`Row`と`EventTime`を組み込み、後述するトレーニング/テストセット分割時に使います。
+
+### 特徴量の結合とアラインメント
+
+`ASOF JOIN`でエンティティキーとタイムスタンプを突き合わせることで、必要な特徴量を紐づけます。「特徴量ごとテーブル」を使っているとして、以下の3つがあるとします。
+
+- `number_unique_ips_per_hour`  
+  ドメインごとの1時間あたりのユニークIP数
+- `domains_visited_per_hour`  
+  ユーザーごとの1時間あたりの訪問ドメイン数
+- `average_request_time`  
+  ドメインごとの1時間あたりの平均リクエスト時間
+
+単純化すれば、以下のように書けます。
+
+<pre style="font-size: 14px;"><code class="hljs language-sql">INSERT INTO predict_bounce_model SELECT
+   rand() AS Row,
+   mt.EventTime AS EventTime,
+   mt.UserID AS UserID,
+   mt.Domain AS Domain,
+   mt.UserAgent,
+   mt.RefererCategoryID,
+   mt.URLCategoryID,
+   dv.Value AS DomainsVisitedPerHour,
+   uips.Value AS UniqueIPsPerHour,
+   art.Value AS AverageRequestTime,
+   mt.IsNotBounce
+FROM predict_bounce_subset AS mt FINAL
+ASOF JOIN domains_visited_per_hour AS dv ON (mt.UserID = dv.UserID) AND (mt.EventTime >= dv.EventTime)
+ASOF JOIN number_unique_ips_per_hour AS uips ON (mt.Domain = uips.Domain) AND (mt.EventTime >= uips.EventTime)
+ASOF JOIN average_request_time AS art ON (mt.Domain = art.Domain) AND (mt.EventTime >= art.EventTime)
+
+0 rows in set. Elapsed: 13.440 sec. Processed 89.38 million rows, 3.10 GB (6.65 million rows/s., 230.36 MB/s.)
+Peak memory usage: 2.94 GiB.
+
+SELECT * FROM predict_bounce_model LIMIT 1 FORMAT Vertical
+
+Row 1:
+──────
+Row:               57
+EventTime:         2013-07-10 06:11:39.000
+UserID:            1993141920794806602
+Domain:            smeshariki.ru
+UserAgent:         7
+RefererCategoryID: 16000
+URLCategoryID:     9911
+DomainsVisitedPerHour: 1
+UniqueIPsPerHour:  16479
+AverageRequestTime: 182.69382
+IsNotBounce:       0
+</code></pre>
+
+「エンティティごとテーブル」を使う場合は、`FeatureId`でフィルタしてそれぞれサブクエリにして結合するので、もう少し複雑になります。下記は実行例です（多少時間はかかる可能性があります）。
+
+<pre style="font-size: 14px;"><code class="hljs language-sql">INSERT INTO predict_bounce_model SELECT
+   rand() AS Row,
+   mt.EventTime AS EventTime,
+   mt.UserID AS UserID,
+   mt.Domain AS Domain,
+   mt.UserAgent,
+   mt.RefererCategoryID,
+   mt.URLCategoryID,
+   DomainsVisitedPerHour,
+   UniqueIPsPerHour,
+   AverageRequestTime,
+   mt.IsNotBounce
+FROM predict_bounce_subset AS mt FINAL
+ASOF LEFT JOIN (
+   SELECT Domain, EventTime, Value.UInt64 AS UniqueIPsPerHour
+   FROM domain_features
+   WHERE FeatureId = 'number_unique_ips_per_hour'
+) AS df ON (mt.Domain = df.Domain) AND (mt.EventTime >= df.EventTime)
+ASOF LEFT JOIN (
+   SELECT Domain, EventTime, Value.Float64 AS AverageRequestTime
+   FROM domain_features
+   WHERE FeatureId = 'average_request_time'
+) AS art ON (mt.Domain = art.Domain) AND (mt.EventTime >= art.EventTime)
+ASOF LEFT JOIN (
+   SELECT UserID, EventTime, Value.UInt64 AS DomainsVisitedPerHour
+   FROM user_features
+   WHERE FeatureId = 'domains_visited_per_hour'
+) AS dv ON (mt.UserID = dv.UserID) AND (mt.EventTime >= dv.EventTime)
+
+0 rows in set. Elapsed: 12.528 sec. Processed 58.65 million rows, 3.08 GB (4.68 million rows/s., 245.66 MB/s.)
+Peak memory usage: 3.16 GiB.
+</code></pre>
+
+> なお、上記ASOF JOINはハッシュジョインを利用していますが、v24.7で`full_sorting_merge`アルゴリズムが追加され、ソートされたテーブルをマージする形でJOINを行う最適化が可能になりました。これにより事前ソートや大量のデータ処理が削減され、高速化とリソース削減が期待できます。
+
+## ステップ 5 – テストおよびトレーニング用データセットの生成
+
+最終的に完成したモデルデータテーブルから、学習・バリデーション・テスト用にデータを分割します。例えば80%をトレーニング、10%をバリデーション、10%をテストとするなどです。ここで大事なのは、クエリを何度実行しても常に同じデータを取り出せるようにすること、そして行の順番や選択がぶれないことです。
+
+この安定性と再現性を簡単に担保するために、先ほどの`Row`列や`EventTime`列が使えます。例えば80%をトレーニングデータにし、`EventTime`昇順で返したい場合、次のようなクエリが使えます。
+
+<pre style="font-size: 14px;"><code class="hljs language-sql">SELECT * EXCEPT Row
+FROM predict_bounce_model
+WHERE (Row % 100) < 80
+ORDER BY EventTime, Row ASC
+</code></pre>
+
+これが常に同じ結果を返すことは、例えば以下のようにハッシュを取れば確認できます。
+
+<pre style="font-size: 14px;"><code class="hljs language-sql">SELECT
+   groupBitXor(sub) AS hash,
+   count() AS count
+FROM
+(
+   SELECT sipHash64(concat(*)) AS sub
+   FROM predict_bounce_model
+   WHERE (Row % 100) < 80
+   ORDER BY
+       EventTime ASC,
+       Row ASC
+)
+
+┌─────────────────hash─┬────count─┐
+│ 14452214628073740040 │ 34315802 │
+└──────────────────────┴──────────┘
+
+1 row in set. Elapsed: 8.346 sec. Processed 42.89 million rows, 2.74 GB (5.14 million rows/s., 328.29 MB/s.)
+Peak memory usage: 10.29 GiB.
+
+-- 同じクエリを再度実行 (省略)
+
+┌─────────────────hash─┬────count─┐
+│ 14452214628073740040 │ 34315802 │
+└──────────────────────┴──────────┘
+</code></pre>
+
+同様に、バリデーションやテストには以下のようなクエリが使えます。
+
+<pre style="font-size: 14px;"><code class="hljs language-sql">-- validation
+SELECT * EXCEPT Row
+FROM predict_bounce_model
+WHERE (Row % 100) BETWEEN 80 AND 89
+ORDER BY EventTime, Row ASC
+
+-- test
+SELECT * EXCEPT Row
+FROM predict_bounce_model
+WHERE (Row % 100) BETWEEN 90 AND 100
+ORDER BY EventTime, Row ASC
+</code></pre>
+
+実際には時系列で分割してリークを防ぎたい場合もあるので、`EventTime`をキーにするなど、運用に合わせて最適化してください。詳しくは[こちら](https://clickhouse.com/docs/en/data-modeling/schema-design#choosing-an-ordering-key)のOrdering Key選択に関するガイドも参考になります。
+
+## 構築するか、導入するか
+
+ここまでのフローでは、マルチステップのクエリや複雑な処理が必要になっていることがわかります。ClickHouseを使ってオフライン特徴量ストアを構築する場合は、だいたい以下の3パターンに分かれます。
+
+1. **フルスクラッチで構築**  
+   データ構造や最適化を自社の要件に合わせて徹底的にチューニングしたい場合。広告テックのように特徴量ストアがビジネスの肝で超大規模データを扱う企業では、こうしたアプローチが選ばれます。
+
+2. **dbt + Airflow**  
+   dbtで複雑なクエリやデータモデリングを管理し、Airflowでワークフローをスケジューリングする構成。特徴量ストアをフルスクラッチで作るほどではないが、ある程度のカスタム要件に対応したい場合に最適です。  
+   既存のフレームワークを使いながら大規模データと複雑なクエリをさばける点がバランスが良く、多くのエンジニアが利用しています。
+
+3. **既存の特徴量ストアを導入し、ClickHouseを連携**  
+   例として[Featureform](https://www.featureform.com/)などがClickHouseをバックエンドに利用し、特徴量の管理やバージョン管理、ガバナンス機能を提供しています。これらを利用すれば、データサイエンティスト側の負担が減り、ワークフローも標準化できるメリットがあります。  
+   自社の要件とのマッチ度合いが導入判断のポイントになります。
+
+![featureform.png](https://clickhouse.com/uploads/featureform_cf5b1cb84f.png)
+_画像: Featureform Feature Store_
+
+## 推論時における ClickHouse
+
+本記事ではClickHouseをオフラインストアとして使う話が中心でしたが、実際の運用フェーズでは学習済みモデルをデプロイして推論を行う際に、リアルタイムでユーザーIDやドメインなどの情報を参照する必要があります。「直近1時間の集計結果」などを推論のたびに計算するのは重すぎるので、何らかの形で事前に特徴量を用意しておき、それを即座に参照できるようにする「オンラインストア」的な使い方が必要です。
+
+ClickHouseはリアルタイム分析DBとして高い同時実行性能と低レイテンシ、書き込み処理の多さにも対応できるので、こうしたオンライン特徴量ストアにも利用可能です。オフラインで計算した特徴量をそのまま同じクラスタか別のインスタンスに移して利用するといったフローも十分実現可能です。詳細は別記事で解説予定です。
+
+## 結論
+
+本記事では、ClickHouseを使ったオフライン特徴量ストア＆変換エンジンの代表的なデータモデリング手法を紹介しました。実際にはここで挙げた以外にもさまざまな方法がありますが、本記事の内容はFeatureformなどClickHouseと連携する特徴量ストアで一般的に採用されているやり方に近いものです。もし「自分はこうやって運用している」「こういう改善案がある」という方がいれば、ぜひ教えてください。
+
+ClickHouseで機械学習用データをモデリングし、パイプラインを高速化しながら、数十億行レベルのデータに対してもすばやく特徴量を作り上げる方法をぜひ試してみてください。
+
+---
+
+## ClickHouse vs Snowflake によるリアルタイム分析 - ベンチマークとコスト分析
+Published: 2024-12-30T08:05:45+00:00
+URL: https://clickhouse.com/blog/clickhouse-vs-snowflake-for-real-time-analytics-benchmarks-cost-analysis-jp
+
+---
+title: "ClickHouse vs Snowflakeによるリアルタイム分析 - 比較と移行"
+date: "2024-12-30T08:05:32.029Z"
+author: "ClickHouse"
+category: "Engineering"
+excerpt: "Snowflakeのコストがどんどん膨らんで驚いていませんか？予測できない課金モデルにうんざりしていませんか？ClickHouseとSnowflakeの違い、そして移行方法について解説します"
+---
+
+# ClickHouse vs Snowflakeによるリアルタイム分析 - 比較と移行
+
+title  
+ClickHouse vs Snowflakeによるリアルタイム分析 - 比較と移行
+
+![clickhouse_vs_snowflake_simple.png](https://clickhouse.com/uploads/clickhouse_vs_snowflake_simple_165592b77b.png)
+
+## 要約
+
+この「ClickHouse vs. Snowflake」ブログシリーズは2つのパートで構成されており、それぞれ独立して読むことができます。各パートは以下のとおりです。
+
+- 比較と移行 - 本記事では、ClickHouseとSnowflakeのアーキテクチャ上の類似点と相違点を概説し、ClickHouse Cloudがリアルタイム分析に特に適した機能をレビューします。SnowflakeからClickHouseへのワークロード移行に興味がある方のために、データセットの違いやデータ移行方法についても解説します。  
+- [ベンチマークとコスト分析](/blog/clickhouse-vs-snowflake-for-real-time-analytics-benchmarks-cost-analysis) - シリーズのもう一つの記事では、提案するアプリケーションを支える一連のリアルタイム分析用クエリを両システムでベンチマークし、さまざまな最適化を試した上でコストを直接比較しています。私たちの結果によると、ClickHouse Cloudはパフォーマンスとコストの両面でSnowflakeを上回りました。
+
+  - 本番運用では、ClickHouse CloudはSnowflakeより3〜5倍コスト効率が高い  
+  - クエリ速度はSnowflakeと比較して2倍以上高速  
+  - データ圧縮率はSnowflakeより38%優れている  
+
+<div>
+    <h2 style="margin-bottom: 20px;">目次</h2>
+    <ul>
+        <li><a href="/blog/clickhouse-vs-snowflake-for-real-time-analytics-comparison-migration-guide#introduction">はじめに</a></li>
+        <li><a href="/blog/clickhouse-vs-snowflake-for-real-time-analytics-comparison-migration-guide#clickhouse-vs-snowflake">ClickHouse vs Snowflake</a>
+            <ul style="margin-bottom: 0px">
+                <li style="margin-top: 10px"><a href="/blog/clickhouse-vs-snowflake-for-real-time-analytics-comparison-migration-guide#similarities">類似点</a></li>
+                <li style="margin-top: 10px"><a href="/blog/clickhouse-vs-snowflake-for-real-time-analytics-comparison-migration-guide#differences">相違点</a></li>
+                <li style="margin-top: 10px"><a href="/blog/clickhouse-vs-snowflake-for-real-time-analytics-comparison-migration-guide#real-time-analytics">リアルタイム分析</a></li>
+                <li style="margin-top: 10px"><a href="/blog/clickhouse-vs-snowflake-for-real-time-analytics-comparison-migration-guide#clustering-vs-ordering">クラスタリング vs ORDER BY</a></li>
+                <li style="margin-top: 10px"><a href="/blog/clickhouse-vs-snowflake-for-real-time-analytics-comparison-migration-guide#migrating-data">データ移行</a>
+                    <ul style="margin-bottom: 0px">
+                        <li style="margin-top: 10px"><a href="/blog/clickhouse-vs-snowflake-for-real-time-analytics-comparison-migration-guide#unloading-from-snowflake">Snowflakeからのアンロード</a></li>
+                        <li style="margin-top: 10px"><a href="/blog/clickhouse-vs-snowflake-for-real-time-analytics-comparison-migration-guide#importing-to-clickhouse">ClickHouseへのインポート</a></li>
+                    </ul>
+                </li>
+            </ul>
+        </li>
+        <li><a href="/blog/clickhouse-vs-snowflake-for-real-time-analytics-comparison-migration-guide#conclusion">結論</a></li>
+        <li><a href="/blog/clickhouse-vs-snowflake-for-real-time-analytics-comparison-migration-guide#appendix">付録</a>
+            <ul style="margin-bottom: 0px">
+                <li style="margin-top: 10px"><a href="/blog/clickhouse-vs-snowflake-for-real-time-analytics-comparison-migration-guide#data-types">データ型</a>
+                    <li style="margin-top: 10px"><a href="/blog/clickhouse-vs-snowflake-for-real-time-analytics-comparison-migration-guide#numerics">数値型</a></li>
+                    <li style="margin-top: 10px"><a href="/blog/clickhouse-vs-snowflake-for-real-time-analytics-comparison-migration-guide#strings">文字列</a></li>
+                    <li style="margin-top: 10px"><a href="/blog/clickhouse-vs-snowflake-for-real-time-analytics-comparison-migration-guide#semi-structured">セミ構造化</a></li>
+                </li>
+            </ul>   
+        </li>
+    </ul>
+</div>
+
+## はじめに
+
+Snowflakeはオンプレミスのレガシーなデータウェアハウスのワークロードをクラウドに移行することを主目的としたクラウドデータウェアハウスです。大規模な長時間レポート処理に最適化されています。データをクラウドへ移行するにつれ、データオーナーはこのデータをどのように活用してさらに価値を引き出せるかを検討するようになります。たとえば、社内外で使うリアルタイムアプリケーションに活用するといったケースです。そこで、リアルタイム分析に最適化されたデータベースであるClickHouseの必要性に気づきます。
+
+私たちはこの比較を公正に行うよう努めており、Snowflakeがデータウェアハウス用途で素晴らしい機能をいくつも備えていることも認めています。私たちはClickHouseの専門家ではありますが、Snowflakeに関しては必ずしも専門家ではありません。Snowflakeに詳しいユーザーからのフィードバックや改善の提案を歓迎しています。Snowflakeが他のユースケースにも利用可能であることは承知していますが、本記事の範囲はリアルタイム分析に絞られています。
+
+## ClickHouse vs Snowflake
+
+### 類似点
+
+Snowflakeはクラウドベースのデータウェアハウスプラットフォームで、大量データの格納・処理・分析をスケーラブルかつ効率的に行うためのソリューションを提供します。ClickHouse同様、Snowflakeは既存技術の上に構築されたものではなく、独自のSQLクエリエンジンとカスタムアーキテクチャを採用しています。
+
+Snowflakeのアーキテクチャは、[共有ディスク](https://en.wikipedia.org/wiki/Shared-disk_architecture)（私たちは「共有ストレージ」という用語を好みます）と[共有ナッシング](https://en.wikipedia.org/wiki/Shared-nothing_architecture)アーキテクチャをハイブリッドに組み合わせたものと説明されます。つまり、オブジェクトストア（S3など）を使ってすべての計算ノードからアクセスできる（共有ディスク）一方、クエリに応じて各計算ノードがデータの一部をローカルに保持する（共有ナッシング）仕組みです。これは理論上、[両方の利点を兼ね備えている](https://www.geeksforgeeks.org/difference-between-shared-nothing-architecture-and-shared-disk-architecture/)とされます。共有ディスクアーキテクチャのシンプルさと、共有ナッシングアーキテクチャのスケーラビリティを兼ね備えているわけです。
+
+この設計は、オブジェクトストレージを主要なストレージとして利用することを前提としており、ほぼ無限の同時アクセス性と高い耐久性、スケーラブルなスループットを実現しています。
+
+![snowflake_architecture.png](https://clickhouse.com/uploads/snowflake_architecture_e3c612c8e9.png)
+_クレジット: https://docs.snowflake.com/en/user-guide/intro-key-concepts_
+
+一方、ClickHouseはオープンソースかつクラウドホスティングされた製品で、共有ディスクと共有ナッシングのどちらの構成にもデプロイすることができます。後者はセルフマネージド環境で一般的です。CPUやメモリのスケールアップは容易ですが、共有ナッシング構成ではクラスタ構成変更の際にデータのレプリケーションや管理にまつわる古典的な課題やオーバーヘッドが発生します。
+
+このため、ClickHouse CloudではSnowflakeと同様のコンセプトを持つ共有ストレージアーキテクチャを採用しています。S3やGCSなどのオブジェクトストアに単一コピーのデータを格納し、ほぼ無制限のストレージ容量と強力な冗長性が得られます。すべてのノードはこの単一コピーのデータと各ノード固有のローカルSSDキャッシュにアクセスできます。ノード数やスペックを調整することでCPUやメモリをスケールさせます。Snowflakeと同様、S3のスケーラビリティ特性によって、ノードを追加してもディスクI/Oやネットワークがボトルネックになりにくく、並行アクセスが増えても性能が落ちにくいのが特長です。
+
+![clickhouse_architecture.png](https://clickhouse.com/uploads/clickhouse_architecture_53f247b7b1.png)
+
+### 相違点
+
+基盤となるストレージ形式やクエリエンジン以外にも、これらのアーキテクチャにはいくつか細かな違いがあります。
+
+- Snowflakeの計算リソースは、[ウェアハウス](https://docs.snowflake.com/en/user-guide/warehouses)という概念を通じて提供されます。これは一定サイズのノード数で構成されます。Snowflakeはウェアハウスの具体的な構成を公開していませんが、一般的には[各ノードに8vCPU、16GiB、200GBのローカルストレージ（キャッシュ用）がある](https://select.dev/posts/snowflake-warehouse-sizing)と理解されています。ノード数はTシャツサイズ方式で決まり、たとえばX-Smallは1ノード、Smallは2ノード、Mediumは4ノード、Largeは8ノードといった具合です。これらのウェアハウスはオブジェクトストア上にあるデータをどれでもクエリすることが可能です。クエリ負荷がかかっていないアイドル時はウェアハウスが停止し、クエリが来ると再開します。ストレージコストは常に請求されますが、ウェアハウスの料金はアクティブな時間だけ発生します。  
+- ClickHouse Cloudも同様に、ノードとそのローカルキャッシュストレージを使った仕組みを利用します。ただしTシャツサイズではなく、ユーザーは合計CPUとメモリを指定してサービスをデプロイし、それに応じて（あらかじめ定義した上限内で）クエリ負荷に合わせて自動的に垂直・水平方向にスケールします。ClickHouse Cloudのノードは現在、Snowflakeの1:2とは異なり1:4のCPU対メモリ比率です。現時点では、Snowflakeのウェアハウスほど厳密にデータと疎結合ではありませんが、将来的には疎結合の構成も可能です。ノードはアイドルになると自動的に停止し、クエリが来ると再開します。必要に応じて手動でリサイズもできます。  
+- ClickHouse Cloudのクエリキャッシュは各ノード固有であり、Snowflakeのようにサービスレイヤーで共有していません。それでも、ベンチマークではSnowflakeより高いパフォーマンスを示しました。  
+- SnowflakeとClickHouse Cloudはクエリ同時実行数を増やすために異なるアプローチを取っています。Snowflakeは[マルチクラスタウェアハウス](https://docs.snowflake.com/en/user-guide/warehouses-multicluster#benefits-of-multi-cluster-warehouses)という機能で並列化を図り、クエリ同時実行数を増やします（クエリレイテンシ自体は改善しません）。一方ClickHouseでは、垂直または水平スケールによってメモリやCPUを増やすことでこれを実現します。本記事では同時実行数よりもレイテンシに主眼を置いているため詳細は扱いませんが、Snowflakeが[ウェアハウスごとの同時実行数をデフォルトで8に制限](https://docs.snowflake.com/en/sql-reference/parameters#max-concurrency-level)しているのに対し、ClickHouse Cloudは1ノードあたり1000クエリまで実行可能である点は注目に値します。  
+- Snowflakeはデータセットに対してコンピュートサイズを変更でき、ウェアハウスの再開も速い点があるため、アドホッククエリの体験は良好です。データウェアハウスやデータレイク用途では、これが他システムに対する優位性につながる場合があります。
+
+追加の機能やデータ型における類似点・相違点については後述します。
+
+### リアルタイム分析
+
+ベンチマークの結果から、ClickHouseは以下の観点でリアルタイム分析アプリケーションにおいてSnowflakeを上回っています。
+
+- **クエリレイテンシ**: Snowflakeのクエリは、テーブルにクラスタリングを適用して最適化してもなお高めのレイテンシが生じます。テーブルをSnowflake側でクラスタリングキーに含め、ClickHouse側でPRIMARY KEYに含めた列でフィルタをかけた場合でも、Snowflakeでは同等のパフォーマンスを達成するのにClickHouseの2倍以上の計算リソースが必要でした。Snowflakeの[永続的なクエリキャッシュ](https://docs.snowflake.com/en/user-guide/querying-persisted-results)は一部のレイテンシ問題を緩和しますが、フィルタ条件が多様化すると効果が薄れます。また、キャッシュはデータが変更されると無効化されるため、新しいデータが取り込まれるようなユースケースではキャッシュの恩恵を受けにくい可能性があります。今回のベンチマークではそのケースを想定していませんが、実際の運用ではもっと新しいデータが継続的に追加されるでしょう。  
+  ClickHouseのクエリキャッシュはノード固有であり、[トランザクションレベルの一貫性](https://clickhouse.com/blog/introduction-to-the-clickhouse-query-cache-and-design)を保証しませんが、[リアルタイム分析には向いている](https://clickhouse.com/blog/introduction-to-the-clickhouse-query-cache-and-design)設計です。ユーザーはクエリごとに[クエリキャッシュの使用](https://clickhouse.com/docs/en/operations/settings/settings#use-query-cache)を制御でき、[サイズ](https://clickhouse.com/docs/en/operations/settings/settings#query-cache-max-size-in-bytes)やクエリのキャッシュ対象となる[実行回数・時間](https://clickhouse.com/docs/en/operations/settings/settings#enable-writes-to-query-cache)などの制限も設定できます。  
+- **コスト削減**: Snowflakeではクエリが一定時間走らないとウェアハウスが自動で休止し、課金がストップする仕組みがあります。ただし、このアイドルチェックは[60秒までしか下げられません](https://docs.snowflake.com/en/sql-reference/sql/alter-warehouse)。そして、クエリが届くと数秒以内にウェアハウスが再開します。リソースを使った分だけ課金されるので、アドホッククエリ主体のワークロードにはメリットがあります。  
+  しかし、多くのリアルタイム分析ワークロードでは継続的なデータ取り込みと頻繁なクエリ実行が必要となり、アイドルになるタイミングがほぼありません（例: 外部に公開されているダッシュボードなど）。結果としてウェアハウスは常にアクティブになり、Snowflakeのアイドル停止機能によるコストメリットが活かせません。一方、ClickHouse Cloudは1秒あたりのコスト単価がSnowflakeより低いため、常時稼働が求められるリアルタイム分析ワークロードでは最終的な料金が大幅に下がります。  
+- **機能に関する予測可能な価格設定**: マテリアライズドビューやクラスタリング（ClickHouseのORDER BYに相当）などは、リアルタイム分析で高いパフォーマンスを得るうえで不可欠な機能です。Snowflakeではこれらの機能が追加課金や高い料金プランを必要とし、さらにバックグラウンドでどれだけ処理が走るかは予測しづらいです。一方、ClickHouse Cloudではこれらの機能を使っても基本コストに追加料金はかかりません（挿入時のCPU・メモリ使用量が増える程度）。私たちのベンチマークでは、これらの違いやクエリの高速化、圧縮率の高さが合わさって、トータルコストをSnowflakeより大きく下げられることが分かりました。
+
+さらにClickHouseには、リアルタイム分析機能を幅広くサポートする次のような特長があるという声もユーザーから寄せられています。
+
+- [アグリゲートコンビネータ](https://clickhouse.com/blog/aggregate-functions-combinators-in-clickhouse-for-arrays-maps-and-states)や[配列関数](https://clickhouse.com/docs/en/sql-reference/functions/array-functions/)などの特殊な分析関数が豊富で、複雑なクエリも短い構文で書け、パフォーマンスや可読性を向上できる  
+- Snowflakeほど厳しくないエイリアス制約など、分析向けに設計されたクエリ構文  
+- ENUMや精密指定可能な数値型など、より豊富なデータ型サポート。特にSnowflakeでは数値の精度指定があってもディスク消費には影響せず、ClickHouseでは型を厳密にすることで非圧縮時メモリを削減できる  
+- [ファイルやデータ形式](https://clickhouse.com/blog/data-formats-clickhouse-csv-tsv-parquet-native)の幅広いサポート（Snowflakeの[制限された形式](https://docs.snowflake.com/en/sql-reference/sql/create-file-format)よりも多い）により、分析データのインポート・エクスポートが簡単  
+- S3やMySQL、PostgreSQL、MongoDB、Delta Lakeなど、さまざまなデータレイクやデータストアに対してアドホックでフェデレーテッドクエリを実行可能  
+- 列ごとに[カスタムスキーマやコーデック](https://clickhouse.com/blog/optimize-clickhouse-codecs-compression-schema)を指定することで高い圧縮率を実現可能。ベンチマークでもこの機能を活用して圧縮率を高めました  
+- セカンダリインデックスとプロジェクション機能をサポート。[セカンダリインデックス](https://clickhouse.com/docs/en/optimize/skipping-indexes)には[インバーテッドインデックス](https://clickhouse.com/docs/en/engines/table-engines/mergetree-family/invertedindexes#usage)も含まれ、テキスト検索にも対応。[プロジェクション](https://clickhouse.com/docs/en/engines/table-engines/mergetree-family/mergetree#projections)はクエリごとに最適化を行うための仕組みです。プロジェクションはSnowflakeのマテリアライズドビューと似ていますが、[制限](https://docs.snowflake.com/en/user-guide/views-materialized#limitations-on-creating-materialized-views)が少なく、すべてのアグリゲート関数をサポートしています。プロジェクション自体でコストが増加することはなく（Snowflakeでは機能使用によって1.5倍課金される場合がある）、ストレージ使用量増加分のみが影響します。ベンチマーク分析でこれらの機能が有効であることを示します。  
+- マテリアライズドビューもサポート。Snowflakeのマテリアライズドビュー（ClickHouseのプロジェクションに近い）とは異なり、ClickHouseのマテリアライズドビューはデータの挿入時にのみトリガーが実行されます。  
+  - 結果は別のテーブルに格納可能で、もとのデータを保持する必要はありません。要約したデータだけでいいなら、ストレージ削減と高いパフォーマンスを両立できます。  
+  - JOINやWHEREフィルタをサポートし、またマテリアライズドビューをチェーンさせることもできます。
+
+### クラスタリング vs ORDER BY
+
+ClickHouseもSnowflakeもカラム指向データベースです。行指向に比べてCPUキャッシュやSIMD命令を効率的に活用でき、特定のカラムをソートしておくと圧縮率が上がります。どちらも最適な読み取りパフォーマンスにはソートやインデックスが重要で、実装の違いはあるものの、概念としては類似しています。
+
+ClickHouseでは、スパースインデックスとソートされたデータを中心とした構造を採用しています。テーブル作成時に`ORDER BY`でカラムのタプルを指定し、ディスク上のソート順を決定します。一般的には[頻繁に使われるクエリのフィルタ列を、カーディナリティが低い順に並べる](https://clickhouse.com/docs/en/optimize/sparse-primary-indexes)とよいとされています。また、`ORDER BY`を省略するとデフォルトでPRIMARY KEYが使われますが、`PRIMARY KEY`と`ORDER BY`を両方指定することも可能です（`PRIMARY KEY`は`ORDER BY`の先頭と一致している必要があります）。スパースインデックスはディスク上がソートされていることを前提として動くため、効率的にデータをスキップできます。
+
+Snowflakeは[マイクロパーティション](https://docs.snowflake.com/en/user-guide/tables-clustering-micropartitions)と呼ばれる独自構造を使いつつ、[クラスタリング](https://docs.snowflake.com/en/user-guide/tables-clustering-keys)という機能で似たコンセプトを提供しています。クラスタリングキーに指定されたカラムをもとにマイクロパーティションが割り振られ、同じ値を持つデータが近接配置されるようになります。これはClickHouseの`ORDER BY`と同様、ディスク上のデータが並ぶ順序を制御し、クエリや圧縮において同様の利点を得ることができます。
+
+ただし、実装上はいくつかの違いがあります。
+
+- ClickHouseは、データ挿入時に`ORDER BY`に従って自動的にソートとインデックス構築を行います。これによる追加コストはほぼなく、高速に更新が必要なテーブルでも適切に最適化されます。  
+- Snowflakeはバックグラウンドでの[自動クラスタリング](https://docs.snowflake.com/en/user-guide/tables-auto-reclustering)によってデータを再配置し、クレジットが消費されます。これにかかる料金を事前に予測するのは難しく、多数の行があるテーブルでこそ威力を発揮する一方で[頻繁に更新されるテーブルには推奨していない](https://docs.snowflake.com/en/user-guide/tables-clustering-keys#benefits-of-defining-clustering-keys-for-very-large-tables)です。カラムのカーディナリティによってコストが大きく左右され、Snowflakeでは`to_date`などの式を使ってカーディナリティを下げることを推奨しています。さらに、クラスタリングによる恩恵が得られるまでには時間がかかり、すぐに最適化されるわけではありません。  
+- Snowflakeはマイクロパーティション方式なので、高コストではあるものの[再クラスタリング](https://docs.snowflake.com/en/user-guide/tables-clustering-keys#credit-and-storage-impact-of-reclustering)が可能です。一方ClickHouseでは、テーブルを完全に再書き込みしなければ再ソートできません。
+
+両システムとも、分析処理では一般的に`GROUP BY`やソート、フィルタリングで特定のカラムをよく使用するため、こうしたソート/クラスタリングの設定は重要になります。クラスタリング/ORDER BYに指定するカラムはできるだけ多くのクエリで恩恵を受けられるよう選択し、カラムの並び順にも気を配る必要があります。
+
+カラム選択の推奨事項は両システムでほぼ共通しています。
+
+- 選択的なフィルタで頻繁に使うカラムを採用する。`GROUP BY`に使われるカラムもメモリ効率で役立つ  
+- カーディナリティが十分に高いカラムを使う（コイントスのように50%の行しか絞れないものは避ける）  
+- 複数カラムが必要な場合は、カーディナリティが低いカラムから高いカラムの順に並べる。特にClickHouseでは[この点が非常に重要](https://clickhouse.com/docs/en/guides/improving-query-performance/sparse-primary-indexes/sparse-primary-indexes-cardinality/)ですが、Snowflakeも考え方は同じと思われます。  
+
+_注: 上記の推奨事項は似ていますが、Snowflakeは[高カーディナリティカラムをクラスタリングキーに指定するのを推奨していません](https://docs.snowflake.com/en/user-guide/tables-clustering-keys#strategies-for-selecting-clustering-keys)。これはClickHouseには当てはまりません。タイムスタンプなどカーディナリティが高い列はClickHouseでもORDER BYの候補になります。_
+
+このガイドラインを踏まえた上で、私たちのベンチマークを行いました。
+
+### データ移行
+
+SnowflakeからClickHouseにデータを移行する場合、S3などのオブジェクトストアを中継ストレージとして利用することができます。SnowflakeとClickHouseの`COPY INTO`や`INSERT INTO SELECT`コマンドを組み合わせ、次のような流れで転送します。
+
+![migrating_clickhouse_snowflake.png](https://clickhouse.com/uploads/migrating_clickhouse_snowflake_93a30b945c.png)
+
+#### Snowflakeからのアンロード
+
+Snowflakeからのエクスポートには、図のように[External Stage](https://docs.snowflake.com/en/sql-reference/sql/create-stage)を使います。これは[ClickHouseのS3テーブルエンジン](https://clickhouse.com/docs/en/engines/table-engines/integrations/s3)と似ており、外部にホストされたファイルのまとまりをSQLで参照できるようにします。
+
+SnowflakeとClickHouse間のデータ移行には、型情報を維持し、圧縮効率も良く、ネスト構造を扱えるParquet形式を推奨します。[JSONの`ndjson`形式](https://docs.snowflake.com/en/sql-reference/sql/create-file-format#required-parameters)を使う方法もありますが、こちらは可読性を除けばデータ量が増加する傾向があります。
+
+> 以下の例では65億行のPyPiデータセットをエクスポートしています。このスキーマとデータセットは、[publicなBigQueryテーブル](https://console.cloud.google.com/bigquery?p=bigquery-public-data&d=pypi&page=dataset)から取得したもので、[こちら](https://packaging.python.org/en/latest/guides/analyzing-pypi-package-downloads/)のとおりPiPなどのツールを使ったPythonパッケージのダウンロード履歴を記録しています。詳細は[ベンチマーク記事](/blog/clickhouse-vs-snowflake-for-real-time-analytics-benchmarks-cost-analysis)で紹介していますが、550億行以上の大きなデータセットであり、リアルタイム分析における一般的なデータ構造に近いものとして選びました。
+
+下記の例では、SnowflakeでParquetの[名前付きファイル形式](https://docs.snowflake.com/en/sql-reference/sql/create-file-format)を作成し、次にエクスポート先のS3を表すExternal Stageを宣言してから、`COPY INTO`コマンドでエクスポートします。このステージはS3バケットへの抽象化レイヤーで、権限付与も行いやすくなります。
+
+SnowflakeではS3への書き込み権限を付与する方法が[複数](https://docs.snowflake.com/en/user-guide/data-load-s3-config)あります。サンプルを簡単にするため今回はキーとシークレットを直接使っていますが、本番環境では[Snowflake Storage Integration](https://docs.snowflake.com/en/user-guide/data-load-s3-config-aws-iam-user)を使うことを推奨します。
+
+```sql
+CREATE FILE FORMAT my_parquet_format TYPE = parquet;
+
+CREATE OR REPLACE STAGE my_ext_unload_stage 
+URL='s3://datasets-documentation/pypi/sample/'
+CREDENTIALS=(AWS_KEY_ID='<key>' AWS_SECRET_KEY='<secret>')
+FILE_FORMAT = my_parquet_format;
+
+-- 全ファイルに「pypi」プレフィックスを適用し、最大ファイルサイズを150MBに指定
+COPY INTO @my_ext_unload_stage/pypi from pypi max_file_size=157286400 header=true;
+```
+
+Snowflake側のスキーマは以下です。
+
+```sql
+CREATE TABLE PYPI (
+   timestamp TIMESTAMP,
+   country_code varchar,
+   url varchar,
+   project varchar,
+   file OBJECT,
+   installer OBJECT,
+   python varchar,
+   implementation OBJECT,
+   distro VARIANT,
+   system OBJECT,
+   cpu varchar,
+   openssl_version varchar,
+   setuptools_version varchar,
+   rustc_version varchar,
+   tls_protocol varchar,
+   tls_cipher varchar
+) DATA_RETENTION_TIME_IN_DAYS = 0;
+```
+
+Parquetにエクスポートするとサイズは約5.5TiB、1ファイル150MB上限で分割されます。AWS us-east-1にある2X-LARGEサイズのウェアハウスで処理時間は30分程度です。`header=true`を指定しているのはカラム名を出力するためです。VARIANTやOBJECTカラムは[デフォルトでJSON文字列](https://docs.snowflake.com/en/sql-reference/sql/copy-into-location#usage-notes)として出力されるので、ClickHouseにインサートする際にキャストが必要になります。
+
+#### ClickHouseへのインポート
+
+一度オブジェクトストアに書き出してしまえば、ClickHouseの[s3テーブル関数](https://clickhouse.com/docs/en/sql-reference/table-functions/s3)などを使ってテーブルへ取り込めます。以下の例のように実行します。
+
+以下のようなターゲットスキーマを想定します。
+
+```sql
+CREATE TABLE default.pypi
+(
+	`timestamp` DateTime64(6),
+	`date` Date MATERIALIZED timestamp,
+	`country_code` LowCardinality(String),
+	`url` String,
+	`project` String,
+	`file` Tuple(filename String, project String, version String, type Enum8('bdist_wheel' = 0, 'sdist' = 1, 'bdist_egg' = 2, 'bdist_wininst' = 3, 'bdist_dumb' = 4, 'bdist_msi' = 5, 'bdist_rpm' = 6, 'bdist_dmg' = 7)),
+	`installer` Tuple(name LowCardinality(String), version LowCardinality(String)),
+	`python` LowCardinality(String),
+	`implementation` Tuple(name LowCardinality(String), version LowCardinality(String)),
+	`distro` Tuple(name LowCardinality(String), version LowCardinality(String), id LowCardinality(String), libc Tuple(lib Enum8('' = 0, 'glibc' = 1, 'libc' = 2), version LowCardinality(String))),
+	`system` Tuple(name LowCardinality(String), release String),
+	`cpu` LowCardinality(String),
+	`openssl_version` LowCardinality(String),
+	`setuptools_version` LowCardinality(String),
+	`rustc_version` LowCardinality(String),
+	`tls_protocol` Enum8('TLSv1.2' = 0, 'TLSv1.3' = 1),
+	`tls_cipher` Enum8('ECDHE-RSA-AES128-GCM-SHA256' = 0, 'ECDHE-RSA-CHACHA20-POLY1305' = 1, 'ECDHE-RSA-AES128-SHA256' = 2, 'TLS_AES_256_GCM_SHA384' = 3, 'AES128-GCM-SHA256' = 4, 'TLS_AES_128_GCM_SHA256' = 5, 'ECDHE-RSA-AES256-GCM-SHA384' = 6, 'AES128-SHA' = 7, 'ECDHE-RSA-AES128-SHA' = 8)
+)
+ENGINE = MergeTree
+ORDER BY (date, timestamp)
+```
+
+Snowflake側でOBJECTやVARIANTだった構造化データはJSON文字列として出力されるため、[JSONExtract関数](https://clickhouse.com/docs/en/sql-reference/functions/json-functions#jsonextractjson-indices_or_keys-return_type)を使ってインサート時にタプルへ変換します。
+
+```sql
+INSERT INTO pypi
+SELECT
+	TIMESTAMP,
+	COUNTRY_CODE,
+	URL,
+	PROJECT,
+	JSONExtract(ifNull(FILE, '{}'), 'Tuple(filename String, project String, version String, type Enum8(\'bdist_wheel\' = 0, \'sdist\' = 1, \'bdist_egg\' = 2, \'bdist_wininst\' = 3, \'bdist_dumb\' = 4, \'bdist_msi\' = 5, \'bdist_rpm\' = 6, \'bdist_dmg\' = 7))') AS file,
+	JSONExtract(ifNull(INSTALLER, '{}'), 'Tuple(name LowCardinality(String), version LowCardinality(String))') AS installer,
+	PYTHON,
+	JSONExtract(ifNull(IMPLEMENTATION, '{}'), 'Tuple(name LowCardinality(String), version LowCardinality(String))') AS implementation,
+	JSONExtract(ifNull(DISTRO, '{}'), 'Tuple(name LowCardinality(String), version LowCardinality(String), id LowCardinality(String), libc Tuple(lib Enum8(\'\' = 0, \'glibc\' = 1, \'libc\' = 2), version LowCardinality(String)))') AS distro,
+	JSONExtract(ifNull(SYSTEM, '{}'), 'Tuple(name LowCardinality(String), release String)') AS system,
+	CPU,
+	OPENSSL_VERSION,
+	SETUPTOOLS_VERSION,
+	RUSTC_VERSION,
+	TLS_PROTOCOL,
+	TLS_CIPHER
+FROM s3('https://datasets-documentation.s3.eu-west-3.amazonaws.com/pypi/2023/pypi*.parquet')
+SETTINGS input_format_null_as_default = 1, input_format_parquet_case_insensitive_column_matching = 1
+```
+
+ここでは、[`input_format_null_as_default=1`](https://clickhouse.com/docs/en/operations/settings/formats#input_format_null_as_default)と[`input_format_parquet_case_insensitive_column_matching=1`](https://clickhouse.com/docs/en/operations/settings/formats#input_format_parquet_case_insensitive_column_matching)を有効にし、null値をデフォルトに変換し、列名の大小文字を区別しないようにしています。
+
+[Azure](https://docs.snowflake.com/en/user-guide/data-unload-azure)や[Google Cloud](https://docs.snowflake.com/en/user-guide/data-unload-gcs)を使う場合も同様に処理できます。ClickHouseにはそれぞれの[専用テーブル関数](https://clickhouse.com/docs/en/sql-reference/table-functions/azureBlobStorage)などが用意されています。
+
+## 結論
+
+本記事では、リアルタイム分析をユースケースとした場合にSnowflakeとClickHouseがどのように比較されるかを、両システムの類似点や相違点とともに見てきました。リアルタイム分析で有用なClickHouseの機能を挙げ、Snowflakeからワークロードを移行する際の考慮点も解説しました。[次の記事](/blog/clickhouse-vs-snowflake-for-real-time-analytics-benchmarks-cost-analysis)では、サンプルのリアルタイム分析アプリケーションを構築し、圧縮や挿入パフォーマンスの違い、代表的なクエリのベンチマークを行います。その結果をコスト分析とともに紹介し、ClickHouse Cloud導入時のコスト削減可能性を示します。
+
+---
+
+
+## 付録
+
+SnowflakeからClickHouseへリアルタイム分析ワークロードを移行する際に知っておくべき主要な概念を、以下にまとめます。データ型の違いやクラスタリングとORDER BYの相違を補足的に解説します。
+
+### データ型
+
+#### 数値型
+
+SnowflakeとClickHouseを比較すると、SnowflakeよりClickHouseのほうが数値型の精度指定が細かいことに気づくでしょう。Snowflakeは数値型に`Number`を使っており、精度（桁数）とスケール（小数点以下の桁数）を指定します（最大38桁）。整数は`Number`の精度とスケールを0にしたものと同じです。Snowflakeではマイクロパーティションレベルで最小限のバイトで格納するため、ユーザーが指定する精度やスケールは実際のディスク使用量に大きく影響しません。圧縮で相殺される部分もあります。一方、`Float64`型を使用すると、精度を一部失う代わりにさらに広い範囲の値を扱えます。
+
+ClickHouseは、符号付き・符号なしの複数のビット幅を持つ整数型と浮動小数点型を提供し、明示的に精度を指定してメモリ消費を抑えることができます。`Decimal`型はSnowflakeの`Number`と同等ですが、最大76桁までサポートするためSnowflakeの倍の精度があります。浮動小数点は`Float32`と`Float64`の2種類があり、精度が必要ない場合は`Float32`で圧縮とメモリを節約できます。
+
+#### 文字列
+
+ClickHouseとSnowflakeでは文字列型の扱い方に違いがあります。SnowflakeのVARCHARはUTF-8でエンコードされたUnicode文字列を保持し、最大長を指定しても実際の使用バイト数だけが格納されます。その他のTEXTやNCharなどの型はVARCHARのエイリアスです。  
+ClickHouseは[生バイト列](https://clickhouse.com/docs/en/sql-reference/data-types/string)として文字列を保持し、エンコーディングはユーザー側が管理します。クエリ時にエンコーディングを扱うための[関数](https://clickhouse.com/docs/en/sql-reference/functions/string-functions#lengthutf8)が用意されています（[こちら](https://utf8everywhere.org/#cookie)の考え方も参照）。実装的には、ClickHouseのString型はSnowflakeのBinary型に近いと言えます。  
+また、[照合順序（コレーション）](https://docs.snowflake.com/en/sql-reference/collation)はSnowflakeと[ClickHouse](https://clickhouse.com/docs/en/sql-reference/statements/select/order-by#collation-support)の双方がサポートしています。
+
+#### セミ構造化
+
+SnowflakeとClickHouseはどちらもセミ構造化データのために豊富な型サポートを提供しています。Snowflakeは[VARIANT](https://docs.snowflake.com/en/sql-reference/data-types-semistructured)を中心に[ARRAYやOBJECT](https://docs.snowflake.com/en/sql-reference/data-types-semistructured)を定義し、ClickHouseは[JSON型](https://clickhouse.com/docs/en/sql-reference/data-types/json)や[Tuple、Nested型](https://clickhouse.com/docs/en/sql-reference/data-types/nested-data-structures/nested)で実現します。SnowflakeのARRAYやOBJECTもVARIANTの制約付きにすぎず、内部型を厳密に指定できないのが特徴です。
+
+一方、ClickHouseはNamed TupleやNested型によって、階層化された構造を明示的に定義できます。サブカラムごとに型を厳密に指定し、そこに圧縮やコーデックを適用できます。Snowflakeでは内部まで型を細かく指定できないため、[最適な圧縮を得るために構造をフラット化する](https://docs.snowflake.com/en/user-guide/semistructured-considerations#storing-semi-structured-data-in-a-variant-column-vs-flattening-the-nested-structure)ことを推奨しています。また、Snowflakeにはセミ構造化データに[サイズ制限](https://docs.snowflake.com/en/user-guide/semistructured-considerations#data-size-limitations)があります。
+
+以下の表は、SnowflakeとClickHouseの型対応をまとめたものです。
+
+<table>
+   <thead>
+      <tr>
+         <th style="text-align:center"><strong>Snowflake</strong></th>
+         <th style="text-align:center"><strong>ClickHouse</strong></th>
+         <th><strong>備考</strong></th>
+      </tr>
+   </thead>
+   <tbody>
+      <tr>
+         <td style="text-align:center"><a href="https://docs.snowflake.com/en/sql-reference/data-types-numeric" target="_blank">NUMBER</a></td>
+         <td style="text-align:center"><a href="https://clickhouse.com/docs/en/sql-reference/data-types/decimal"  target="_blank">Decimal</a></td>
+         <td>ClickHouseではSnowflakeの倍となる76桁までの精度とスケールをサポート</td>
+      </tr>
+      <tr>
+         <td style="text-align:center"><a href="https://docs.snowflake.com/en/sql-reference/data-types-numeric#data-types-for-floating-point-numbers" target="_blank">FLOAT, FLOAT4, FLOAT8</a></td>
+         <td style="text-align:center"><a href="https://clickhouse.com/docs/en/sql-reference/data-types/float" target="_blank">Float32, Float64</a></td>
+         <td>Snowflakeでは浮動小数点は常に64ビット</td>
+      </tr>
+      <tr>
+         <td style="text-align:center"><a href="https://docs.snowflake.com/en/sql-reference/data-types-text#varchar" target="_blank">VARCHAR</a></td>
+         <td style="text-align:center"><a href="https://clickhouse.com/docs/en/sql-reference/data-types/string" target="_blank">String</a></td>
+         <td></td>
+      </tr>
+      <tr>
+         <td style="text-align:center"><a href="https://docs.snowflake.com/en/sql-reference/data-types-text#binary" target="_blank">BINARY</a></td>
+         <td style="text-align:center"><a href="https://clickhouse.com/docs/en/sql-reference/data-types/string" target="_blank">String</a></td>
+         <td></td>
+      </tr>
+      <tr>
+         <td style="text-align:center"><a href="https://docs.snowflake.com/en/sql-reference/data-types-logical" target="_blank">BOOLEAN</a></td>
+         <td style="text-align:center"><a href="https://clickhouse.com/docs/en/sql-reference/data-types/boolean" target="_blank">Bool</a></td>
+         <td></td>
+      </tr>
+      <tr>
+         <td style="text-align:center"><a href="https://docs.snowflake.com/en/sql-reference/data-types-datetime#date" target="_blank">DATE</a></td>
+         <td style="text-align:center"><a href="https://clickhouse.com/docs/en/sql-reference/data-types/date" target="_blank">Date</a>, <a href="https://clickhouse.com/docs/en/sql-reference/data-types/date32" target="_blank">Date32</a></td>
+         <td>SnowflakeのDATEはClickHouseのDateより広い範囲をカバー。ClickHouseのDateは2バイトでコンパクト</td>
+      </tr>
+      <tr>
+         <td style="text-align:center"><a href="https://docs.snowflake.com/en/sql-reference/data-types-datetime#time" target="_blank">TIME(N)</a></td>
+         <td style="text-align:center">直接の対応はないが、<a href="https://clickhouse.com/docs/en/sql-reference/data-types/datetime" target="_blank">DateTime</a>や<a href="https://clickhouse.com/docs/en/sql-reference/data-types/datetime64" target="_blank">DateTime64(N)</a>で表現可能</td>
+         <td>DateTime64は同様に小数点以下の精度を扱える</td>
+      </tr>
+      <tr>
+         <td style="text-align:center"><a href="https://docs.snowflake.com/en/sql-reference/data-types-datetime#timestamp" target="_blank">TIMESTAMP</a> - <a href="https://docs.snowflake.com/en/sql-reference/data-types-datetime#timestamp-ltz-timestamp-ntz-timestamp-tz" target="_blank">TIMESTAMP_LTZ</a>, <a href="https://docs.snowflake.com/en/sql-reference/data-types-datetime#timestamp-ltz-timestamp-ntz-timestamp-tz" target="_blank">TIMESTAMP_NTZ</a>, <a href="https://docs.snowflake.com/en/sql-reference/data-types-datetime#timestamp-ltz-timestamp-ntz-timestamp-tz" target="_blank">TIMESTAMP_TZ</a></td>
+         <td style="text-align:center"><a href="https://clickhouse.com/docs/en/sql-reference/data-types/datetime" target="_blank">DateTime</a> と <a href="https://clickhouse.com/docs/en/sql-reference/data-types/datetime64" target="_blank">DateTime64</a></td>
+         <td>DateTimeおよびDateTime64では列ごとにTZパラメータを設定可能。設定がない場合はサーバーのタイムゾーンが使われる。クライアント側で<code>--use_client_time_zone</code>を使うこともできる</td>
+      </tr>
+      <tr>
+         <td style="text-align:center"><a href="https://docs.snowflake.com/en/sql-reference/data-types-semistructured#variant" target="_blank">VARIANT</a></td>
+         <td style="text-align:center"><a href="https://clickhouse.com/docs/en/integrations/data-formats/json" target="_blank">JSON, Tuple, Nested</a></td>
+         <td>ClickHouseのJSON型はまだ実験的機能。挿入時に型を推論する。Tuple, Nested, Arrayを使って明示的に型を定義する方法もある</td>
+      </tr>
+      <tr>
+         <td style="text-align:center"><a href="https://docs.snowflake.com/en/sql-reference/data-types-semistructured#object" target="_blank">OBJECT</a></td>
+         <td style="text-align:center"><a href="https://clickhouse.com/docs/en/integrations/data-formats/json" target="_blank">Tuple, Map, JSON</a></td>
+         <td>OBJECTとMapはどちらもキーがStringの構造。Snowflakeでは値もVARIANTで、キーごとに型が異なる可能性がある。ClickHouseでは値の型を厳密にする必要があるため、混在型を扱うにはJSON型やTupleで明示的に定義する</td>
+      </tr>
+      <tr>
+         <td style="text-align:center"><a href="https://docs.snowflake.com/en/sql-reference/data-types-semistructured#array" target="_blank">ARRAY</a></td>
+         <td style="text-align:center"><a href="https://clickhouse.com/docs/en/sql-reference/data-types/array" target="_blank">Array</a>, <a href="https://clickhouse.com/docs/en/sql-reference/data-types/nested-data-structures/nested" target="_blank">Nested</a></td>
+         <td>SnowflakeのARRAYはVARIANTのサブタイプ。一方ClickHouseのArrayは要素が強く型付けされる</td>
+      </tr>
+      <tr>
+         <td style="text-align:center"><a href="https://docs.snowflake.com/en/sql-reference/data-types-geospatial#geography-data-type" target="_blank">GEOGRAPHY</a></td>
+         <td style="text-align:center"><a href="https://clickhouse.com/docs/en/sql-reference/data-types/geo" target="_blank">Point, Ring, Polygon, MultiPolygon</a></td>
+         <td>Snowflakeは座標系(WGS 84)を固定的に適用。ClickHouseはクエリ時に指定する</td>
+      </tr>
+      <tr>
+         <td style="text-align:center"><a href="https://docs.snowflake.com/en/sql-reference/data-types-geospatial#geometry-data-type" target="_blank">GEOMETRY</a></td>
+         <td style="text-align:center"><a href="https://clickhouse.com/docs/en/sql-reference/data-types/geo" target="_blank">Point, Ring, Polygon, MultiPolygon</a></td>
+         <td></td>
+      </tr>
+   </tbody>
+</table>
+
+このほかClickHouseには以下のような型もあります。
+
+- [ipv4](https://clickhouse.com/docs/en/sql-reference/data-types/ipv4)と[ipv6](https://clickhouse.com/docs/en/sql-reference/data-types/ipv6)などのIP専用型（Snowflakeより効率的に格納できる場合がある）  
+- [FixedString](https://clickhouse.com/docs/en/sql-reference/data-types/fixedstring) - ハッシュなど固定長のバイト列を扱うのに便利  
+- [LowCardinality](https://clickhouse.com/docs/en/sql-reference/data-types/lowcardinality) - どんな型でも辞書エンコードをかけられる。カーディナリティが10万未満のときに有効  
+- [Enum](https://clickhouse.com/docs/en/sql-reference/data-types/enum) - 小さな整数値で名前付き定数を格納できる  
+- [UUID](https://clickhouse.com/docs/en/sql-reference/data-types/uuid) - UUIDを効率的に格納  
+- [ベクトル](https://clickhouse.com/blog/vector-search-clickhouse-p2)は`Array(Float32)`などで表現可能で、距離関数にも対応
+
+さらに、ClickHouseでは[アグリゲート関数の中間状態](https://clickhouse.com/docs/en/sql-reference/data-types/aggregatefunction)を格納できるというユニークな機能があります。これは実装依存の形式ですが、マテリアライズドビューなどと組み合わせることで、挿入時の集計結果の状態を保持し、後から[マージ関数](https://clickhouse.com/docs/en/sql-reference/aggregate-functions/combinators#-state)を適用して素早く集計結果を取得できます（詳しくは[こちら](https://clickhouse.com/blog/aggregate-functions-combinators-in-clickhouse-for-arrays-maps-and-states#working-with-aggregation-states)）。
+
+[お問い合わせ](https://clickhouse.com/company/contact?loc=snowflake-blog-comparing-and-migrating&utm_source=clickhouse&utm_medium=blog&utm_campaign=snowflake)いただければ、ClickHouse Cloudを用いたリアルタイム分析の詳細をご案内します。あるいは[こちら](https://clickhouse.cloud/signUp?loc=snowflake-blog-comparing-and-migrating-footer&utm_source=clickhouse&utm_medium=blog&utm_campaign=snowflake)からClickHouse Cloudを始めると、300ドル分のクレジットが付与されます。
+
+---
+
+## ClickHouse vs Snowflakeによるリアルタイム分析 - 比較と移行
+Published: 2024-12-30T08:05:32+00:00
+URL: https://clickhouse.com/blog/clickhouse-vs-snowflake-for-real-time-analytics-comparison-migration-guide-jp
+
+---
+title: "ClickHouse vs Snowflakeによるリアルタイム分析 - 比較と移行"
+date: "2024-12-30T08:05:32.029Z"
+author: "ClickHouse"
+category: "Engineering"
+excerpt: "Snowflakeのコストがどんどん膨らんで驚いていませんか？予測できない課金モデルにうんざりしていませんか？ClickHouseとSnowflakeの違い、そして移行方法について解説します"
+---
+
+# ClickHouse vs Snowflakeによるリアルタイム分析 - 比較と移行
+
+title  
+ClickHouse vs Snowflakeによるリアルタイム分析 - 比較と移行
+
+![clickhouse_vs_snowflake_simple.png](https://clickhouse.com/uploads/clickhouse_vs_snowflake_simple_165592b77b.png)
+
+## 要約
+
+この「ClickHouse vs. Snowflake」ブログシリーズは2つのパートで構成されており、それぞれ独立して読むことができます。各パートは以下のとおりです。
+
+- 比較と移行 - 本記事では、ClickHouseとSnowflakeのアーキテクチャ上の類似点と相違点を概説し、ClickHouse Cloudがリアルタイム分析に特に適した機能をレビューします。SnowflakeからClickHouseへのワークロード移行に興味がある方のために、データセットの違いやデータ移行方法についても解説します。  
+- [ベンチマークとコスト分析](/blog/clickhouse-vs-snowflake-for-real-time-analytics-benchmarks-cost-analysis) - シリーズのもう一つの記事では、提案するアプリケーションを支える一連のリアルタイム分析用クエリを両システムでベンチマークし、さまざまな最適化を試した上でコストを直接比較しています。私たちの結果によると、ClickHouse Cloudはパフォーマンスとコストの両面でSnowflakeを上回りました。
+
+  - 本番運用では、ClickHouse CloudはSnowflakeより3〜5倍コスト効率が高い  
+  - クエリ速度はSnowflakeと比較して2倍以上高速  
+  - データ圧縮率はSnowflakeより38%優れている  
+
+<div>
+    <h2 style="margin-bottom: 20px;">目次</h2>
+    <ul>
+        <li><a href="/blog/clickhouse-vs-snowflake-for-real-time-analytics-comparison-migration-guide#introduction">はじめに</a></li>
+        <li><a href="/blog/clickhouse-vs-snowflake-for-real-time-analytics-comparison-migration-guide#clickhouse-vs-snowflake">ClickHouse vs Snowflake</a>
+            <ul style="margin-bottom: 0px">
+                <li style="margin-top: 10px"><a href="/blog/clickhouse-vs-snowflake-for-real-time-analytics-comparison-migration-guide#similarities">類似点</a></li>
+                <li style="margin-top: 10px"><a href="/blog/clickhouse-vs-snowflake-for-real-time-analytics-comparison-migration-guide#differences">相違点</a></li>
+                <li style="margin-top: 10px"><a href="/blog/clickhouse-vs-snowflake-for-real-time-analytics-comparison-migration-guide#real-time-analytics">リアルタイム分析</a></li>
+                <li style="margin-top: 10px"><a href="/blog/clickhouse-vs-snowflake-for-real-time-analytics-comparison-migration-guide#clustering-vs-ordering">クラスタリング vs ORDER BY</a></li>
+                <li style="margin-top: 10px"><a href="/blog/clickhouse-vs-snowflake-for-real-time-analytics-comparison-migration-guide#migrating-data">データ移行</a>
+                    <ul style="margin-bottom: 0px">
+                        <li style="margin-top: 10px"><a href="/blog/clickhouse-vs-snowflake-for-real-time-analytics-comparison-migration-guide#unloading-from-snowflake">Snowflakeからのアンロード</a></li>
+                        <li style="margin-top: 10px"><a href="/blog/clickhouse-vs-snowflake-for-real-time-analytics-comparison-migration-guide#importing-to-clickhouse">ClickHouseへのインポート</a></li>
+                    </ul>
+                </li>
+            </ul>
+        </li>
+        <li><a href="/blog/clickhouse-vs-snowflake-for-real-time-analytics-comparison-migration-guide#conclusion">結論</a></li>
+        <li><a href="/blog/clickhouse-vs-snowflake-for-real-time-analytics-comparison-migration-guide#appendix">付録</a>
+            <ul style="margin-bottom: 0px">
+                <li style="margin-top: 10px"><a href="/blog/clickhouse-vs-snowflake-for-real-time-analytics-comparison-migration-guide#data-types">データ型</a>
+                    <li style="margin-top: 10px"><a href="/blog/clickhouse-vs-snowflake-for-real-time-analytics-comparison-migration-guide#numerics">数値型</a></li>
+                    <li style="margin-top: 10px"><a href="/blog/clickhouse-vs-snowflake-for-real-time-analytics-comparison-migration-guide#strings">文字列</a></li>
+                    <li style="margin-top: 10px"><a href="/blog/clickhouse-vs-snowflake-for-real-time-analytics-comparison-migration-guide#semi-structured">セミ構造化</a></li>
+                </li>
+            </ul>   
+        </li>
+    </ul>
+</div>
+
+## はじめに
+
+Snowflakeはオンプレミスのレガシーなデータウェアハウスのワークロードをクラウドに移行することを主目的としたクラウドデータウェアハウスです。大規模な長時間レポート処理に最適化されています。データをクラウドへ移行するにつれ、データオーナーはこのデータをどのように活用してさらに価値を引き出せるかを検討するようになります。たとえば、社内外で使うリアルタイムアプリケーションに活用するといったケースです。そこで、リアルタイム分析に最適化されたデータベースであるClickHouseの必要性に気づきます。
+
+私たちはこの比較を公正に行うよう努めており、Snowflakeがデータウェアハウス用途で素晴らしい機能をいくつも備えていることも認めています。私たちはClickHouseの専門家ではありますが、Snowflakeに関しては必ずしも専門家ではありません。Snowflakeに詳しいユーザーからのフィードバックや改善の提案を歓迎しています。Snowflakeが他のユースケースにも利用可能であることは承知していますが、本記事の範囲はリアルタイム分析に絞られています。
+
+## ClickHouse vs Snowflake
+
+### 類似点
+
+Snowflakeはクラウドベースのデータウェアハウスプラットフォームで、大量データの格納・処理・分析をスケーラブルかつ効率的に行うためのソリューションを提供します。ClickHouse同様、Snowflakeは既存技術の上に構築されたものではなく、独自のSQLクエリエンジンとカスタムアーキテクチャを採用しています。
+
+Snowflakeのアーキテクチャは、[共有ディスク](https://en.wikipedia.org/wiki/Shared-disk_architecture)（私たちは「共有ストレージ」という用語を好みます）と[共有ナッシング](https://en.wikipedia.org/wiki/Shared-nothing_architecture)アーキテクチャをハイブリッドに組み合わせたものと説明されます。つまり、オブジェクトストア（S3など）を使ってすべての計算ノードからアクセスできる（共有ディスク）一方、クエリに応じて各計算ノードがデータの一部をローカルに保持する（共有ナッシング）仕組みです。これは理論上、[両方の利点を兼ね備えている](https://www.geeksforgeeks.org/difference-between-shared-nothing-architecture-and-shared-disk-architecture/)とされます。共有ディスクアーキテクチャのシンプルさと、共有ナッシングアーキテクチャのスケーラビリティを兼ね備えているわけです。
+
+この設計は、オブジェクトストレージを主要なストレージとして利用することを前提としており、ほぼ無限の同時アクセス性と高い耐久性、スケーラブルなスループットを実現しています。
+
+![snowflake_architecture.png](https://clickhouse.com/uploads/snowflake_architecture_e3c612c8e9.png)
+_クレジット: https://docs.snowflake.com/en/user-guide/intro-key-concepts_
+
+一方、ClickHouseはオープンソースかつクラウドホスティングされた製品で、共有ディスクと共有ナッシングのどちらの構成にもデプロイすることができます。後者はセルフマネージド環境で一般的です。CPUやメモリのスケールアップは容易ですが、共有ナッシング構成ではクラスタ構成変更の際にデータのレプリケーションや管理にまつわる古典的な課題やオーバーヘッドが発生します。
+
+このため、ClickHouse CloudではSnowflakeと同様のコンセプトを持つ共有ストレージアーキテクチャを採用しています。S3やGCSなどのオブジェクトストアに単一コピーのデータを格納し、ほぼ無制限のストレージ容量と強力な冗長性が得られます。すべてのノードはこの単一コピーのデータと各ノード固有のローカルSSDキャッシュにアクセスできます。ノード数やスペックを調整することでCPUやメモリをスケールさせます。Snowflakeと同様、S3のスケーラビリティ特性によって、ノードを追加してもディスクI/Oやネットワークがボトルネックになりにくく、並行アクセスが増えても性能が落ちにくいのが特長です。
+
+![clickhouse_architecture.png](https://clickhouse.com/uploads/clickhouse_architecture_53f247b7b1.png)
+
+### 相違点
+
+基盤となるストレージ形式やクエリエンジン以外にも、これらのアーキテクチャにはいくつか細かな違いがあります。
+
+- Snowflakeの計算リソースは、[ウェアハウス](https://docs.snowflake.com/en/user-guide/warehouses)という概念を通じて提供されます。これは一定サイズのノード数で構成されます。Snowflakeはウェアハウスの具体的な構成を公開していませんが、一般的には[各ノードに8vCPU、16GiB、200GBのローカルストレージ（キャッシュ用）がある](https://select.dev/posts/snowflake-warehouse-sizing)と理解されています。ノード数はTシャツサイズ方式で決まり、たとえばX-Smallは1ノード、Smallは2ノード、Mediumは4ノード、Largeは8ノードといった具合です。これらのウェアハウスはオブジェクトストア上にあるデータをどれでもクエリすることが可能です。クエリ負荷がかかっていないアイドル時はウェアハウスが停止し、クエリが来ると再開します。ストレージコストは常に請求されますが、ウェアハウスの料金はアクティブな時間だけ発生します。  
+- ClickHouse Cloudも同様に、ノードとそのローカルキャッシュストレージを使った仕組みを利用します。ただしTシャツサイズではなく、ユーザーは合計CPUとメモリを指定してサービスをデプロイし、それに応じて（あらかじめ定義した上限内で）クエリ負荷に合わせて自動的に垂直・水平方向にスケールします。ClickHouse Cloudのノードは現在、Snowflakeの1:2とは異なり1:4のCPU対メモリ比率です。現時点では、Snowflakeのウェアハウスほど厳密にデータと疎結合ではありませんが、将来的には疎結合の構成も可能です。ノードはアイドルになると自動的に停止し、クエリが来ると再開します。必要に応じて手動でリサイズもできます。  
+- ClickHouse Cloudのクエリキャッシュは各ノード固有であり、Snowflakeのようにサービスレイヤーで共有していません。それでも、ベンチマークではSnowflakeより高いパフォーマンスを示しました。  
+- SnowflakeとClickHouse Cloudはクエリ同時実行数を増やすために異なるアプローチを取っています。Snowflakeは[マルチクラスタウェアハウス](https://docs.snowflake.com/en/user-guide/warehouses-multicluster#benefits-of-multi-cluster-warehouses)という機能で並列化を図り、クエリ同時実行数を増やします（クエリレイテンシ自体は改善しません）。一方ClickHouseでは、垂直または水平スケールによってメモリやCPUを増やすことでこれを実現します。本記事では同時実行数よりもレイテンシに主眼を置いているため詳細は扱いませんが、Snowflakeが[ウェアハウスごとの同時実行数をデフォルトで8に制限](https://docs.snowflake.com/en/sql-reference/parameters#max-concurrency-level)しているのに対し、ClickHouse Cloudは1ノードあたり1000クエリまで実行可能である点は注目に値します。  
+- Snowflakeはデータセットに対してコンピュートサイズを変更でき、ウェアハウスの再開も速い点があるため、アドホッククエリの体験は良好です。データウェアハウスやデータレイク用途では、これが他システムに対する優位性につながる場合があります。
+
+追加の機能やデータ型における類似点・相違点については後述します。
+
+### リアルタイム分析
+
+ベンチマークの結果から、ClickHouseは以下の観点でリアルタイム分析アプリケーションにおいてSnowflakeを上回っています。
+
+- **クエリレイテンシ**: Snowflakeのクエリは、テーブルにクラスタリングを適用して最適化してもなお高めのレイテンシが生じます。テーブルをSnowflake側でクラスタリングキーに含め、ClickHouse側でPRIMARY KEYに含めた列でフィルタをかけた場合でも、Snowflakeでは同等のパフォーマンスを達成するのにClickHouseの2倍以上の計算リソースが必要でした。Snowflakeの[永続的なクエリキャッシュ](https://docs.snowflake.com/en/user-guide/querying-persisted-results)は一部のレイテンシ問題を緩和しますが、フィルタ条件が多様化すると効果が薄れます。また、キャッシュはデータが変更されると無効化されるため、新しいデータが取り込まれるようなユースケースではキャッシュの恩恵を受けにくい可能性があります。今回のベンチマークではそのケースを想定していませんが、実際の運用ではもっと新しいデータが継続的に追加されるでしょう。  
+  ClickHouseのクエリキャッシュはノード固有であり、[トランザクションレベルの一貫性](https://clickhouse.com/blog/introduction-to-the-clickhouse-query-cache-and-design)を保証しませんが、[リアルタイム分析には向いている](https://clickhouse.com/blog/introduction-to-the-clickhouse-query-cache-and-design)設計です。ユーザーはクエリごとに[クエリキャッシュの使用](https://clickhouse.com/docs/en/operations/settings/settings#use-query-cache)を制御でき、[サイズ](https://clickhouse.com/docs/en/operations/settings/settings#query-cache-max-size-in-bytes)やクエリのキャッシュ対象となる[実行回数・時間](https://clickhouse.com/docs/en/operations/settings/settings#enable-writes-to-query-cache)などの制限も設定できます。  
+- **コスト削減**: Snowflakeではクエリが一定時間走らないとウェアハウスが自動で休止し、課金がストップする仕組みがあります。ただし、このアイドルチェックは[60秒までしか下げられません](https://docs.snowflake.com/en/sql-reference/sql/alter-warehouse)。そして、クエリが届くと数秒以内にウェアハウスが再開します。リソースを使った分だけ課金されるので、アドホッククエリ主体のワークロードにはメリットがあります。  
+  しかし、多くのリアルタイム分析ワークロードでは継続的なデータ取り込みと頻繁なクエリ実行が必要となり、アイドルになるタイミングがほぼありません（例: 外部に公開されているダッシュボードなど）。結果としてウェアハウスは常にアクティブになり、Snowflakeのアイドル停止機能によるコストメリットが活かせません。一方、ClickHouse Cloudは1秒あたりのコスト単価がSnowflakeより低いため、常時稼働が求められるリアルタイム分析ワークロードでは最終的な料金が大幅に下がります。  
+- **機能に関する予測可能な価格設定**: マテリアライズドビューやクラスタリング（ClickHouseのORDER BYに相当）などは、リアルタイム分析で高いパフォーマンスを得るうえで不可欠な機能です。Snowflakeではこれらの機能が追加課金や高い料金プランを必要とし、さらにバックグラウンドでどれだけ処理が走るかは予測しづらいです。一方、ClickHouse Cloudではこれらの機能を使っても基本コストに追加料金はかかりません（挿入時のCPU・メモリ使用量が増える程度）。私たちのベンチマークでは、これらの違いやクエリの高速化、圧縮率の高さが合わさって、トータルコストをSnowflakeより大きく下げられることが分かりました。
+
+さらにClickHouseには、リアルタイム分析機能を幅広くサポートする次のような特長があるという声もユーザーから寄せられています。
+
+- [アグリゲートコンビネータ](https://clickhouse.com/blog/aggregate-functions-combinators-in-clickhouse-for-arrays-maps-and-states)や[配列関数](https://clickhouse.com/docs/en/sql-reference/functions/array-functions/)などの特殊な分析関数が豊富で、複雑なクエリも短い構文で書け、パフォーマンスや可読性を向上できる  
+- Snowflakeほど厳しくないエイリアス制約など、分析向けに設計されたクエリ構文  
+- ENUMや精密指定可能な数値型など、より豊富なデータ型サポート。特にSnowflakeでは数値の精度指定があってもディスク消費には影響せず、ClickHouseでは型を厳密にすることで非圧縮時メモリを削減できる  
+- [ファイルやデータ形式](https://clickhouse.com/blog/data-formats-clickhouse-csv-tsv-parquet-native)の幅広いサポート（Snowflakeの[制限された形式](https://docs.snowflake.com/en/sql-reference/sql/create-file-format)よりも多い）により、分析データのインポート・エクスポートが簡単  
+- S3やMySQL、PostgreSQL、MongoDB、Delta Lakeなど、さまざまなデータレイクやデータストアに対してアドホックでフェデレーテッドクエリを実行可能  
+- 列ごとに[カスタムスキーマやコーデック](https://clickhouse.com/blog/optimize-clickhouse-codecs-compression-schema)を指定することで高い圧縮率を実現可能。ベンチマークでもこの機能を活用して圧縮率を高めました  
+- セカンダリインデックスとプロジェクション機能をサポート。[セカンダリインデックス](https://clickhouse.com/docs/en/optimize/skipping-indexes)には[インバーテッドインデックス](https://clickhouse.com/docs/en/engines/table-engines/mergetree-family/invertedindexes#usage)も含まれ、テキスト検索にも対応。[プロジェクション](https://clickhouse.com/docs/en/engines/table-engines/mergetree-family/mergetree#projections)はクエリごとに最適化を行うための仕組みです。プロジェクションはSnowflakeのマテリアライズドビューと似ていますが、[制限](https://docs.snowflake.com/en/user-guide/views-materialized#limitations-on-creating-materialized-views)が少なく、すべてのアグリゲート関数をサポートしています。プロジェクション自体でコストが増加することはなく（Snowflakeでは機能使用によって1.5倍課金される場合がある）、ストレージ使用量増加分のみが影響します。ベンチマーク分析でこれらの機能が有効であることを示します。  
+- マテリアライズドビューもサポート。Snowflakeのマテリアライズドビュー（ClickHouseのプロジェクションに近い）とは異なり、ClickHouseのマテリアライズドビューはデータの挿入時にのみトリガーが実行されます。  
+  - 結果は別のテーブルに格納可能で、もとのデータを保持する必要はありません。要約したデータだけでいいなら、ストレージ削減と高いパフォーマンスを両立できます。  
+  - JOINやWHEREフィルタをサポートし、またマテリアライズドビューをチェーンさせることもできます。
+
+### クラスタリング vs ORDER BY
+
+ClickHouseもSnowflakeもカラム指向データベースです。行指向に比べてCPUキャッシュやSIMD命令を効率的に活用でき、特定のカラムをソートしておくと圧縮率が上がります。どちらも最適な読み取りパフォーマンスにはソートやインデックスが重要で、実装の違いはあるものの、概念としては類似しています。
+
+ClickHouseでは、スパースインデックスとソートされたデータを中心とした構造を採用しています。テーブル作成時に`ORDER BY`でカラムのタプルを指定し、ディスク上のソート順を決定します。一般的には[頻繁に使われるクエリのフィルタ列を、カーディナリティが低い順に並べる](https://clickhouse.com/docs/en/optimize/sparse-primary-indexes)とよいとされています。また、`ORDER BY`を省略するとデフォルトでPRIMARY KEYが使われますが、`PRIMARY KEY`と`ORDER BY`を両方指定することも可能です（`PRIMARY KEY`は`ORDER BY`の先頭と一致している必要があります）。スパースインデックスはディスク上がソートされていることを前提として動くため、効率的にデータをスキップできます。
+
+Snowflakeは[マイクロパーティション](https://docs.snowflake.com/en/user-guide/tables-clustering-micropartitions)と呼ばれる独自構造を使いつつ、[クラスタリング](https://docs.snowflake.com/en/user-guide/tables-clustering-keys)という機能で似たコンセプトを提供しています。クラスタリングキーに指定されたカラムをもとにマイクロパーティションが割り振られ、同じ値を持つデータが近接配置されるようになります。これはClickHouseの`ORDER BY`と同様、ディスク上のデータが並ぶ順序を制御し、クエリや圧縮において同様の利点を得ることができます。
+
+ただし、実装上はいくつかの違いがあります。
+
+- ClickHouseは、データ挿入時に`ORDER BY`に従って自動的にソートとインデックス構築を行います。これによる追加コストはほぼなく、高速に更新が必要なテーブルでも適切に最適化されます。  
+- Snowflakeはバックグラウンドでの[自動クラスタリング](https://docs.snowflake.com/en/user-guide/tables-auto-reclustering)によってデータを再配置し、クレジットが消費されます。これにかかる料金を事前に予測するのは難しく、多数の行があるテーブルでこそ威力を発揮する一方で[頻繁に更新されるテーブルには推奨していない](https://docs.snowflake.com/en/user-guide/tables-clustering-keys#benefits-of-defining-clustering-keys-for-very-large-tables)です。カラムのカーディナリティによってコストが大きく左右され、Snowflakeでは`to_date`などの式を使ってカーディナリティを下げることを推奨しています。さらに、クラスタリングによる恩恵が得られるまでには時間がかかり、すぐに最適化されるわけではありません。  
+- Snowflakeはマイクロパーティション方式なので、高コストではあるものの[再クラスタリング](https://docs.snowflake.com/en/user-guide/tables-clustering-keys#credit-and-storage-impact-of-reclustering)が可能です。一方ClickHouseでは、テーブルを完全に再書き込みしなければ再ソートできません。
+
+両システムとも、分析処理では一般的に`GROUP BY`やソート、フィルタリングで特定のカラムをよく使用するため、こうしたソート/クラスタリングの設定は重要になります。クラスタリング/ORDER BYに指定するカラムはできるだけ多くのクエリで恩恵を受けられるよう選択し、カラムの並び順にも気を配る必要があります。
+
+カラム選択の推奨事項は両システムでほぼ共通しています。
+
+- 選択的なフィルタで頻繁に使うカラムを採用する。`GROUP BY`に使われるカラムもメモリ効率で役立つ  
+- カーディナリティが十分に高いカラムを使う（コイントスのように50%の行しか絞れないものは避ける）  
+- 複数カラムが必要な場合は、カーディナリティが低いカラムから高いカラムの順に並べる。特にClickHouseでは[この点が非常に重要](https://clickhouse.com/docs/en/guides/improving-query-performance/sparse-primary-indexes/sparse-primary-indexes-cardinality/)ですが、Snowflakeも考え方は同じと思われます。  
+
+_注: 上記の推奨事項は似ていますが、Snowflakeは[高カーディナリティカラムをクラスタリングキーに指定するのを推奨していません](https://docs.snowflake.com/en/user-guide/tables-clustering-keys#strategies-for-selecting-clustering-keys)。これはClickHouseには当てはまりません。タイムスタンプなどカーディナリティが高い列はClickHouseでもORDER BYの候補になります。_
+
+このガイドラインを踏まえた上で、私たちのベンチマークを行いました。
+
+### データ移行
+
+SnowflakeからClickHouseにデータを移行する場合、S3などのオブジェクトストアを中継ストレージとして利用することができます。SnowflakeとClickHouseの`COPY INTO`や`INSERT INTO SELECT`コマンドを組み合わせ、次のような流れで転送します。
+
+![migrating_clickhouse_snowflake.png](https://clickhouse.com/uploads/migrating_clickhouse_snowflake_93a30b945c.png)
+
+#### Snowflakeからのアンロード
+
+Snowflakeからのエクスポートには、図のように[External Stage](https://docs.snowflake.com/en/sql-reference/sql/create-stage)を使います。これは[ClickHouseのS3テーブルエンジン](https://clickhouse.com/docs/en/engines/table-engines/integrations/s3)と似ており、外部にホストされたファイルのまとまりをSQLで参照できるようにします。
+
+SnowflakeとClickHouse間のデータ移行には、型情報を維持し、圧縮効率も良く、ネスト構造を扱えるParquet形式を推奨します。[JSONの`ndjson`形式](https://docs.snowflake.com/en/sql-reference/sql/create-file-format#required-parameters)を使う方法もありますが、こちらは可読性を除けばデータ量が増加する傾向があります。
+
+> 以下の例では65億行のPyPiデータセットをエクスポートしています。このスキーマとデータセットは、[publicなBigQueryテーブル](https://console.cloud.google.com/bigquery?p=bigquery-public-data&d=pypi&page=dataset)から取得したもので、[こちら](https://packaging.python.org/en/latest/guides/analyzing-pypi-package-downloads/)のとおりPiPなどのツールを使ったPythonパッケージのダウンロード履歴を記録しています。詳細は[ベンチマーク記事](/blog/clickhouse-vs-snowflake-for-real-time-analytics-benchmarks-cost-analysis)で紹介していますが、550億行以上の大きなデータセットであり、リアルタイム分析における一般的なデータ構造に近いものとして選びました。
+
+下記の例では、SnowflakeでParquetの[名前付きファイル形式](https://docs.snowflake.com/en/sql-reference/sql/create-file-format)を作成し、次にエクスポート先のS3を表すExternal Stageを宣言してから、`COPY INTO`コマンドでエクスポートします。このステージはS3バケットへの抽象化レイヤーで、権限付与も行いやすくなります。
+
+SnowflakeではS3への書き込み権限を付与する方法が[複数](https://docs.snowflake.com/en/user-guide/data-load-s3-config)あります。サンプルを簡単にするため今回はキーとシークレットを直接使っていますが、本番環境では[Snowflake Storage Integration](https://docs.snowflake.com/en/user-guide/data-load-s3-config-aws-iam-user)を使うことを推奨します。
+
+```sql
+CREATE FILE FORMAT my_parquet_format TYPE = parquet;
+
+CREATE OR REPLACE STAGE my_ext_unload_stage 
+URL='s3://datasets-documentation/pypi/sample/'
+CREDENTIALS=(AWS_KEY_ID='<key>' AWS_SECRET_KEY='<secret>')
+FILE_FORMAT = my_parquet_format;
+
+-- 全ファイルに「pypi」プレフィックスを適用し、最大ファイルサイズを150MBに指定
+COPY INTO @my_ext_unload_stage/pypi from pypi max_file_size=157286400 header=true;
+```
+
+Snowflake側のスキーマは以下です。
+
+```sql
+CREATE TABLE PYPI (
+   timestamp TIMESTAMP,
+   country_code varchar,
+   url varchar,
+   project varchar,
+   file OBJECT,
+   installer OBJECT,
+   python varchar,
+   implementation OBJECT,
+   distro VARIANT,
+   system OBJECT,
+   cpu varchar,
+   openssl_version varchar,
+   setuptools_version varchar,
+   rustc_version varchar,
+   tls_protocol varchar,
+   tls_cipher varchar
+) DATA_RETENTION_TIME_IN_DAYS = 0;
+```
+
+Parquetにエクスポートするとサイズは約5.5TiB、1ファイル150MB上限で分割されます。AWS us-east-1にある2X-LARGEサイズのウェアハウスで処理時間は30分程度です。`header=true`を指定しているのはカラム名を出力するためです。VARIANTやOBJECTカラムは[デフォルトでJSON文字列](https://docs.snowflake.com/en/sql-reference/sql/copy-into-location#usage-notes)として出力されるので、ClickHouseにインサートする際にキャストが必要になります。
+
+#### ClickHouseへのインポート
+
+一度オブジェクトストアに書き出してしまえば、ClickHouseの[s3テーブル関数](https://clickhouse.com/docs/en/sql-reference/table-functions/s3)などを使ってテーブルへ取り込めます。以下の例のように実行します。
+
+以下のようなターゲットスキーマを想定します。
+
+```sql
+CREATE TABLE default.pypi
+(
+	`timestamp` DateTime64(6),
+	`date` Date MATERIALIZED timestamp,
+	`country_code` LowCardinality(String),
+	`url` String,
+	`project` String,
+	`file` Tuple(filename String, project String, version String, type Enum8('bdist_wheel' = 0, 'sdist' = 1, 'bdist_egg' = 2, 'bdist_wininst' = 3, 'bdist_dumb' = 4, 'bdist_msi' = 5, 'bdist_rpm' = 6, 'bdist_dmg' = 7)),
+	`installer` Tuple(name LowCardinality(String), version LowCardinality(String)),
+	`python` LowCardinality(String),
+	`implementation` Tuple(name LowCardinality(String), version LowCardinality(String)),
+	`distro` Tuple(name LowCardinality(String), version LowCardinality(String), id LowCardinality(String), libc Tuple(lib Enum8('' = 0, 'glibc' = 1, 'libc' = 2), version LowCardinality(String))),
+	`system` Tuple(name LowCardinality(String), release String),
+	`cpu` LowCardinality(String),
+	`openssl_version` LowCardinality(String),
+	`setuptools_version` LowCardinality(String),
+	`rustc_version` LowCardinality(String),
+	`tls_protocol` Enum8('TLSv1.2' = 0, 'TLSv1.3' = 1),
+	`tls_cipher` Enum8('ECDHE-RSA-AES128-GCM-SHA256' = 0, 'ECDHE-RSA-CHACHA20-POLY1305' = 1, 'ECDHE-RSA-AES128-SHA256' = 2, 'TLS_AES_256_GCM_SHA384' = 3, 'AES128-GCM-SHA256' = 4, 'TLS_AES_128_GCM_SHA256' = 5, 'ECDHE-RSA-AES256-GCM-SHA384' = 6, 'AES128-SHA' = 7, 'ECDHE-RSA-AES128-SHA' = 8)
+)
+ENGINE = MergeTree
+ORDER BY (date, timestamp)
+```
+
+Snowflake側でOBJECTやVARIANTだった構造化データはJSON文字列として出力されるため、[JSONExtract関数](https://clickhouse.com/docs/en/sql-reference/functions/json-functions#jsonextractjson-indices_or_keys-return_type)を使ってインサート時にタプルへ変換します。
+
+```sql
+INSERT INTO pypi
+SELECT
+	TIMESTAMP,
+	COUNTRY_CODE,
+	URL,
+	PROJECT,
+	JSONExtract(ifNull(FILE, '{}'), 'Tuple(filename String, project String, version String, type Enum8(\'bdist_wheel\' = 0, \'sdist\' = 1, \'bdist_egg\' = 2, \'bdist_wininst\' = 3, \'bdist_dumb\' = 4, \'bdist_msi\' = 5, \'bdist_rpm\' = 6, \'bdist_dmg\' = 7))') AS file,
+	JSONExtract(ifNull(INSTALLER, '{}'), 'Tuple(name LowCardinality(String), version LowCardinality(String))') AS installer,
+	PYTHON,
+	JSONExtract(ifNull(IMPLEMENTATION, '{}'), 'Tuple(name LowCardinality(String), version LowCardinality(String))') AS implementation,
+	JSONExtract(ifNull(DISTRO, '{}'), 'Tuple(name LowCardinality(String), version LowCardinality(String), id LowCardinality(String), libc Tuple(lib Enum8(\'\' = 0, \'glibc\' = 1, \'libc\' = 2), version LowCardinality(String)))') AS distro,
+	JSONExtract(ifNull(SYSTEM, '{}'), 'Tuple(name LowCardinality(String), release String)') AS system,
+	CPU,
+	OPENSSL_VERSION,
+	SETUPTOOLS_VERSION,
+	RUSTC_VERSION,
+	TLS_PROTOCOL,
+	TLS_CIPHER
+FROM s3('https://datasets-documentation.s3.eu-west-3.amazonaws.com/pypi/2023/pypi*.parquet')
+SETTINGS input_format_null_as_default = 1, input_format_parquet_case_insensitive_column_matching = 1
+```
+
+ここでは、[`input_format_null_as_default=1`](https://clickhouse.com/docs/en/operations/settings/formats#input_format_null_as_default)と[`input_format_parquet_case_insensitive_column_matching=1`](https://clickhouse.com/docs/en/operations/settings/formats#input_format_parquet_case_insensitive_column_matching)を有効にし、null値をデフォルトに変換し、列名の大小文字を区別しないようにしています。
+
+[Azure](https://docs.snowflake.com/en/user-guide/data-unload-azure)や[Google Cloud](https://docs.snowflake.com/en/user-guide/data-unload-gcs)を使う場合も同様に処理できます。ClickHouseにはそれぞれの[専用テーブル関数](https://clickhouse.com/docs/en/sql-reference/table-functions/azureBlobStorage)などが用意されています。
+
+## 結論
+
+本記事では、リアルタイム分析をユースケースとした場合にSnowflakeとClickHouseがどのように比較されるかを、両システムの類似点や相違点とともに見てきました。リアルタイム分析で有用なClickHouseの機能を挙げ、Snowflakeからワークロードを移行する際の考慮点も解説しました。[次の記事](/blog/clickhouse-vs-snowflake-for-real-time-analytics-benchmarks-cost-analysis)では、サンプルのリアルタイム分析アプリケーションを構築し、圧縮や挿入パフォーマンスの違い、代表的なクエリのベンチマークを行います。その結果をコスト分析とともに紹介し、ClickHouse Cloud導入時のコスト削減可能性を示します。
+
+---
+
+
+## 付録
+
+SnowflakeからClickHouseへリアルタイム分析ワークロードを移行する際に知っておくべき主要な概念を、以下にまとめます。データ型の違いやクラスタリングとORDER BYの相違を補足的に解説します。
+
+### データ型
+
+#### 数値型
+
+SnowflakeとClickHouseを比較すると、SnowflakeよりClickHouseのほうが数値型の精度指定が細かいことに気づくでしょう。Snowflakeは数値型に`Number`を使っており、精度（桁数）とスケール（小数点以下の桁数）を指定します（最大38桁）。整数は`Number`の精度とスケールを0にしたものと同じです。Snowflakeではマイクロパーティションレベルで最小限のバイトで格納するため、ユーザーが指定する精度やスケールは実際のディスク使用量に大きく影響しません。圧縮で相殺される部分もあります。一方、`Float64`型を使用すると、精度を一部失う代わりにさらに広い範囲の値を扱えます。
+
+ClickHouseは、符号付き・符号なしの複数のビット幅を持つ整数型と浮動小数点型を提供し、明示的に精度を指定してメモリ消費を抑えることができます。`Decimal`型はSnowflakeの`Number`と同等ですが、最大76桁までサポートするためSnowflakeの倍の精度があります。浮動小数点は`Float32`と`Float64`の2種類があり、精度が必要ない場合は`Float32`で圧縮とメモリを節約できます。
+
+#### 文字列
+
+ClickHouseとSnowflakeでは文字列型の扱い方に違いがあります。SnowflakeのVARCHARはUTF-8でエンコードされたUnicode文字列を保持し、最大長を指定しても実際の使用バイト数だけが格納されます。その他のTEXTやNCharなどの型はVARCHARのエイリアスです。  
+ClickHouseは[生バイト列](https://clickhouse.com/docs/en/sql-reference/data-types/string)として文字列を保持し、エンコーディングはユーザー側が管理します。クエリ時にエンコーディングを扱うための[関数](https://clickhouse.com/docs/en/sql-reference/functions/string-functions#lengthutf8)が用意されています（[こちら](https://utf8everywhere.org/#cookie)の考え方も参照）。実装的には、ClickHouseのString型はSnowflakeのBinary型に近いと言えます。  
+また、[照合順序（コレーション）](https://docs.snowflake.com/en/sql-reference/collation)はSnowflakeと[ClickHouse](https://clickhouse.com/docs/en/sql-reference/statements/select/order-by#collation-support)の双方がサポートしています。
+
+#### セミ構造化
+
+SnowflakeとClickHouseはどちらもセミ構造化データのために豊富な型サポートを提供しています。Snowflakeは[VARIANT](https://docs.snowflake.com/en/sql-reference/data-types-semistructured)を中心に[ARRAYやOBJECT](https://docs.snowflake.com/en/sql-reference/data-types-semistructured)を定義し、ClickHouseは[JSON型](https://clickhouse.com/docs/en/sql-reference/data-types/json)や[Tuple、Nested型](https://clickhouse.com/docs/en/sql-reference/data-types/nested-data-structures/nested)で実現します。SnowflakeのARRAYやOBJECTもVARIANTの制約付きにすぎず、内部型を厳密に指定できないのが特徴です。
+
+一方、ClickHouseはNamed TupleやNested型によって、階層化された構造を明示的に定義できます。サブカラムごとに型を厳密に指定し、そこに圧縮やコーデックを適用できます。Snowflakeでは内部まで型を細かく指定できないため、[最適な圧縮を得るために構造をフラット化する](https://docs.snowflake.com/en/user-guide/semistructured-considerations#storing-semi-structured-data-in-a-variant-column-vs-flattening-the-nested-structure)ことを推奨しています。また、Snowflakeにはセミ構造化データに[サイズ制限](https://docs.snowflake.com/en/user-guide/semistructured-considerations#data-size-limitations)があります。
+
+以下の表は、SnowflakeとClickHouseの型対応をまとめたものです。
+
+<table>
+   <thead>
+      <tr>
+         <th style="text-align:center"><strong>Snowflake</strong></th>
+         <th style="text-align:center"><strong>ClickHouse</strong></th>
+         <th><strong>備考</strong></th>
+      </tr>
+   </thead>
+   <tbody>
+      <tr>
+         <td style="text-align:center"><a href="https://docs.snowflake.com/en/sql-reference/data-types-numeric" target="_blank">NUMBER</a></td>
+         <td style="text-align:center"><a href="https://clickhouse.com/docs/en/sql-reference/data-types/decimal"  target="_blank">Decimal</a></td>
+         <td>ClickHouseではSnowflakeの倍となる76桁までの精度とスケールをサポート</td>
+      </tr>
+      <tr>
+         <td style="text-align:center"><a href="https://docs.snowflake.com/en/sql-reference/data-types-numeric#data-types-for-floating-point-numbers" target="_blank">FLOAT, FLOAT4, FLOAT8</a></td>
+         <td style="text-align:center"><a href="https://clickhouse.com/docs/en/sql-reference/data-types/float" target="_blank">Float32, Float64</a></td>
+         <td>Snowflakeでは浮動小数点は常に64ビット</td>
+      </tr>
+      <tr>
+         <td style="text-align:center"><a href="https://docs.snowflake.com/en/sql-reference/data-types-text#varchar" target="_blank">VARCHAR</a></td>
+         <td style="text-align:center"><a href="https://clickhouse.com/docs/en/sql-reference/data-types/string" target="_blank">String</a></td>
+         <td></td>
+      </tr>
+      <tr>
+         <td style="text-align:center"><a href="https://docs.snowflake.com/en/sql-reference/data-types-text#binary" target="_blank">BINARY</a></td>
+         <td style="text-align:center"><a href="https://clickhouse.com/docs/en/sql-reference/data-types/string" target="_blank">String</a></td>
+         <td></td>
+      </tr>
+      <tr>
+         <td style="text-align:center"><a href="https://docs.snowflake.com/en/sql-reference/data-types-logical" target="_blank">BOOLEAN</a></td>
+         <td style="text-align:center"><a href="https://clickhouse.com/docs/en/sql-reference/data-types/boolean" target="_blank">Bool</a></td>
+         <td></td>
+      </tr>
+      <tr>
+         <td style="text-align:center"><a href="https://docs.snowflake.com/en/sql-reference/data-types-datetime#date" target="_blank">DATE</a></td>
+         <td style="text-align:center"><a href="https://clickhouse.com/docs/en/sql-reference/data-types/date" target="_blank">Date</a>, <a href="https://clickhouse.com/docs/en/sql-reference/data-types/date32" target="_blank">Date32</a></td>
+         <td>SnowflakeのDATEはClickHouseのDateより広い範囲をカバー。ClickHouseのDateは2バイトでコンパクト</td>
+      </tr>
+      <tr>
+         <td style="text-align:center"><a href="https://docs.snowflake.com/en/sql-reference/data-types-datetime#time" target="_blank">TIME(N)</a></td>
+         <td style="text-align:center">直接の対応はないが、<a href="https://clickhouse.com/docs/en/sql-reference/data-types/datetime" target="_blank">DateTime</a>や<a href="https://clickhouse.com/docs/en/sql-reference/data-types/datetime64" target="_blank">DateTime64(N)</a>で表現可能</td>
+         <td>DateTime64は同様に小数点以下の精度を扱える</td>
+      </tr>
+      <tr>
+         <td style="text-align:center"><a href="https://docs.snowflake.com/en/sql-reference/data-types-datetime#timestamp" target="_blank">TIMESTAMP</a> - <a href="https://docs.snowflake.com/en/sql-reference/data-types-datetime#timestamp-ltz-timestamp-ntz-timestamp-tz" target="_blank">TIMESTAMP_LTZ</a>, <a href="https://docs.snowflake.com/en/sql-reference/data-types-datetime#timestamp-ltz-timestamp-ntz-timestamp-tz" target="_blank">TIMESTAMP_NTZ</a>, <a href="https://docs.snowflake.com/en/sql-reference/data-types-datetime#timestamp-ltz-timestamp-ntz-timestamp-tz" target="_blank">TIMESTAMP_TZ</a></td>
+         <td style="text-align:center"><a href="https://clickhouse.com/docs/en/sql-reference/data-types/datetime" target="_blank">DateTime</a> と <a href="https://clickhouse.com/docs/en/sql-reference/data-types/datetime64" target="_blank">DateTime64</a></td>
+         <td>DateTimeおよびDateTime64では列ごとにTZパラメータを設定可能。設定がない場合はサーバーのタイムゾーンが使われる。クライアント側で<code>--use_client_time_zone</code>を使うこともできる</td>
+      </tr>
+      <tr>
+         <td style="text-align:center"><a href="https://docs.snowflake.com/en/sql-reference/data-types-semistructured#variant" target="_blank">VARIANT</a></td>
+         <td style="text-align:center"><a href="https://clickhouse.com/docs/en/integrations/data-formats/json" target="_blank">JSON, Tuple, Nested</a></td>
+         <td>ClickHouseのJSON型はまだ実験的機能。挿入時に型を推論する。Tuple, Nested, Arrayを使って明示的に型を定義する方法もある</td>
+      </tr>
+      <tr>
+         <td style="text-align:center"><a href="https://docs.snowflake.com/en/sql-reference/data-types-semistructured#object" target="_blank">OBJECT</a></td>
+         <td style="text-align:center"><a href="https://clickhouse.com/docs/en/integrations/data-formats/json" target="_blank">Tuple, Map, JSON</a></td>
+         <td>OBJECTとMapはどちらもキーがStringの構造。Snowflakeでは値もVARIANTで、キーごとに型が異なる可能性がある。ClickHouseでは値の型を厳密にする必要があるため、混在型を扱うにはJSON型やTupleで明示的に定義する</td>
+      </tr>
+      <tr>
+         <td style="text-align:center"><a href="https://docs.snowflake.com/en/sql-reference/data-types-semistructured#array" target="_blank">ARRAY</a></td>
+         <td style="text-align:center"><a href="https://clickhouse.com/docs/en/sql-reference/data-types/array" target="_blank">Array</a>, <a href="https://clickhouse.com/docs/en/sql-reference/data-types/nested-data-structures/nested" target="_blank">Nested</a></td>
+         <td>SnowflakeのARRAYはVARIANTのサブタイプ。一方ClickHouseのArrayは要素が強く型付けされる</td>
+      </tr>
+      <tr>
+         <td style="text-align:center"><a href="https://docs.snowflake.com/en/sql-reference/data-types-geospatial#geography-data-type" target="_blank">GEOGRAPHY</a></td>
+         <td style="text-align:center"><a href="https://clickhouse.com/docs/en/sql-reference/data-types/geo" target="_blank">Point, Ring, Polygon, MultiPolygon</a></td>
+         <td>Snowflakeは座標系(WGS 84)を固定的に適用。ClickHouseはクエリ時に指定する</td>
+      </tr>
+      <tr>
+         <td style="text-align:center"><a href="https://docs.snowflake.com/en/sql-reference/data-types-geospatial#geometry-data-type" target="_blank">GEOMETRY</a></td>
+         <td style="text-align:center"><a href="https://clickhouse.com/docs/en/sql-reference/data-types/geo" target="_blank">Point, Ring, Polygon, MultiPolygon</a></td>
+         <td></td>
+      </tr>
+   </tbody>
+</table>
+
+このほかClickHouseには以下のような型もあります。
+
+- [ipv4](https://clickhouse.com/docs/en/sql-reference/data-types/ipv4)と[ipv6](https://clickhouse.com/docs/en/sql-reference/data-types/ipv6)などのIP専用型（Snowflakeより効率的に格納できる場合がある）  
+- [FixedString](https://clickhouse.com/docs/en/sql-reference/data-types/fixedstring) - ハッシュなど固定長のバイト列を扱うのに便利  
+- [LowCardinality](https://clickhouse.com/docs/en/sql-reference/data-types/lowcardinality) - どんな型でも辞書エンコードをかけられる。カーディナリティが10万未満のときに有効  
+- [Enum](https://clickhouse.com/docs/en/sql-reference/data-types/enum) - 小さな整数値で名前付き定数を格納できる  
+- [UUID](https://clickhouse.com/docs/en/sql-reference/data-types/uuid) - UUIDを効率的に格納  
+- [ベクトル](https://clickhouse.com/blog/vector-search-clickhouse-p2)は`Array(Float32)`などで表現可能で、距離関数にも対応
+
+さらに、ClickHouseでは[アグリゲート関数の中間状態](https://clickhouse.com/docs/en/sql-reference/data-types/aggregatefunction)を格納できるというユニークな機能があります。これは実装依存の形式ですが、マテリアライズドビューなどと組み合わせることで、挿入時の集計結果の状態を保持し、後から[マージ関数](https://clickhouse.com/docs/en/sql-reference/aggregate-functions/combinators#-state)を適用して素早く集計結果を取得できます（詳しくは[こちら](https://clickhouse.com/blog/aggregate-functions-combinators-in-clickhouse-for-arrays-maps-and-states#working-with-aggregation-states)）。
+
+[お問い合わせ](https://clickhouse.com/company/contact?loc=snowflake-blog-comparing-and-migrating&utm_source=clickhouse&utm_medium=blog&utm_campaign=snowflake)いただければ、ClickHouse Cloudを用いたリアルタイム分析の詳細をご案内します。あるいは[こちら](https://clickhouse.cloud/signUp?loc=snowflake-blog-comparing-and-migrating-footer&utm_source=clickhouse&utm_medium=blog&utm_campaign=snowflake)からClickHouse Cloudを始めると、300ドル分のクレジットが付与されます。
+
+---
+
+## Prometheusを活用したClickHouse Cloudの強化されたモニタリング
+Published: 2024-12-30T08:05:00+00:00
+URL: https://clickhouse.com/blog/clickhouse-cloud-now-supports-prometheus-monitoring-jp
+
+---
+title: "Prometheusを活用したClickHouse Cloudの強化されたモニタリング"
+date: "2024-12-30T08:05:00.462Z"
+author: "ClickHouse"
+category: "Product"
+excerpt: "本日、ClickHouse CloudがPrometheusとの連携による強化されたモニタリングをサポートしたことをお知らせします。"
+---
+
+# Prometheusを活用したClickHouse Cloudの強化されたモニタリング
+
+本日、ClickHouse CloudがPrometheusによる拡張モニタリングをサポートしたことをお知らせできるのを楽しみにしています。この機能は一般利用可能で、クラウドインスタンスのモニタリングをこれまでになく簡単にします。ユーザーが普段使っているツールをそのまま利用できるため、オブザーバビリティにこだわるエンジニアにとって大きなメリットがあります。  
+
+多くの組織にとって、クラウドサービスを導入するときに必須となる要件のひとつが、ClickHouse自体とは独立して、その稼働状況やパフォーマンスを監視できることです。  
+
+この機能を試したい方は[こちらのドキュメント](https://clickhouse.com/docs/en/integrations/prometheus)をご覧ください。DatadogやGrafanaとどう連携するかを学習したい方のために、ドキュメントにはシンプルな例も用意しています。  
+
+Prometheus APIを既存のアプローチに比べてどう活用できるかや、効率的に実装する上での課題に興味があれば、ぜひこのまま読み進めてください。  
+
+## 背景と課題  
+
+依存するクラウドサービスを集中して監視できることは、組織にとって重要です。これまで、ClickHouse Cloudを監視したいユーザーは、必要なメトリクスをsystemテーブルに対してSQLで問い合わせて取得する方法に頼っていました。SQLに慣れていたとしても、目的に合ったクエリを組み立てるために必要なsystemテーブルを探すのは時間がかかりがちです。さらに、監視エージェント用に適切なアクセス制御や権限の設定を行う手間も発生します。  
+
+[Datadogなどのエージェント](https://docs.datadoghq.com/integrations/clickhouse/?_gl=1*iimrav*_gcl_au*MTIyOTE0NTEyOC4xNzE0NTU5MTU0*_ga*MzEzNTA0MTk0LjE3MTQ1NTkxNTU.*_ga_KN80RDFSQK*MTcxNDU2MTYxNS4yLjAuMTcxNDU2MTYxNS4wLjAuMTkyNjc5Nzc1NQ..*_fplc*NUNqVVFSN2hEQU02YUEyJTJGS2VDV0l0MzFYQmZ5emNJem5BdWx2OHlKT2NvYiUyQnVnbiUyRno3S0lpWTkwU1dzdUNtWW5pOWtNWHlKbzJxZjNRVGh5R0JxUlZZMjBGTHV3JTJGWG93cmF2SlpycnR1JTJGeEE4WUY3V0pWY1M3RnhJTkl2dyUzRCUzRA..&_ga=2.15437109.220939076.1714559156-313504194.1714559155&tab=host)を利用してClickHouse Cloudを監視する方法もありますが、Datadogの例ではクラウド側のプロキシレイヤーの都合上、呼び出すたびに異なるインスタンスへリクエストが飛ぶ可能性があり、結果的に取得したメトリクスの解釈が難しくなる課題がありました。clusterAllReplicas関数を使い、細かな設定を行うことで対策は可能でしたが、SELECTクエリによる定期的なポーリングが続くため、インスタンスがアイドル状態になるのを妨げる問題もありました。  
+
+ClickHouse Cloudのインスタンスは、利用していないときに自動的にアイドル化してコンピュートコストを抑える仕組みを備えています。そのため、監視のために継続的にクエリを投げ続けることが、ユーザーにとって好ましくないケースが多かったのです。  
+
+さらに、Prometheusフォーマットはこの手のメトリクスデータにおいて事実上の標準になりつつあり、GrafanaやDatadogなどの人気ツールも標準で対応しています。  
+
+よって、インスタンスが未使用のときに邪魔をせず、アイドル状態を妨げることなくPrometheus形式のメトリクスを提供できるシンプルなエンドポイントが最適解だと考えました。  
+
+## シンプルでエレガントな設計  
+
+今回のエンドポイントに求められる要件は以下のとおりです:  
+
+* **Prometheus形式のメトリクスを返す** - 既存の広く使われている監視エージェントに対応する  
+* **アイドル状態のインスタンスを起こさない** - アイドル状態なら、そのことを示す簡単な情報だけ返す  
+* **インスタンスのアイドル化を妨げない** - このエンドポイントへのリクエストは、インスタンスのアイドル化判定に影響を与えない  
+
+ClickHouse本体側の[設定機能](https://clickhouse.com/docs/en/operations/server-configuration-parameters/settings#prometheus)を活用して各インスタンスにPrometheusエンドポイントを個別に設定することも考えられましたが、アイドル状態のインスタンスをどう扱うかという問題があり、さらにインスタンスごとにユーザーを作り権限を設定してエージェント側へ配布するのは、セキュリティ上のリスクや運用面の煩雑さを招きます。  
+
+そこで、このエンドポイントを[既存のCloud API](https://clickhouse.com/docs/en/cloud/manage/api/api-overview)として実装することにしました。このAPIはすでにインスタンスの作成や設定を扱っており、組織単位のアクセス制御も備えています。数クリックでAPIキーを作成・取り消しできるため、セキュリティの攻撃面を最小限にしつつ、ClickHouseやSQLの知識が不要なシンプルなエンドポイントを提供できます。  
+
+その結果、組織IDとインスタンスIDを指定するだけで、Prometheus形式のメトリクスを安全にリクエストできるCloud APIエンドポイントを用意しました。  
+
+![prometheus_01.png](https://clickhouse.com/uploads/prometheus_01_a5a8008aad.png)  
+
+> APIキーは組織単位で作成され、「Developer」または「Admin」を選択できます。Prometheusエンドポイントには「Developer」権限で十分なので、不正アクセスを受けても新しいサービスの作成や破壊などのリスクを最小化できます。  
+
+## 実装  
+
+Cloud API経由でこのエンドポイントを実装することで、仕組みをシンプルに保ちました。Cloud APIはすでに各インスタンスの状態を把握しており、アイドル状態のインスタンスにはリクエストを送らないようにできるからです。インスタンスが稼働中であれば、権限を絞った専用ユーザーでリクエストを発行します。このユーザーからのリクエストは、インスタンスのアイドル化判定の対象外となります。  
+
+### メトリクス収集の効率化  
+
+あとは、systemテーブルで必要なメトリクスを集約するクエリをどう書くかという問題が残りました。ユーザーが必要とするメトリクスは複数のsystemテーブルに散在しており、ひとつの大きなクエリで取得するとそれなりに負荷がかかります。そこで、このクエリを毎回実行しないよう、最近追加された[Refreshable Materialized Views](https://clickhouse.com/blog/clickhouse-release-23-12#refreshable-materialized-views)の仕組みを活用しています。  
+
+このビューは現在1分ごとに定期的にクエリを実行し、その結果を`system.custom_metrics`テーブルに書き込みます。このターゲットテーブルはMemoryエンジンを使っており、Cloud APIから高速に参照可能です。以下のテーブル定義とビューの例を示します（興味がある方向けです）。  
+
+```sql
+CREATE TABLE system.custom_metrics
+(
+	`name` String,
+	`value` Float64,
+	`help` String,
+	`labels` Map(String, String),
+	`type` String
+)
+ENGINE = Memory
+```
+
+```sql
+CREATE MATERIALIZED VIEW system.custom_metrics_refresher
+REFRESH EVERY 1 MINUTE TO system.custom_metrics
+(
+	`name` String,
+	`value` Nullable(Float64),
+	`help` String,
+	`labels` Map(String, String),
+	`type` String
+)
+AS SELECT
+	concat('ClickHouse_', event) AS name,
+	toFloat64(value) AS value,
+	description AS help,
+	map('hostname', hostName(), 'table', 'system.events') AS labels,
+	'counter' AS type
+FROM system.events
+UNION ALL
+//他のメトリクス
+```
+
+このように、マテリアライズドビューのリフレッシュ間隔によってクエリを実行する頻度を制御し、1分に1回以上は走らないようにしています。誤った設定のエージェントなどから過剰なリクエストを送られても、サービスに負荷がかかるようなことを防げます。  
+
+## エンドポイントの利用方法  
+
+まずはClickHouse CloudでAPIキーを作成します。その手順は次のとおりです。  
+
+![prometheus_02.gif](https://clickhouse.com/uploads/prometheus_02_161cd4ae79.gif)  
+
+エンドポイントが利用できる状態になったら、組織IDとインスタンスIDを取得します。  
+
+![prometheus_03.gif](https://clickhouse.com/uploads/prometheus_03_1630d99c09.gif)  
+
+あとは、以下のようにHTTPリクエストを送るだけです:  
+
+<pre><code class="hljs language-bash" style="font-size: 12px;"><span class="hljs-built_in">export</span> KEY_SECRET=&lt;key_secret&gt;
+<span class="hljs-built_in">export</span> KEY_ID=&lt;key_id&gt;
+<span class="hljs-built_in">export</span> ORG_ID=&lt;org <span class="hljs-built_in">id</span>&gt;
+<span class="hljs-built_in">export</span> INSTANCE_ID=&lt;instance <span class="hljs-built_in">id</span>&gt;
+curl --silent --user <span class="hljs-variable">$KEY_ID</span>:<span class="hljs-variable">$KEY_SECRET</span> https://api.control-plane.clickhouse-staging.com/v1/organizations/<span class="hljs-variable">$ORG_ID</span>/services/<span class="hljs-variable">$INSTANCE_ID</span>/prometheus 
+
+…
+<span class="hljs-comment"># HELP ClickHouse_ServiceInfo サービスに関する情報（クラスタのステータスやClickHouseのバージョンなど）</span>
+<span class="hljs-comment"># TYPE ClickHouse_ServiceInfo untyped</span>
+ClickHouse_ServiceInfo{clickhouse_org=<span class="hljs-string">"c2ba4799-a76e-456f-a71a-b021b1fafe60"</span>,clickhouse_service=<span class="hljs-string">"12f4a114-9746-4a75-9ce5-161ec3a73c4c"</span>,clickhouse_service_name=<span class="hljs-string">"test service"</span>,clickhouse_cluster_status=<span class="hljs-string">"running"</span>,clickhouse_version=<span class="hljs-string">"24.5"</span>,scrape=<span class="hljs-string">"full"</span>} 1
+
+<span class="hljs-comment"># HELP ClickHouseProfileEvents_Query クエリとして解釈され、実行される可能性があるクエリの数</span>
+<span class="hljs-comment"># TYPE ClickHouseProfileEvents_Query counter</span>
+ClickHouseProfileEvents_Query{clickhouse_org=<span class="hljs-string">"c2ba4799-a76e-456f-a71a-b021b1fafe60"</span>,clickhouse_service=<span class="hljs-string">"12f4a114-9746-4a75-9ce5-161ec3a73c4c"</span>,clickhouse_service_name=<span class="hljs-string">"test service"</span>,hostname=<span class="hljs-string">"c-cream-ma-20-server-3vd2ehh-0"</span>,instance=<span class="hljs-string">"c-cream-ma-20-server-3vd2ehh-0"</span>,table=<span class="hljs-string">"system.events"</span>} 6
+
+<span class="hljs-comment"># HELP ClickHouseProfileEvents_QueriesWithSubqueries サブクエリを含むすべてのクエリの数</span>
+<span class="hljs-comment"># TYPE ClickHouseProfileEvents_QueriesWithSubqueries counter</span>
+ClickHouseProfileEvents_QueriesWithSubqueries{clickhouse_org=<span class="hljs-string">"c2ba4799-a76e-456f-a71a-b021b1fafe60"</span>,clickhouse_service=<span class="hljs-string">"12f4a114-9746-4a75-9ce5-161ec3a73c4c"</span>,clickhouse_service_name=<span class="hljs-string">"test service"</span>,hostname=<span class="hljs-string">"c-cream-ma-20-server-3vd2ehh-0"</span>,instance=<span class="hljs-string">"c-cream-ma-20-server-3vd2ehh-0"</span>,table=<span class="hljs-string">"system.events"</span>} 230
+
+<span class="hljs-comment"># HELP ClickHouseProfileEvents_SelectQueriesWithSubqueries サブクエリを含むSELECTクエリの数</span>
+<span class="hljs-comment"># TYPE ClickHouseProfileEvents_SelectQueriesWithSubqueries counter</span>
+ClickHouseProfileEvents_SelectQueriesWithSubqueries{clickhouse_org=<span class="hljs-string">"c2ba4799-a76e-456f-a71a-b021b1fafe60"</span>,clickhouse_service=<span class="hljs-string">"12f4a114-9746-4a75-9ce5-161ec3a73c4c"</span>,clickhouse_service_name=<span class="hljs-string">"test service"</span>,hostname=<span class="hljs-string">"c-cream-ma-20-server-3vd2ehh-0"</span>,instance=<span class="hljs-string">"c-cream-ma-20-server-3vd2ehh-0"</span>,table=<span class="hljs-string">"system.events"</span>} 224
+
+<span class="hljs-comment"># HELP ClickHouseProfileEvents_FileOpen 開かれたファイルの回数</span>
+<span class="hljs-comment"># TYPE ClickHouseProfileEvents_FileOpen counter</span>
+ClickHouseProfileEvents_FileOpen{clickhouse_org=<span class="hljs-string">"c2ba4799-a76e-456f-a71a-b021b1fafe60"</span>,clickhouse_service=<span class="hljs-string">"12f4a114-9746-4a75-9ce5-161ec3a73c4c"</span>,clickhouse_service_name=<span class="hljs-string">"test service"</span>,hostname=<span class="hljs-string">"c-cream-ma-20-server-3vd2ehh-0"</span>,instance=<span class="hljs-string">"c-cream-ma-20-server-3vd2ehh-0"</span>,table=<span class="hljs-string">"system.events"</span>} 4157
+
+<span class="hljs-comment"># HELP ClickHouseProfileEvents_Seek 'lseek'関数が呼び出された回数</span>
+<span class="hljs-comment"># TYPE ClickHouseProfileEvents_Seek counter</span>
+ClickHouseProfileEvents_Seek{clickhouse_org=<span class="hljs-string">"c2ba4799-a76e-456f-a71a-b021b1fafe60"</span>,clickhouse_service=<span class="hljs-string">"12f4a114-9746-4a75-9ce5-161ec3a73c4c"</span>,clickhouse_service_name=<span class="hljs-string">"test service"</span>,hostname=<span class="hljs-string">"c-cream-ma-20-server-3vd2ehh-0"</span>,instance=<span class="hljs-string">"c-cream-ma-20-server-3vd2ehh-0"</span>,table=<span class="hljs-string">"system.events"</span>} 1840
+…
+</code></pre>  
+
+ClickHouse CloudのPrometheusエンドポイントは、[ClickHouseネイティブのPrometheusエンドポイント](https://clickhouse.com/docs/en/operations/server-configuration-parameters/settings#prometheus)と同等のメトリクスを公開しています。上記は一部の例ですが、実際にはClickHouseを監視するのに有用な1000を超えるメトリクスを返しています。公開されているメトリクスはClickHouseのドキュメントで確認できます。  
+
+もし必要なメトリクスがあれば、ぜひご要望をお知らせください。  
+
+インスタンスがアイドル状態の場合は、以下のように示されます:  
+
+```bash
+# HELP ClickHouse_ServiceInfo サービスに関する情報（クラスタのステータスやClickHouseのバージョンなど）
+# TYPE ClickHouse_ServiceInfo untyped
+ClickHouse_ServiceInfo{clickhouse_org="c2ba4799-a76e-456f-a71a-b021b1fafe60",clickhouse_service="12f4a114-9746-4a75-9ce5-161ec3a73c4c",clickhouse_service_name="test service",clickhouse_cluster_status="idle",clickhouse_version="24.5",scrape="full"}
+```  
+
+## Prometheusの例  
+
+Prometheusをインストールするには、公式の[ガイド](https://prometheus.io/docs/prometheus/latest/installation/)を参照してください。  
+
+下記はClickHouse CloudをPrometheusでスクレイプする設定例です。先ほどの手順で取得した `<ORG_ID>`、`<INSTANCE_ID>`、`<KEY_ID>`、`<KEY_SECRET>`が必要です。`honor_labels`の設定は`true`にしておく必要があります。こうしないと、インスタンスラベルが正しく設定されません。  
+
+```yaml
+global:
+  scrape_interval: 15s
+scrape_configs:
+  - job_name: "prometheus"
+    static_configs:
+    - targets: ["localhost:9090"]
+  - job_name: "clickhouse"
+    static_configs:
+      - targets: ["api.clickhouse.cloud"]
+    scheme: https
+    metrics_path: "/v1/organizations/<ORG_ID>/services/<INSTANCE_ID>/prometheus"
+    basic_auth:
+      username: <KEY_ID>
+      password: <KEY_SECRET>
+    honor_labels: true
+```  
+
+## Datadogの例  
+
+Datadog Agentと[OpenMetrics連携](https://docs.datadoghq.com/integrations/guide/prometheus-host-collection/)を使うと、ClickHouse Cloudのエンドポイントからメトリクスを収集できます。以下は簡単な設定例です。  
+
+```yaml
+init_config:
+
+instances:
+   - openmetrics_endpoint: 'https://api.control-plane.clickhouse.com/v1/organizations/97a33bdb-4db3-4067-b14f-ce40f621aae1/services/f7fefb6e-41a5-48fa-9f5f-deaaa442d5d8/prometheus'
+     namespace: 'clickhouse'
+     metrics:
+         - '^ClickHouse_.*'
+     username: username
+     password: password
+```  
+
+下記は、Datadogエージェントで収集したメトリクスを使い、大きなINSERT処理を実行中のClickHouseを監視する様子です:  
+
+![prometheus_04.png](https://clickhouse.com/uploads/prometheus_04_f635fe5b64.png)  
+
+DatadogやGrafanaとの連携については、[こちらのドキュメント](https://clickhouse.com/docs/en/integrations/prometheus)で詳しく解説しています。  
+
+## 結論  
+
+今回リリースしたPrometheus連携によって、お気に入りのオブザーバビリティツールでClickHouse Cloudを簡単に監視できるようになります。メトリクスのセットは、私たちがClickHouseを監視する中で有用だと感じたものが中心ですが、今後も拡張される予定です。もし必要なメトリクスや、ほかのツールとの連携に関する要望があれば、ぜひ教えてください。  
+
+---
+
+## ダウンタイムなしでわずか3ヶ月でClickHouse Cloudへ移行：120テラバイトのデータジャーニーとそのメリット
+Published: 2024-12-30T08:04:06+00:00
+URL: https://clickhouse.com/blog/migrating-to-clickhouse-cloud-in-just-three-months-with-no-downtime-a-120-terabyte-data-journey-and-its-benefits-jp
+
+---
+title: "ダウンタイムなしでわずか3ヶ月でClickHouse Cloudへ移行：120テラバイトのデータジャーニーとそのメリット"
+date: "2024-12-30T08:04:06.166Z"
+author: "Vladimir Rudev"
+category: "User stories"
+excerpt: "技術的負債が手に負えなくなっていたため、大規模なインフラの見直しが必要であることは明らかでした。私たちは長年ClickHouseを使用してきたため、AWS上のClickHouse Cloudを検討するのは理にかなっていました。"
+---
+
+# ダウンタイムなしでわずか3ヶ月でClickHouse Cloudへ移行：120テラバイトのデータジャーニーとそのメリット
+
+![Azur Games.png](https://clickhouse.com/uploads/Azur_Games_bd2e39de7d.png)
+
+_これは、Azur Gamesのリードソリューションアーキテクト、Vladimir Rudev氏によるゲスト投稿です。_
+
+昨年、当社は既存の技術ソリューションがもはや当社の成長するニーズを満たしていないことに気づきました。技術的負債が手に負えなくなっていたため、大規模なインフラの刷新が必要であることは明らかでした。
+
+当社は長年ClickHouseを使用していたため、AWS上のClickHouse Cloudを検討することは理にかなっていました。
+
+課題は、分析にダウンタイムを引き起こすことなく、120TBのデータベースを移行し、シームレスな移行を保証することでした。この目標を達成するために、「完全複製」、検証、およびアトミックな切り替えアプローチを選択しました。これだけのデータがどこから来たのか疑問に思うかもしれません。ダウンロード数でトップのモバイルゲームパブリッシャーとして、当社は150を超えるプロジェクトを立ち上げ、合計80億以上のインストール数を達成しています。当然のことながら、これにより膨大な量のテレメトリーデータが生成されます。
+
+ハイパーカジュアルゲームとは、参入障壁が低い、シンプルでプレイしやすいモバイルゲームです。このようなペースの速いシンプルなゲームは、プレイヤーの行動を理解し、収益化を最適化し、実験を行い、全体的なゲーム体験を向上させるために重要な、ユーザーインタラクションからの大量のテレメトリーデータを生成します。これは、Azur Gamesが開発するカジュアルゲームやミッドコアゲームにも当てはまります。データ分析の要件は、すべてのジャンルに当てはまります。
+
+この記事では、移行がどのように進んだか、直面した課題、そして得られた利点について詳しく説明します。
+
+_ネタバレ：移行を成功させただけでなく、多くのポジティブな結果も体験しました。クラウドへの移行後の最終的なサービスコストは、以前とほぼ同じでした。さらに、2人のエンジニアの時間の半分を解放し、多くのストレスを軽減し、メンテナンスから創造的な、より興味深いタスクに焦点を移しました。_
+
+![Kingdome Clash.jpeg](https://clickhouse.com/uploads/Kingdome_Clash_bb657b24be.jpeg)
+
+それでは、プロセスをポイントごとに見ていきましょう。
+
+私たちが達成しようとしていた主な**目標**：
+
+1. ストレージの信頼性を向上させる。
+2. 運用上の信頼性を向上させ、障害の数を減らす。
+3. メンテナンスを簡素化する。
+4. 成長のための柔軟性を確保する。
+5. 予算に合わせてコストを最適化する。
+
+私たちの出発点：
+
+**リソース:**
+* 20台の強力なデータベースサーバー + ZooKeeper用の3台の低電力サーバー。
+* 11台のAirflowサーバー（200+ vCPU）。
+* 6台のMinIOサーバー（S3エミュレーター、Airflowキャッシュ）。
+* 4台のMySQLデータベースサーバー。
+* BIおよびサポートサービス用の4台のサーバー。
+* 2人のAirflowエンジニア。
+* 1人のDevOpsエンジニア。
+
+合計：45台のサーバーと3人の専門家。
+
+また、多くのマネージドユニットがあり、最も重要な7つのユニットは、CH、ZK、MySQL、MinIO、Airflow（スケジューラー、ワーカー）、およびBIです。
+
+**ツール:**
+* すべてのサーバーを管理するAnsible。
+* 2年前のAirflow 2.2.3。
+* MinIOのバージョンも2年前のもの。
+* 2年以上前のClickHouse 21.3。
+
+## 懸念事項
+**TL;DR:** 単一のディスク障害がシャード全体の崩壊につながるリスクが大きな懸念事項でした。これにより、一部のプロジェクトで長期間データが完全に利用できなくなる可能性があります。最も恐ろしいのは、データドライブの連鎖的な故障でした。
+
+この問題は、ディスクの使用量が大きい長期実行プロジェクトでは珍しくありません。サーバーにインストールされているディスクは同じバッチからのものであることが多く、同じようなタイミングで故障する傾向があります。稼働時間が同じということは、故障の確率も同じであることを意味します。1つのディスクが故障すると、隣接するディスクへの負荷が増加します。RAID 10で構成された当社のサーバーでは、ディスクはペアで動作するため、1つのディスクの故障は、そのコピーであるパートナーディスクも故障する可能性を高める可能性があります。同じグループのディスクのペアが故障した場合、サーバー全体がダウンします。
+
+1つのレプリカが3〜6時間ダウンしても心配はありません。ただし、15TBのドライブが故障した場合、同期には約1週間かかることがあります。この間に別のパートナーディスクが故障した場合、サーバー全体が故障し、レプリカの再同期には3日から1週間かかる可能性があります。この期間中、残りのレプリカはETLプロセスと新しいサーバーへの同期で過負荷になります。そのため、各レプリカの負荷が60％以下で、シャードあたり3つのレプリカを持つことが推奨されていますが、これは非常に高価です。
+
+2番目の大きな問題はMinIOでした。MinIOをライブで更新することは危険でした。ボリュームが増加するにつれて、サービス障害が頻繁になり、MinIOクラスターにリソースを追加してもほとんど効果がありませんでした。何か間違ったことをしているか、まだ特定できていない特定のバージョンのMinIOのバグに遭遇しているかのどちらかであることは明らかでした。時間の経過とともに、障害が頻繁になり、ETLプロセスがクラッシュするようになりました。Airflowエンジニアは、故障したETLの確認と復元にかなりの時間を費やす必要がありました。
+
+要約すると、私たちが慣れ親しんだ2つの主な問題点がありました。
+
+1. 管理者は、アップデートを伴わない簡単な修正では解決できないソフトウェアクラッシュが発生した場合に苦労しました。
+2. Airflowエンジニアは、ETLプロセスが中断した場合に常に混乱に直面しました。これは、何かが故障するたびに何らかの形で発生しました。これは、データの可用性のタイムラインと新機能の開発に影響を与えました。
+
+これらの問題を最小限に抑えるために可能な限り自動化しましたが、ETLのサポートにはかなりの時間が必要であり、士気に影響を与えました。
+
+## ClickHouse Cloud以外の検討した代替ソリューション
+![Bunker Wars.jpeg](https://clickhouse.com/uploads/Bunker_Wars_c30c5bffb4.jpeg)
+
+適切なソリューションを見つけるにはかなりの時間がかかりました。対処する必要がある主なタスクを思い出してください。
+
+1. ストレージの信頼性。
+2. 運用上の信頼性。
+3. メンテナンスの容易さ。
+4. 成長の柔軟性。
+5. 予算に対する最適なコスト。
+
+選択肢は次のとおりでした。
+
+**1. ベアメタルにとどまるが、プロバイダーを変更する — その他は現状維持**
+
+これにより4番目のポイントに対処できますが、コストは同じにはなりません。
+
+**2. AWS/Google/Azureに移行する**
+
+適切に構成されていれば、このオプションはストレージの信頼性、運用上の信頼性、およびコストの柔軟性の問題を解決できる可能性があります。Kubernetesに関する専門知識があれば、メンテナンスの容易さにも部分的に対処できます。
+
+ただし、コストの問題は依然として解決する必要があります。詳細な説明は次のとおりです。ClickHouse CloudなしでAWSに移行すると、より強力なハードウェアが提供されますが、データ量が多いため、価格が大幅に高くなります。AWSは、単一の「ファット」サーバーの使用を許可することで、非効率的な構成を緩和できます。複数の小さなシャードの代わりに1つの大きなシャードを使用し、そこに大量のドライブを入れることができますが、少なくとも2つのレプリカが必要になります。これは、ディスク上で240TBのデータを管理することを意味し、その他の費用を含めずに、ストレージだけでも数千ドルの追加費用がかかります。したがって、コストは依然として大きな懸念事項です。
+
+データをホットストレージとコールドストレージに分割して、コストを半分にする可能性もあります。ただし、これらのソリューションには、高度な資格を持つエンジニアによる広範な計画、テスト、および時間が必要です。今後の速度とサービス品質を損なうことなく、当社のデータ処理パターンに適した適切な構成を見つけることが課題です。
+
+**3. 以前のプロバイダーにとどまるが、そのフレームワーク内で移動する**
+
+このオプションにより、最新のソフトウェアバージョンにアップデートし、いくつかの技術的負債に対処できます。ただし、他の目標には表面的な部分しか触れません。
+
+## ClickHouse Cloudを選んだ理由
+
+AWS PrivateLinkを介してシームレスに接続されたClickHouse Cloudは、ディスクの代わりにS3にデータを保存する機能や、ゼロコピーレプリケーション（ZCR）などの機能により、大幅なコスト削減を実現します。後者はここで重要な役割を果たします。ZCRでは、データのコピーを2つ保存せずに、シャードに2つのレプリカを持つことができます。このようにして、保存されたデータのボリュームは、その実際のサイズと同じになります。
+
+S3は、ストレージに使用される従来のディスクよりも低コストで99.999999％のデータ耐久性を提供します。
+
+## 移行の結果
+![Airflow workers details.jpg](https://clickhouse.com/uploads/Airflow_workers_details_d349b95566.jpg)
+
+**ハードウェア:**
+
+* Airflowは現在、24〜40 vCPUで動作しており、自動スケーリングに対応しています。
+* ClickHouseには現在、S3上のすべてのデータを持つ3つのレプリカがあります。すべてのリクエストは実際のボリュームでテストされており、古いClickHouseセットアップよりもパフォーマンスが劣るものはありません（これは重要であり、何度も再確認しました）。
+* リクエストの大部分は現在より高速に処理され、残りはほぼ同じパフォーマンスで実行されます。
+* 残りのデータベースは現在、RDSに含まれています。
+* 管理者とETLエンジニアの負荷が大幅に軽減されました。
+* 総コスト（ClickHouseデータベース + ETLインフラストラクチャ）はわずかに増加しましたが、ほぼ同じです。
+
+**目標はどうなりましたか？**
+
+1. ストレージの信頼性：すべての重要なユニット（DB、S3）は、信頼性を保証する「サービス」に含まれています。多くの複雑なタスクをオフロードしたため、SaaSソリューションは比較にならないほど安価になりました。
+
+2. 運用上の信頼性、成長の柔軟性、および最適なコスト：100％達成。
+
+3. メンテナンスの容易さ：80〜85％解決しました。問題は完全には解消されませんでしたが、大幅に軽減されました。投資したリソースを考えると、これは良い結果であり、エンジニアの時間を大幅に節約したため、わずかなコスト増を十分に補っています。
+
+4. 成長の柔軟性：100％達成。
+
+5. 2人のエンジニアの3か月間のフルタイム作業と私の1か月の移動期間を費やしました。サービスのコストはほぼ同じであるだけでなく、得られたメリットによって何度もカバーされています。
+
+**複雑さの軽減:**
+
+1. Amazon S3に置き換えられたMinIO。
+
+2. 3つの異なるAirflowデプロイメント。優れたハードウェア上の最新バージョンが、すべての負荷を完璧に処理します。
+
+3. 古いサーバーのセットアップとメンテナンスのための多数の不要な構成とスクリプト。
+
+**得られた利点:**
+
+1. システム全体がよりシンプルになり、高速になり、信頼性が高くなりました。
+
+2. コードと結果の間の管理者の層が薄くなりました。私たちのチームは、より多くの制御と機能を備え、管理者に関与せずにそれらを使用できます。管理者を関与させることなく、Pythonに必要なソフトウェアを追加したり、スケールアップやスケールダウンを行ったりできるため、ルーチン操作の中間ステップが削減されます。
+
+3. Amazonから優れたハードウェアを受け取りました。これは、新しいAirflowに特に当てはまります。高速S3は、超高速ネットワークとディスクとともに、ETLを大幅に高速化しました。
+
+4. 必要に応じて、数分で2倍、5倍、または10倍にスケールアップする機能を取得しました。たとえば、データプロバイダー側で統合が一時的に破損し、通常よりも多くのデータを迅速に受け入れる必要がある場合などです。
+
+5. 最新バージョンのClickHouseを受け取り、ClickHouseチームが管理するローリングベースでの継続的なアップグレードを受けました。これには、試してみる必要がある多くの新機能と最適化が含まれています。
+
+* すべてを計算するための新しい便利な関数。
+* クエリの一部を高速化できる最適化。
+* データストレージに関連する新機能。これらは、スペース（コストに影響します）を節約し、クエリを高速化できる可能性があります。
+* ETLをより高速、より信頼性が高く、より単純にするのに役立つ機能。
+
+6. 実験が必要なタスクはより迅速に完了します。最近では、最適なサーバーパラメーターを選択するとき、新しい構成が適用される前に紅茶を入れる時間さえありません。結果をすぐに確認できるのは常に良いことです。待っている間に別のタスクに切り替える必要はありません。
+
+7. 実験は現在管理可能です。私は常に頭の中に「より良くできること」のリストを持っており、ほとんどがデータに関連しています。データのストレージと記録回路の大幅な見直しを必要とする実験は、以前はディスクに負担をかけていましたが、これはもはや心配する必要はありません。このプロセスは古いClickHouseでは気が引けましたが、今はそうではありません。故障の心配なく、新しいClickHouseを好きなだけロードできます。
+
+## ビジネスへの影響
+![ETL status (high level).jpg](https://clickhouse.com/uploads/ETL_status_high_level_555210bdda.jpg)
+
+主な利点は、従業員の時間を節約できることです。これにより、よりエキサイティングで戦略的なタスクに時間を費やすことができます。当社の管理者の1人は時間の約60％が解放され、ETLエンジニアは現在時間の40％を節約しています。
+
+これはまた、多くのストレスを軽減しますが、道徳的な要素を計算するのはより困難です。現在、複雑なインフラストラクチャを常に維持する代わりに、創造に焦点を当てることができます。
+会社には常に興味深いタスクのバックログがあります。たとえば、現在分析で広く使用されており、当社のニーズに完全に適合しているDBT（データ構築ツール）の実験をようやく開始することができました。
+
+さらに、多くのビジネスタスクが以前よりもはるかに早くリリースされるようになりました。多くの場合、費やされた時間が2倍以上短縮されました。
+
+典型的な例は、履歴全体に対して再計算する必要がある新しいデータ集計の必要性です。
+
+以前は、これを行うために、クラスターで利用可能な空きリソースを計算し、その速度を見積もり、計算量で乗算し、完了の締め切りを取得する必要がありました。すべてが順調に進み、重大な障害がなく、クラスターが安定したままであると仮定しました。
+
+現在では、ETL側とDBMS側の両方でコンピューティングパワーを瞬時に追加できます。これは、タスクが使用されたリソースに比例してより高速に完了することを意味します。
+
+> 正確なリソースコストでより早く結果を達成することで、ビジネスは当然恩恵を受けます。
+
+## 新しい問題はありましたか？
+正確には新しい問題ではありませんが、新しい現実です。クラウドでの生活は異なるルールに従います。クラウドは通常、コストの面で容赦がありません。ネットワーク経由で送信されたすべてのバイトと使用されたすべてのプロセッササイクルに対して料金を支払います。そして、その可能性を最大限に活用しない場合でも、アイドル状態で実行されています。これにより、効率を最大化するためのアルゴリズムとアーキテクチャを実装する必要が生じます。
+
+ただし、これはすべて良い影響をもたらします。非常に高速なスケーリングと超強力なハードウェアと組み合わせることで、最小限の労力でシステムのパフォーマンスを数倍向上させることができます。
+
+新しいクラスターのアーキテクチャも、以前のアーキテクチャとは大きく異なります。以前はうまく機能していたものが、新しいクラスターでは非効率であることがわかりました。しかし、同じ問題に対処するための新しいソリューションが登場しました。移行中に、私たちは新しい現実に適応しました。
+
+## 移行タイムライン
+
+**7月。** 移行に関する積極的な作業を開始しました。1か月間、ClickHouseチームと協力し、徐々に製品に慣れ、小規模な実験を実施しました。
+
+**8月。** 入念な試行が必要であることを認識し、データの移行を開始しました。必要なリファクタリングも約1か月かかるため、1か月以内、または最大でも6週間以内に転送を完了することを目指しました。ここで最初のミスが浮上しました。2人のエンジニアがビジネス関連のタスクで頻繁に気を散らされており、遅延が発生しました。その結果、計画された時間枠内でいくつかのことしか完了できませんでした。
+
+**9月。** データ移行と必要な調整に1か月を費やしました。
+
+**10月。** この月は当初、セーフティネットとして計画されていました。保留中のタスクを完了し、徹底的なテストを実施しました。9月末までに、以前は気づいていなかったデータマージプロセスに問題があることを発見しました。10月前半はデータの追加を続けました。後半は、すべてのデータが正しく転送されていることを確認することに重点を置きました。努力にもかかわらず、作業は10月末までに完了する必要がありました。
+
+**11月。** 残り1か月となり、少し息を整えて、より細心の注意を払ってデータの転送と検証に集中できるようになったようです。正確さが最優先でした。チームは素晴らしい仕事をしてくれました。11月中旬までに、分析を新しいシステムに切り替える準備がほぼ整いました。
+
+11月21日に切り替えを行いましたが、すぐに2つの不快なバグに遭遇しました。ClickHouseの一部のクエリが、予想とは異なる動作をし始めました。問題をClickHouseチームに報告したところ、最初の問題に対する回避策が迅速に提供され、2番目の問題はClickHouse側で修正されました。
+
+11月23日までに、BI操作を新しいClickHouseシステムに切り替えました。
+
+11月27日に契約を締結し、古いサーバーをシャットダウンしました。
+
+**合計**: 3か月の積極的な作業。
+
+## ClickHouseチームと協力する理由
+
+>ClickHouse Cloudのアーキテクチャは、従来のオンプレミス設定とは大きく異なります。これにより、テストフェーズ中にいくつかの問題が発生しました。ClickHouseチームは非常に協力的で、代替ソリューションを見つけるのを手伝ってくれ、当社のニーズに合わせてClickHouseのコードを迅速に変更してくれました。
+
+## まとめ
+
+わずか3か月で、より技術的に高度な新しいソリューションを展開しました。これにより、ストレージとサービスの信頼性をほぼ100％達成し、将来の成長の可能性を提供し、エンジニアの時間を大幅に解放することができました。これらの改善から得られた利点は、メンテナンスコストのわずかな増加を十分に正当化します。
+
+
+---
+
 ## ClickHouse Cloud: Gumlet’s key to processing billions of video and image requests daily
 Published: 2024-12-18T18:01:52+00:00
 URL: https://clickhouse.com/blog/gumlet-processing-billions-of-video-image-requests-with-clickhouse
@@ -70675,6 +81194,680 @@ We encourage users to explore it further on our public demo environment at [sql.
 
 ---
 
+## trip.comはElasticsearchから移行し、ClickHouseで50PBのログソリューションを構築した方法
+Published: 2024-12-18T10:48:52+00:00
+URL: https://clickhouse.com/blog/how-trip.com-migrated-from-elasticsearch-and-built-a-50pb-logging-solution-with-clickhouse-jp
+
+---
+title: "trip.comはElasticsearchから移行し、ClickHouseで50PBのログソリューションを構築した方法"
+date: "2024-12-18T10:48:52.561Z"
+author: "Dongyu Lin"
+category: "User stories"
+excerpt: "trip.comが50PBの集中型ログプラットフォームをElasticsearchからClickHouseへ移行し、ストレージを4分の1に削減し、クエリ性能を最大30倍向上させた事例をご覧ください。"
+---
+
+# trip.comはElasticsearchから移行し、ClickHouseで50PBのログソリューションを構築した方法
+
+trip.com では、ホテルや航空券の予約、観光地、ツアーパッケージ、ビジネストラベル管理、旅行コンテンツなど、幅広いデジタルサービスを提供しています。おそらくお察しの通り、拡張性があり、堅牢で高速なログプラットフォームが必要であり、それが運用の健全性を保つ鍵となっています。
+
+始める前に、少し興味を引くために、ClickHouseの上に構築したプラットフォームを示すいくつかの数字をご覧いただきます:
+
+![Stats (1).png](https://clickhouse.com/uploads/Stats_1_786f2569d0.png)
+
+このブログ記事では、ログプラットフォームのストーリー、初めて構築した理由、使用した技術、そしてSharedMergeTreeといった機能を活用するClickHouseの上での今後の計画についてご紹介します。
+
+以下は、私たちが旅を通して触れるさまざまなトピックです:
+- 中央集約型ログプラットフォームをどのように構築したか
+- ログプラットフォームをどのように拡張し、ElasticsearchからClickHouseに移行したか
+- 運用体験をどのように改善したか
+- AlicloudでどのようにClickHouse Cloudをテストしたか
+
+簡単にするために、タイムラインにまとめてみましょう:
+
+![Timeline (1).png](https://clickhouse.com/uploads/Timeline_1_df9d7d029e.png)
+
+## 中央集約型ログプラットフォームの構築
+
+すべての偉大なストーリーは偉大な問題から始まりますが、私たちのプロジェクトも2012年以前には trip.com に統一された中央集約型のログプラットフォームがなかったために始まりました。各チームや事業ユニット（BU）が自分たちのログを収集し管理している状態で、以下のような多くの課題が存在しました:
+
+- これらの環境を開発、維持、運用するために多くの人手が必要で、そのために多くの重複した努力が必要でした。
+- データガバナンスとコントロールが複雑化しました。
+- 会社内での統一された標準がありませんでした。
+
+このことから、中央集約型で統一されたログプラットフォームを構築する必要があることがわかりました。
+
+2012年、私たちは最初のプラットフォームを立ち上げました。それはElasticsearchの上に構築され、ETL、ストレージ、ログアクセス、およびクエリの標準を定義し始めました。
+
+現在はもうElasticsearchはログプラットフォームには使用していませんが、どのように私たちのソリューションを実装したか調べる価値があります。このことが、後にClickHouseに移行する際に考慮しなければならなかった多くのその後の作業につながりました。
+
+## ストレージ
+
+私たちのElasticsearchクラスターは主にマスターノード、コーディネーターノード、およびデータノードで構成されています。
+
+### マスターノード
+
+
+すべてのElasticsearchクラスターは少なくとも3つのマスター候補ノードで構成されます。これらのうち1つがマスターに選出され、クラスター状態を維持する責任を持ちます。クラスター状態は、様々なインデックス、シャード、レプリカなどの情報を含むメタデータです。クラスター状態を変更する操作は、マスターノードによって実行されます。
+
+### データノード
+
+データノードはデータを保存し、CRUD操作を実行するために使用されます。これらは複数のレイヤーに分割することができます：ホット、ウォームなど。
+
+### コーディネーターノード
+
+このタイプのノードは、（マスター、データ、インジェスト、トランスフォームなどの）他の機能を持たず、クラスター状態を考慮したスマートな負荷分散装置として機能します。コーディネーターがCRUD操作を伴うクエリを受け取ると、それはデータノードに送信されます。または、インデックスを追加または削除するクエリを受け取ると、それはマスターノードに送信されます。
+
+![Coordinator nodes.png](https://clickhouse.com/uploads/Coordinator_nodes_bd31e25a76.png)
+
+## 可視化
+
+Elasticsearchの上に、可視化層としてKibanaを使用しました。下記に可視化の例を示します:
+
+![trip.com-visualization.png](https://clickhouse.com/uploads/trip_com_visualization_e5825ad405.png)
+
+## データ挿入
+
+私たちのユーザーには、ログをプラットフォームに送信するための2つのオプションがあります：Kafka経由とエージェント経由です。
+
+### Kafka経由
+
+最初の方法は、会社のフレームワークTripLogを使ってデータをKafkaメッセージブローカーにインジェストすることです（[Hermes](https://hermes-pubsub.readthedocs.io/en/latest/)を使用）。
+
+<pre style="
+    font-size: 12px;
+"><code class="hljs language-java"><span class="hljs-keyword">private</span> <span class="hljs-keyword">static</span> <span class="hljs-keyword">final</span> <span class="hljs-type">Logger</span> <span class="hljs-variable">log</span> <span class="hljs-operator">=</span> LoggerFactory.getLogger(Demo.class);
+
+<span class="hljs-keyword">public</span> <span class="hljs-keyword">void</span> <span class="hljs-title function_">demo</span> <span class="hljs-params">()</span>{
+  <span class="hljs-type">TagMarker</span> <span class="hljs-variable">marker</span> <span class="hljs-operator">=</span> TagMarkerBuilder.newBuilder().scenario(<span class="hljs-string">"demo"</span>).addTag(<span class="hljs-string">"tagA"</span>, <span class="hljs-string">"valueA"</span>).addTag(<span class="hljs-string">"tagA"</span>, <span class="hljs-string">"valueA"</span>).build();
+  log.info(marker, <span class="hljs-string">"Hello World!"</span>);
+}
+</code></pre>
+
+これにより、ユーザーはログを容易にプラットフォームに送信するためのフレームワークを得られます。
+
+### エージェント経由
+
+もう一つのアプローチは、Filebeat、Logstash、Logagent、またはカスタムクライアントなどのエージェントを使用して直接Kafkaに書き込むことです。以下はFilebeatの設定例です:
+
+<pre style="
+    font-size: 12px;
+"><code class="hljs language-yaml"><span class="hljs-attr">filebeat.config.inputs:</span>
+  <span class="hljs-attr">enabled:</span> <span class="hljs-literal">true</span>
+  <span class="hljs-attr">path:</span> <span class="hljs-string">"/path/to/your/filebeat/config"</span>
+<span class="hljs-attr">filebeat.inputs:</span>
+  <span class="hljs-bullet">-</span> <span class="hljs-attr">type:</span> <span class="hljs-string">log</span>
+    <span class="hljs-attr">enabled:</span> <span class="hljs-literal">true</span>
+    <span class="hljs-attr">paths:</span>
+      <span class="hljs-bullet">-</span> <span class="hljs-string">/var/log/history.log</span>
+      <span class="hljs-bullet">-</span> <span class="hljs-string">/var/log/auth.log</span>
+      <span class="hljs-bullet">-</span> <span class="hljs-string">/var/log/secure</span>
+      <span class="hljs-bullet">-</span> <span class="hljs-string">/var/log/messages</span>
+    <span class="hljs-attr">harvester_buffer_size:</span> <span class="hljs-number">102400</span>
+    <span class="hljs-attr">max_bytes:</span> <span class="hljs-number">100000</span>
+    <span class="hljs-attr">tail_files:</span> <span class="hljs-literal">true</span>
+    <span class="hljs-attr">fields:</span>
+      <span class="hljs-attr">type:</span> <span class="hljs-string">os</span>
+    <span class="hljs-attr">ignore_older:</span> <span class="hljs-string">30m</span>
+    <span class="hljs-attr">close_inactive:</span> <span class="hljs-string">2m</span>
+    <span class="hljs-attr">close_timeout:</span> <span class="hljs-string">40m</span>
+    <span class="hljs-attr">close_removed:</span> <span class="hljs-literal">true</span>
+    <span class="hljs-attr">clean_removed:</span> <span class="hljs-literal">true</span>
+<span class="hljs-attr">output.kafka:</span>
+  <span class="hljs-attr">hosts:</span> [<span class="hljs-string">"kafka_broker1"</span>, <span class="hljs-string">"kafka_broker2"</span>]
+  <span class="hljs-attr">topic:</span> <span class="hljs-string">"logs-<span class="hljs-template-variable">%{[fields.type]}</span>"</span>
+  <span class="hljs-attr">required_acks:</span> <span class="hljs-number">0</span>
+  <span class="hljs-attr">compression:</span> <span class="hljs-string">none</span>
+  <span class="hljs-attr">max_message_bytes:</span> <span class="hljs-number">1000000</span>
+<span class="hljs-attr">processors:</span>
+  <span class="hljs-bullet">-</span> <span class="hljs-attr">rename:</span>
+      <span class="hljs-attr">when:</span>
+        <span class="hljs-attr">equals:</span>
+          <span class="hljs-attr">source:</span> <span class="hljs-string">"message"</span>
+          <span class="hljs-attr">target:</span> <span class="hljs-string">"log_message"</span>
+</code></pre>
+
+## ETL
+
+ユーザーが選択したアプローチにかかわらず、データはKafkaに入った後、[gohangout](https://github.com/childe/gohangout)を用いてElasticsearchにパイプライン化されます。
+
+Gohangoutは、Logstashの代替として trip.com によって開発され、維持されているオープンソースのアプリケーションです。Kafkaからデータを消費し、ETL操作を行い、最終的にからのデータを様々なストレージ媒体（ClickHouseやElasticsearchなど）に出力することを設計しています。フィルターモジュールでのデータ処理には、データクリーニング用の共通機能が含まれており、JSON処理、Grokパターンマッチング、時間変換（以下に示されています）が行われます。以下の例で、GoHangoutは`Message`フィールドから`num`データを正規表現マッチングを使用して抽出し、別のフィールドとして保存します。
+
+![gohangout.png](https://clickhouse.com/uploads/gohangout_f652651959.png)
+
+## ガラスの天井に到達する
+
+多くの人々はオブザーバビリティのためにElasticsearchを使用しており、そのデータ量が小さい場合には力を発揮します。使いやすいソフトウェア、スキーマレスな体験、幅広い機能、Kibanaによる人気のUIを提供します。しかし、我々の規模でデプロイすると、よく知られている課題に直面します。
+
+Elasticsearchに4PBのデータを保存しているときに、以下のような**クラスターの安定性**に関する複数の問題に直面し始めました:
+
+1. クラスターへの高負荷が多くのリクエスト拒否、書き込み遅延、遅いクエリを引き起こしました
+2. ホットノードからコールドノードへの1日200TBのデータ移行が大きなパフォーマンス低下をもたらしました
+3. シャードの割り当てが困難で、一部のノードが圧倒されました
+4. 大規模クエリはメモリ不足（OOM）例外を引き起こしました。
+
+**クラスターのパフォーマンス**についても:
+
+1. クエリ速度は全体的なクラスター状態に影響を受けました
+2. インジェスト時の高いCPU使用量のせいで挿入スループットを増やすことが難しかったです
+
+そして最後に、**コスト**に関して:
+
+1. データのボリューム、データ構造、および圧縮の欠如が高いストレージ要求を引き起こしました
+2. 圧縮率が低いため、業務上の影響があり、保有期間を小さくせざるを得ませんでした
+3. Elasticsearchが原因で発生するJVMとメモリの限界がTCO（総所有コスト）を上昇させました
+
+これらの問題を認識した後、私たちは代替案を探し始め、そしてClickHouseが登場しました！
+
+### ClickHouse vs Elasticsearch
+
+ElasticsearchとClickHouseにはいくつかの基本的な違いがあり、それらを見ていきましょう。
+
+### Query DSL vs SQL
+
+ElasticsearchはQuery DSL（Domain Specific Language）と呼ばれる特定のクエリ言語に依存しています。今ではより多くのオプションがありますが、これがメインの構文です。一方のClickHouseはSQLに依存しており、極めて主流で、非常にユーザーフレンドリーで、さまざまな統合やBIツールに対応しています。
+
+### 内部構造
+
+ElasticsearchとClickHouseは内部挙動にいくつかの類似点がありますが、Elasticsearchはセグメントを生成し、ClickHouseはパーツを書き込みます。どちらも時間とともに非同期で統合され、より大きなパーツとセグメントを作成しますが、ClickHouseは列指向モデルであり、そのデータはORDER BYキーによりソートされます。これにより、素早いフィルタリングと高圧縮率による効率的なストレージ使用が可能なスパースインデックスを構築できます。このインデックスメカニズムについてはこの[ガイド](https://clickhouse.com/docs/en/optimize/sparse-primary-indexes)をご覧ください。
+
+### インデックス vs テーブル
+
+Elasticsearchではデータはインデックスに保存され、シャードに分割されます。これらは比較的小さなサイズ範囲（私たちの時点では推奨はシャードごとに約50GBでした）に保たれる必要があります。対照的に、ClickHouseのデータはテーブルに保存され、TB単位またはそれ以上の大きさにすることができます。さらに、ClickHouseは[パーティションキー](https://clickhouse.com/docs/en/engines/table-engines/mergetree-family/custom-partitioning-key)を作成することができ、物理的にデータを異なるフォルダに分けます。必要に応じてこれらのパーティションを効率的に操作することができます。
+
+全体として、ClickHouseの機能と特性に感銘を受けました。それには、列指向ストレージ、ベクトル化クエリ実行、高圧縮率、高挿入スループットがあります。これらは、私たちのログソリューションが求めるパフォーマンス、安定性、費用対効果を満たすものでした。そのため、私たちはClickHouseを使ってストレージとクエリ層を置き換えることを決定しました。
+
+次の課題は、サービスを中断せずにどのようにして1つのストレージから他のストレージにシームレスに移行するかでした。
+
+## Logs 2.0: ClickHouseへの移行
+
+ClickHouseへの移行を決定した際に、いくつかの異なるタスクを特定しました:
+
+![Migration plan.png](https://clickhouse.com/uploads/Migration_plan_f83ccc024a.png)
+
+### テーブル設計
+
+これは、最終的に設計した初期のテーブル設計です（数年前のものであり、現在のClickHouseには存在するデータ型がすべて揃っていません。例えばマップなど）：
+
+<pre style="
+    font-size: 12px;
+"><code class="hljs language-sql"><span class="hljs-keyword">CREATE</span> <span class="hljs-keyword">TABLE</span> log.example
+(
+  `<span class="hljs-type">timestamp</span>` DateTime64(<span class="hljs-number">9</span>) CODEC(ZSTD(<span class="hljs-number">1</span>)),
+  `_log_increment_id` Int64 CODEC(ZSTD(<span class="hljs-number">1</span>)),
+  `host_ip` LowCardinality(String) CODEC(ZSTD(<span class="hljs-number">1</span>)),
+  `host_name` LowCardinality(String) CODEC(ZSTD(<span class="hljs-number">1</span>)),
+  `log_level` LowCardinality(String) CODEC(ZSTD(<span class="hljs-number">1</span>)),
+  `message` String CODEC(ZSTD(<span class="hljs-number">1</span>)),
+  `message_prefix` String MATERIALIZED <span class="hljs-built_in">substring</span>(message, <span class="hljs-number">1</span>, <span class="hljs-number">128</span>) CODEC(ZSTD(<span class="hljs-number">1</span>)),
+  `_tag_keys` <span class="hljs-keyword">Array</span>(LowCardinality(String)) CODEC(ZSTD(<span class="hljs-number">1</span>)),
+  `_tag_vals` <span class="hljs-keyword">Array</span>(String) CODEC(ZSTD(<span class="hljs-number">1</span>)),
+  `log_type` LowCardinality(String) CODEC(ZSTD(<span class="hljs-number">1</span>)),
+   ...
+   INDEX idx_message_prefix message_prefix TYPE tokenbf_v1(<span class="hljs-number">8192</span>, <span class="hljs-number">2</span>, <span class="hljs-number">0</span>) GRANULARITY <span class="hljs-number">16</span>,
+   ...
+)
+ENGINE <span class="hljs-operator">=</span> ReplicatedMergeTree(<span class="hljs-string">'/clickhouse/tables/{shard}/example'</span>, <span class="hljs-string">'{replica}'</span>)
+<span class="hljs-keyword">PARTITION</span> <span class="hljs-keyword">BY</span> toYYYYMMDD(<span class="hljs-type">timestamp</span>)
+<span class="hljs-keyword">ORDER</span> <span class="hljs-keyword">BY</span> (log_level, <span class="hljs-type">timestamp</span>, host_ip, host_name)
+TTL toDateTime(<span class="hljs-type">timestamp</span>) <span class="hljs-operator">+</span> toIntervalHour(<span class="hljs-number">168</span>)
+</code></pre>
+
+- 動的に変化するタグを保存するためにデュアルリストアプローチを採用しています（将来的にはマップを使用する予定です）。つまり、2つの配列にキーと値を分けて保存しています。
+- データの操作を容易にするために、日別のパーティション分けを行っています。私たちのデータ量では、日別のパーティション分けが理にかなっていますが、多くの場合には月次または週次のパーティショニングの方が適しています。
+- クエリで使用するフィルターに応じて、上記のテーブル以上の`ORDER BY`キーを持つことをお勧めします。上記のキーは、`log_level`と`time`を使用するクエリに最適化されています。たとえば、クエリが`log_level`を利用していない場合、キーには`time`カラムのみを含めることが理にかなっています。
+- [Tokenbf_v1 Bloomフィルター](https://clickhouse.com/docs/en/optimize/skipping-indexes#bloom-filter-types)を利用して、用語クエリやファジークエリを最適化します。
+- _log_increment_idカラムは、効率的なスクロールページネーションと正確なデータ位置決めを可能にするグローバルに一意のインクリメンタルIDを含んでいます。
+- ZSTDデータ圧縮方式により、40%以上のストレージコストを削減しています。
+
+### クラスターセットアップ
+
+Elasticsearchでの歴史的なセットアップと経験を踏まえ、同様のアーキテクチャを複製することに決めました。我々のClickHouse-KeeperインスタンスはElasticsearchにおけるマスターノードと同様に機能します。データを保持せず、分散テーブルがClickHouseサーバーを指すクエリノードを複数展開しました。これらのサーバーはデータノードをホストしデータを保存し書き込みます。以下の図が我々のアーキテクチャの最終的な形です:
+
+![Operational challenges - one cluster.png](https://clickhouse.com/uploads/Operational_challenges_one_cluster_0e466b7430.png)
+
+### データ可視化
+
+ClickHouseに移行した後も、ユーザーにシームレスな体験を提供したかったため、ユーザーのすべての可視化とダッシュボードがClickHouseを利用できるようにする必要がありました。これは課題であり、KibanaはもともとElasticsearch上で開発されたツールで、追加のストレージエンジンをサポートしていません。そのため、ClickHouseとインターフェースできるようにKibanaをカスタマイズする必要がありました。これには、ClickHouseで使用できる新しいデータパネルをKibanaに作成する必要がありました：`chhistogram`, `chhits`, `chpercentiles`, `chranges`, `chstats`, `chtable`, `chterms`, そして `chuniq`。
+
+私たちは、既存のKibanaダッシュボードの95％をClickHouseで使用できるようにするスクリプトを作成し、最終的にKibanaを強化してユーザーがSQLクエリを書くことができるようにしました。
+
+![trip-kibana.png](https://clickhouse.com/uploads/trip_kibana_dc439229b1.png)
+
+## Triplog
+
+我々のログパイプラインはセルフサービスで、ユーザーはログを送信できます。これらのユーザーは、インデックスを作成し、所有権、権限、TTLポリシーを定義できる必要があります。そのため、ユーザーがテーブル、ユーザー、役割を管理し、データフローを監視し、アラートを作成できるインターフェースを提供するプラットフォームTriplogを作成しました。
+
+![triplog.png](https://clickhouse.com/uploads/triplog_1a8259f2ea.png)
+
+## 振り返り
+
+すべての移行が完了した今、新しいプラットフォームのパフォーマンスを確認する時です。 95％の移行を自動化しシームレスな移行を達成しましたが、成功指標に戻り、新しいプラットフォームがどのように機能しているかを確認することが重要です。最も重要なのはクエリパフォーマンスと総所有コスト（TCO）でした。
+
+### 総所有コスト（TCO）
+
+元々のコストの大部分はストレージでした。ElasticsearchとClickHouseで同じデータサンプルを用いたストレージを比較してみましょう:
+
+![storage_trip.com.png](https://clickhouse.com/uploads/storage_trip_com_5da2cb9607.png)
+
+**ストレージスペースの節約は50%以上に達し、既存のElasticsearchサーバーでClickHouseを用いてデータ量を4倍に増やせるようになりました。**
+
+### クエリパフォーマンス
+
+![trip.com-query-performance.png](https://clickhouse.com/uploads/trip_com_query_performance_db814cbbd5.png)
+
+**クエリの速度はElasticSearchよりも4倍から30倍速く、P90は300ms未満、P99は1.5秒未満です。**
+
+## ログ3.0: ClickHouseベースのプラットフォームの改善
+
+2022年にElasticsearchからの移行を完了して以来、より多くのログ用途をプラットフォームに追加し、4PBから20PBに成長しました。そして30PBに向けてさらに成長し拡大するにつれて、新たな課題に直面しました。
+
+### パフォーマンスと機能上の課題
+
+1. この規模の単一のClickHouseクラスタは管理が難しいです。デプロイメント時にClickHouse-KeeperやSharedMergeTreeがなく、Zookeeper周りでパフォーマンスの課題に直面し、DDLタイムアウトの例外が発生しました。
+2. ユーザーによる不適切なインデックスの選択が、サブオプティマルなクエリパフォーマンスを引き起こし、スキーマを改善してデータを再挿入する必要がありました。
+3. 不適切で最適化されていないクエリがパフォーマンスの問題を引き起こしました。
+
+### 運用上の課題
+
+1. クラスタの構築はAnsibleに依存しているため、デプロイメントサイクルが長くなります（数時間）。
+2. 現在のClickHouseインスタンスはコミュニティバージョンから数バージョン遅れており、現在のクラスタデプロイメントモードは更新を行うのに不便です。
+
+上述したパフォーマンスの課題に対処するため、まず単一クラスタのアプローチを避けました。我々の規模では、SharedMergeTreeやClickHouse Keeperなしでメタデータの管理が困難となり、ZookeeperのボトルネックのためにDDLステートメントのタイムアウトが発生していました。そのため、単一のクラスタを維持する代わりに、以下のように複数のクラスタを作成しました：
+
+![Operational challenges.png](https://clickhouse.com/uploads/Operational_challenges_899dcd40f7.png)
+
+この新しいアーキテクチャは、Zookeeperの制約を克服しつつスケールアップを可能にしました。これらのクラスタをKubernetesにデプロイし、StatefulSets、アンチアフィニティ（非親和性）、ConfigMapsを使用しています。このアプローチにより、単一クラスタの配信時間は2日から5分に短縮されました。同時に、デプロイメントのアーキテクチャを標準化し、グローバルな複数環境でのデプロイメントプロセスを簡略化しました。このアプローチにより、運用コストを大幅に削減し、上述した方法の実装を支援しました。
+
+### クエリルーティング
+
+上述の問題を解決したにもかかわらず、ユーザーから特定のクラスタにクエリをどのように割り当てるかという新たな複雑さが導入されました。
+
+例を用いて説明します：
+
+3つのクラスタ：クラスタ1、クラスタ2、クラスタ3、および3つのテーブル：A、B、Cがあると仮定します。以下で説明する仮想テーブルパーティショニング手法を実装する前は、単一のテーブル（例えばA）は1つのデータクラスタ（例：クラスタ1）にしか存在できませんでした。この設計上の制約により、クラスタ1のディスクスペースが一杯になると、テーブルAのデータをクラスタ2の比較的空のディスクスペースに移行する迅速な方法がありませんでした。代わりに、２重書き込みを使用して、テーブルAのデータをクラスタ1とクラスタ2に同時に書き込む必要がありました。その後、クラスタ2のデータが期限切れ（例：7日後）になると、クラスタ1からテーブルAのデータを削除することができました。このプロセスは煩雑で遅く、クラスタを管理するために多大な手作業が必要でした。
+
+![Query routing 1.png](https://clickhouse.com/uploads/Query_routing_1_8eec2445cf.png)
+
+この問題に対処するため、テーブルAを複数のクラスタ（クラスタ1、クラスタ2、クラスタ3）の間で移動できるようにするクラスライクなパーティショニングアーキテクチャを設計しました。変換後の右側に示されているように、テーブルAのデータは時間間隔に基づいてパーティショニングされています（秒単位で正確にすることもできますが簡単にするためここでは日を例としています）。例えば、6月8日分のデータはクラスタ1に書き込まれ、6月9日分のデータはクラスタ2に書き込まれ、8月10日分のデータはクラスタ3に書き込まれます。6月8日のデータにクエリがアクセスするときは、クラスタ1のデータだけをクエリします。6月9日と10日のデータが必要な時は、クラスタ2とクラスタ3のデータを同時にクエリします。
+
+この機能は、異なる分散テーブルを設定することで実現され、その各テーブルは特定の時間期間のデータを表し、各分散テーブルはクラスタの論理的な組み合わせ（例：クラスタ1、クラスタ2、クラスタ3）に関連付けられます。このアプローチにより、テーブルがクラスタをまたぐ問題を解決し、異なるクラスタ間のディスク使用率がより均等になる傾向があります。
+
+![Query routing 2.png](https://clickhouse.com/uploads/Query_routing_2_b66bf6d20f.png)
+
+上の画像でわかるように、各クエリは`WHERE`句に基づいて、プロキシによって必要なテーブルを含む適切なクラスタに賢くリダイレクトされます。
+
+このアーキテクチャは時間の経過に伴うスキーマの進化にも役立ちます。カラムを追加したり削除したりすることができるため、いくつかのテーブルはより多くまたは少ないカラムを持つことがあります。このルーティングは、クエリに必要なカラムを含まないテーブルをフィルタリングするプロキシと共に、カラムレベルで適用できます。
+
+さらに、このアーキテクチャは進化する`ORDER BY`キーのサポートにも役立ちます。通常、ClickHouseでは`ORDER BY`キーを動的に変更することはできません。上記のアプローチでは、新しいテーブルで`ORDER BY`キーを変更し、古いテーブルを期限切れにするだけです（有効期限 (TTL)により）。
+
+## Antlr4によるSQLパース
+
+クエリ層では、Antlr4技術を使用してユーザーのSQLクエリを抽象構文木（AST）に解析しています。ASTツリーを用いることで、SQLクエリからテーブル名、フィルター条件、集計次元などの情報を迅速に取得できます。この情報を手に入れることで、データの統計、クエリのリライト、ガバナンスフロー制御など、SQLクエリに対してリアルタイムでターゲットとなる戦略を簡単に実装することができます。
+
+![Antlr4_parser.png](https://clickhouse.com/uploads/Antlr4_parser_6ec63286af.png)
+
+すべてのユーザーSQLクエリに対して統一されたクエリゲートウェイプロキシを実装しました。このプログラムはメタデータ情報とポリシーに基づいてユーザーSQLクエリをリライトし、正確なルーティングや自動パフォーマンス最適化などの機能を提供します。さらに、各クエリの詳細なコンテキストを記録し、クラスタークエリの統一ガバナンスに使用され、QPS、大規模テーブルスキャン、クエリ実行時間に制限を課し、システムの安定性を向上させます。
+
+## 私たちのプラットフォームの未来は？
+
+私たちのプラットフォームは40PB以上の規模で実証されていますが、まだ改善すべきことがたくさんあります。特に、休暇期間などの高いピーク使用時にもっとダイナミックにスケーラブルになることを望んでいます。この成長を扱うため、ClickHouse Enterprise Service（Alibaba Cloud経由）を検討し、[SharedMergeTree](https://clickhouse.com/docs/en/cloud/reference/shared-merge-tree)テーブルエンジンを導入しました。これにより、ストレージとコンピュートのネイティブな分離を提供し、この新しいアーキテクチャで、trip.com 内でのより多くのログ用例をサポートするためにほぼ無制限のストレージを提供できるようになります。
+
+> Alibaba Cloudで提供されるClickHouse Enterprise Serviceは、ClickHouse Cloudで使用されるのと同じバージョンのClickHouseです。
+
+### AliCloudでのClickHouse Enterprise Serviceのテスト
+
+ClickHouse Enterprise Serviceをテストするために、２重書き込みを行い、既存のデプロイメントとSharedMergeTreeを利用する新しいサービスの両方にデータを挿入しました。現実的なワークロードをシミュレートするために：
+
+- 3TBのデータを両方のクラスタにロードし、その後継続的な挿入負荷をかけました。
+- テストセットとして使用するためのさまざまなクエリテンプレートを収集しました。
+- スクリプトを使用して、非空結果セットを保証する特定の値で1時間のランダムな時間間隔をクエリするクエリを構築しました。
+
+インフラストラクチャについて：
+
+- ClickHouse Enterpriseの提供（SMT）にはオブジェクトストレージを使用した32CPU、128GiBメモリの3ノード
+- コミュニティエディション（オープンソース）はHDDを使用した40CPU、176GiBメモリの2ノード
+
+クエリワークロードの実行には、両方のサービスで[`clickhouse-benchmark`](https://clickhouse.com/docs/en/operations/utilities/clickhouse-benchmark)ツールを使用しました。
+
+1. エンタープライズとコミュニティの両オプションは、ファイルシステムキャッシュを使用するように構成されています。これは、本番環境での類似条件を再現したいからです（データボリュームがはるかに大きいため、本番環境でのキャッシュヒット率は低くなることが予想されます）。
+2. 最初のテストは2の並列実行で行われ、各クエリは3つの異なるラウンドで実行されます。
+
+<table style="font-weight: bold;">
+   <thead>
+      <tr>
+         <th></th>
+         <th>Testing Round</th>
+         <th>P50</th>
+         <th>P90</th>
+         <th>P99</th>
+         <th>P9999</th>
+         <th>Avg</th>
+      </tr>
+   </thead>
+   <tbody>
+      <tr>
+         <td>Alicloud Enterprise Edition</td>
+         <td>1st</td>
+         <td style="
+            color: yellow;
+            ">0.26</td>
+         <td style="
+            color: yellow;
+            ">0.62</td>
+         <td style="
+            color: yellow;
+            ">7.2</td>
+         <td style="
+            color: yellow;
+            ">22.99</td>
+         <td style="
+            color: yellow;
+            ">0.67</td>
+      </tr>
+      <tr>
+         <td></td>
+         <td>2nd</td>
+         <td style="
+            color: yellow;
+            ">0.24</td>
+         <td style="
+            color: yellow;
+            ">0.46</td>
+         <td style="
+            color: yellow;
+            ">4.4</td>
+         <td style="
+            color: yellow;
+            ">20.61</td>
+         <td style="
+            color: yellow;
+            ">0.52</td>
+      </tr>
+      <tr>
+         <td></td>
+         <td>3rd</td>
+         <td style="
+            color: yellow;
+            ">0.24</td>
+         <td style="
+            color: yellow;
+            ">0.48</td>
+         <td style="
+            color: yellow;
+            ">16.75</td>
+         <td style="
+            color: yellow;
+            ">21.71</td>
+         <td style="
+            color: yellow;
+            ">0.70</td>
+      </tr>
+      <tr style="
+         white-space: pre-wrap;
+         word-wrap:break-word;
+         ">
+         <td></td>
+         <td>Avg</td>
+         <td><span style="color: yellow">0.246<br/></span><span style="color: green">40.3%</span></td>
+         <td><span style="color: yellow">0.52<br/></span><span style="color: green">22.2%</span></td>
+         <td><span style="color: yellow">7.05<br/></span><span style="color: green">71.4%</span></td>
+         <td><span style="color: yellow">21.77<br/></span><span style="color: green">90.3</span></td>
+         <td><span style="color: yellow">0.63<br/></span><span style="color: green">51.6%</span></td>
+      </tr>
+      <tr>
+         <td>Alicloud Community Edition</td>
+         <td>1st</td>
+         <td style="
+            color: red;
+            ">0.63</td>
+         <td style="
+            color: red;
+            ">3.4</td>
+         <td style="
+            color: red;
+            ">11.06</td>
+         <td style="
+            color: red;
+            ">29.50</td>
+         <td style="
+            color: red;
+            ">1.39</td>
+      </tr>
+      <tr>
+         <td></td>
+         <td>2nd</td>
+         <td style="
+            color: red;
+            ">0.64</td>
+         <td style="
+            color: red;
+            ">1.92</td>
+         <td style="
+            color: red;
+            ">9.35</td>
+         <td style="
+            color: red;
+            ">23.50</td>
+         <td style="
+            color: red;
+            ">1.20</td>
+      </tr>
+      <tr>
+         <td></td>
+         <td>3rd</td>
+         <td style="
+            color: red;
+            ">0.58</td>
+         <td style="
+            color: red;
+            ">1.60</td>
+         <td style="
+            color: red;
+            ">9.23</td>
+         <td style="
+            color: red;
+            ">19.3</td>
+         <td style="
+            color: red;
+            ">1.07</td>
+      </tr>
+      <tr style="
+         white-space: pre-wrap;
+         word-wrap:break-word;
+         ">
+         <td></td>
+         <td>Avg</td>
+         <td><span style="color: red">0.61<br/></span><span style="color: green">100%</span></td>
+         <td><span style="color: red">2.31<br/></span><span style="color: green">100%</span></td>
+         <td><span style="color: red">9.88<br/></span><span style="color: green">100%</span></td>
+         <td><span style="color: red">24.1<br/></span><span style="color: green">100%</span></td>
+         <td><span style="color: red">1.07<br/></span><span style="color: green">100%</span></td>
+      </tr>
+   </tbody>
+</table>
+
+ClickHouse Enterprise Serviceの結果は黄色で表示され、Alicloudのコミュニティエディションの結果は赤で表示されています。コミュニティエディションとのパフォーマンスの割合は緑で示されており（低いほど良い）ます。
+
+並列処理の数を増やすにつれ、コミュニティエディションはすぐにワークロードを処理できなくなり、エラーを返し始めます。これは実質的にエンタープライズエディションが同時クエリを3倍効果的に処理できることを意味します。
+
+ClickHouseのエンタープライズサービスはデータの保存手段としてオブジェクトストレージを使用しているにもかかわらず、それでもなお高並行ワークロードに関して特に良好なパフォーマンスを発揮します。このシームレスなインプレースアップグレードが、私たちにとって大きな運用負荷を取り除く可能性があると考えています。
+
+このテストの結果として、ビジネスメトリクスをエンタープライズサービスに移行し始めることに決定しました。これには、支払い完了率、注文統計などの情報が含まれています。全てのコミュニティユーザーに対して、ぜひエンタープライズサービスを試してみることをお勧めします！
+
+---
+
+## ClickHouse と OpenTelemetry
+Published: 2024-12-18T10:11:18+00:00
+URL: https://clickhouse.com/blog/clickhouse-and-open-telemtry-jp
+
+---
+title: "ClickHouse と OpenTelemetry"
+date: "2024-12-18T10:11:18.534Z"
+author: "Spencer Torres and Ryadh Dahimene"
+category: "Engineering"
+excerpt: "このたび、OpenTelemetryのロギングおよびトレーシング機能を正式にサポートし、エクスポーターをベータステータスへと進化させました。統合の最新動向、スキーマ最適化、大規模な観測データ管理のベストプラクティスについて、ぜひご確認ください。"
+---
+
+# ClickHouse と OpenTelemetry
+
+今年初めに、ClickHouseチームはClickHouse用のOpenTelemetryエクスポーターの公式サポートと貢献を始めることを決定しました。このエクスポーターは最近、ログとトレースの両方でベータ版に移行しました（現在のOTelエクスポーターエコシステムでの最高レベルです）。このポストでは、このマイルストーンを機会として、OpenTelemetryとClickHouseの統合について紹介したいと思います。
+
+## OpenTelemetryとは何か？
+
+OpenTelemetry（略してOTel）は、Cloud Native Computing Foundation（CNCF）から提供されるオープンソースのフレームワークで、テレメトリーデータの標準化された収集、処理、エクスポートを可能にします。主なオブザーバビリティの柱（トレース、メトリクス、ログ）を軸に、OTelは統一された、ベンダーニュートラルなアプローチを提供し、開発者と運用チームがシステムの健康状態を把握し、分散システムの問題を診断できるようにします。
+
+OTelはまた、複数の言語に対応した計測ライブラリを提供しており、最小限のコード変更でデータ収集を自動化します。OTel Collectorはこのデータフローを管理し、さまざまなバックエンドプラットフォームにテレメトリーデータをエクスポートするゲートウェイとして機能します。一貫したオブザーバビリティの標準を提供することで、OTelはチームが効率的にテレメトリーデータを収集し、複雑なシステムに関する洞察を得るのを助けます。
+
+## OpenTelemetryが重要な理由は？
+
+オブザーバビリティの分断されたベンダー主導の状況が支配していますが、OTelは標準化された、柔軟でオープンなアプローチをもたらします。ソフトウェアアプリケーションがより複雑になり、マイクロサービスやクラウドベースのアーキテクチャにまたがると、システム内外で何が起きているのかを追跡することが難しくなります。OTelはこの問題を解決するために、主要なテレメトリーデータの一貫した収集と分析を可能にします。
+
+ベンダーニュートラルなアプローチは特に価値があり、特定のモニタリングツールにロックインされるのを避けることができます。OTelを使用することで、組織はさまざまなオブザーバビリティバックエンド間を簡単に切り替えたり、組み合わせて使用することができ、コスト削減と柔軟性向上が実現できます。テレメトリーデータの標準化されたフォーマットは、マルチクラウドやハイブリッド環境においてもシステム間の統合を簡素化します。
+
+## OpenTelemetry + ClickHouse
+
+以前のブログで、ClickHouseのようなツールが大量のオブザーバビリティデータを処理できることから、専有システムに代わるオープンソースの有力な選択肢となることを説明しました。SQLベースのオブザーバビリティは、SQLに慣れたチームに適しており、コスト管理と拡張性を提供します。OTelのようなオープンソースのツールが進化を続ける中、このアプローチはデータニーズの大きい組織にとってますます実用的になっています。
+
+SQLベースのオブザーバビリティスタックの重要なコンポーネントはOpenTelemetry Collectorです。OTelコレクターはSDKや他のソースからテレメトリーデータを収集し、サポートされているバックエンドに転送します。それはテレメトリーデータを受信、処理、エクスポートするための中央集約的なハブとして機能します。OTelコレクターは単一のアプリケーション（エージェント）のためのローカルコレクターとして、または複数のアプリケーション（ゲートウェイ）のための中央集約的なコレクターとして機能できます。
+
+![img09_4566662115.0.png](https://clickhouse.com/uploads/img09_4566662115.png)
+
+コレクターはさまざまなデータフォーマットをサポートするエクスポーターの範囲を含んでいます。エクスポーターはデータを選択したバックエンドまたはオブザーバビリティプラットフォームに送信します、例えばClickHouseのように。開発者は複数のエクスポーターを構成して、必要に応じてテレメトリーデータを異なる宛先にルーティングすることができます。
+
+私たちはClickHouseでの自身のニーズにOpenTelemetryを使用しており、多くの成功したユーザーがそれを採用しているのを見て、公式にClickHouseのためのOTelエクスポーターをサポートし、このコンポーネントの開発に貢献することに決めました。ClickHouse用のOTelエクスポーターは、その管理者（[@hanjm](https://www.github.com/hanjm), [@dmitryax](https://www.github.com/dmitryax), [@Frapschen](https://www.github.com/Frapschen)）とコミュニティの貢献によってすでに良い状態にあり、私たちが本当に求めているのは、規模に応じた重要なユースケースのサポートです。
+
+## すべてを支配する1つのスキーマ
+
+スキーマに関する問題は、私たちが最初に取り組むことに決めた課題でした。「一つの方法ですべてに対応する」ことはできません。これは、ClickHouseのためのエクスポーターを設計する際に受け入れるべき厳しい現実です。大規模なデータベースの場合、何をインサートし、どのようにして取り出すかについて良いアイデアを持っている必要があります。ClickHouseは、**あなたのユースケースのためにあなたのスキーマを最適化する**ことで最良のパフォーマンスを発揮します。
+
+OpenTelemetryデータの場合、これはさらに重要です。OpenTelemetryのデザイナーでさえ、SDKを執筆する際にこの問題に直面しました。言語とツールの大規模なエコシステムをどのように単一のテレメトリーパイプラインに適合させるか？各チームはログやトレースの検索パターンを持っており、これをテーブルスキーマをモデル化する際に考慮する必要があります。データはどれだけの期間保持されますか？あなたのアーキテクチャはサービス名でフィルタリングするのが好きですか、それとも他の識別子でパーティションを分ける必要がありますか？Kubernetesのポッド名でフィルタリングするためのカラムが必要ですか？すべての人を含めることは不可能であり、そうすることでパフォーマンスと使い勝手を犠牲にすることはできません。
+
+**「一つの方法ですべてに対応する」**は私たちが望める最善のものであり、ClickHouseエクスポーターの場合も同様です。ログ、トレース、メトリクスのためにデフォルトのスキーマが提供されています。このデフォルトのスキーマは、ほとんどの一般的なテレメトリーユースケースに対して良好なパフォーマンスを発揮しますが、スケールでのロギングソリューションを構築しようとしている場合は、ClickHouse内でデータがどのように保存され、アクセスされているかを理解し、関連する主キーを選択することをお勧めします。これは内部ログソリューションで43ペタバイト以上のOTelデータを保存している場合と同様です（2024年10月時点）。
+
+![log_house_43pb.png](https://clickhouse.com/uploads/log_house_43pb_1d229d40b9.png)
+
+_[LogHouse](https://clickhouse.com/blog/building-a-logging-platform-with-clickhouse-and-saving-millions-over-datadog)からの統計情報、ClickHouse Cloud OTelベースのログプラットフォーム_
+
+エクスポーターはデフォルトで必要なテーブルを作成しますが、本番ワークロードには推奨されません。エクスポーターのコードを変更せずにテーブルスキーマを置き換えたい場合は、自分でテーブルを作成すれば簡単にできます。構成ファイルには、データが送信されるテーブル名のみが定義されます。これにより、カラム名がエクスポーターによってインサートされた内容と一致し、タイプが基になるデータと互換性があることが要求されます。
+
+```json
+{
+  "Timestamp": "2024-06-15 21:48:06.207795400",
+  "TraceId": "10c0fcd202c978d6400aaa24f3810514",
+  "SpanId": "60e8560ae018fc6e",
+  "TraceFlags": 1,
+  "SeverityText": "Information",
+  "SeverityNumber": 9,
+  "ServiceName": "cartservice",
+  "Body": "GetCartAsync called with userId={userId}",
+  "ResourceAttributes": {
+    "container.id": "4ef56d8f15da5f46f3828283af8507ee8dc782e0bd971ae38892a2133a3f3318",
+    "docker.cli.cobra.command_path": "docker%20compose",
+    "host.arch": "",
+    "host.name": "4ef56d8f15da",
+    "telemetry.sdk.language": "dotnet",
+    "telemetry.sdk.name": "opentelemetry",
+    "telemetry.sdk.version": "1.8.0"
+  },
+  "ScopeName": "cartservice.cartstore.RedisCartStore",
+  "ScopeAttributes": {},
+  "LogAttributes": {
+    "userId": "71155994-7b72-428a-9d51-43962a82ae43"
+  }
+}
+```
+
+_OpenTelemetryで生成されたログイベントの例_
+
+提供されるデフォルトのスキーマとは大きく異なるスキーマが必要な場合、ClickHouseの[マテリアライズドビュー](https://clickhouse.com/docs/en/observability/schema-design#materialized-views)を使用することができます。デフォルトのテーブルスキーマは利用可能な出発点を提供しますが、エクスポーターがどのようなデータを提供できるかのガイドとしても見ることができます。自分自身のテーブルをモデル化している場合は、特定のカラムを含めるか除外するか、さらにはそのタイプを変更することを選択できます。内部のログでは、これを機会としてKubernetesに関連するカラム、例えばポッド名を抽出しました。次に、特定のクエリパターンに対するパフォーマンスを最適化するために、これをテーブルの主キーに組み込みました。
+
+本番デプロイメントでは、デフォルトでテーブルの作成を無効にするのがベストです。複数のエクスポータープロセスが実行されている場合は、それらがテーブルを作成するために（おそらく異なるバージョンで）競合することになります。この[ユーザーガイド](https://clickhouse.com/docs/en/observability)では、ClickHouseをオブザーバビリティストアとして使用するためのベストプラクティスを挙げています。
+
+以下に、私たちのClickHouse Cloud Logging SolutionであるLogHouseで使用しているカスタムスキーマを示します。
+
+<pre style="font-size: 13px;"><code class="hljs language-sql border border-solid border-c3 break-words mb-9"><span class="hljs-keyword">CREATE</span> <span class="hljs-keyword">TABLE</span> otel.server_text_log_0
+(
+	`<span class="hljs-type">Timestamp</span>` DateTime64(<span class="hljs-number">9</span>) CODEC(Delta(<span class="hljs-number">8</span>), ZSTD(<span class="hljs-number">1</span>)),
+	`EventDate` <span class="hljs-type">Date</span>,
+	`EventTime` DateTime,
+	`TraceId` String CODEC(ZSTD(<span class="hljs-number">1</span>)),
+	`SpanId` String CODEC(ZSTD(<span class="hljs-number">1</span>)),
+	`TraceFlags` UInt32 CODEC(ZSTD(<span class="hljs-number">1</span>)),
+	`SeverityText` LowCardinality(String) CODEC(ZSTD(<span class="hljs-number">1</span>)),
+	`SeverityNumber` Int32 CODEC(ZSTD(<span class="hljs-number">1</span>)),
+	`ServiceName` LowCardinality(String) CODEC(ZSTD(<span class="hljs-number">1</span>)),
+	`Body` String CODEC(ZSTD(<span class="hljs-number">1</span>)),
+	`Namespace` LowCardinality(String),
+	`Cell` LowCardinality(String),
+	`CloudProvider` LowCardinality(String),
+	`Region` LowCardinality(String),
+	`ContainerName` LowCardinality(String),
+	`PodName` LowCardinality(String),
+	`query_id` String CODEC(ZSTD(<span class="hljs-number">1</span>)),
+	`logger_name` LowCardinality(String),
+	`source_file` LowCardinality(String),
+	`source_line` LowCardinality(String),
+	`level` LowCardinality(String),
+	`thread_name` LowCardinality(String),
+	`thread_id` LowCardinality(String),
+	`ResourceSchemaUrl` String CODEC(ZSTD(<span class="hljs-number">1</span>)),
+	`ScopeSchemaUrl` String CODEC(ZSTD(<span class="hljs-number">1</span>)),
+	`ScopeName` String CODEC(ZSTD(<span class="hljs-number">1</span>)),
+	`ScopeVersion` String CODEC(ZSTD(<span class="hljs-number">1</span>)),
+	`ScopeAttributes` Map(LowCardinality(String), String) CODEC(ZSTD(<span class="hljs-number">1</span>)),
+	`ResourceAttributes` Map(LowCardinality(String), String) CODEC(ZSTD(<span class="hljs-number">1</span>)),
+	`LogAttributes` Map(LowCardinality(String), String) CODEC(ZSTD(<span class="hljs-number">1</span>)),
+	INDEX idx_trace_id TraceId TYPE bloom_filter(<span class="hljs-number">0.001</span>) GRANULARITY <span class="hljs-number">1</span>,
+	INDEX idx_thread_id thread_id TYPE bloom_filter(<span class="hljs-number">0.001</span>) GRANULARITY <span class="hljs-number">1</span>,
+	INDEX idx_thread_name thread_name TYPE bloom_filter(<span class="hljs-number">0.001</span>) GRANULARITY <span class="hljs-number">1</span>,
+	INDEX idx_Namespace Namespace TYPE bloom_filter(<span class="hljs-number">0.001</span>) GRANULARITY <span class="hljs-number">1</span>,
+	INDEX idx_source_file source_file TYPE bloom_filter(<span class="hljs-number">0.001</span>) GRANULARITY <span class="hljs-number">1</span>,
+	INDEX idx_scope_attr_key mapKeys(ScopeAttributes) TYPE bloom_filter(<span class="hljs-number">0.01</span>) GRANULARITY <span class="hljs-number">1</span>,
+	INDEX idx_scope_attr_value mapValues(ScopeAttributes) TYPE bloom_filter(<span class="hljs-number">0.01</span>) GRANULARITY <span class="hljs-number">1</span>,
+	INDEX idx_res_attr_key mapKeys(ResourceAttributes) TYPE bloom_filter(<span class="hljs-number">0.01</span>) GRANULARITY <span class="hljs-number">1</span>,
+	INDEX idx_res_attr_value mapValues(ResourceAttributes) TYPE bloom_filter(<span class="hljs-number">0.01</span>) GRANULARITY <span class="hljs-number">1</span>,
+	INDEX idx_log_attr_key mapKeys(LogAttributes) TYPE bloom_filter(<span class="hljs-number">0.01</span>) GRANULARITY <span class="hljs-number">1</span>,
+	INDEX idx_log_attr_value mapValues(LogAttributes) TYPE bloom_filter(<span class="hljs-number">0.01</span>) GRANULARITY <span class="hljs-number">1</span>,
+	INDEX idx_body Body TYPE tokenbf_v1(<span class="hljs-number">32768</span>, <span class="hljs-number">3</span>, <span class="hljs-number">0</span>) GRANULARITY <span class="hljs-number">1</span>
+)
+ENGINE <span class="hljs-operator">=</span> SharedMergeTree
+<span class="hljs-keyword">PARTITION</span> <span class="hljs-keyword">BY</span> EventDate
+<span class="hljs-keyword">ORDER</span> <span class="hljs-keyword">BY</span> (PodName, <span class="hljs-type">Timestamp</span>)
+TTL EventTime <span class="hljs-operator">+</span> toIntervalDay(<span class="hljs-number">180</span>)
+SETTINGS index_granularity <span class="hljs-operator">=</span> <span class="hljs-number">8192</span>, ttl_only_drop_parts <span class="hljs-operator">=</span> <span class="hljs-number">1</span>;
+</code></pre>
+
+_LogHouseのOTelスキーマ、ClickHouse Cloud Logging Solution_
+
+LogHouseスキーマに関するいくつかの観察ポイント：
+
+- 順序キー` (PodName, Timestamp)`を使用しています。これは、ユーザーが通常これらのカラムでフィルタリングするクエリアクセスパターンに最適化されています。ユーザーは自分の期待されるワークフローに基づいてこれを変更する必要があります。
+- 非常に高いカーディナリティのものを除くすべてのStringカラムに対して`LowCardinality(String)`型を使用しています。これにより、文字列の値が辞書エンコードされ、圧縮が向上し、読み取りパフォーマンスが向上しました。現在の経験則として、10,000以下のユニークな値を持つ文字列カラムに対してこのエンコーディングを適用しています。
+- すべてのカラムに対するデフォルトの圧縮コーデックはレベル1のZSTDです。これはデータがS3に保存されているという事実に特有のものです。ZSTDはLZ4のような代替手段と比較して圧縮が遅い場合がありますが、圧縮率が優れており、一貫して高速な解凍を提供します（[約20%のばらつき](https://engineering.fb.com/2016/08/31/core-data/smaller-and-faster-data-compression-with-zstandard/)）。これらはS3をストレージとして使用する際に好ましい特性です。
+- [OTelスキーマ](https://github.com/open-telemetry/opentelemetry-collector-contrib/blob/c008f8feb719b30d997bd529bb7360372d4a7161/exporter/clickhouseexporter/exporter_logs.go#L144)から継承して、マップのキーおよび値に対してbloom_filtersを使用しています。これにより、`Bloom フィルター`データ構造に基づいて、マップのキーと値に対してセカンダリインデックスが提供されます。Bloom フィルターは、わずかな確率で偽陽性が発生するコストで、集合のメンバーシップを効率的にテストできるデータ構造です。理論的には、これにより、ディスク上のグラニュールに特定のマップキーや値が含まれているかを迅速に評価することができます。このフィルターは論理的に意味がある場合があります。なぜなら、いくつかのマップキーや値は、ポッド名やタイムスタンプという順序キーと相関しているべきだからです。つまり、特定のポッドには特定の属性があるでしょう。しかし、他のものはすべてのポッドに存在します。これらの値でクエリを実行する場合、フィルタリング条件が少なくとも1行のグラニュールに一致する確率が非常に高いため、これらのクエリの高速化は期待できません（この構成では、ブロックはグラニュールであり、GRANULARITY=1）。順序キーと列/式の間に相関関係が必要な理由についての詳細は[こちら](https://clickhouse.com/docs/en/optimize/skipping-indexes#skip-best-practices)を参照してください。この一般的なルールは、Namespace などの他の列にも適用されています。一般的に、これらの Bloom フィルターは広範に適用されており、最適化が必要です。これは保留中のタスクです。偽陽性率0.01も調整されていません。
+
+### 次のステップ
+
+ClickHouseエクスポーターには改善の余地があります。私たちの目標は、最新のClickHouseサーバーの開発にエクスポーターを最新の状態に保つことです。新しい最適化が見つかり、新しいパフォーマンスベンチマークがテストされると、ログ、トレース、メトリクスのデフォルトスキーマを改善する方法が見つかることでしょう。
+
+多くのオブザーバビリティユースケースに影響を与える特長の1つに、ClickHouseの新しいJSONデータ型のサポートがあります。これにより、ログやトレースの属性がどのように保存され、検索されるかが簡素化されます。新機能に加えて、OTel+ClickHouseのユーザーは頻繁にリポジトリにフィードバックを提出しており、これが過去1年間で多くの機能改善やバグ修正につながっています。
+
+## 付録: OpenTelemetryへの貢献
+
+オープンソースの魔法は、コミュニティの協力的な力にあります：OpenTelemetryに貢献することで、オブザーバビリティの未来に直接的な影響を与え、形作ることができます。コードの改善、ドキュメントの強化、フィードバックの提供、どれだけの貢献であっても、このプロジェクトの範囲を広げ、開発者に利益をもたらします。このセクションでは、いくつかのヒントを共有します。
+
+![society_oss.png](https://clickhouse.com/uploads/society_oss_4277f26f41.png)
+
+OpenTelemetryへの貢献は、ほとんどの他のオープンソースプロジェクトと似ています。メンバーである必要はなく、誰でも貢献できます。問題についての意見を共有したり、プルリクエストを開いたりすることもすべての貢献がプロジェクトに歓迎されます。
+
+コンポーネントのメンテナーとして、貢献するために最も価値のあるものは、実際には最も簡単なことです：フィードバックです。ユーザーがどのようなバグに直面しているかを知ることや、複数のユーザーにとっての体験を向上させる機能のギャップを知ることは非常に価値があります。私たちは内部でClickHouseエクスポーターを使用していますが、私たち自身の使用は他の人の使用とは異なるため、コミュニティから学ぶことはたくさんあります。
+
+もちろん、OpenTelemetryとClickHouseの両方に熟知し、エクスポーターに巧妙な貢献ができるユーザーもいます。例として、最近の[ClickHouseにインサートする前にマップ属性をソートする](https://github.com/open-telemetry/opentelemetry-collector-contrib/issues/33634)取り組みがあります。以前のバージョンでは、ログとトレースの属性は受信した時点で単純にインサートされていました。これは常に最良の圧縮をもたらすわけではありません。同じデータを反映しているかもしれませんが、順序が異なる可能性があります。マップ属性をキーでソートすることによって、ClickHouseの優れた圧縮力を活用することができます。このアイデアは外部の問題でメモされていましたが、まだ追加されていませんでした。コミュニティのユーザーがこれを見つけて、彼らの実装を[プルリクエスト](https://github.com/open-telemetry/opentelemetry-collector-contrib/pull/35725)として提出しました。
+
+OpenTelemetryプロジェクトと頻繁にやり取りしている場合、その組織のメンバーになることを検討しても良いでしょう。コミュニティリポジトリにある[完全なガイド](https://github.com/open-telemetry/community/blob/main/guides/contributor/membership.md#member)には、そのプロセスが詳しく説明されていますが、基本的な考え方は、実質的にすでにメンバーであることを示すことです。メンバーシップの申請は、GitHubでのイシュー作成と貢献（イシュー、プルリクエストなど）のリストを添付して提出されます。既存のメンバーが同意すれば、メンバーシップが承認され、組織内でより大きな役割を引き受けることが可能になります。貢献をするために必須ではありませんが、他のメンバーや訪問者に対して、OTelエコシステムに積極的に参加していることを示すことができます。
+
+---
+
 ## Support Services built like our product - blazingly fast, simple, and developer friendly
 Published: 2024-12-16T15:28:12+00:00
 URL: https://clickhouse.com/blog/clickhouse-support-services-fast-simple-friendly
@@ -70721,6 +81914,508 @@ One of the areas that we're continuing to focus on is how to bring you the knowl
 
 In the upcoming blogs in this series, you'll get to know some of our team members and some of their favorite technical solutions they've helped develop with our users. 
 
+
+
+---
+
+## ClickHouseの新たな強力なJSONデータ型の開発プロセス
+Published: 2024-12-14T19:35:19+00:00
+URL: https://clickhouse.com/blog/a-new-powerful-json-data-type-for-clickhouse-jp
+
+---
+title: "ClickHouseの新たな強力なJSONデータ型の開発プロセス"
+date: "2024-12-14T19:35:19.096Z"
+author: "Pavel Kruglov"
+category: "Engineering"
+excerpt: "JSON は現代のデータシステムで半構造化および非構造化データを扱うための共通言語となっています。ロギングや[オブザーバビリティ](https://clickhouse.com/blog/the-state-of-sql-based-observability)のシナリオ、リアルタイムデータストリーミング、モバイルアプリのストレージ、機械学習のパイプラインにおいても、JSONの柔軟な構造により、分散システム間でデータをキャプチャし送信するための共通のフォーマットとなっています。"
+---
+
+# ClickHouseの新たな強力なJSONデータ型の開発プロセス
+
+## はじめに
+
+[JSON](https://www.json.org/json-en.html)は現代のデータシステムで半構造化および非構造化データを扱うための共通言語となっています。ロギングや[オブザーバビリティ](https://clickhouse.com/blog/the-state-of-sql-based-observability)のシナリオ、リアルタイムデータストリーミング、モバイルアプリのストレージ、機械学習のパイプラインにおいても、JSONの柔軟な構造により、分散システム間でデータをキャプチャし送信するための共通のフォーマットとなっています。
+
+ClickHouseでは、シームレスなJSONサポートの重要性を[認識](https://github.com/ClickHouse/ClickHouse/issues/23516)していました。しかし、JSONは単純なように見えても、大規模に効果的に活用するには独特の課題があり、それを以下に簡単に説明します。
+
+### 課題 1: 真の列指向ストレージ
+
+ClickHouseは [市場で最速](https://benchmark.clickhouse.com/)の[分析データベースの一つ](https://www.vldb.org/pvldb/vol17/p3731-schulze.pdf)です。そのようなパフォーマンスのレベルは、正しいデータの“オリエンテーション”でしか達成できません。ClickHouseは、テーブルをディスク上のカラムデータファイルのコレクションとして保存する[真の](https://clickhouse.com/docs/en/about-us/distinctive-features#true-column-oriented-database-management-system) [列指向データベース](https://clickhouse.com/engineering-resources/what-is-columnar-database)であり、これにより最適な [圧縮](https://clickhouse.com/docs/en/data-compression/compression-in-clickhouse) やハードウェア効率の高い、高速な[ベクトル化](https://clickhouse.com/docs/en/development/architecture)列操作（フィルターや[集計](https://clickhouse.com/blog/clickhouse_vs_elasticsearch_mechanics_of_count_aggregations)など）が可能になります。
+
+JSONデータでも同じレベルのパフォーマンスを可能にするには、真の列指向ストレージをJSONに実装し、JSONパスが圧縮され、他の数値と同様に効率よく処理（フィルタリングやベクトル化された集計など）できるようにする必要がありました。
+
+そのため、次の図に示すように、JSONドキュメントを文字列列にそのまま保存して（後で[パース](https://clickhouse.com/docs/en/sql-reference/functions/json-functions)する）というような方法は避けましょう。
+
+![JSON-01.png](https://clickhouse.com/uploads/JSON_01_1b40b01231.png)
+
+JSONパスの各ユニークな値を真の列指向の形式で保存することを目指しました:
+
+![JSON-02.png](https://clickhouse.com/uploads/JSON_02_c5811c3a53.png)
+
+### 課題 2: 型の統一なしに動的に変化するデータ
+
+JSONパスを真の列指向の方法で保存できる場合、次の課題は、JSONが同じJSONパスに対して異なるデータ型の値を許可することです。ClickHouseの場合、これらの異なるデータ型は事前に知られていない場合があり、互換性がない可能性があります。さらに、最小の共通型に統一するのではなく、すべてのデータ型を保存する方法を見つける必要がありました。たとえば、同じJSONパス`a`に値として2つの整数と1つの浮動小数点数がある場合、次の図のようにすべてを浮動小数点数としてディスクに保存したくありません:
+
+![JSON-03.png](https://clickhouse.com/uploads/JSON_03_d34ab653ae.png)
+
+このようなアプローチは、混在する型のデータの整合性を保持せず、同じパス`a`の下に次に保存される値が配列であるような、より複雑なシナリオもサポートしないでしょう:
+
+![JSON-04.png](https://clickhouse.com/uploads/JSON_04_85b5392a1b.png)
+
+### 課題 3: ディスク上のカラムデータファイルの雪崩の防止
+
+JSONパスを真の列指向の方法で保存することは、データ圧縮やベクトル化されたデータ処理の利点があります。しかし、多数のユニークなJSONキーが存在するシナリオでは、新しいユニークなJSONパスごとに新しいカラムファイルを作成すると、ディスク上のカラムファイルの雪崩状態に陥る可能性があります:
+
+![JSON-05.png](https://clickhouse.com/uploads/JSON_05_8c3f9a39b4.png)
+
+これは多くの[ファイルディスクリプター](https://en.wikipedia.org/wiki/File_descriptor)（それぞれがメモリにスペースを必要とする）を必要とし、多数のファイルを処理する必要があるため、マージのパフォーマンスに影響を与え、パフォーマンスの問題を引き起こす可能性があります。そのため、カラムの作成に制限を導入する必要がありました。これにより、JSONストレージを効果的にスケーリングし、ペタバイト規模のデータセットに対する高性能な分析を保証します。
+
+### 課題 4: 密なストレージ
+
+多数のユニークだがスパースなJSONキーが存在するシナリオでは、特定のJSONパスに実際の値がない行に対してNULLやデフォルト値を冗長に保存（および処理）するのを避けたいと考えました。以下の図で示すとおりです:
+
+![JSON-06.png](https://clickhouse.com/uploads/JSON_06_81504bcb8e.png)
+
+代わりに、各ユニークなJSONパスの値を密で非冗長な方法で保存したいと考えました。これにより、JSONストレージをPBデータセットに対する高性能な分析のためにスケーリングすることができます。
+
+### 新たに大幅に強化されたJSONデータ型
+
+伝統的な実装が直面するボトルネックなくJSONデータのハイパフォーマンスな処理を提供するために新たに開発された強化型[JSONデータ型](https://clickhouse.com/docs/en/sql-reference/data-types/newjson)を発表します。
+
+この初回の投稿では、この機能の開発にあたっての課題（および[過去の制限](https://github.com/ClickHouse/ClickHouse/issues/54864)）に対応しながら、なぜ私たちの実装が列指向ストレージの上に構築されたJSONの最高の実装であるかをお見せします。次にサポートする機能を提供します:
+
+* 動的に変化するデータ: 同じJSONパスに対して異なるデータ型（時には互換性がなく、事前に知られていない）の値を許可し、最小の共通型に統一することなく混合型データの整合性を維持します。
+
+* **高性能かつ密で真の列指向ストレージ**: 挿入された任意のJSONキーのパスをネイティブで密なサブカラムとして保存・読み込みし、高いデータ圧縮を可能にし、従来の型で見られるクエリ性能を維持します。
+
+* **スケーラビリティ**: 保存されるサブカラムの数を制限することで、PBデータセットに対する高性能な分析のためにJSONストレージをスケーリングします。
+
+* **チューニング**: JSON解析のヒント（JSONパスのための明示的な型、解析中にスキップすべきパスなど）を提供します。
+
+この投稿の残りの部分では、JSONを超えた広範なアプリケーションを持つ基礎的なコンポーネントを最初に構築することにより、新しいJSON型の開発について説明します。
+
+## ビルディングブロック 1 - Variant型
+
+[Variantデータ型](https://clickhouse.com/docs/en/sql-reference/data-types/variant)は、新しいJSONデータ型を実装するための最初の構成要素です。この型はJSONの外でも使用できる完全に独立した機能として[設計](https://clickhouse.com/blog/clickhouse-release-24-01#variant-type)され、同じテーブルカラム内で異なるデータ型の値を効率的に保存（および読み取り）できます。最小の共通型に統一することはありません。これで[最初の](/blog/a-new-powerful-json-data-type-for-clickhouse#challenge-1-true-column-oriented-storage)および[2つ目の](/blog/a-new-powerful-json-data-type-for-clickhouse#challenge-2-dynamically-changing-data-without-type-unification)課題を解決します。
+
+### ClickHouseにおける従来のデータ保存
+
+新しいVariantデータ型がない場合、ClickHouseテーブルのカラムはすべて固定型であり、挿入されるすべての値は対象のカラムの正しいデータ型であるか、必要な型に暗黙的に強制されなければなりません。
+
+Variant型の動作をよりよく理解するための準備として、以下の図は固定データ型のカラムを持つ[MergeTree](https://clickhouse.com/docs/en/engines/table-engines/mergetree-family)ファミリのテーブルが、ディスク上でどのようにデータを保存するか（[データパート](https://clickhouse.com/docs/en/engines/table-engines/mergetree-family/mergetree#mergetree-data-storage)ごとに）を示しています:
+
+![JSON-07.png](https://clickhouse.com/uploads/JSON_07_c5da8ca64b.png)
+
+上記の図で例示されたテーブルを再現するためのSQLコードは[こちら](https://gist.github.com/tom-clickhouse/558b82bb6e7dbb00dbbf0f669012b64a)です。各カラムにはデータ型が注釈として付けられていることに注意してください。例えば、カラム`C1`は`Int64型`です。ClickHouseは[列指向データベース](https://clickhouse.com/docs/en/faq/general/columnar-database)であるため、各テーブルカラムの値はディスク上で別々に（高度に[圧縮](https://clickhouse.com/docs/en/data-compression/compression-in-clickhouse)された）カラムファイルに保存されます。カラム`C2`が[Nullable](https://clickhouse.com/docs/en/sql-reference/data-types/nullable)であるため、ClickHouseはNULLマスクを保持する別のファイルを[使用](https://clickhouse.com/docs/en/sql-reference/data-types/nullable#storage-features)し、通常のカラムファイルに加えてNULLと空（デフォルト）値を区別するために用います。テーブルカラム`C3`については、ClickHouseがどのように[配列](https://clickhouse.com/docs/en/sql-reference/data-types/array)を保存することをネイティブにサポートしているかを示しており、各テーブル行の配列のサイズをディスク上の別のファイルで保存しています。これらのサイズ値は、データファイル内の配列要素にアクセスするための対応するオフセットを計算するために使用されます。
+
+### 動的に変化するデータのためのストレージ拡張
+
+新しいVariantデータ型を使用すると、上記のテーブルのすべてのカラムからのすべての値を単一のカラムに保存できます。次の図は、クリックして拡大すると、そのカラムがどのように機能し、ClickHouseの列指向ストレージを基にディスク上でどのように実装されているか（データパートごとに）をスケッチしています:
+
+<a href="/uploads/JSON_08_c04e3510ad.png" target="_blank"><img src="/uploads/JSON_08_c04e3510ad.png"/></a>
+
+図に示す例のテーブルを再現するためのSQLコードは[こちら](https://gist.github.com/tom-clickhouse/c4f3da235843252b7b5c38472bdeba5d)です。この例では、ClickHouseのテーブル列`C`に対してVariant型を指定しました。これにより、列`C`に整数、文字列、整数の配列を混在して格納できるようになります。このようなカラムに対して、ClickHouseは同じデータ型のすべての値を別々のサブカラムに保存します（Variant型のカラムデータファイルで、それ自体は[前の](/blog/a-new-powerful-json-data-type-for-clickhouse#traditional-data-storage-in-clickhouse)例のカラムデータファイルとほぼ同一に見えます）。例えば、すべての整数値は`C.Int64 .bin`ファイルに保存され、すべての文字列値は`C.String .bin`に保存され、そして他の型も同様です。
+
+### サブタイプ間の切り替えのための識別子カラム
+
+ClickHouseテーブルの各行で使用されているタイプを知るために、ClickHouseは各データタイプに識別子を割り当て、これらの識別子を含む追加の(`UInt8`)カラムデータファイル（上図の`C.variant_discr.bin`）を保存します。各discriminator値は、ソートされた使用タイプ名のリストへのインデックスを表します。discriminator 255は`NULL`値用に予約されており、これは設計上、Variantが最大255の異なる具体的なタイプを持つことができることを意味します。
+
+特に注意すべきは、[NULLマスクファイル](/blog/a-new-powerful-json-data-type-for-clickhouse#traditional-data-storage-in-clickhouse)を別途持つ必要がなく、NULLとデフォルトの値を区別することです。
+
+さらに、[識別子のコンパクトなシリアル化形式](/blog/a-new-powerful-json-data-type-for-clickhouse#one-more-detail---compact-discriminator-serialization)が存在し、（典型的なJSONシナリオに最適化するために）特別な形式が用意されています。
+
+### 密なデータストレージ
+
+Variantタイプのカラムデータファイルは密です。これらのファイルに`NULL`値を保存しません。多くのユニークだがスパースなJSONキーが存在するシナリオでは、特定のJSONパスに対して実際の値がない行に対してデフォルト値を保存しません（[この](/blog/a-new-powerful-json-data-type-for-clickhouse#challenge-4-dense-storage)図で示されている反例として）。これで、[第4の](/blog/a-new-powerful-json-data-type-for-clickhouse#challenge-4-dense-storage)課題を解決します。
+
+この密なVariant型のストレージのため、識別子カラムの行を対応するVariant型のカラムデータファイルの行にマッピングする必要もあります。この目的のために、`UInt64`オフセットカラム（上図の`offsets`）が存在し、メモリ上にしか存在しないが（識別子カラムファイルから動的に作成可能）、ディスクには保存されません。
+
+例えば、上図のClickHouseテーブルの行6の値を取得するために、ClickHouseは識別子カラムの行6を検査して要求された値を含むVariant型カラムデータファイル`C.Int64 .bin`を特定します。さらに、ClickHouseはoffsetsファイルの行6を調べて、`C.Int64 .bin`ファイル内の要求された値の具体的な`offsets`を知っています。そのため、ClickHouseテーブルの行6の要求値は44です。
+
+### Variant型の任意のネスト
+
+Variantカラム内にネストされる型の順序は関係ありません: `Variant(T1, T2)` = `Variant(T2, T1)`です。さらに、Variant型は任意のネストを許可し、Variant内で使われるVariant型の1つとしてVariant型を使用できます。別の図を用いて（クリックして拡大可能）、これを示します:
+
+<a href="/uploads/JSON_09_ceb9570915.png" target="_blank"><img src="/uploads/JSON_09_ceb9570915.png"/></a>
+
+この図に示された例のテーブルを複製するためのSQLコードは[こちら](https://gist.github.com/tom-clickhouse/56b56271239eb2b7c9a8ca970f62611f)です。今回は、Variantカラム`C`を使用して、整数、文字列、Variant値を含む配列のミックスを格納することを指定しました。上の図は、ClickHouseが内部で、上記で説明したVariantストレージのアプローチをどのように配列カラムデータファイル内にネストして、ネストされたVariant型を実現しているかをスケッチしています。
+
+### サブカラムとしてのVariantネスト型の読み取り
+
+Variant型は、サブカラムとして型名を使用してVariantカラムから単一のネスト型の値を読み取ることを[サポート](https://clickhouse.com/docs/en/sql-reference/data-types/variant#reading-variant-nested-types-as-subcolumns)します。たとえば、上記のテーブルの`C`サブカラムの`Int64`型のすべての整数値を`C.Int64`という構文を使用して読み取ることができます:
+
+
+```
+SELECT C.Int64
+FROM test;
+
+   ┌─C.Int64─┐
+1. │      42 │
+2. │    ᴺᵁᴸᴸ │
+3. │    ᴺᵁᴸᴸ │
+4. │      43 │
+5. │    ᴺᵁᴸᴸ │
+6. │    ᴺᵁᴸᴸ │
+7. │      44 │
+8. │    ᴺᵁᴸᴸ │
+9. │    ᴺᵁᴸᴸ │
+   └─────────┘
+```
+
+
+## ビルディングブロック 2 - Dynamic型
+
+Variant型の後には、Dynamic型の実装が続きます。この[Dynamic](https://clickhouse.com/docs/en/sql-reference/data-types/dynamic)型は、JSONコンテキストの外でも単独で使用できる[独自の特長を持つ機能](https://clickhouse.com/blog/clickhouse-release-24-05#dynamic-data-type)として実装されています。
+
+Dynamic型はVariant型の強化版と見なされ、2つの重要な新機能を導入します:
+1. 単一のテーブルカラム内に任意のデータ型の値を保存し、すべての型を事前に知って指定する必要はありません。
+
+2. サブカラムデータファイルとして保存される型の数を制限する可能性。これにより、[部分的に](/blog/a-new-powerful-json-data-type-for-clickhouse#preventing-an-avalanche-of-column-files)3番目の課題である[ディスク上のカラムデータファイルの雪崩現象](/blog/a-new-powerful-json-data-type-for-clickhouse#storage-extension-for-dynamically-changing-data)を解決します。
+
+次にこれら2つの新機能について簡単に説明します。
+
+### サブタイプを指定する必要はありません
+
+次の図は、クリックして拡大可能で、単一のDynamicカラムを持つClickHouseテーブルとそのディスク上の保存方法（データパートごとに）を示しています:
+
+<a href="/uploads/JSON_10_92f1907815.png" target="_blank"><img src="/uploads/JSON_10_92f1907815.png"/></a>
+
+この図に示されるテーブルを再現するためのSQLコードは[こちら](https://gist.github.com/tom-clickhouse/cba68ca35a5926d2145a186bec695d73)です。Dynamicカラム`C`には、Variant型で行うように、事前に型を指定せずに任意の型の値を挿入できます。
+
+内部的に、DynamicカラムはVariantカラムと[同様](/blog/a-new-powerful-json-data-type-for-clickhouse#storage-extension-for-dynamically-changing-data)にディスク上にデータを保存し、特に構造に関する追加情報を保持します。図は、保存方法の差異を示しており、Dynamicカラムがサブカラムと保存するための`C.dynamic_structure.bin`という追加のファイルを持ち、保存された型のリストとそのVariant型カラムデータファイルのサイズの統計を含んでいることを示しています。このメタデータは、サブカラムの読み取りとデータパートのマージに使用されます。
+
+### カラムファイルの雪崩を防ぐ
+
+Dynamic型は、型定義で`max_types`パラメータを指定することで、サブカラムデータファイルとして保存される型の数を制限することもサポートしています: `Dynamic(max_types=N)`ここで0<= N <255。`max_types`のデフォルト値は32です。この制限が達成されると、残りのすべての型は特別な構造を持つ単一のカラムデータファイルに保存されます。次の図でその例を示しています（クリックして拡大可能）:
+
+<a href="/uploads/JSON_11_c3698916bb.png" target="_blank"><img src="/uploads/JSON_11_c3698916bb.png"/></a>
+
+上記の図に示された例のテーブルを生成するためのSQLスクリプトは[こちら](https://gist.github.com/tom-clickhouse/c30b287d0a4a514b1019fcbed1584467)です。今回は、max_typesパラメータを3に設定したDynamicカラムCを使用します。
+
+したがって、最初の3つの使用タイプのみが個別のカラムデータファイルに保存されます（これは圧縮と分析クエリに効率的です）。さらに使用される追加のタイプ（上の例のテーブルで緑色でハイライトされている部分）からのすべての値は、`String`タイプを持つ単一のカラムデータファイル（`C.SharedVariant.bin`）にまとめて保存されます。SharedVariantの各行には、以下のデータを含む文字列値が含まれています：<[binary_encoded_data_type](https://clickhouse.com/docs/en/sql-reference/data-types/data-types-binary-encoding)><binary_value>。この構造を使用することで、単一のカラム内に異なるタイプの値を保存（および取得）することができます。
+
+### サブカラムとしてダイナミックネスト型の読み取り
+
+Variant型と同様に、Dynamic型は[サポート](https://clickhouse.com/docs/en/sql-reference/data-types/dynamic#reading-dynamic-nested-types-as-subcolumns)しており、Dynamicカラムから特定のネストされた型の値をサブカラムとして読み取ることができます。型名を使用します：
+
+
+```
+SELECT C.Int64
+FROM test;
+
+   ┌─C.Int64─┐
+1. │      42 │
+2. │    ᴺᵁᴸᴸ │
+3. │    ᴺᵁᴸᴸ │
+4. │      43 │
+5. │    ᴺᵁᴸᴸ │
+6. │    ᴺᵁᴸᴸ │
+7. │      44 │
+8. │    ᴺᵁᴸᴸ │
+9. │    ᴺᵁᴸᴸ │
+   └─────────┘
+```
+
+
+## ClickHouse JSON型: すべてをひとつにまとめる
+
+VariantおよびDynamic型の実装後、ClickHouseの列指向ストレージ上に新たな強力なJSON型を実装するために必要なすべての構成要素が揃い、[課題](/blog/a-new-powerful-json-data-type-for-clickhouse#introduction)を克服するためのサポートが整いました：
+
+- **動的に変化するデータ:** 同じJSONパスに対して異なるデータ型（時には互換性がない場合や事前に判明しない場合もある）の値を許可し、型の統一なしに混合型データの整合性を保ちます。
+
+- **高性能で密度が高い、真の列指向ストレージ:** ネイティブで密度のあるサブカラムとして挿入されたJSONキーを保存および読み取り、高いデータ圧縮と従来の型で見られたクエリ性能を維持します。
+
+- **スケーラビリティ:** 個別に保存されるサブカラムの数を制限することができ、PBデータセットに対する高性能分析のためのJSONストレージをスケールします。
+
+- **チューニング:** JSON解析のヒント（JSONパスの明示的な型、解析時にスキップされるべきパスなど）を許可します。
+
+新しい[JSON型](https://clickhouse.com/docs/en/sql-reference/data-types/newjson)は、任意の構造を持つJSONオブジェクトの保存を可能にし、JSONパスをサブカラムとして使用してその中のすべてのJSON値を読み取ることができます。
+
+### JSON型の宣言
+
+新しい型には、いくつかのオプションパラメータとヒントが宣言に含まれています：
+
+
+```
+<column_name> JSON(
+  max_dynamic_paths=N, 
+  max_dynamic_types=M, 
+  some.path TypeName, 
+  SKIP path.to.skip, 
+  SKIP REGEXP 'paths_regexp')
+```
+
+
+ここで：
+* `max_dynamic_paths`（デフォルト値`1024`）は、サブカラムとして個別に保存されるJSONキーパスの数を指定します。この制限を超えた場合、他のすべてのパスは特殊な構造を持つ単一のサブカラムにまとめて保存されます。
+
+* `max_dynamic_types`（デフォルト値`32`）は`0`から`254`の間の値で、`Dynamic`型を持つ単一のJSONキーパスカラムに対して、個別のカラムデータファイルとして保存される異なるデータタイプの数を指定します。この制限を超えた場合、新しいタイプはすべて特殊な構造を持つ単一のカラムデータファイルにまとめて保存されます。
+
+* `some.path TypeName`は特定のJSONパスに対するタイプヒントです。このようなパスは常に指定された型のサブカラムとして保存され、パフォーマンスが保証されます。
+
+* `SKIP path.to.skip`はJSON解析中にスキップすべき特定のJSONパスに対するヒントです。このようなパスはJSONカラムに保存されることはありません。指定されたパスがネストされたJSONオブジェクトの場合、ネストされたオブジェクト全体がスキップされます。
+
+* `SKIP REGEXP 'path_regexp`はJSON解析中にパスをスキップするために使用される正規表現を含むヒントです。この正規表現にマッチするすべてのパスはJSONカラムに保存されることはありません。
+### 真の列指向JSONストレージ
+
+以下の図（クリックすると拡大表示できます）は、単一のJSONカラムを持つClickHouseテーブルとそのカラムのJSONデータがClickHouseの列指向ストレージ上でどのように効率的に実装されているかを示しています（各データパートあたり）：
+
+<a href="/uploads/JSON_12_f4326293fb.png" target="_blank"><img src="/uploads/JSON_12_f4326293fb.png"/></a>
+
+以下のSQLコードを[使用して](https://gist.github.com/tom-clickhouse/c52ab757aca15723427032f305c73656)、上の図で示されるようにテーブルを再作成します。我々の例のテーブルのカラム`C`は`JSON`型で、JSONパス`a.b`と`a.c`の型を指定する2つの型ヒントを提供しました。
+
+私たちのテーブルカラムには6つのJSONドキュメントが含まれており、それぞれのユニークなJSONキーのパスの葉の値は、通常のカラムデータファイルとして（型付きJSONパス、型ヒント付きパスの場合、図の`C.a.b`や`C.a.c`を参照）または動的サブカラムとして（動的JSONパス、データが動的に変化する可能性のあるパスの場合、図の`C.a.d`、`C.a.d.e`、`C.a.e`を参照）、ディスクに保存されます。後者の場合、ClickHouseは[動的データ型](/blog/a-new-powerful-json-data-type-for-clickhouse#building-block-2---dynamic-type)を使用します。
+
+加えて、JSON型は動的パスに関するメタデータ情報や各動的パスの非NULL値の統計（カラムシリアル化時に計算される）を含む特別なファイル（`object_structure`）を使用しています。このメタデータはサブカラムの読み取りとデータパーツのマージに使用されます。
+
+### カラムファイルの雪崩を防ぐ
+
+1つのJSONキーのパス内で動的型が多く存在するシナリオや、動的JSONキーのユニークなパスが大量に存在するシナリオでディスク上に多くのカラムファイルが爆発的に増加するのを防ぐために、JSON型は以下を許可しています：
+
+(1) 単一のJSONキーのパスに対してどれだけ多くの異なるデータ型が個別のカラムデータファイルとして保存されるかを`max_dynamic_types`（デフォルト値`32`）パラメータで制限する。
+
+(2) JSONキーのパスがサブカラムとして個別に保存される数を`max_dynamic_paths`（デフォルト値`1024`）パラメータで制限する。
+
+これが[第三](/blog/a-new-powerful-json-data-type-for-clickhouse#challenge-3-prevention-of-avalanche-of-column-data-files-on-disk)の課題を解決するものです。
+
+(1)の例は[上記](/blog/a-new-powerful-json-data-type-for-clickhouse#preventing-column-file-avalanche)に示されています。そして、(2)については、他の図を使用して示します（クリックすると拡大表示できます）：
+
+<a href="/uploads/JSON_13_846ce6ca7c.png" target="_blank"><img src="/uploads/JSON_13_846ce6ca7c.png"/></a>
+
+この図のテーブルを再現するためのSQLコードは[こちら](https://gist.github.com/tom-clickhouse/c02b49fc5ec275aaa6e9d463311048ba)です。前の例と同様に、私たちのClickHouseテーブルのカラム`C`は`JSON`型で、JSONパス`a.b`と`a.c`の型を指定する同じ2つの型ヒントを提供しました。
+
+さらに、`max_dynamic_paths`パラメータを3に設定しました。これにより、ClickHouseは最初の3つの動的JSONパスの葉の値のみを動的サブカラムとして保存します（Dynamic型を使用する）。
+
+追加の動的JSONパスは、それらの型情報と値（上の例のテーブルで緑色でハイライトされている部分）がすべて共有データとして保存されます - 上図の`C.object_shared_data.size0.bin`、`C.object_shared_data.paths.bin`、`C.object_shared_data.values.bin`ファイルを参照してください。共有データファイル（`object_shared_data.values`）は`String`型であることに注意してください。各エントリは、以下のデータを含む文字列値です：<[binary_encoded_data_type](https://clickhouse.com/docs/en/sql-reference/data-types/data-types-binary-encoding)><binary_value>。
+
+共有データと共に、サブカラムの読み取りやデータパーツのマージに使用される追加の統計情報を`object_structure.bin`ファイルに保存します。共有データカラムに保存されている（現在のところ最初の10000の）パスの非NULL値に関する統計を保存しています。
+
+### JSONパスの読み取り
+
+JSON型は、パス名をサブカラムとして使用して、各パスのリーフ値を読み取ることを[サポート](https://clickhouse.com/docs/en/sql-reference/data-types/newjson#reading-json-paths-as-subcolumns)しています。たとえば、上記の例でJSONパス`a.b`のすべての値を`C.a.b`という文法で読み取れます：
+
+
+```
+SELECT C.a.b
+FROM test;
+
+   ┌─C.a.b─┐
+1. │    10 │
+2. │    20 │
+3. │    30 │
+4. │    40 │
+5. │    50 │
+6. │    60 │
+   └───────┘
+```
+
+
+要求されたパスの型がJSON型の宣言で型ヒントによって指定されていない場合、そのパスの値は常にDynamic型を持ちます：
+
+
+```
+SELECT
+    C.a.d,
+    toTypeName(C.a.d)
+FROM test;
+
+   ┌─C.a.d───┬─toTypeName(C.a.d)─┐
+1. │ 42      │ Dynamic           │
+2. │ 43      │ Dynamic           │
+3. │ ᴺᵁᴸᴸ    │ Dynamic           │
+4. │ foo     │ Dynamic           │
+5. │ [23,24] │ Dynamic           │
+6. │ ᴺᵁᴸᴸ    │ Dynamic           │
+   └─────────┴───────────────────┘
+```
+
+
+また、特別なJSON構文`JSON_column.some.path.:TypeName`を使用してDynamic型のサブカラムを読み取ることも可能です：
+
+
+```
+SELECT C.a.d.:Int64
+FROM test;
+
+
+   ┌─C.a.d.:`Int64`─┐
+1. │             42 │
+2. │             43 │
+3. │           ᴺᵁᴸᴸ │
+4. │           ᴺᵁᴸᴸ │
+5. │           ᴺᵁᴸᴸ │
+6. │           ᴺᵁᴸᴸ │
+   └────────────────┘
+```
+
+
+さらに、JSON型はサポートしており、特別な構文`JSON_column.^some.path`を使用して、JSON型でネストされたJSONオブジェクトをサブカラムとして読み取ることができます：
+
+
+   ```
+SELECT C.^a
+FROM test;
+
+   ┌─C.^`a`───────────────────────────────────────┐
+1. │ {"b":10,"c":"str1","d":"42"}                 │
+2. │ {"b":20,"c":"str2","d":"43"}                 │
+3. │ {"b":30,"c":"str3","e":"44"}                 │
+4. │ {"b":40,"c":"str4","d":"foo","e":"baz"}      │
+5. │ {"b":50,"c":"str5","d":["23","24"]}          │
+6. │ {"b":60,"c":"str6","d":{"e":"bar"},"e":"45"} │
+   └──────────────────────────────────────────────┘
+```
+
+```
+SELECT toTypeName(C.^a)
+FROM test
+LIMIT 1;
+
+   ┌─toTypeName(C.^`a`)───────┐
+1. │ JSON(b UInt32, c String) │
+   └──────────────────────────┘
+```
+
+ 
+ > 現時点では、ドット構文はパフォーマンス上の理由でネストされたオブジェクトを読み取りません。データはパスごとにリテラル値を非常に効率的に読み取れるように保存されていますが、パスごとにすべてのサブオブジェクトを読み取るには、より多くのデータを読み込む必要があり、時には遅くなることもあります。したがって、オブジェクトを返したい場合には、代わりに.^を使用する必要があります。現在、２つの異なる`.`構文を統一する[計画](https://github.com/ClickHouse/ClickHouse/issues/68428)をしています。
+ 
+ ## もう一つの詳細 - コンパクトなディスクリミネータのシリアル化
+ 
+ 多くのシナリオでは、動的なJSONパスはほとんど同じ型の値を持つことがあります。この場合、Dynamic型の[ディスクリミネータファイル](/blog/a-new-powerful-json-data-type-for-clickhouse#discriminator-column-for-switching-between-subtypes)には主に同じ数（型ディスクリミネータ）が含まれることになります。
+
+同様に、多くのユニークでスパースなJSONパスを保存する場合、それぞれのパスのディスクリミネータファイルには主に値255（NULL値を示す）が含まれることになります。
+
+両方の場合においてディスクリミネータファイルは十分に圧縮されますが、すべての行が同じ値を持つ場合にはかなり冗長になる可能性があります。
+
+これを最適化するために、ディスクリミネータのシリアル化の特別なコンパクト形式を実装しました。[通常の](/blog/a-new-powerful-json-data-type-for-clickhouse#discriminator-column-for-switching-between-subtypes)`UInt8`値としてディスクリミネータを記述する代わりに、[ターゲットグラニュール](https://clickhouse.com/docs/en/optimize/sparse-primary-indexes#data-is-organized-into-granules-for-parallel-data-processing)内ですべてのディスクリミネータが同じ場合、3つの値のみをシリアル化します ([8192](https://clickhouse.com/docs/en/operations/settings/merge-tree-settings#index_granularity) 値の代わりに):
+
+1. コンパクトグラニュールフォーマットのインジケータ
+2. このグラニュール内の値の数のインジケータ
+3. ディスクリミネータ値
+
+この最適化は、MergeTreeの設定`use_compact_variant_discriminators_serialization`（デフォルトで有効）によって制御できます。
+
+## ここからが始まりです
+
+この記事では、JSONの基礎的な構成要素を最初に作成することで、私たちの新しいJSON型をゼロからどのように開発したかを概説しました。
+
+この新しいJSON型は、現在は非推奨となった[Object('json')](https://clickhouse.com/docs/en/sql-reference/data-types/object-data-type)データ型を置き換えることを目的として設計されており、その制限を克服し、全体的な機能性を改善しています。
+
+新しい実装は現在、テスト目的で[リリース](https://clickhouse.com/blog/clickhouse-release-24-08#json-data-type)されており、機能セットはまだ完成していません。私たちの[JSONロードマップ](https://github.com/ClickHouse/ClickHouse/issues/68428)には、テーブルの主キーやデータスキッピングインデックス内でJSONキーパスを使用するなど、いくつかの強力な機能拡張が含まれています。
+
+また、新しいJSONタイプを実装するために作成した基盤ブロックは、ClickHouseがXML、YAML、その他の半構造化タイプをサポートするための道を開きました。
+
+今後の投稿では、実際のデータを使用して新しいJSONタイプの主要なクエリ機能を紹介し、データ圧縮とクエリパフォーマンスのベンチマークを示します。また、JSONの実装の内部動作についても詳しく説明し、データがメモリ内でどのように効率的にマージされ処理されるかを解説します。
+
+ClickHouse Cloudを使用していて、新しいJSONデータタイプをテストしたい場合は、プライベートプレビューを有効にするために[サポートにご連絡](https://clickhouse.com/docs/en/cloud/support)ください。
+
+
+
+
+
+
+
+
+
+
+
+---
+
+## GENIEEがClickHouseを活用して広告パフォーマンスレポートを安定化・最適化した方法
+Published: 2024-12-14T19:05:33+00:00
+URL: https://clickhouse.com/blog/geniee-user-story-japanese
+
+---
+title: "GENIEEがClickHouseを活用して広告パフォーマンスレポートを安定化・最適化した方法"
+date: "2024-12-14T19:05:33.771Z"
+author: "ClickHouse"
+category: "User stories"
+excerpt: "ClickHouseの柔軟性とスケーラビリティを活用することで、GENIEEは成長を続け、顧客により迅速で信頼性の高いインサイトを提供することができます。"
+---
+
+# GENIEEがClickHouseを活用して広告パフォーマンスレポートを安定化・最適化した方法
+
+<iframe width="768" height="432" src="https://www.youtube.com/embed/JsXrPfgcIhY" title="YouTube video player" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" referrerpolicy="strict-origin-when-cross-origin" allowfullscreen></iframe>
+
+<p><br /></p>
+
+[GENIEE](https://en.geniee.co.jp/)は、誰もがマーケティングで成功できる世界の実現を目指しています。2010年に東京で設立されたGENIEEは、パブリッシャー、広告主、代理店、アプリ開発者の広告戦略を最適化し、広告収益を最大化するための広告技術とデジタルマーケティングソリューションを提供しています。
+
+デジタルマーケティングにおいて、データは効果的な広告戦略の基盤です。GENIEEのクライアントは、インプレッションやクリックからコンバージョンやコストに至る莫大な量のリアルタイムデータに基づいてキャンペーンを調整し、リターンを最大化しています。毎日生成される何十億ものデータポイントを持つ中で、GENIEEは効率よく情報を処理、保存、分析することができるデータベース管理システムを必要としています。これにより、正確でリアルタイムのインサイトを提供し、広告主が迅速に意思決定できるようにします。
+
+2017年以来、ClickHouseはGENIEEのデータ運用の中心となり、中央報告データベースとして機能しています。[2024年6月の東京ミートアップ](/videos/tokyo-meetup-accelerate-advertising-performance-reporting-with-clickhouse)で、エンジニアの片岡氏は、ClickHouseの使用をデータ集計にまで拡大するという最近の決定について説明しました。この動きにより、レポートの速度が向上し、システムの安定性が改善され、コストが削減されました。
+
+## 旧システムの限界を超える
+
+2021年まで、GENIEEの広告パフォーマンスレポートシステムは、ストリーミングデータにはApache Kafkaを、データ集計にはApache Flinkを組み合わせて使用していました。このセットアップでは、Flinkが広告データの集計という複雑なタスクを処理し、その結果をClickHouseに送信してレポートしていました。しかし、データの規模が拡大するにつれて、このシステムは効率性と信頼性を損なういくつかの問題に直面しました。
+
+最も大きな問題の一つは、頻繁なFlinkの障害でした。これらの中断は不完全または不正確なレポートを引き起こし、しばしばGENIEEのエンジニアリングチームがデータを再カウントし、確認のために人によるチェックを行う必要がありました。これは労力がかかり時間がかかるプロセスでした。レポートの遅延も別の問題であり、ピーク時にはレポートの生成に40分以上かかることもあり、クライアントにリアルタイムのインサイトを提供するのが難しくなっていました。
+
+![geniee-img1.png](https://clickhouse.com/uploads/geniee_img1_31d67e3976.png)
+
+_GENIEEの旧アーキテクチャ: データはKafkaを介してストリーミングされ、Flinkで集計され、ClickHouseでレポート用に保存されます。_
+
+旧システムはまた、サーバーリソースを大量に消費し、安定性とパフォーマンスを維持するための運用コストを押し上げていました。エンジニアは問題を診断するためにログを手動で検索する必要があり、これもまたプロセスを遅くし、作業量を増加させていました。
+
+「状況は理想的ではありませんでした」と片岡氏は言います。「問題の根本原因に対処したいと考えていましたが、データの複雑さと規模の大きさのため、それは簡単ではありませんでした。」
+
+GENIEEの長期的な成長を支え、クライアントから期待される最先端の広告技術とデジタルマーケティングソリューションを提供するためには、より安定性と効率の良いデータベース管理ソリューションが必要であることに気付きました。
+
+## BigQueryよりもClickHouseを選択
+
+広告パフォーマンスレポートシステムを刷新するために、片岡氏とチームはGoogle BigQueryを含むいくつかの選択肢を検討しました。しかし、BigQueryがいくつかの利点を提供している中で、GENIEEはClickHouseの使用を拡大することが最良の道であると判断しました。
+
+この決定の主な要因の一つは、報告データベースとして数年間使用してきたClickHouseへのチームの親しみでした。この長い関係とClickHouseの高度な機能の採用により、データ集計への拡大に伴うスムーズな移行が可能になりました。
+
+さらに、ClickHouseはコスト効率が高く、サーバーリソースと運用費用を削減することを目指す企業にとって重要なポイントだったと片岡氏は述べています。
+
+信頼されている既存のシステムを基に構築することで、GENIEEはパフォーマンス、安定性、コストのバランスを取った戦略的な選択をすることができました。報告と集計の両方にClickHouseを使用する決定により、完全にデータ運用を最適化し、新しいプラットフォームを必要とせずに済みました。
+
+「結果的に、BigQueryよりもClickHouseを選択したのは正しい選択でした」と片岡氏は言います。
+
+## 新たな、より良いデータアーキテクチャ
+
+GENIEEの新たなデータアーキテクチャは、ログ集計用と報告用の2つのClickHouseクラスターを中心に構築され、データ処理を合理化し安定化するために連携しています。データフローはKafkaで始まり、リアルタイムデータを取り込み、集計と報告の両方のためにClickHouseにルーティングします。これにより、GENIEEは大量の広告パフォーマンスデータを迅速かつ正確に処理できるようになりました。
+
+![geniee-img2.png](https://clickhouse.com/uploads/geniee_img2_7a7a462af7.png)
+
+_GENIEEの新しいアーキテクチャ: データはKafkaを介してストリーミングされ、ClickHouseで集計・パースされ、リアルタイムレポート用に保存されます。_
+
+システムの主なコンポーネントには以下のものがあります：
+
+### Kafkaテーブルエンジン
+
+GENIEEはリアルタイムデータの取り込みにKafkaを引き続き使用していますが、ログを[Kafkaテーブルエンジン](/docs/en/integrations/kafka/kafka-table-engine)を介して直接ClickHouseにルーティングするようになりました。この合理化されたアプローチにより、システムは遅延を最小限に抑えながら大量の受信データを処理できるようになります。
+
+### Materialized View
+
+ClickHouseの[Materialized View](/docs/en/materialized-view)を使用することで、GENIEEはインプレッションやクリックのような広告データを事前集計し、クエリ時間を数時間から数分に短縮しました。Materialized Viewは自動的にデータのパースと集計をトリガーし、報告プロセスをさらに簡素化しています。
+
+### SummingMergeTreeエンジン
+
+ClickHouseの[SummingMergeTree](/docs/en/engines/table-engines/mergetree-family/summingmergetree)エンジンを活用することで、GENIEEはインプレッションやコストのようなメトリクスの集計を完全に自動化しました。これにより、旧システムを悩ませていた手動処理や再集計を避けることができます。
+
+### Dictionaryとメタデータの処理
+
+ClickHouseの[Dictionary機能](/docs/en/sql-reference/dictionaries)を使用することで、GENIEEは広告主のメタデータに特においてキーを属性値に効率的にマッピングしています。この方法はデータの重複を減らし、リアルタイムルックアップを高速化し、データアーキテクチャの全体的な効率を向上させています。
+
+## 速度、安定性、スケーラビリティ
+
+片岡氏が説明するように、GENIEEの新しいClickHouse中心のデータアーキテクチャは、ビジネスの重要な領域でさまざまな利点をもたらしました。
+
+旧システムではレポートの生成に数時間かかっていたのが、同じクエリがわずか数分で完了するようになりました。これにより、GENIEEの顧客は広告戦略や支出をリアルタイムで最適化し、迅速でよりインフォームされた意思決定を行うことができます。
+
+システムの安定性も大幅に改善されました。GENIEEがFlinkで経験していた頻繁な障害は過去のものとなっています。ClickHouseの集計エンジンに移行することで、GENIEEはデータフローを簡素化し、障害点を減少させ、システムの信頼性を向上させました。
+
+コスト効率も大きな成果でした。ClickHouseのSummingMergeTreeエンジンを使用することで、GENIEEはメトリクスの集計を自動化し、手動の介入を不要にし、エンジニアが戦略的で高価値のあるタスクに集中できるようになりました。また、新しいアーキテクチャはリソース効率が高く、サーバーの台数を減らし、会社のインフラコストを下げています。
+
+全体として、新しいシステムはプロセスを合理化し、信頼性を向上し、コストを削減し、GENIEEが顧客によりタイムリーで価値のあるインサイトを提供できるようにしました。
+
+## ClickHouseと共に成長する
+
+将来を見据えて、片岡氏はチームがClickHouseの機能を活用し続けることに興奮していると述べています。特に注力しているのはクエリパフォーマンスをさらに向上させることで、プロジェクションのような機能を試したり、処理時間を短縮するために圧縮アルゴリズムを最適化したりしています。また、JSONからバイナリログ形式への移行を検討しており、これが性能を向上させ、データ処理をさらに効率化することを期待しています。
+
+ClickHouseの柔軟性とスケーラビリティを活用することで、GENIEEは成長を続け、顧客により迅速で信頼性の高いインサイトを提供することができます。ビジネスが進化する中で、片岡氏とチームは、ClickHouseが広告技術とデジタルマーケティングのリーダーとして先を行くためのデータインフラストラクチャの基盤となることに自信を持っています。
 
 
 ---
