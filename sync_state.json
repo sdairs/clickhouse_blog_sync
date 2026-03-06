@@ -1,5 +1,5 @@
 {
-  "last_sync": "2026-03-05T06:21:31.903319Z",
+  "last_sync": "2026-03-06T06:19:52.446147Z",
   "processed_blogs": {
     "https://clickhouse.com/blog/clickhouse-raises-400-million-series-d-acquires-langfuse-launches-postgres": {
       "title": "ClickHouse raises $400M Series D led by Dragoneer to accelerate expansion across analytics and AI infrastructure",
@@ -4242,9 +4242,21 @@
       "pub_date": "2025-02-19T14:58:53+00:00",
       "file_path": "blogs/2025-02-19-clickhouse-materialized-view.md",
       "processed_at": "2026-03-05T06:21:31.816019Z"
+    },
+    "https://clickhouse.com/blog/clickstack-embedded-clickhouse": {
+      "title": "Introducing ClickStack embedded in ClickHouse",
+      "pub_date": "2026-03-05T12:06:10+00:00",
+      "file_path": "blogs/2026-03-05-introducing-clickstack-embedded-in-clickhouse.md",
+      "processed_at": "2026-03-06T06:19:52.073886Z"
+    },
+    "https://clickhouse.com/blog/lago": {
+      "title": "A million events per second: How Lago scales usage-based billing with ClickHouse Cloud",
+      "pub_date": "2026-03-03T14:54:50+00:00",
+      "file_path": "blogs/2026-03-03-a-million-events-per-second-how-lago-scales-usage.md",
+      "processed_at": "2026-03-06T06:19:52.361455Z"
     }
   },
-  "total_blogs": 707,
+  "total_blogs": 709,
   "failed_blogs": [
     {
       "url": "https://clickhouse.com/jp/blog/clickhouse-gcp-japan-availability",

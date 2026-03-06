@@ -1,6 +1,189 @@
 # ClickHouse Blogs
-Last updated: 2026-03-05 06:21:31 UTC
-Total blogs: 707
+Last updated: 2026-03-06 06:19:52 UTC
+Total blogs: 709
+
+---
+
+## Introducing ClickStack embedded in ClickHouse
+Published: 2026-03-05T12:06:10+00:00
+URL: https://clickhouse.com/blog/clickstack-embedded-clickhouse
+
+---
+title: "Introducing ClickStack embedded in ClickHouse"
+date: "2026-03-05T12:06:10.839Z"
+author: "The ClickStack Team"
+category: "Product"
+excerpt: "With ClickHouse 26.2, the ClickStack observability UI is embedded directly in the binary. Install ClickHouse, open localhost:8123, and start exploring your logs, traces, and metrics - no extra setup required."
+---
+
+# Introducing ClickStack embedded in ClickHouse
+
+## TLDR; {#tldr}
+
+With 26.2, we are introducing a new distribution method: ClickStack UI embedded in ClickHouse. The ClickStack UI is now distributed and embedded directly in the ClickHouse binary, making it easy to experiment with observability on your local instance, explore your own datasets, and even inspect ClickHouse itself.  Simply navigate to https://localhost:8123, select "ClickStack", and start exploring.
+
+## Introduction {#introduction}
+
+Historically, ClickStack has been available through Docker-based distributions. You can run the [full stack in a single container](https://clickhouse.com/docs/use-cases/observability/clickstack/deployment/all-in-one) for testing and experimentation, or deploy [each component independently](https://clickhouse.com/docs/use-cases/observability/clickstack/deployment/hyperdx-only) when moving to production - running the UI, collector, and ClickHouse separately using [tools such as Helm](https://clickhouse.com/docs/use-cases/observability/clickstack/deployment/helm).
+
+More recently, [we introduced a managed ClickStack offering](https://clickhouse.com/blog/introducing-managed-clickstack-beta) in ClickHouse Cloud, where we host both the UI and ClickHouse. Users benefit from integrated authentication along with ClickHouse Cloud's separation of storage and compute - enabling both long-term data retention in object storage while allowing independent scaling of compute to minimize the cost per GB.
+
+**From 26.2, we are adding a 3rd option.**
+
+The ClickStack UI now comes embedded in the ClickHouse binary itself. At first glance, embedding a web application into a high-performance C++ database might sound like it would significantly increase the binary size. In practice, we have kept the additional footprint under 4.1 MB, ensuring installation remains lightweight and fast.
+
+This means that installing ClickHouse now gives you ClickStack out of the box. Whether you use Docker, download the binary, or install via your favorite package manager, ClickStack is immediately available. Simply install ClickHouse, navigate to [http://localhost:8123](http://localhost:8123), and select ClickStack from the menu. Within seconds, you can begin exploring your logs, traces, and metrics.
+
+<iframe width="768" height="432" src="https://www.youtube.com/embed/s1MGNcVNvNg?si=vO78XutzyvwGbHZM" title="YouTube video player" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" referrerpolicy="strict-origin-when-cross-origin" allowfullscreen></iframe>
+
+## Built for Exploration and Local Development {#built-for-exploration-and-local-development}
+
+The embedded version of the ClickStack UI  is designed for local exploration, learning, and exploring your own ClickHouse data with an observability UI. It is not intended for production deployments.
+
+This distribution makes it easy to experiment with observability on your local ClickHouse instance, explore your own datasets, and even inspect ClickHouse itself. ClickHouse already exposes rich internal logs and metrics that are invaluable for diagnosing and optimizing performance. The ClickStack UI provides convenient ways to visualize this data and better understand how your instance behaves.
+
+![](https://clickhouse.com/uploads/clickstack_mar2026_image4_da7cac1173.png)
+
+![](https://clickhouse.com/uploads/clickstack_mar2026_image7_45f3e11739.png)
+
+![](https://clickhouse.com/uploads/clickstack_mar2026_image1_b8e282373a.png)
+
+![](https://clickhouse.com/uploads/clickstack_mar2026_image9_e4198f5349.png)
+
+> The ClickHouse preset dashboard can be useful for diagnosing local issues and performance problems. Users can also search their local logs and build visualizations over system metric tables.
+
+For larger or production deployments, we always recommend running ClickStack components separately.
+
+The embedded version also intentionally omits certain capabilities to keep the distribution size small and the experience simple. There is no persistent state storage so alerting is disabled, as well as dashboard and querying persistence. [Event pattern](https://clickhouse.com/docs/use-cases/observability/clickstack/event_patterns) functionality is also not included to keep the size small as this requires [a WASM Python runtime](https://clickhouse.com/blog/event-patterns-clickstack#how-clickstack-implements-event-patterns).
+
+Some of these limitations may be addressed in the future using approaches such as browser based storage, but for now the focus is simplicity and approachability.
+
+If you plan to operate ClickStack at scale, or require alerting and persistence, the [open source docker versions](https://clickhouse.com/docs/use-cases/observability/clickstack/getting-started/oss) or [managed cloud](https://clickhouse.com/docs/use-cases/observability/clickstack/getting-started/managed) offering remain the recommended path.
+
+## The technical challenges {#the-technical-challenges}
+
+For the curious reader, embedding a full web application inside a C++ database binary involved some interesting engineering decisions.
+
+### Assumptions {#assumptions}
+
+Embedding ClickStack inside ClickHouse meant working within a strict set of conditions defined by the core team, reflecting the engineering standards expected of the ClickHouse binary:
+
+1. Adding a [Node.js](http://node.js) dependency to ClickHouse is a non-starter
+2. Files must be embedded in the binary, not lingering somewhere in the file system
+3. ClickStack should not significantly inflate the binary size
+
+### The Next.js parts {#the-nextjs-parts}
+
+The UI that powers ClickStack, HyperDX, is a Next.js application. For those familiar, Next.js is a full-stack framework that renders pages on the server before serving, meaning that both the frontend and the backend are bundled into an application. It allows you to serve both static pages and dynamic HTML. However, serving dynamic pages without introducing a Node.js dependency would mean rewriting a lot of the Next.js internals. This meant serving dynamic pages was off the table. Luckily, ClickStack heavily uses static pages. There is still React running in the browser, but very little dynamic server-side rendering ever occurs.
+
+ClickHouse has some existing HTML pages,  such as `play.html` for running queries in a WebUI, and `dashboards.html` for some extremely helpful dashboards to see the health of your ClickHouse instance. The `dashboards.html` page even loads some JavaScript!
+
+However, both are a far cry from the complexity of serving a webpack output from a modern full-featured website like ClickStack. I'll get to that complexity in the [Bundling into ClickHouse](/blog/clickstack-embedded-clickhouse#bundling-into-clickhouse) section, but the existing web pages meant we could add an additional handler with just a little custom functionality.
+
+### ClickStack existing variations and connecting to ClickHouse {#clickstack-existing-variations-and-connecting-to-clickhouse}
+
+ClickStack already has a few  dependencies on which it relies for core functionality. The standard application includes Next.js, Express, and MongoDB. Express and MongoDB are primarily used for the CRUD persistence layer for saved searches, dashboards, and sources. The Express server also serves as a proxy for ClickHouse,  while also handling authentication to ensure DB credentials are not leaked to the frontend. It was safe to assume that the Express backend, MongoDB, and a proxy layer would not be available when embedding ClickStack in ClickHouse.
+
+However, there already existed a [demo site](http://play-clickstack.clickhouse.com) with most capabilities we needed; connections stored in session storage, sources persisted in local storage, and ability to query ClickHouse directly without a proxy layer. The only modifications needed would be to adjust all links with the prefix "/clickstack". With this mechanism, we could attempt bundling into ClickHouse.
+
+> We also decided to remove `pyodide`, a WASM Python runtime for the browser used for ClickStack's "Event Patterns" feature, purely because its size would inflate the ClickHouse binary size by more than we are comfortable with.
+
+### Bundling into ClickHouse {#bundling-into-clickhouse}
+
+ClickHouse uses many 3rd-party libraries and manages them via git submodules. This means that updating a version of a dependency is as simple as checking out a specific commit and rerunning the ClickHouse build. This provides us with the basic foundation to ensure that upgrading to a newer ClickStack version is potentially easy if we can provide it as a usable sub-module.
+
+Building ClickHouse requires many dependent tools such as `cmake`, `ccache`, `ninja`, and many more. But NOT Node.js. For the purpose of reducing friction in local development as well as build times, this meant adding a new dependency with rather large implications like [node.js](http://node.js) was not an option. A good alternative is to generate a static bundle upon release and included directly in a git submodule. As we didn't want to clutter the ClickStack repo, this meant creating a new repo that can reproducibly check out a ClickStack version, build the static output, and update the bundle - ideally all automated upon the release of a new ClickStack version.
+
+But we still have an issue - the files are now present in a ClickHouse build, but how can they be embedded?
+
+C++ does have an #embed macro that allows embedding known files as raw bytes rather than as a file. Unfortunately, a feature of [Next.js](http://next.js) is that it outputs seemingly randomized file names, and lots of them. To handle this, we  generate a C++ file on the fly using some `cmake` magic. It does the following:
+
+1. Creates a new file with some static definitions, specifically a struct definition that includes the file name, bytes, and MIME type
+2. Find all files in contrib/clickstack/out
+3. Sort by name
+4. For each file
+   1. Gzip the file (to reduce binary size + bytes shipped to browser)
+   2. Generate an entry in an array
+
+The generated file is then simply #included. Then, when a request is made to the `/clickstack` HTTP handler, there is a binary search for the file. If it is found, the file is returned with the appropriate MIME type. In the browser, the user must supply some username and password credentials to authenticate against ClickHouse - these are then used to directly query  ClickHouse over HTTP.
+
+![](https://clickhouse.com/uploads/clickstack_mar2026_image3_ab1eabc337.png)
+
+The result is a very lean addition, around 4.2mb embedded directly into the actual binary itself.
+
+## Getting Started {#getting-started}
+
+To try ClickStack embedded in ClickHouse, install ClickHouse as you normally would. You can use the one-line installer:
+
+<pre><code type='click-ui' language='bash'>
+curl https://clickhouse.com/ | sh
+</code></pre>
+
+Or see the Open Source Quick Start [guide](https://clickhouse.com/docs/getting-started/quick-start/oss) for alternatives.
+
+For this example, we will enable internal logs so you can explore your own ClickHouse instance, including executed queries and resource usage.
+
+After downloading the binary, move to the directory where you want ClickHouse to store its data. Then create a configuration snippet that enables the query and metric logs:
+
+<pre><code type='click-ui' language='bash'>
+mkdir -p config.d && echo "&lt;clickhouse&gt;&lt;query_log&gt;&lt;database&gt;system&lt;/database&gt;&lt;table&gt;query_log&lt;/table&gt;&lt;/query_log&gt;&lt;query_thread_log&gt;&lt;database&gt;system&lt;/database&gt;&lt;table&gt;query_thread_log&lt;/table&gt;&lt;/query_thread_log&gt;&lt;query_views_log&gt;&lt;database&gt;system&lt;/database&gt;&lt;table&gt;query_views_log&lt;/table&gt;&lt;/query_views_log&gt;&lt;metric_log&gt;&lt;database&gt;system&lt;/database&gt;&lt;table&gt;metric_log&lt;/table&gt;&lt;/metric_log&gt;&lt;asynchronous_metric_log&gt;&lt;database&gt;system&lt;/database&gt;&lt;table&gt;asynchronous_metric_log&lt;/table&gt;&lt;/asynchronous_metric_log&gt;&lt;/clickhouse&gt;" | sudo tee ./config.d/query_logs.xml &gt; /dev/null
+</code></pre>
+
+
+This appends to the default configuration and enables system log tables.
+
+Start the server and open your browser at [http://localhost:8123/clickstack](http://localhost:8123/clickstack)
+
+<pre><code type='click-ui' language='bash'>
+./clickhouse server
+</code></pre>
+
+A connection to the local instance is created automatically. If you already have OpenTelemetry data loaded, ClickStack will detect it and create sources automatically. On a fresh installation, you will be prompted to create a source. For this example, create a new **Log Source** that points to `system.query_log`.
+
+![](https://clickhouse.com/uploads/clickstack_mar2026_image8_3e2b3fa28f.png)
+
+> Config: `Name: Query Logs`
+> 
+> `Database: system`
+> 
+> `Table: query_log`
+> 
+> `Timestamp Column: event_time`
+> 
+> `Default Select: event_time, query_kind, query, databases, tables, initial_user, projections, memory_usage, written_rows, read_rows, query_duration_ms`.*
+
+Save the source. You will be redirected to the search view, where query logs should immediately begin appearing.
+
+At this point, you are observing your own ClickHouse instance.
+
+![](https://clickhouse.com/uploads/clickstack_mar2026_image5_4ac157885b.png)
+
+Feel free to open the play UI at [http://localhost:8213/play](http://localhost:8213/play), run a few queries and watch them appear in ClickStack. With the default selection you can view the execution time, the memory usage and other useful metadata such as the projections used.
+
+We also include a built-in ClickHouse preset dashboard, available from the left navigation menu. It provides insights into query latency and slow queries, highlights the most time consuming query patterns, shows query counts per table, and surfaces key system metrics such as CPU usage, memory consumption, S3 requests, and insert activity. Together, these views give you immediate observability into your ClickHouse instance, powered entirely by the embedded ClickStack UI.
+
+![](https://clickhouse.com/uploads/clickstack_mar2026_image2_42373b1362.png)
+
+To continue exploring ClickStack and learning its features, we recommend trying it with one of our [sample datasets](https://clickhouse.com/docs/use-cases/observability/clickstack/sample-datasets). These include sample [observability data](https://clickhouse.com/docs/use-cases/observability/clickstack/getting-started/sample-data) from the [OpenTelemetry demo](https://github.com/ClickHouse/opentelemetry-demo), along with examples for [exploring session replay functionality](https://clickhouse.com/docs/use-cases/observability/clickstack/example-datasets/session-replay-demo) and monitoring your [local infrastructure and ClickHouse instance](https://clickhouse.com/docs/use-cases/observability/clickstack/getting-started/local-data).
+
+## Conclusion {#conclusion}
+
+With ClickStack now embedded directly in ClickHouse, getting started with observability is as simple as installing the database itself. There is no additional setup, no separate services to run, and no external UI to deploy. Within seconds, you can begin exploring logs, traces, metrics, and even ClickHouse's own internal behavior.
+
+Our hope is that this distribution lowers the barrier to entry and makes it easier to discover the value of ClickStack using your own local datasets. It provides a practical environment for learning the product, running demos, training teams, experimenting with queries, and understanding how ClickHouse behaves during development.
+
+We look forward to seeing how the community uses it, and contributes to its evolution.
+
+
+---
+
+## Get started today
+
+Interested in seeing how ClickHouse works on your data? Get started with ClickHouse Cloud in minutes and receive $300 in free credits.
+
+[Sign up](https://console.clickhouse.cloud/signUp?loc=blog-cta-92-get-started-today-sign-up&utm_blogctaid=92)
+
+---
 
 ---
 
@@ -160,6 +343,88 @@ We would love to hear what resources and workflows matter most to your team. Joi
 Interested in seeing how ClickStack works for your observability data? Get started in minutes and receive $300 in free credits.
 
 [Sign up](https://console.clickhouse.cloud/signUp?loc=blog-cta-91-get-started-today-with-clickstack-sign-up&utm_blogctaid=91)
+
+---
+
+---
+
+## A million events per second: How Lago scales usage-based billing with ClickHouse Cloud
+Published: 2026-03-03T14:54:50+00:00
+URL: https://clickhouse.com/blog/lago
+
+---
+title: "A million events per second: How Lago scales usage-based billing with ClickHouse Cloud"
+date: "2026-03-03T14:54:50.107Z"
+author: "ClickHouse"
+category: "User stories"
+excerpt: "“We tried so many databases. The only one that worked really well and that was really easy to understand was ClickHouse.”  “We’re the only billing solution that can provide one million events per second ingestion. Without ClickHouse, this wouldn't be poss"
+---
+
+# A million events per second: How Lago scales usage-based billing with ClickHouse Cloud
+
+## Summary
+
+* Lago uses ClickHouse Cloud to ingest, store, and query massive volumes of usage events for real-time, usage-based billing and complex monetization for large enterprises  
+* By moving to ClickHouse Cloud and using ClickPipes, Lago scaled from 10K events per second to enterprise workloads of 1M events per second.  
+* ClickHouse enables Lago to serve larger, more complex customers with accurate, low-latency billing, without building or operating its own data infrastructure.
+
+
+## Building the billing backbone
+
+The team at [Lago](http://www.getlago.com) has a saying: "friends don't let friends build billing systems."
+
+In the late 2010s, the French startup's founders were working at Qonto, one of Europe's fastest-growing fintechs. Like many product teams, they assumed billing would be a side project—something they could knock out quickly and move on from. Instead, complexity piled up fast, with new pricing models, new customer requirements, and new edge cases to figure out. What started as a handful of scripts turned into a sprawling internal platform supported by a team of 10 to 15 full-time engineers. They learned that billing is critical infrastructure, and it gets harder the more products, geographies and customers you add to your business.
+
+When they founded Lago in 2021, the goal wasn't just to build another billing tool. It was to change how billing is built: It should neither be a black box nor a homegrown tangle of microservices. Open source was central to that vision, for practical reasons as much as philosophical ones. If billing is the backbone of a company's revenue, it needs to be transparent, extensible, and enable maximum privacy, compliance, and security. Lago was designed so developers could inspect the code, adapt it to their own systems, and avoid being trapped in rigid, black-box workflows.
+
+It was also a reaction to what they saw in the market. In their words: "Many other billing vendors lock their customers in or offer limited flexibility, leading to the customer having to internally build much of the billing logic."  At scale, that model starts to crack. As Lago's Head of Growth, Lisa Bardet, puts it, "Companies have to build a lot of workarounds when they reach a certain size and complexity. That's typically when they come knocking at our door."
+
+Lago was built for complex billing from day one. This means it supports usage-based pricing, subscriptions, credits, and almost any other pricing model (or hybrids of them). That decision has only become more relevant as AI-driven products and API-first businesses reshape how software is sold. Every request, every token, every feature used becomes a billable event. As Lisa says, "That's why it's so important to be able to scale the number of events we ingest, so we can provide the most accurate picture of our customers' margins at any point in time."
+
+## What led Lago to ClickHouse Cloud
+
+As Lago's platform has matured, so has the profile of the companies it serves. What started as a solution for fast-growing startups is increasingly being adopted by larger, more complex enterprises (like PayPal, CoreWeave, and Mistral, among others) with demanding requirements. With that shift upmarket comes an explosion in data volume. At a certain point, billing stops being an application problem and starts becoming a data problem.
+
+Supporting that new reality meant rethinking Lago's infrastructure from the ground up. The team needed a system that could ingest massive streams of usage events in real time, query them efficiently, and evolve as their customers' needs changed, without forcing Lago into rigid or proprietary constraints. "As an open-source company, we don't want to be locked in with a solution," says Engineering Lead Jérémy Denquin.
+
+The team evaluated many of the usual candidates: Redshift, Timescale, DuckDB, as well as Postgres-based approaches. They tested, benchmarked, and pushed each system under real workloads. Some struggled with ingestion. Others required heavy configuration or were too operationally complex to scale. "We tried so many databases," Jérémy says. "The only one that worked really well and that was really easy to understand was ClickHouse."
+
+At the time, million-event-per-second workloads were still a ways off. Lago's initial target was closer to 10,000 to 20,000 events per second—already well beyond what their existing systems could comfortably handle. Even at that level, ClickHouse stood out. It was fast out of the box. It handled high write volumes without drama. And it didn't require weeks of tuning just to get something working. The documentation was clear, the ecosystem was active, and it fit the team's open-source philosophy, preserving flexibility and control.
+
+If choosing ClickHouse was one decision, choosing how to run it was another. Jérémy was effectively operating solo on the infrastructure side, and the team had no interest in becoming database operators. "I didn't have time," he says. "For me, it was way easier to use ClickHouse Cloud." The managed service offloaded the burden of scaling, upgrades, and maintenance, allowing the team to focus on billing solutions instead of infrastructure.
+
+[ClickHouse Cloud](https://clickhouse.com/cloud) also fit naturally into Lago's existing pipeline. The team relies heavily on Kafka and Redpanda to stream usage events. [ClickPipes](https://clickhouse.com/clickpipes), ClickHouse Cloud's native ingestion service, made it straightforward to move that data into ClickHouse without building and maintaining custom connectors. With private networking, native integrations, and a clear operational model, ClickHouse Cloud gave Jérémy and the team the performance and reliability they needed, without turning infrastructure into a second job.
+
+## Lago's ClickHouse-based billing engine
+
+Today, ClickHouse is at the center of Lago's billing infrastructure. The platform relies on it for three core workloads: high-volume billing event ingestion, fast [analytical queries](https://clickhouse.com/resources/engineering/oltp-vs-olap) over usage data, and activity and audit logs across the product.
+
+The largest of those is the billing event pipeline. Every time a Lago customer's application generates a billable action—an API call, a feature being used, a unit of compute consumed—that event is streamed through Kafka or Redpanda and ingested into ClickHouse via ClickPipes. For many customers, that means tens of thousands of events per second flowing continuously through the system. And for some, it's far more than that.
+
+A large customer for example, required Lago to support ingestion rates approaching one million events per second. "We did it, and it was a success," Jérémy says. The scale of that workload points to where usage-based billing is heading as larger enterprises adopt consumption-driven models. "We're the only one in the market that can provide a million events per second ingestion on the billing side," he adds. "Without ClickHouse, this wouldn't be possible."
+
+Lago also relies on ClickHouse for querying that usage in real time. The platform needs to compute consumption, apply pricing logic, and expose accurate usage data to customers with minimal latency. ClickHouse's [columnar storage](https://clickhouse.com/resources/engineering/what-is-columnar-database) and query performance make it possible to run those analytical workloads directly on raw event data, without pre-aggregation or complex pipelines, even as data volumes continue to grow.
+
+The most recent addition is activity and audit logging. Every API call to Lago is recorded in ClickHouse, giving the team a complete, queryable history of what's happening across the platform. That data is used internally for debugging and observability, and externally to give customers visibility into their own activity. It's another example of a workload that starts small but scales quickly, and another place where performance and reliability matter.
+
+## What's next for Lago and ClickHouse
+
+As Lago continues its move upmarket, ClickHouse's role is only growing. The team is already expanding its use beyond core billing events and logs, pushing deeper into real-time usage tracking, aggregation, and analytics. The goal is to give customers an even clearer, more immediate view of how their products are being used and how that usage translates into revenue. "I expect we'll use it more and more," Jérémy says of ClickHouse.
+
+That expansion is tightly coupled to the types of customers Lago is serving, who demand the highest billing accuracy, performance, and reliability. "We're moving toward serving larger and larger organizations," Lisa says. "ClickHouse plays a big role in helping us scale and maintain performance at that level. It's a core component of our infrastructure."
+
+Over time, the team expects ClickHouse to take on an even larger share of Lago's data workload. While some analytics and event storage still run on Postgres today, the long-term direction is clear. "One day in production, we will remove Postgres as an event store," Jérémy says. The goal is to consolidate around a single, high-performance foundation that can handle everything from raw ingestion to real-time analytics, while keeping operations simple.
+
+As Lago grows and onboards larger, more complex organizations, that foundation matters more than ever. For a company that started with a vision of making complex billing feel simple, ClickHouse is helping ensure that the hardest parts stay under the hood.
+
+
+---
+
+## Get started today
+
+Interested in seeing how ClickHouse works on your data? Get started with ClickHouse Cloud in minutes and receive $300 in free credits.
+
+[Sign up](https://console.clickhouse.cloud/signUp?loc=blog-cta-90-get-started-today-sign-up&utm_blogctaid=90)
 
 ---
 
