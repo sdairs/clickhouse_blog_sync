@@ -1,5 +1,5 @@
 {
-  "last_sync": "2026-03-10T06:19:35.945783Z",
+  "last_sync": "2026-03-11T06:21:27.982245Z",
   "processed_blogs": {
     "https://clickhouse.com/blog/clickhouse-raises-400-million-series-d-acquires-langfuse-launches-postgres": {
       "title": "ClickHouse raises $400M Series D led by Dragoneer to accelerate expansion across analytics and AI infrastructure",
@@ -4254,9 +4254,27 @@
       "pub_date": "2026-03-03T14:54:50+00:00",
       "file_path": "blogs/2026-03-03-a-million-events-per-second-how-lago-scales-usage.md",
       "processed_at": "2026-03-06T06:19:52.361455Z"
+    },
+    "https://clickhouse.com/blog/full-text-search-ga-release": {
+      "title": "Announcing General Availability of ClickHouse Full-text Search",
+      "pub_date": "2026-03-10T11:00:34+00:00",
+      "file_path": "blogs/2026-03-10-announcing-general-availability-of-clickhouse.md",
+      "processed_at": "2026-03-11T06:21:27.410415Z"
+    },
+    "https://clickhouse.com/blog/gittrends": {
+      "title": "GitTrends: A Google Trends style view of the GitHub ecosystem",
+      "pub_date": "2026-03-10T15:21:01+00:00",
+      "file_path": "blogs/2026-03-10-gittrends-a-google-trends-style-view-of-the.md",
+      "processed_at": "2026-03-11T06:21:27.671383Z"
+    },
+    "https://clickhouse.com/blog/replo": {
+      "title": "What Replo learned optimizing 100+ billion events in ClickHouse",
+      "pub_date": "2026-03-09T11:40:43+00:00",
+      "file_path": "blogs/2026-03-09-what-replo-learned-optimizing-100-billion-events.md",
+      "processed_at": "2026-03-11T06:21:27.895552Z"
     }
   },
-  "total_blogs": 709,
+  "total_blogs": 712,
   "failed_blogs": [
     {
       "url": "https://clickhouse.com/jp/blog/clickhouse-gcp-japan-availability",

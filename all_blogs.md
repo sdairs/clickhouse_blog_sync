@@ -1,6 +1,548 @@
 # ClickHouse Blogs
-Last updated: 2026-03-10 06:19:35 UTC
-Total blogs: 709
+Last updated: 2026-03-11 06:21:27 UTC
+Total blogs: 712
+
+---
+
+## GitTrends: A Google Trends style view of the GitHub ecosystem
+Published: 2026-03-10T15:21:01+00:00
+URL: https://clickhouse.com/blog/gittrends
+
+---
+title: "GitTrends: A Google Trends style view of the GitHub ecosystem"
+date: "2026-03-10T15:21:01.574Z"
+author: "Lionel Palacin"
+category: "Engineering"
+excerpt: "Search and uncover technology trends across 10 billion GitHub events in real time."
+---
+
+# GitTrends: A Google Trends style view of the GitHub ecosystem
+
+GitHub generates a constant stream of issues, pull requests, and comments. Those are known as Github events. Over time, these billions of events capture the complete lifecycle of technology: how frameworks, libraries, and tools rise and fade. But capturing that immense data stream and turning it into a real-time trends analyzer is a challenge. 
+
+**GitTrends** make this possible. It is a new open-source demo application that works like a **specialized Google Trends for the tech world**, letting you search and compare any topic, technology, or keyword trends across **over 10 billion GitHub events in real time**. 
+
+It is now available at [https://gittrends.clickhouse.com](https://gittrends.clickhouse.com)
+
+> GitTrends is a public demo built to showcase ClickHouse's Full Text Search capabilities. It is fully functional, but may be missing some features or have the occasional bug. 
+
+## How can you use GitTrends? 
+
+Type a search term into GitTrends and instantly see how many times it was mentioned across issues, pull requests, and comments in every GitHub repository. This gives you an overview of a technology's popularity over time, the repositories driving the conversation, the developers most actively talking about it, and the actual issues and pull requests where the term appears.
+
+![gittrend-1.png](https://clickhouse.com/uploads/gittrend_1_f90a94c48d.png)
+
+But GitTrends gets really interesting when you start comparing.
+
+### Compare tech adoption 
+
+Search and compare mention trends for any keywords, exactly like Google Trends but built on the world's most relevant data source for open-source technology. Compare `ClickHouse vs Druid` to see how two analytics databases have traded momentum over time, or track `Claude vs OpenAI` to watch the AI landscape shift in real developer conversations.
+
+![gittrends-21.png](https://clickhouse.com/uploads/gittrends_21_d1284e2bdc.png)
+
+### Identify Ecosystems
+
+Identify the top repositories driving the conversation around any topic. Is ClickHouse discussed mostly in its own ecosystem, or is it bleeding into data engineering and observability projects? Is OpenAI mentioned across a broad range of repos while Claude is concentrated in a handful? 
+
+Knowing where a technology lives tells you as much as knowing how popular it is.
+
+![gittrends-31.png](https://clickhouse.com/uploads/gittrends_31_cca45cbdc2.png)
+
+### Drill into the Source
+
+Move from a high-level trend to the actual conversations behind it. Select any repository and explore its underlying activity: the most active contributors, and the most mentioned issues and PRs driving the trend.
+
+![gittrends-41.png](https://clickhouse.com/uploads/gittrends_41_81773597ae.png)
+
+## Full Text Search at Scale
+
+GitTrends is built around a simple idea: search any term in real time, across nearly 10 billion GitHub events with no data transformation. Rather than querying pre-computed answers, you index the raw text and search it directly at query time. That's the all promise behind the [new Full text search feature](https://clickhouse.com/blog/full-text-search-ga-release) recently released in ClickHouse. [Simply build a text index on a text column](https://clickhouse.com/docs/engines/table-engines/mergetree-family/textindexes) and use full text search.
+
+What makes ClickHouse particularly powerful here is that Full Text Search and aggregation live in the same engine. A single query can search raw text and aggregate results in one pass, with no joins across systems, no data movement, and no latency penalty. That combination is what makes the experience feel instant rather than just fast.
+
+The GitHub events dataset, nearly 10 billion rows of issues, pull requests, and comments, is a deliberate stress test. GitTrends still delivers fast search across all of it.
+
+To highlight the performance of the new Full text search index, GitTrends includes a live query performance comparison. For any search, you can toggle between using Full Text Search, Bloom Filter and a Full Table Scan and watch the difference play out in real time. 
+
+It is the clearest demonstration of what the right index buys you at scale.
+
+## Look under the hood
+
+GitTrends is fully open and built to be explored at every layer.
+
+### How is the data ingested?
+
+We have been ingesting the Github events dataset for a while now to make the dataset available in our SQL Playground for anyone to query the data using SQL and also described in this [page](https://clickhouse.com/demos/explore-github-with-clickhouse-powered-real-time-analytics) how you can query the data to build cool analysis.
+
+The script to ingest data in ClickHouse is available [here](https://github.com/ClickHouse/sql.clickhouse.com/blob/main/load_scripts/github_events/ingest.sh). 
+
+### What SQL query is running behind each chart?
+
+Every chart in GitTrends is backed by a real query. Click the SQL button on any chart to open it in the SQL playground, where you can inspect it, edit it, and run it yourself.
+
+<pre><code run='false' type='click-ui' language='sql' runnable='true' view='table'  play_link='https://sql.clickhouse.com/?query_id=TWAMA73L7QFQUY6AKWSVJL' show_statistics='true'>
+SELECT
+  toStartOfDay(created_at) AS bucket,
+  count() AS count
+FROM github.github_events
+WHERE
+  event_type IN ('IssueCommentEvent','IssuesEvent','PullRequestEvent','PullRequestReviewCommentEvent','PullRequestReviewEvent')
+  AND hasAllTokens(body, 'clickhouse')
+  AND created_at >= (now() - toIntervalMonth(1))
+  AND 1=1
+GROUP BY bucket
+ORDER BY bucket ASC
+SETTINGS
+    enable_parallel_replicas = 1,
+    enable_full_text_index = 1,
+    use_skip_indexes = 1,
+    query_plan_direct_read_from_text_index = 1,
+    use_skip_indexes_on_data_read = 1
+</code></pre>
+
+Each search type, Full Text Search, Bloom Filter, and Full Table Scan, has its own query so you can see exactly what changes under the hood.
+
+### How is the application built?
+
+Want to deploy GitTrends locally or build something similar on your own dataset? The full source code and deployment instructions are available on GitHub.
+
+Give the demo a try at <https://gittrends.clickhouse.com> and share with us [any feedback](https://github.com/ClickHouse/gitTrends/issues/new).
+
+
+---
+
+## Announcing General Availability of ClickHouse Full-text Search
+Published: 2026-03-10T11:00:34+00:00
+URL: https://clickhouse.com/blog/full-text-search-ga-release
+
+---
+title: "Announcing General Availability of ClickHouse Full-text Search"
+date: "2026-03-10T11:00:34.696Z"
+author: "Melvyn Peignon"
+category: "Product"
+excerpt: "Full-text Search is now GA in ClickHouse"
+---
+
+# Announcing General Availability of ClickHouse Full-text Search
+
+<style>
+div.w-full + p,
+span.relative + p {
+  text-align: center;
+  font-style: italic;
+}
+</style>
+
+## TLDR; {#tldr}
+
+* **Full-text Search is now GA in ClickHouse**, delivering native inverted indexes for fast, scalable token-based search across large text datasets.
+* **Dramatic performance gains**: up to 7–10x faster queries compared to traditional approaches for cold queries and even more for hot.
+* **Purpose-built for analytics and observability**, enabling fast multi-token search with aggregation over billions or trillions of rows.
+* **More powerful than Bloom filters for text workloads**, with deterministic results, better scalability, and significantly faster query performance at scale.
+* **Webinar** - Join us on our [webinar on March 11th](https://clickhouse.com/company/events/202603-APJ-Webinar-Full-Text-Search) to learn more as we dive deeper into full-text indices.
+
+<blockquote>
+<p style="font-size: 15px">"With ClickHouse Full-text Search, we are seeing a 96% reduction in the number of granules scanned compared to queries without the index. For our benchmark workload, query latency improved consistently by almost 7x."</p>
+</blockquote>
+
+## Introduction {#introduction}
+
+We're pleased to announce that Full-text Search in ClickHouse is now generally available and ready for production use.
+
+This milestone marks the culmination of a journey to bring powerful, native text search capabilities to ClickHouse. Since its initial conception, the implementation has gone through multiple iterations, each refining performance, usability, and integration with the broader ClickHouse architecture.
+
+Most recently, our focus has been on ensuring strong performance on object storage, enabling ClickHouse Cloud users to benefit from the same speed and efficiency that open source users have come to expect. Achieving this required a series of targeted optimizations, which we will explore in detail in a follow up post alongside comprehensive benchmark results.
+
+In this announcement, we will introduce the core benefits of Full-text Search, provide guidance on when to use it, and demonstrate how it behaves in real world scenarios.
+
+## What is Full-text Search in ClickHouse? {#what_is_full_text_search_in_clickhouse}
+
+Full-text Search in ClickHouse is implemented as an inverted index, similar to the approach used in search technologies such as Lucene. At a high level, a text index stores a mapping from tokens to the row numbers that contain each token. This structure allows ClickHouse to quickly identify which rows may match a search condition, itself consisting of tokens, without scanning every value in a column. Fundamentally, these indices accelerate text based filtering.
+
+Tokens are generated through a process called tokenization. Prior to tokenization, pre-processing functions can be applied to string values to modify the string values and in turn change the resulting search behavior e.g. lowercasing for case insensitive search. As an example consider the following:
+
+![](https://clickhouse.com/uploads/fts_mar2026_image9_af8055e387.png)
+
+When a text index is defined on a column, this tokenization process is applied to the column's values at insert time (or when the index is materialized), and the resulting token-to-row mapping is stored internally. At query time, the same tokenization logic is applied to the search string. The inverted index is then used to efficiently identify candidate rows that contain the requested token or tokens.
+
+Text indices thus enable fast searches for single tokens and multiple tokens within string columns. In addition to plain strings, text indices can be used with arrays of strings, as well as map keys and values.
+
+<blockquote>
+<p style="font-size: 15px">Currently, the text index does not directly accelerate phrase searches where one token must follow another in sequence. However, multi-token search can still be used to narrow the candidate set before phrase matching is performed using standard linear scanning on the remaining granules. In this way, phrase searches can still benefit indirectly. Direct acceleration of phrase searches is planned for a future iteration.</p>
+</blockquote>
+
+As we'll show in the examples below, the tokenization and processing is configurable in ClickHouse using standard SQL expressions. Users can control how both the indexed data and the query text are split into tokens. This affects matching behavior as well as performance. For example, n-gram or sparse n-gram tokenizers can be used to support substring style matching. Different tokenization strategies allow users to tune for specific use cases and tradeoffs.
+
+A forthcoming engineering focused blog will cover how this is implemented in ClickHouse's columnar architecture in more detail, as well as provide benchmark results vs previous techniques used in ClickHouse as well as other more traditional search engines.
+
+## When should I use Full-text Search indices? {#when_should_i_use_full_text_search_indices}
+
+Full-text Search in ClickHouse is designed to accelerate string based filtering at scale. It is particularly effective for queries that search for tokens within large volumes of text data, workloads that might previously have relied on techniques such as [Bloom filter skip indices to speed up string matching](https://clickhouse.com/docs/optimize/skipping-indexes#bloom-filter-types). With text indices, users can efficiently search across String columns, arrays of strings, and map keys and values. Support for additional semi structured types will continue to evolve.
+
+<blockquote>
+<p style="font-size: 15px">Historically, users accelerated string search in ClickHouse with <a href="https://clickhouse.com/docs/optimize/skipping-indexes">Bloom filter–based skip indexes.</a> While useful, Bloom filters are probabilistic and operate at granule level, meaning they can produce false positives and only answer coarse set-membership questions such as whether a token may exist in a range of data. They also require careful tuning and do not natively support multi-token search. Text indexes take a fundamentally different approach. They build a deterministic inverted index over tokens, storing row-level information that enables precise term lookups with no false positives from the index itself. While text indexes are larger than Bloom filters, they deliver significantly better scalability and performance for large text corpora are now the <strong>recommended approach to string matching at scale.</strong></p>
+</blockquote>
+
+This makes Full-text Search a strong fit for analytical workloads that combine filtering and aggregation over very large datasets. One of the unique advantages of ClickHouse is the ability to search and then immediately aggregate over billions or even trillions of rows. Searching petabytes of data and computing aggregates in the same query is fully aligned with ClickHouse's core strengths as a high-performance analytical database.
+
+Observability is a natural example. In ClickStack, [Full-text Search is already integrated to accelerate log search](https://clickhouse.com/blog/whats-new-in-clickstack-january-2026#supporting-text-indices). These workloads typically involve filtering logs by specific terms and then performing aggregations, grouping, and visualizations. Log data is simply another form of analytical data that happens to contain large volumes of text. Fast token matching combined with real time analytics is exactly the scenario Full-text Search is built for.
+
+It is important to be clear about what Full-text Search in ClickHouse is not. It is not a relevance engine and does not implement scoring models such as TF IDF or BM25, nor does it store positional information for advanced phrase ranking. It is designed to accelerate token based filtering, not to replace dedicated search engines built for rich NLP and relevance driven use cases. If you need sophisticated ranking and linguistic features, a traditional search engine may be a better fit. If you need extremely fast token and string matching over terabytes or petabytes of data, combined with real time aggregation and analytics, ClickHouse Full-text Search is purpose built for that workload.
+
+### User story - Ryft.io {#user_story_ryftio}
+
+During the beta phase, ClickHouse Cloud users began enabling Full-text Search on their existing production workloads to validate performance and usability at scale.
+
+One of those customers was [Ryft.io](http://Ryft.io), a platform that automates Apache Iceberg table maintenance and compaction based on real usage patterns, helping teams keep their lakehouse efficient and continuously optimized. Customers provide their query logs, and Ryft analyzes how tables are accessed to manage and optimize them over time.
+
+![](https://clickhouse.com/uploads/fts_mar2026_image2_83f710867d.png)
+
+As part of this workflow, Ryft now uses ClickHouse Full-text Search to power free text search across hundreds of millions of historical queries:
+
+> "With ClickHouse Full-text Search, we are seeing up to 96% reduction in the number of granules scanned compared to queries without the index. For our benchmark workload, query latency improved by almost 7x. This has fundamentally changed the usability of free text search in our query analysis engine. Now, we can offer a seamless search experience and clearly demonstrate the performance impact and optimization value Ryft delivers over time."
+>
+> <br />
+>
+> Guy Gadon, Co-Founder & VP R&D at Ryft
+
+### User story - Icite {#user_story_icite}
+
+[Icite](https://icite.io) was built for Security Operations to give teams identity specific context and enable confident, scalable threat response. It provides a clear view of who a user is, what they can access, what actions that access allows, and what they have actually done with it. Most importantly, it enables teams to quickly isolate and contain access to reduce risk in real time.
+
+![](https://clickhouse.com/uploads/fts_mar2026_image10_8be51f0593.png)
+
+<br />
+
+> "Full-text search in ClickHouse has fundamentally changed how we search across our log data. We ingest millions of events from diverse sources, storing the raw payload in a String column, and previously multi-term searches could take 30 to 45 seconds using linear scans. With the new inverted index, those same queries now complete in around 400 milliseconds. This has allowed us to deliver a fast, interactive search experience across our entire log corpus without introducing additional infrastructure or duplicating data outside ClickHouse."
+>
+> <br />
+>
+> Kevin Manson, Principal Cloud Engineer at Icite
+
+With Full-text Search now generally available, we look forward to more customers unlocking the same benefits across their analytical and observability workloads.
+
+## How do I use Full-text Search? {#how_do_i_use_full_text_search}
+
+Full-text Search is enabled by declaring a text index on a table. You choose the column to index, then specify a tokenizer and an optional preprocessor. The tokenizer controls how values are split into tokens, while the preprocessor lets you transform the input before tokenization, for example, lowercasing for case-insensitive search. There are also advanced tuning options for the index, including caching, which you can find [in our docs](https://clickhouse.com/docs/engines/table-engines/mergetree-family/textindexes).
+
+<iframe width="768" height="432" src="https://www.youtube.com/embed/9zPmf1a_heU" frameborder="0" allowfullscreen></iframe>
+
+In the example below, we add a text index to the GitHub Events dataset, available in [our public demo environment](https://sql.clickhouse.com/?query_id=6E6DUMHGX1TMG8XFCBRSE4). It contains over 10 billion rows, with each row representing a public GitHub event such as an issue, comment, watch, or pull request across all repositories. We have previously published [examples of analyzing this dataset](https://clickhouse.com/demos/explore-github-with-clickhouse-powered-real-time-analytics) for structured analytics, but text heavy analysis at this scale has historically been much harder to do efficiently.
+
+<pre><code type='click-ui' language='sql'>
+CREATE TABLE github.github_events(
+    ...
+    body String,
+    ...
+    INDEX fts_body body TYPE text(
+        tokenizer = splitByNonAlpha,
+        preprocessor = lowerUTF8(body)
+    ),
+    INDEX bloom_body tokens(lower(body)) TYPE bloom_filter(0.01) GRANULARITY 8
+)
+ENGINE = MergeTree
+ORDER BY (repo_id, event_type, created_at);
+</code></pre>
+
+<blockquote>
+<p style="font-size: 15px">See <a href="https://sql.clickhouse.com/?query=U0hPVyBDUkVBVEUgVEFCTEUgZ2l0aHViLmdpdGh1Yl9ldmVudHM">here</a> for the full table schema.</p>
+</blockquote>
+
+One question we can now answer quickly is: how often is "ClickHouse" mentioned across GitHub comments over time?
+
+<blockquote>
+<p style="font-size: 15px">All queries here are the fastest of 3 runs (effectively hot filesystem cache). We use a 32-core node in ClickHouse Cloud to execute queries.</p>
+</blockquote>
+
+First, if we disable both the text index and the Bloom filter, we force a linear scan. Even with ClickHouse parallelism, scanning gigabytes of text is not fast enough for interactive analytics:
+
+<pre><code type='click-ui' language='sql'>
+SELECT
+    toStartOfMonth(created_at) AS month,
+    count() AS count
+FROM github.github_events
+WHERE hasTokenCaseInsensitive(body, 'ClickHouse')
+GROUP BY month
+ORDER BY month ASC
+SETTINGS enable_full_text_index = 0, use_skip_indexes = 0;
+</code></pre>
+
+```shell
+┌──────month─┬─count─┐
+│ 2015-02-01 │     1 │
+│ 2016-06-01 │    68 │
+│ 2016-07-01 │    60 │
+│ 2016-08-01 │    53 │
+│ 2016-09-01 │    42 │
+—omitted for brevity
+
+119 rows in set. Elapsed: 193.018 sec. Processed 10.50 billion rows, 2.96 TB (54.40 million rows/s., 15.34 GB/s.)
+```
+
+<blockquote>
+<p style="font-size: 15px">Note that we use the <a href="https://clickhouse.com/docs/sql-reference/functions/string-search-functions#hasTokenCaseInsensitive"><code>hasTokenCaseInsensitive</code></a> function to achieve case-insensitive matching.</p>
+</blockquote>
+
+Next, we can enable the Bloom filter index while keeping the text index disabled. This improves performance with about 80% of granules pruned.
+
+<pre><code type='click-ui' language='sql'>
+SELECT
+    toStartOfMonth(created_at) AS month,
+    count() AS count
+FROM github.github_events
+WHERE hasAny(tokens(lower(body)), ['clickhouse'])
+GROUP BY month
+ORDER BY month ASC
+SETTINGS enable_full_text_index = 0, use_skip_indexes = 1, use_query_condition_cache = 0;
+</code></pre>
+
+```shell
+119 rows in set. Elapsed: 143.293 sec. Processed 2.16 billion rows, 729.00 GB (15.05 million rows/s., 5.09 GB/s.)
+```
+
+<blockquote>
+<p style="font-size: 15px">Currently, in order for the Bloom Filter index to be used, the expression has to match that used in the index specification i.e. <code>tokens(lower(body)</code>.</p>
+</blockquote>
+
+The overhead of the bloom filter here is surprising. Although the amount of data scanned is significantly lower, the performance improvement is not as dramatic.  Although we could improve this, it requires tuning to get good results:
+
+Finally, we enable the Full-text Search index. Now, ClickHouse can use the inverted index to identify matching rows efficiently, dramatically reducing the amount of data that needs to be read:
+
+<pre><code type='click-ui' language='sql'>
+SELECT
+    toStartOfMonth(created_at) AS month,
+    count() AS count
+FROM github.github_events
+WHERE hasToken(body, 'ClickHouse')
+GROUP BY month
+ORDER BY month ASC
+SETTINGS use_query_condition_cache = 0;
+</code></pre>
+
+```shell
+119 rows in set. Elapsed: 0.422 sec. Processed 334.92 million rows, 1.36 GB (794.41 million rows/s., 3.23 GB/s.)
+```
+
+In this case, the query is both simpler and substantially faster: we can write a natural predicate and let the index handle tokenization and preprocessing. The result is a dramatic reduction in scanned granules and a step-change in query latency, turning what was previously a heavy scan into something that feels interactive even at multi-billion-row scale.
+
+For more details on the query syntax supported for matching, as well as the preprocessors and tokenizers, see [the documentation](https://clickhouse.com/docs/engines/table-engines/mergetree-family/textindexes).
+
+## How much faster is Full-text Search? {#how_much_faster_is_full_text_search}
+
+As shown above, the performance gains from Full-text Search can be dramatic. While the example focused on a single term over a single dataset, and individual results will vary by workload, we consistently see meaningful improvements. For most real-world search queries, users can expect 7 to 10x faster performance for cold queries and even more for hot.
+
+![](https://clickhouse.com/uploads/fts_mar2026_image5_b7f77b503c.png)
+
+![](https://clickhouse.com/uploads/fts_mar2026_image8_f920b500b3.png)
+
+![](https://clickhouse.com/uploads/fts_mar2026_image4_daa32d2b11.png)
+
+To validate this more broadly, we benchmarked Full-text Search on 50 TB of log data with 59 vCPU and 256GB of RAM in ClickHouse Cloud. In addition to query latency, we measured storage overhead and insert performance. The index introduces additional write cost, with insert throughput reduced by ~50 percent compared to no index. However, the query performance gains are substantial: up to 10 times faster for cold queries, and even greater improvements when data is cached [on local nodes](https://clickhouse.com/blog/building-a-distributed-cache-for-s3). Compared to Bloom filter-based approaches, Full-text Search is typically slightly slower on inserts but delivers multiple times faster performance at query time.
+
+The animation below illustrates the impact on end-to-end query latency across representative workloads.
+
+
+<video autoplay="1" muted="1" loop="1" controls="0">
+  <source src="https://clickhouse.com/uploads/o11y_fts_aed2920d33.mp4" type="video/mp4" />
+</video>
+
+
+There is also a storage tradeoff. Full-text Search indexes are larger than Bloom filters, and both are larger than having no index at all. The difference is visible when comparing index sizes directly for our Github dataset:
+
+<pre><code type='click-ui' language='sql'>
+SELECT
+    name,
+    type,
+    formatReadableSize(data_compressed_bytes) AS compressed_bytes,
+    formatReadableSize(data_uncompressed_bytes) AS uncompressed_bytes
+FROM system.data_skipping_indices
+WHERE (`table` = 'github_events') AND (database = 'github') AND ((name = 'bloom_body') OR (name = 'fts_body'));
+</code></pre>
+
+```shell
+   ┌─name───────┬─type─────────┬─compressed_bytes─┬─uncompressed_bytes─┐
+1. │ fts_body   │ text         │ 215.84 GiB       │ 223.13 GiB         │
+2. │ bloom_body │ bloom_filter │ 7.04 GiB         │ 7.24 GiB           │
+   └────────────┴──────────────┴──────────────────┴────────────────────┘
+
+2 rows in set. Elapsed: 0.003 sec.
+```
+
+That said, in ClickHouse Cloud the cost of storage is often a small fraction of overall infrastructure spend. At approximately $25 per TB per month, even a sizable index is rarely a dominant cost driver for large analytical workloads, with overall compression remaining strong.
+
+For example, if we look at the compression rate for the GitHub table, it is about 9x before considering the text index. This reduces to around 6x when we factor in the text index.
+
+<pre><code type='click-ui' language='sql'>
+SELECT
+    formatReadableSize(sum(data_compressed_bytes)) AS compressed_size,
+    formatReadableSize(sum(data_uncompressed_bytes)) AS un_compressed_size
+FROM system.columns
+WHERE (`table` = 'github_events') AND (database = 'github');
+</code></pre>
+
+```shell
+┌─compressed_size─┬─un_compressed_size─┐
+│ 477.09 GiB      │ 4.23 TiB           │
+└─────────────────┴────────────────────┘
+
+1 row in set. Elapsed: 0.004 sec.
+```
+
+There are still open questions for some scenarios, particularly around how the index interacts with node level and distributed caching layers in observability workloads. For this reason, we have not yet made it the default in ClickStack, but we expect to address these considerations and expand default usage in the near future.
+
+## GitSearch - a Full-text Search demo {#gitsearch_a_full_text_search_demo}
+
+The examples above illustrate the mechanics and performance characteristics, but the best way to understand Full-text Search is to try it yourself. To make this easy, we have built an interactive public demo, [GitTrends](https://gittrends.clickhouse.com/), on top of the same GitHub Events dataset.
+
+![](https://clickhouse.com/uploads/fts_mar2026_image7_520bc9d605.png)
+
+In the demo, you can search for any technology term and instantly see how mentions trend over time across all public GitHub repositories.
+
+
+<video autoplay="1" muted="1" loop="1" controls="0">
+  <source src="https://clickhouse.com/uploads/Git_Trends_v2_354fb37e2f.mp4" type="video/mp4" />
+</video>
+
+Users can then drill into specific repositories where that technology appears, analyze how it shows up in issues and pull requests, and explore how interest in a given project evolves. You can even compare multiple technologies side by side, offering a lightweight alternative to tools like Google Trends for understanding activity and momentum within the developer ecosystem.
+
+![](https://clickhouse.com/uploads/fts_mar2026_image1_3870d680a5.png)
+
+
+
+![](https://clickhouse.com/uploads/fts_mar2026_image6_9bdf472d6f.png)
+
+All of this is powered by Full-text Search. For those who want to explore the performance differences directly, the UI also allows you to toggle between Full-text Search, Bloom filter based search, and a linear scan, so you can see the impact of each approach in real time.
+
+As in all of our public demos, we'll keep the dataset updated (hourly) so our users can benefit from GitHub analytics for free.
+
+## Conclusion {#conclusion}
+
+We are delighted to announce that Full-text Search in ClickHouse is now generally available and ready for production use. After multiple iterations and significant performance work, including optimizations for object storage in ClickHouse Cloud, we are excited for users to begin benefiting from fast, native text search at scale.
+
+To celebrate the [GA release, we are hosting a webinar](https://clickhouse.com/company/events/202602-EMEA-AMER-Webinar-FullTextSearch) on March 11th with the engineering team, where we will take a deeper dive into the internals, design decisions, and benchmark results behind Full-text Search.
+
+We look forward to seeing how the community applies this powerful new capability across analytics, observability, and beyond, and to hearing the success stories that follow.
+
+
+---
+
+## Get started today
+
+Interested in seeing how ClickHouse works on your data? Get started with ClickHouse Cloud in minutes and receive $300 in free credits.
+
+[Sign up](https://console.clickhouse.cloud/signUp?loc=blog-cta-95-get-started-today-sign-up&utm_blogctaid=95)
+
+---
+
+---
+
+## What Replo learned optimizing 100+ billion events in ClickHouse
+Published: 2026-03-09T11:40:43+00:00
+URL: https://clickhouse.com/blog/replo
+
+---
+title: "What Replo learned optimizing 100+ billion events in ClickHouse"
+date: "2026-03-09T11:40:43.244Z"
+author: "ClickHouse"
+category: "User stories"
+excerpt: "Replo uses ClickHouse to analyze 100+ billion events in real time, keeping analytics dashboards fast and responsive for 4,000+ Shopify   merchants."
+---
+
+# What Replo learned optimizing 100+ billion events in ClickHouse
+
+## Summary
+
+<style>
+div.w-full + p,
+span.relative + p {
+  text-align: center;
+  font-style: italic;
+}
+</style>
+
+Replo uses ClickHouse to power real-time, in-product analytics for Shopify merchants running live pages, offers, and A/B tests. The team iterated through multiple data models, learning how precomputation, deduplication, and recomputation boundaries affect real-time analytics at scale. Today, ClickHouse supports ingestion of 3,000-5,000 events per second and analysis of 100+ billion events while keeping dashboards fast and responsive.
+
+Last September, [Replo](https://www.replo.app/) engineer Ryan Voris attended a ClickHouse meetup in San Francisco. Like most meetups, it featured happy customers talking about how they used ClickHouse to scale their data operations. But for Ryan, it left a little something to be desired.
+
+"Everybody was talking about how great ClickHouse is and showing us all their amazing use cases," he says. "But nobody really showed anything like, 'Here's how I messed it up' or 'Here's what I did wrong' or 'Don't do this, it's not a good idea.'"
+
+So when Ryan took the stage at [our last San Francisco meetup](https://clickhouse.com/videos/meetupsf_dec_20254), he decided to do something different. Instead of a neatly packaged case study, he told the true story of how Replo, an AI-powered page builder trusted by more than 4,000 Shopify merchants, built its [analytics product](https://www.replo.app/product/analytics-and-insights) on ClickHouse, complete with missteps, migrations, and architectural resets.
+
+<iframe width="768" height="432" src="https://www.youtube.com/embed/nDL48eSsAa8?si=PLF1A8zhHGYPJz5s" title="YouTube video player" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" referrerpolicy="strict-origin-when-cross-origin" allowfullscreen></iframe>
+
+The result is a system capable of processing and analyzing more than 100 billion events, while keeping dashboards fast, attribution accurate, and analytics usable for online retailers.
+
+## Real-time analytics for live campaigns
+
+[Replo Analytics](https://www.replo.app/product/analytics-and-insights) sits directly inside the product. Customers use it to track sessions, purchases, conversion rates, average order value, and A/B test performance across campaigns. When a brand launches a new page or ad, they expect to see [real-time analytics](https://clickhouse.com/resources/engineering/what-is-real-time-analytics) immediately, not hours later.
+
+Behind the scenes, that translates into a steady stream of frontend events flowing into ClickHouse at anywhere from 3,000 to 5,000 events per second. "We're tracking things like clicks, page views, and purchases," Ryan explains. "Whenever there's a purchase on a page, we record that event and the purchase amount, and we use that to calculate information like average order value, revenue per session, and conversation rates."
+
+Replo's traffic patterns follow predictable rhythms, peaking during the North American workday and tapering off overnight. Expectations, however, never change. Dashboards need to stay responsive. Attribution needs to be correct. And analytics can't introduce the kind of latency that makes a live campaign feel opaque or unreliable.
+
+From the beginning (even before Ryan joined the company), Replo built this system on ClickHouse. There was never much doubt as to whether ClickHouse could handle the volume. The real question became how to model and compute analytics in a way that stayed fast as Replo Analytics grew, usage scaled, and requirements evolved.
+
+## From one table to precomputation
+
+Replo's first analytics pipeline was simple. All events flowed into a single table, and every dashboard query recomputed metrics on the fly.
+
+This worked for a few months, but as usage grew, problems started to appear. Every query, whether it was for the last hour or six months ago, hit the same table and repeated the same calculations. Session-level metrics were recomputed again and again, even though nothing about those sessions had changed.
+
+The schema itself didn't help either, with what Ryan describes as "a weird kind of nested payload" holding whatever didn't fit elsewhere. "It wasn't very effective," he says. "This eventually failed and we realized we needed a new table."
+
+The next version introduced a clearer structure, starting with a customer-specific namespace, followed by time and session identifiers. Grouping events by customer and session made it possible to scope queries more tightly and reflect how merchants actually interact with their data. It was a step toward treating analytics as something computed once and reused, rather than endlessly recalculated.
+
+From there, the team introduced a second table to hold precomputed results. The idea was to calculate metrics like total purchase amount or AOV ahead of time, store the results, and make queries cheap. Most events didn't require any computation at all. But as Ryan explains, "sessions that do require computation (ie. purchases) are a little bit more interesting."
+
+To manage that, the team implemented a "mark and unmark strategy," using [SummingMergeTree](https://clickhouse.com/docs/engines/table-engines/mergetree-family/summingmergetree) to track which sessions needed processing and clearing them once computation was complete. Behind the scenes, a [refreshable materialized view](https://clickhouse.com/docs/materialized-view/refreshable-materialized-view) ran on a fixed cadence, triggering a massive computation function that gathered all the events for each marked session, performed the aggregation, and wrote the final result back to ClickHouse.
+
+It was complex, but it worked. Queries were noticeably faster. "Customers who couldn't use our system before now actually could use our system," Ryan says. There was some additional write-time delay, but as he puts it, "It still felt like real time." With performance under control and tens of billions of events migrated, the team's confidence grew. As Ryan recalls, "Product owners felt like, 'Hey, this is awesome—let's add more functionality.'"
+
+## Real-time meets eventual consistency
+
+One of the next big feature requests was fractional attribution. Instead of crediting a full purchase to a single page, the team wanted to distribute value across every page a customer interacts with during a session. So if someone visits five pages and spends five dollars, each page gets a dollar. It sounds simple in theory, but in practice, the numbers didn't add up. "We realized something's wrong," Ryan says. "The math didn't make sense."
+
+The underlying logic seemed sound. The system already knew which events belonged to which session, and the team assumed that once events were written, the queried data would reflect a clean, deduplicated view of those sessions. "That's when we discovered merge trees are only *eventually* deduplicated, not immediately deduplicated," Ryan says. "Since we were using real-time information and intentionally writing duplicates to our database, we were causing our own problem."
+
+Fortunately, ClickHouse provides clauses like [DISTINCT](https://clickhouse.com/docs/sql-reference/statements/select/distinct) and [FINAL](https://clickhouse.com/docs/sql-reference/statements/select/from#final-modifier) to enforce deduplication at query time. Applying them cleaned up the results instantly. With those changes, test data started behaving as expected. On local datasets with a few hundred thousand rows, everything lined up. "Queries were still snappy, migration was easy," Ryan recalls. "It seemed like it was going fine—but as soon we deployed it, everything started slowing down almost immediately."
+
+This time, when the team looked closer, they saw the same sessions being reprocessed over and over again. Nothing was ever getting cleared. "It seems like sessions aren't being unmarked," Ryan wrote to his team in Slack, as the backlog kept growing.
+
+The culprit was the interaction between real-time recomputation and full-table deduplication at scale. Queries that had been cheap in testing now required scanning massive datasets, taking longer than the one-minute refresh window of the materialized view driving recomputation. Each cycle triggered the next before the previous one could finish.
+
+As Ryan puts it, "We kind of shot ourselves in the foot and caused this runaway train on our entire system." At that point, he says, there was only one question: "How do we fix this?"
+
+## The last approach: keeping it small
+
+The final solution didn't exactly come easy. "I'd be lying if I said this was the next approach we took," Ryan admits. "We tried to get this to work with 'mark and unmark' for way longer than we should have. And then we tried having dozens of CTEs that were doing all kinds of deduplication and different times to live."
+
+What ultimately fixed things was a reset in how the team thought about time. If analytics needed to be recomputed, it was only because a purchase had just happened. And as Ryan notes, "A customer is never going to make a purchase six months ago—so the data from six months ago we don't care about."
+
+That realization led to a new table designed specifically for live session events. Instead of scanning across the entire historical dataset, this table tracks only the last 40 minutes of activity, and only for purchase-related events. "This is a tiny bit of data compared to the 100 billion records we have," Ryan says. Clicks and page views still exist elsewhere, but they no longer dictate recomputation.
+
+With the scope narrowed, the processing logic could be simplified as well. The team moved away from deeply nested CTEs and rebuilt the computation around joins inside a single materialized view. The resulting flusher view is more compact, easier to reason about, and far less prone to runaway recomputation.
+
+This time, the system held. Queries stayed fast. Write-time lag remained around a minute. Migrating historical data took more effort, with scripts required to backfill older events, but that tradeoff was intentional. As Ryan puts it, "That's an easy, containable problem. We can write a script to handle that migration and not expect our live system to be so fault-tolerant that it automatically self-heals and fixes things that happened far in the past."
+
+## A scalable foundation for what's next
+
+Four months later, Replo's analytics architecture is still holding strong. "Everything is still as snappy as it was before," Ryan says.
+
+With the core pipeline stabilized, the team has continued refining how analytics data is modeled and queried. That includes introducing [LowCardinality](https://clickhouse.com/docs/sql-reference/data-types/lowcardinality) columns, materializing frequently accessed fields out of JSON payloads, and moving away from [Nullable](https://clickhouse.com/docs/sql-reference/data-types/nullable) types in favor of simpler defaults.
+
+Ryan is clear that this isn't the end of the road. "We think there's a lot more performance to be gained," he says — and there's no shortage of [ClickHouse query optimizations](https://clickhouse.com/resources/engineering/clickhouse-query-optimisation-definitive-guide) to explore. "We have a lot more we want to do—we just haven't quite gotten to it yet."
+
+In the end, Replo's ClickHouse story doesn't come down to any one optimization or feature. It's about learning where real-time systems benefit from simplicity, and where being explicit about tradeoffs leads to systems that are easier to reason about, operate, and scale.
+
+---
+
+## Get started today
+
+Interested in seeing how ClickHouse works on your data? Get started with ClickHouse Cloud in minutes and receive $300 in free credits.
+
+[Sign up](https://console.clickhouse.cloud/signUp?loc=blog-cta-94-get-started-today-sign-up&utm_blogctaid=94)
+
+---
 
 ---
 
