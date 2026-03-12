@@ -1,5 +1,5 @@
 {
-  "last_sync": "2026-03-11T06:21:27.982245Z",
+  "last_sync": "2026-03-12T06:22:37.489566Z",
   "processed_blogs": {
     "https://clickhouse.com/blog/clickhouse-raises-400-million-series-d-acquires-langfuse-launches-postgres": {
       "title": "ClickHouse raises $400M Series D led by Dragoneer to accelerate expansion across analytics and AI infrastructure",
@@ -4272,9 +4272,21 @@
       "pub_date": "2026-03-09T11:40:43+00:00",
       "file_path": "blogs/2026-03-09-what-replo-learned-optimizing-100-billion-events.md",
       "processed_at": "2026-03-11T06:21:27.895552Z"
+    },
+    "https://clickhouse.com/blog/chdb.4-0-pandas-hex": {
+      "title": "Announcing chDB 4: write Pandas, run ClickHouse, now on Hex",
+      "pub_date": "2026-03-11T10:52:16+00:00",
+      "file_path": "blogs/2026-03-11-announcing-chdb-4-write-pandas-run-clickhouse-now.md",
+      "processed_at": "2026-03-12T06:22:37.238850Z"
+    },
+    "https://clickhouse.com/blog/criticial-manufacturing": {
+      "title": "How Critical Manufacturing uses ClickHouse to bring real-time intelligence to the factory floor",
+      "pub_date": "2026-03-11T12:49:06+00:00",
+      "file_path": "blogs/2026-03-11-how-critical-manufacturing-uses-clickhouse-to.md",
+      "processed_at": "2026-03-12T06:22:37.404873Z"
     }
   },
-  "total_blogs": 712,
+  "total_blogs": 714,
   "failed_blogs": [
     {
       "url": "https://clickhouse.com/jp/blog/clickhouse-gcp-japan-availability",
