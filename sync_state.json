@@ -1,5 +1,5 @@
 {
-  "last_sync": "2026-03-13T06:21:37.033424Z",
+  "last_sync": "2026-03-13T15:40:30.466006Z",
   "processed_blogs": {
     "https://clickhouse.com/blog/clickhouse-raises-400-million-series-d-acquires-langfuse-launches-postgres": {
       "title": "ClickHouse raises $400M Series D led by Dragoneer to accelerate expansion across analytics and AI infrastructure",
@@ -4290,9 +4290,21 @@
       "pub_date": "2026-03-12T12:02:09+00:00",
       "file_path": "blogs/2026-03-12-what-s-new-in-clickstack-february-26.md",
       "processed_at": "2026-03-13T06:21:36.947508Z"
+    },
+    "https://clickhouse.com/blog/ai-generated-clickhouse-schemas-mistakes-and-advice": {
+      "title": "AI doesn’t always generate perfect ClickHouse schemas (yet)",
+      "pub_date": "2026-03-08T19:36:27+00:00",
+      "file_path": "blogs/2026-03-08-ai-doesn-t-always-generate-perfect-clickhouse.md",
+      "processed_at": "2026-03-13T15:40:30.095914Z"
+    },
+    "https://clickhouse.com/blog/parsing-dates-datetimes": {
+      "title": "5 ways to parse Dates and DateTimes in ClickHouse",
+      "pub_date": "2026-03-12T17:20:54+00:00",
+      "file_path": "blogs/2026-03-12-5-ways-to-parse-dates-and-datetimes-in-clickhouse.md",
+      "processed_at": "2026-03-13T15:40:30.403513Z"
     }
   },
-  "total_blogs": 715,
+  "total_blogs": 717,
   "failed_blogs": [
     {
       "url": "https://clickhouse.com/jp/blog/clickhouse-gcp-japan-availability",

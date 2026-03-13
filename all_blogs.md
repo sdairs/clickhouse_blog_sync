@@ -1,6 +1,245 @@
 # ClickHouse Blogs
-Last updated: 2026-03-13 06:21:36 UTC
-Total blogs: 715
+Last updated: 2026-03-13 15:40:30 UTC
+Total blogs: 717
+
+---
+
+## 5 ways to parse Dates and DateTimes in ClickHouse
+Published: 2026-03-12T17:20:54+00:00
+URL: https://clickhouse.com/blog/parsing-dates-datetimes
+
+---
+title: "5 ways to parse Dates and DateTimes in ClickHouse"
+date: "2026-03-12T17:20:54.354Z"
+author: "Mark Needham"
+category: "Engineering"
+excerpt: "5 Ways to Parse Dates and DateTimes in ClickHouse"
+---
+
+# 5 ways to parse Dates and DateTimes in ClickHouse
+
+Dates come in all shapes and sizes - Unix timestamps from event streams, weird looking numeric dates from legacy database exports, ISO 8601 strings from APIs, and more. Lucky for us, ClickHouse has a rich set of functions to handle all of them and that's what we're going to explore in this blog post.
+
+We'll start with the most explicit approaches: converting Unix timestamps with `fromUnixTimestamp`, parsing packed numeric dates with `YYYYMMDDToDate`, and parsing known format strings with `parseDateTime`. Then we'll look at the `parseDateTimeBestEffort` family for when the format is unknown or mixed. 
+
+Finally, we'll cover how casting dates with the `cast_string_to_date_time_mode` setting might be a better choice than explicit function calls for some use cases.
+
+<iframe width="768" height="432" src="https://www.youtube.com/embed/hVEAzVz_xIY?si=-8QknStXsAO9iMjI" title="YouTube video player" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" referrerpolicy="strict-origin-when-cross-origin" allowfullscreen></iframe>
+
+## Unix timestamps {#unix_timestamps}
+
+First up, Unix timestamps! Unix timestamps represent the number of seconds since January 1st, 1970. We can use the [`fromUnixTimestamp`](https://clickhouse.com/docs/en/sql-reference/functions/date-time-functions#fromUnixTimestamp) function to convert them:
+
+<pre><code type='click-ui' language='sql' runnable='true'>
+SELECT
+    fromUnixTimestamp(1704067295) AS val1, toTypeName(val1);
+</code></pre>
+
+This returns a `DateTime` type. If you have milliseconds since January 1st, 1970, there's a different function — [`fromUnixTimestamp64Milli`](https://clickhouse.com/docs/en/sql-reference/functions/type-conversion-functions#fromUnixTimestamp64Milli) — and the type comes back as `DateTime64(3)`, where the `3` means precision up to milliseconds. 
+
+<pre><code type='click-ui' language='sql' runnable='true'>
+SELECT
+    fromUnixTimestamp64Milli(1704067295123) AS val2, toTypeName(val2);
+</code></pre>
+
+For microseconds, [`fromUnixTimestamp64Micro`](https://clickhouse.com/docs/en/sql-reference/functions/type-conversion-functions#fromUnixTimestamp64Micro) returns `DateTime64(6)`:
+
+<pre><code type='click-ui' language='sql' runnable='true'>
+SELECT
+    fromUnixTimestamp64Micro(1704067295123456) AS val3, toTypeName(val3);
+</code></pre>
+
+## Numeric date formats {#numeric_date_formats}
+
+Sometimes dates are represented as plain numbers encoding the year, month, and day — with no separators or formatting. This is common in legacy database exports or flat files from mainframes. The function [`YYYYMMDDToDate`](https://clickhouse.com/docs/en/sql-reference/functions/date-time-functions#YYYYMMDDToDate) handles this:
+
+<pre><code type='click-ui' language='sql' runnable='true'>
+SELECT
+    YYYYMMDDToDate(20240115) AS val1, toTypeName(val1);
+</code></pre>
+
+If the number also includes time information, [`YYYYMMDDhhmmssToDateTime`](https://clickhouse.com/docs/en/sql-reference/functions/date-time-functions#YYYYMMDDhhmmssToDateTime) handles that too:
+
+<pre><code type='click-ui' language='sql' runnable='true'>
+SELECT
+    YYYYMMDDhhmmssToDateTime(20240115143022) AS val2, toTypeName(val2);
+</code></pre>
+
+## Known format strings {#known_format_strings}
+
+APIs often return dates as strings. If you know the format, you can use [`parseDateTime`](https://clickhouse.com/docs/en/sql-reference/functions/type-conversion-functions#parseDateTime) with a MySQL date format string:
+
+<pre><code type='click-ui' language='sql' runnable='true'>
+SELECT
+    parseDateTime('15/01/2024 14:30:22', '%d/%m/%Y %H:%i:%s') AS val1,
+    toTypeName(val1);
+</code></pre>
+
+This returns a `DateTime` including the timezone. 
+
+If you prefer Joda date format strings, there's [`parseDateTimeInJodaSyntax`](https://clickhouse.com/docs/en/sql-reference/functions/type-conversion-functions#parseDateTimeInJodaSyntax) which produces the same output:
+
+<pre><code type='click-ui' language='sql' runnable='true'>
+SELECT
+    parseDateTimeInJodaSyntax('15/01/2024 14:30:22', 'dd/MM/yyyy HH:mm:ss') AS val2,
+    toTypeName(val2);
+</code></pre>
+
+## Best effort parsing of DateTimes {#best_effort_parsing}
+
+The previous three approaches all assumed we knew the exact date format. But what if we don't? That's where the [`parseDateTimeBestEffort`](https://clickhouse.com/docs/en/sql-reference/functions/type-conversion-functions#parseDateTimeBestEffort) family of functions comes in. Imagine we have dates in a mix of different formats:
+
+<pre><code type='click-ui' language='sql' runnable='true'>
+WITH dates AS (
+    SELECT '2024-01-15T14:30:22.000Z' AS raw
+    UNION ALL
+    SELECT '2024-01-15' AS raw
+    UNION ALL
+    SELECT '1704067295' AS raw
+)
+SELECT raw, parseDateTimeBestEffort(raw) AS val, toTypeName(val)
+FROM dates;
+</code></pre>
+
+We can also convert to `DateTime64` using [`parseDateTimeBestEffort64`](https://clickhouse.com/docs/en/sql-reference/functions/type-conversion-functions#parseDateTime64BestEffort), like the earlier functions:
+
+<pre><code type='click-ui' language='sql' runnable='true'>
+WITH dates AS (
+    SELECT '2024-01-15T14:30:22.000Z' AS raw
+    UNION ALL
+    SELECT '2024-01-15' AS raw
+    UNION ALL
+    SELECT '1704067295' AS raw
+)
+SELECT raw, parseDateTime64BestEffort(raw) AS val, toTypeName(val)
+FROM dates;
+</code></pre>
+
+What happens if we include a completely invalid date? 
+
+<pre><code type='click-ui' language='sql' runnable='true'>
+WITH dates AS (
+    SELECT '2024-01-15T14:30:22.000Z' AS raw
+    UNION ALL
+    SELECT '2024-01-15' AS raw
+    UNION ALL
+    SELECT '1704067295' AS raw
+    UNION ALL
+    SELECT 'not a date' AS raw
+)
+SELECT raw, parseDateTime64BestEffort(raw) AS val, toTypeName(val)
+FROM dates;
+</code></pre>
+
+ClickHouse throws an exception! 
+
+We can work around this with the [`parseDateTimeBestEffort64OrNull`](https://clickhouse.com/docs/en/sql-reference/functions/type-conversion-functions#parseDateTime64BestEffortOrNull) variant, which returns `NULL` instead:
+
+<pre><code type='click-ui' language='sql' runnable='true'>
+WITH dates AS (
+    SELECT '2024-01-15T14:30:22.000Z' AS raw
+    UNION ALL
+    SELECT '2024-01-15' AS raw
+    UNION ALL
+    SELECT '1704067295' AS raw
+    UNION ALL
+    SELECT 'not a date' AS raw
+)
+SELECT raw, parseDateTime64BestEffortOrNull(raw) AS val, toTypeName(val)
+FROM dates;
+</code></pre>
+
+Or if you'd rather get an actual datetime value, [`parseDateTimeBestEffort64OrZero`](https://clickhouse.com/docs/en/sql-reference/functions/type-conversion-functions#parseDateTime64BestEffortOrZero) falls back to January 1st, 1970 at midnight:
+
+<pre><code type='click-ui' language='sql' runnable='true'>
+WITH dates AS (
+    SELECT '2024-01-15T14:30:22.000Z' AS raw
+    UNION ALL
+    SELECT '2024-01-15' AS raw
+    UNION ALL
+    SELECT '1704067295' AS raw
+    UNION ALL
+    SELECT 'not a date' AS raw
+)
+SELECT raw, parseDateTime64BestEffortOrZero(raw) AS val, toTypeName(val)
+FROM dates;
+</code></pre>
+
+## Casting {#casting}
+
+If you'd rather avoid calling explicit parse functions throughout your queries, you can cast string values directly to date types using `::DateTime`. However, there's an important setting to be aware of: `cast_string_to_date_time_mode`.
+
+By default it's set to `basic`, which handles standard formats like `YYYY-MM-DD` and `YYYY-MM-DD HH:MM:SS`, but anything else will fail. For broader format support, change it to `best_effort`. Note that this setting still throws an exception for completely invalid dates.
+
+You can pass the setting inline per query:
+
+<pre><code type='click-ui' language='sql' runnable='true'>
+WITH dates AS (
+    SELECT '2024-01-15T14:30:22.000Z' AS raw
+    UNION ALL
+    SELECT '2024-01-15' AS raw
+    UNION ALL
+    SELECT '1704067295' AS raw
+)
+SELECT raw, raw::DateTime AS val, toTypeName(val)
+FROM dates
+SETTINGS cast_string_to_date_time_mode = 'best_effort';
+</code></pre>
+
+Or configure it at the session level so you don't need it in every query:
+
+<pre><code type='click-ui' language='sql'>
+SET cast_string_to_date_time_mode = 'best_effort';
+</code></pre>
+
+Then the same query works without the `SETTINGS` clause:
+
+<pre><code type='click-ui' language='sql'>
+WITH dates AS (
+    SELECT '2024-01-15T14:30:22.000Z' AS raw
+    UNION ALL
+    SELECT '2024-01-15' AS raw
+    UNION ALL
+    SELECT '1704067295' AS raw
+)
+SELECT raw, raw::DateTime AS val, toTypeName(val)
+FROM dates;
+</code></pre>
+
+Finally, imagine that we have the following file that contains a variety of dates:
+
+*dates.csv*
+```csv
+raw
+2024-01-15T14:30:22.000Z
+2024-01-15
+1704067295
+```
+
+We can parse the dates in that file using the same approach:
+
+<pre><code type='click-ui' language='sql'>
+SELECT raw, raw::DateTime AS val, toTypeName(val)
+FROM file('dates.csv', CSVWithNames);
+</code></pre>
+
+```shell
+┌─raw──────────────────────┬─────────────────val─┬─toTypeName(val)─┐
+│ 2024-01-15T14:30:22.000Z │ 2024-01-15 14:30:22 │ DateTime        │
+│ 2024-01-15               │ 2024-01-15 00:00:00 │ DateTime        │
+│ 1704067295               │ 2024-01-01 00:01:35 │ DateTime        │
+└──────────────────────────┴─────────────────────┴─────────────────┘
+```
+
+---
+
+## Get started today
+
+Interested in seeing how ClickHouse works on your data? Get started with ClickHouse Cloud in minutes and receive $300 in free credits.
+
+[Sign up](https://console.clickhouse.cloud/signUp?loc=blog-cta-100-get-started-today-sign-up&utm_blogctaid=100)
+
+---
 
 ---
 
@@ -1250,6 +1489,172 @@ Interested in seeing how ClickHouse works on your data? Get started with ClickHo
 [Sign up](https://console.clickhouse.cloud/signUp?loc=blog-cta-94-get-started-today-sign-up&utm_blogctaid=94)
 
 ---
+
+---
+
+## AI doesn’t always generate perfect ClickHouse schemas (yet)
+Published: 2026-03-08T19:36:27+00:00
+URL: https://clickhouse.com/blog/ai-generated-clickhouse-schemas-mistakes-and-advice
+
+---
+title: "AI doesn’t always generate perfect ClickHouse schemas (yet)"
+date: "2026-03-08T19:36:27.874Z"
+author: "Al Brown"
+category: "Engineering"
+excerpt: "This post walks through the common pitfalls we see when AI generates ClickHouse schemas, drawn from real conversations with our Solutions Architecture team and patterns across dozens of customer engagements."
+---
+
+# AI doesn’t always generate perfect ClickHouse schemas (yet)
+
+Ask any LLM to design a ClickHouse table for real-time event analytics and you'll often get something like this:
+
+<pre><code type='click-ui' language='sql'>
+CREATE TABLE events
+(
+    event_id UUID,
+    user_id UInt64 CODEC(Delta, ZSTD(3)),
+    event_type LowCardinality(String),
+    timestamp DateTime64(3) CODEC(DoubleDelta, ZSTD(1)),
+    properties JSON,
+    session_id String CODEC(ZSTD(3)),
+    page_url String CODEC(ZSTD(5)),
+    duration_ms UInt32 CODEC(T64, ZSTD(3))
+)
+ENGINE = ReplacingMergeTree(timestamp)
+PARTITION BY toYYYYMM(timestamp)
+ORDER BY (event_type, user_id, timestamp)
+SETTINGS index_granularity = 4096
+
+-- Projection for user-level queries
+ALTER TABLE events ADD PROJECTION user_events
+(
+    SELECT * ORDER BY (user_id, timestamp)
+);
+</code></pre>
+
+This looks reasonable at first glance. It's syntactically correct. It uses ClickHouse-specific features. You *could* drop this straight into production.
+
+But there are many choices in this schema that might not be right for you:
+
+* **Custom partitioning**. This is the single most common giveaway of an AI-generated schema. Partitioning in ClickHouse is primarily a data management feature, not a query optimization feature.  
+* **Custom codecs on every column**. ClickHouse's default compression is already excellent, and ideal for most users. Column-level codec tuning is something to do when you know you really need it.  
+* **A projection duplicating most of the table**. Projections are a powerful feature, but they come with real costs at scale that we'll cover later. Adding one from day one, before you've even seen production query patterns, is classic over-optimization.
+
+None of these choices are inherently wrong, and you may end up using them *at some point*. But it’s also quite likely that you *never* need them. And this is where LLMs can take you down the wrong path. They’re smart, but sometimes they try to be *too smart*.
+
+The right approach is almost always the opposite: start with a basic table, a sensible ORDER BY, default compression, no partitions, no projections. Run your actual workload. Measure. Then add complexity where the data tells you it's needed. The [ClickHouse Agent Skills](https://github.com/ClickHouse/agent-skills) can help an LLM to make the right choices, when they’re needed.
+
+This post walks through the common pitfalls we see when AI generates ClickHouse schemas, drawn from real conversations with our Solutions Architecture team and patterns across dozens of customer engagements.
+
+## Common mistakes
+
+### 1. Partitioning for query speed
+
+**The scenario:** A user asks their LLM "how do I make this query faster?" and the LLM suggests partitioning by a frequently filtered column.
+
+Outside of niche cases or extreme scale, this is usually wrong.
+
+Partitions in ClickHouse are designed as a data management feature. They *can* speed up queries *if* you partition very carefully, but that's not their primary purpose and the gain isn’t free.
+
+There are a few cases where partitioning on a dimensional field makes sense for performance, and ClickHouse’s Solutions Architects occasionally recommend it to users. But when they do, they walk through all of the trade-offs:
+
+* You will need to pay more attention to how you insert data, ensuring you align inserts with your partitioning strategy, potentially pre-sorting before inserting or collecting larger batches.  
+* It affects other operations: how you handle TTLs, how you think about merges, how you monitor part counts  
+* If you [partition by a high-cardinality field](https://clickhouse.com/docs/best-practices/choosing-a-partitioning-key), you can end up with a part explosion that degrades performance across the board.
+
+> I recently helped a customer who needed to bring their end-user query latency down by 200ms. They had complex queries and very high scale. We’d already tuned the ORDER BY, queries, and data types, and partitioning was the last call. I had to explain: “this completely changes how you manage your table. But if you need that extra 200 milliseconds of latency, this is what it's going to take.” I only make that recommendation when we’ve done everything else we can do. - Jack Borthwick, Solutions Architect
+
+**What to do instead:** [Optimize your `ORDER BY` key first](https://clickhouse.com/docs/best-practices/choosing-a-primary-key). That's where the majority of query performance in ClickHouse comes from. Partitioning should be driven by data lifecycle requirements (dropping old data, managing retention), not query speed.
+
+### 2. OPTIMIZE TABLE ... FINAL
+
+**The scenario:** A user adopts `ReplacingMergeTree` to handle deduplication. They insert data and notice duplicates are still showing up in query results. This is expected as ClickHouse deduplicates during background merges, not at insert time. So they ask their LLM: "How do I force deduplication in ClickHouse?"
+
+The LLM responds: run `OPTIMIZE TABLE ... FINAL`.
+
+This forces ClickHouse to merge all parts in a partition down as aggressively as possible. It bypasses the normal part size limits, including the limits set on your service or cluster. This is true across both OSS and Cloud.
+
+The result is that you can end up with parts that are massively oversized, potentially terabytes. This is irreversible, and you can't un-merge those parts.
+
+The downstream consequences can be worse than the original problem: it can cause future mutations to fail. If you later try to add a column or an index, ClickHouse needs to rewrite those oversized parts, and those operations can break.
+
+**What to do instead:** [Use the `FINAL` keyword](https://clickhouse.com/docs/guides/replacing-merge-tree) in your `SELECT` queries if you need deduplicated reads before merges have completed. Understand that materialising deduplication is eventually consistent by design, and ClickHouse will merge and deduplicate in the background.
+
+### 3. Materialized View sprawl
+
+**The scenario:** A user has five slow query shapes. They ask the LLM to optimize each one. The LLM creates an incremental materialized view for each. The user now has five MVs. A month later, they have fifteen. Eventually, ingestion pays the price and becomes too slow.
+
+Materialised Views are a powerful way to optimise queries, but they aren’t free. Every incremental materialized view fires on every insert to the source table, meaning the more materialised views, the more work ClickHouse does during an insert. 
+
+We regularly see users end up with a sprawl of countless, intertwined tables with different engines, materialized views, refreshable materialized views, and incompatible features downstream of each other, because the LLM tried to solve each problem in isolation without understanding the overall architecture. 
+
+Often, it's such a mess that the user doesn't understand it either. The first step is always the same: map out every table, every view, every dependency, and figure out what each piece is actually doing. Often we find entire branches of the pipeline that are either broken or redundant.
+
+**What to do instead:** Start with zero materialized views. Run your queries against the base table. Profile them. When you find a query pattern that genuinely can't be served at acceptable latency from the base table, add a single MV and measure the impact on ingestion. Treat each MV as a cost you're paying on every insert.
+
+### 4. JSON column misconfiguration
+
+**The scenario:** A user has fully unstructured data with dynamic keys. The LLM suggests using ClickHouse's JSON type. The user inserts data that has unbounded variability, resulting in thousands of unique key paths.
+
+[The ClickHouse JSON type is powerful, and can allow you to build highly performant analytics over semi-structured data](https://clickhouse.com/blog/json-data-type-gets-even-better), even when your data has thousands of key paths. However, it needs to be used appropriately for the nature of your data.
+
+Under the hood, ClickHouse creates physical sub-columns for your key paths, up to a set limit (`max_dynamic_paths`, default = 1000). Using physical sub-columns makes sense when these key paths are common, and you’re likely to use those columns in your analytics.
+
+However, if your data is truly dynamic with user-defined properties, varying schemas, or unpredictable fields, you can create hundreds of persistent columns that are mostly empty and never queried. Or worse, raise the `max_dynamic_paths` limit to tens of thousands to accommodate.
+
+The JSON type can be used effectively in both cases, but must be applied differently. We see LLMs rarely apply the appropriate settings for either scenario.
+
+**What to do instead:** If your data is highly dynamic with unpredictable key paths, set `max_dynamic_paths` to 0. This gives you a bucketed map type with no persistent sub-columns, and it works well for data where you don't need columnar access to individual keys. Do **not** raise the `max_dynamic_paths` into the thousands.
+
+If your data is semi-structured and you have a manageable amount of frequently used key paths, use the JSON type and name which specific fields should be stored in a physical sub-column. If your data is semi-structured but legitimately has thousands of frequently used key paths, look into the [**advanced serialisation format** within the JSON type](https://clickhouse.com/blog/json-data-type-gets-even-better#advanced-shared-data). Note that the different serialisation formats have their own trade offs, particularly in regards to ingest performance.
+
+### 5. Projections that don't scale
+
+**The scenario:** A user needs to serve queries with different ordering requirements. The LLM suggests adding projections. At development scale, perhaps a few hundred gigabytes, this works beautifully. But when the table grows to 5-10+ terabytes, latency spikes.
+
+At query time, ClickHouse evaluates the mark counts across all projections to choose the optimal one for the query. As data grows, this evaluation itself becomes expensive. A projection that saved you time at small scale can add one to two seconds of latency at large scale, on every query, regardless of whether that projection is ultimately used.
+
+**What to do instead:** Projections are a great feature at the right scale and for the right use case. If you're working with data under a few terabytes and have well-defined alternative query patterns, they're a good option. If you're growing toward or past 5-10TB, test projection performance explicitly with production-scale data before committing to them.
+
+## Optimisation requires nuance
+
+When an experienced engineer looks at a complex data problem - say, denormalizing data from Postgres while handling deduplication and joining across tables - they rarely give you "the answer." They give you three or four options, each with their own trade-offs. Maybe option A gives you faster queries but slower ingestion. Option B simplifies the pipeline but requires more hardware. Option C decouples the systems but adds operational complexity. They lay out the options and say: pick the one that fits your business.
+
+LLMs bias towards confidence over nuance. Rarely do they say "it depends" and present trade-offs.
+
+Every well-adopted system has this challenge: there's a ton of content out there covering the basics: tutorials, getting-started guides, best-practices. And there’s some, though often less, content covering advanced topics. LLMs train on all of it and get the fundamentals mostly right. But there's a sharp drop-off between "best practices content that applies broadly" and "specific, advanced guidance that applies to your exact scenario." So the LLM does the only thing it can: takes generic advice and applies it to your situation without knowing whether it's the right call.
+
+There's a frontier beyond which the LLM is effectively guessing, and it'll never tell you when it's crossed it.
+
+## Our advice for your LLM workflow
+
+None of this means you should stop using LLMs for ClickHouse. They're a genuine accelerator for getting started, writing queries, and understanding basic concepts. Here's how to get the most out of them without ending up in the situations described above.
+
+**Start simple and earn complexity.** Your initial schema should be boring: a `MergeTree` (or `ReplacingMergeTree` if you need deduplication), a well-chosen `ORDER BY`, default compression, no partitions, no projections, no MVs. Add complexity only after you've measured your actual workload and identified a specific bottleneck.
+
+**Work with your LLM to understand its choices.** If an LLM generates a schema with particular details that you don’t immediately recognise as correct, ask it about the choices it made. This does two things: it catches problems before they reach production, and it builds your own understanding of the system you're about to operate. Treat the LLM like a sparring partner you can interrogate until you understand every decision in your DDL.
+
+**Know when to talk to a human.** If you're denormalizing data from Postgres, handling complex deduplication, joining tables on ingestion, or working at multi-terabyte scale — stop and get expert input. There aren't enough patterns on the internet for the LLM to reliably solve these problems. That's not a knock on the technology; it's just the current state of the training data.
+
+---
+
+## Get started today
+
+ClickHouse Cloud users have access to teams of ClickHouse experts, including the original creators of ClickHouse. Use AI to go fast, and count on ClickHouse support when you need it.
+
+[Sign up](https://console.clickhouse.cloud/signUp?loc=blog-cta-93-get-started-today-sign-up&utm_blogctaid=93)
+
+---
+
+## The future is collaborative
+
+We anticipate that more and more engineers will use AI agents to design and operate their databases. It’s an inevitable trend and, on the whole, a good one. LLMs are going to get more capable. There will be more ClickHouse-specific content for them to train on. The frontier of what they can handle reliably will keep moving forward.
+
+But right now, today, there is a meaningful gap between what LLMs can confidently generate and what will actually work at scale in production. That gap is where the pitfalls in this post live. Until it closes, humans still need to play a critical role in validating AI output, especially for the complex, high-stakes, scale-dependent decisions that determine whether your product works or falls over.
+
+Use AI to go fast. Use human judgment to go right.
+
+
 
 ---
 
