@@ -1,6 +1,1770 @@
 # ClickHouse Blogs
-Last updated: 2026-03-18 06:28:51 UTC
-Total blogs: 717
+Last updated: 2026-03-19 06:25:52 UTC
+Total blogs: 725
+
+---
+
+## How ClickStack makes ClickHouse faster for observability
+Published: 2026-03-18T12:55:57+00:00
+URL: https://clickhouse.com/blog/clickstack-faster-observability
+
+---
+title: "How ClickStack makes ClickHouse faster for observability"
+date: "2026-03-18T12:55:57.403Z"
+author: "Mike Shi"
+category: "Engineering"
+excerpt: "  ClickHouse is fast by design, but raw database speed isn't enough. This post explores how ClickStack tightly integrates with ClickHouse to generate optimized queries — from progressive time window pagination and chunked charts to automatic use of materi"
+---
+
+# How ClickStack makes ClickHouse faster for observability
+
+<h2 id="introduction">Introduction</h2>
+
+ClickHouse has become the storage engine of choice for modern observability. Its columnar architecture and execution model make it exceptionally fast for logs, traces, and wide event data at massive scale. Companies such as [Netflix](https://clickhouse.com/blog/netflix-petabyte-scale-logging), [Tesla](https://clickhouse.com/blog/how-tesla-built-quadrillion-scale-observability-platform-on-clickhouse), [Anthropic](https://clickhouse.com/blog/how-anthropic-is-using-clickhouse-to-scale-observability-for-ai-era), and [OpenAI](https://clickhouse.com/blog/why-openai-uses-clickhouse-for-petabyte-scale-observability) rely on it to power demanding telemetry workloads.
+
+But database speed alone does not guarantee observability performance. To consistently deliver low latency queries under heavy, high cardinality workloads, queries must be shaped to work with the internals of the engine. ClickStack bridges that gap by tightly integrating the UI with ClickHouse, embedding optimization best practices directly into how queries are generated and executed.
+
+In this post, we explore how that integration accelerates observability today and how we plan to extend those optimizations even further.
+
+<h2 id="true-speed-requires-planning">True speed requires planning</h2>
+
+ClickHouse is fast by design. Its performance comes from innovations across both the storage and query processing layers.
+
+<iframe width="768" height="432" src="https://www.youtube.com/embed/vsykFYns0Ws" frameborder="0" allowfullscreen></iframe>
+
+However, these architectural advantages only translate into real world speed when queries are written to take advantage of them. Observability workloads are demanding and poorly shaped queries can bypass pruning, inflate intermediate state, and waste CPU and memory. Building an observability solution on top of ClickHouse requires more than simply exposing arbitrary SQL. Queries must align with how the engine stores, prunes, and processes data.
+
+Even with a [mature query analyzer](https://clickhouse.com/docs/operations/analyzer), optimization still matters. We are ***not yet*** at a point where every query is automatically rewritten into its most efficient form.
+
+ClickStack addresses this by tightly coupling the observability UI with ClickHouse itself. Rather than simply passing through user generated SQL, it carefully constructs and rewrites queries to ensure they are executed in the most efficient way possible. This includes techniques such as breaking complex queries into smaller stages, reshaping them to maximize pruning, and minimizing the amount of data read while remaining conscious of CPU and memory usage. The goal is to consistently align query patterns with the engine's strengths.
+
+We explore several of these optimizations below and how, over time, we plan to expose them as opinionated APIs, allowing others to benefit from the same query formulation strategies outside the ClickStack interface.
+
+<h2 id="progressive-time-window-pagination-for-search">Progressive time window pagination for search</h2>
+
+One of the most common access patterns in ClickStack is simple search. Users open the search dialog to browse logs or traces, typically over the last 15 minutes or the last hour. Occasionally, they expand that range to days or even weeks. The intent is rarely to retrieve everything. Instead, users are scanning, looking for signals, patterns, or specific events.
+
+![](https://clickhouse.com/uploads/clickstack_mar2026_image4_c0ef3da65b.png)
+
+The key insight is that we do not need a complete result set before returning data. We only need enough rows to populate the first page. By delivering results incrementally, users see data almost immediately and can begin investigating. In practice, most users refine their query before paging deeply into historical data. That behavior allows us to optimize for fast time to first result rather than full range completeness. A naive implementation might issue a single query across the entire requested range:
+
+<pre><code type='click-ui' language='sql'>
+SELECT *
+FROM logs
+WHERE timestamp BETWEEN now() - INTERVAL 30 DAY AND now()
+ORDER BY timestamp DESC
+LIMIT 500;
+</code></pre>
+
+This forces ClickHouse to scan and sort across the full 30 day range before applying the offset, potentially reading far more data than necessary.
+
+Instead, ClickStack searches progressively, starting with the most recent window:
+
+<pre><code type='click-ui' language='sql'>
+SELECT *
+FROM logs
+WHERE timestamp >= now() - INTERVAL 6 HOUR
+ORDER BY timestamp DESC
+LIMIT 500;
+</code></pre>
+
+If insufficient rows are found, it expands to older windows, for example the previous 6 hours, then 12 hours, then 24 hours, applying pagination only within each bounded window. If sufficient results have been accumulated, we can terminate further scans.
+
+This approach pairs naturally with ClickHouse's [optimize_read_in_order](https://clickhouse.com/docs/knowledgebase/async_vs_optimize_read_in_order) capability. When the ORDER BY clause aligns with the table's primary key, ClickHouse can read data in key order without a separate global sort. In ClickStack, OpenTelemetry tables can be ordered by a time based key such as [`toStartOfMinute(timestamp)`](https://clickhouse.com/docs/sql-reference/functions/date-time-functions#toStartOfMinute), so descending time queries align with the physical layout. Combined with bounded time windows, this allows ClickHouse to return the newest rows quickly with minimal extra sorting or scanning.
+
+<h2 id="chunked-queries">Chunked queries</h2>
+
+A similar technique is used for charting, but with a different objective. In search, we optimize for fast time to the first result and may terminate early. For charts, users expect a complete visualization across the full time range. Instead of running one large aggregation query, we split the range into granularity aligned windows and execute them independently.
+
+For example, a 30 day chart at 5 minute resolution might otherwise require a single aggregation over billions of rows. Rather than executing this as one monolithic query, ClickStack divides the time range into bucket aligned windows. Each window becomes its own query, scanning a smaller slice of partitions.
+
+![](https://clickhouse.com/uploads/clickstack_mar2026_image5_173d4da4d4.gif)
+
+These queries can run in parallel, and their results are concatenated client side in order. Windows are aligned to bucket boundaries to ensure aggregation buckets are never split. The result is a progressive loading effect.
+
+![](https://clickhouse.com/uploads/clickstack_mar2026_image3_4b3edfa904.gif)
+
+This matters because a single large aggregation over billions of rows can monopolize cluster resources or even time out. Chunking constrains each scan lowering memory consumption, and allowing progressive rendering.
+
+<h2 id="automatic-use-of-materialized-columns">Automatic use of materialized columns</h2>
+
+Another early optimization in ClickStack was the automatic use of [materialized columns for map attributes](https://clickhouse.com/docs/use-cases/observability/clickstack/performance_tuning#materialize-frequently-queried-attributes).
+
+Observability data is inherently semi structured. Resource attributes such as Kubernetes labels and span attributes are commonly stored as arbitrary key value pairs using the [Map type](https://clickhouse.com/docs/sql-reference/data-types/map). This allows flexible ingestion without requiring users to define every possible column in advance. However, querying map keys at runtime is expensive. ClickHouse must read the map structure processing all keys within it, increasing IO and CPU usage.
+
+> Recently users have begun to use the JSON type which creates a dedicated typed subcolumn for each attribute. This mitigates the disadvantages of the map type but does come with its own insert overhead costs.
+
+Consider a simplified trace table schema:
+
+<pre><code type='click-ui' language='sql'>
+CREATE TABLE otel.otel_traces
+(
+    `Timestamp` DateTime64(9) CODEC(Delta(8), ZSTD(1)),
+    `TraceId` String CODEC(ZSTD(1)),
+    `SpanId` String CODEC(ZSTD(1)),
+    `ServiceName` LowCardinality(String) CODEC(ZSTD(1)),
+    `ResourceAttributes` Map(LowCardinality(String), String) CODEC(ZSTD(1)),
+    `SpanAttributes` Map(LowCardinality(String), String) CODEC(ZSTD(1)),
+    `Duration` UInt64 CODEC(ZSTD(1)),
+    -- Materialized column extracted at ingest time
+    `PodName` String MATERIALIZED ResourceAttributes['k8s.pod.name'],
+    INDEX idx_res_attr_key mapKeys(ResourceAttributes) TYPE bloom_filter(0.01) GRANULARITY 1,
+    INDEX idx_res_attr_value mapValues(ResourceAttributes) TYPE bloom_filter(0.01) GRANULARITY 1,
+    INDEX idx_duration Duration TYPE minmax GRANULARITY 1
+)
+ENGINE = MergeTree
+PARTITION BY toDate(Timestamp)
+ORDER BY (ServiceName, SpanName, toDateTime(Timestamp));
+</code></pre>
+
+Without materialization, a filter would look like:
+
+<pre><code type='click-ui' language='sql'>
+ResourceAttributes['k8s.pod.name'] = 'payments-7f9d8c'
+</code></pre>
+
+With materialization, the query becomes:
+
+<pre><code type='click-ui' language='sql'>
+PodName = 'payments-7f9d8c'
+</code></pre>
+
+By extracting the attribute at ingest time into a physical column, we avoid runtime map extraction. ClickHouse can read only the required column instead of scanning and decoding the entire map structure. Regular columns also benefit from better compression and more effective pruning.
+
+ClickStack automatically detects when a commonly used attribute has been materialized. If a user filters on `k8s.pod.name`, the generated query transparently targets the `PodName` column. Users get fast filters on common attributes and stable performance at high data volumes, without needing to manage schema optimizations themselves.
+
+<h2 id="automatic-use-of-materialized-views-with-cost-selection">Automatic use of materialized views with cost selection</h2>
+
+A more recent optimization in ClickStack is automatic use of materialized views. In ClickStack, users build dashboards, charts, search experiences, session replay, and service maps from sources, where each source maps to an underlying ClickHouse table. Since the start of this year, sources can also have one or more incremental materialized views attached, designed to pre-aggregate the most common, aggregation-heavy visualizations.
+
+In ClickHouse, an incremental materialized view is not a static snapshot. It is closer to an always-on trigger: as new data is inserted into the source table, the view runs an aggregation on each inserted block and writes the resulting aggregation states into a separate target table. Over time, those partial states are merged in the background, producing the same result you would get by aggregating the raw data at query time, but at a fraction of the cost.
+
+![](https://clickhouse.com/uploads/clickstack_mar2026_image9_7c80bfa1f3.png)
+
+Effectively the user is shifting the cost of the query from query time to insert time, with the cost amortized across all of the inserts, such that the read time performance is lightweight and fast.
+
+Consider a concrete example. Suppose a common visualization needs "request count and average duration per minute, grouped by service and status code":
+
+<pre><code type='click-ui' language='sql'>
+SELECT
+    toStartOfMinute(Timestamp) AS time,
+    ServiceName,
+    StatusCode,
+    count() AS count,
+    avg(Duration) AS avg_duration
+FROM otel.otel_traces
+WHERE Timestamp >= now() - INTERVAL 24 HOUR
+GROUP BY time, ServiceName, StatusCode
+ORDER BY time;
+</code></pre>
+
+```shell
+-- results omitted for brevity
+38210 rows in set. Elapsed: 0.790 sec. Processed 166.45 million rows, 2.99 GB (210.65 million rows/s., 3.79 GB/s.) Peak memory usage: 598.18 MiB.
+```
+
+Instead of recomputing this over raw traces every time a dashboard loads, we create a target table that stores aggregation states:
+
+<pre><code type='click-ui' language='sql'>
+CREATE TABLE otel.otel_traces_1m
+(
+    `Timestamp` DateTime,
+    `ServiceName` LowCardinality(String),
+    `StatusCode` LowCardinality(String),
+    `count` SimpleAggregateFunction(sum, UInt64),
+    `avg__Duration` AggregateFunction(avg, UInt64)
+)
+ENGINE = AggregatingMergeTree
+ORDER BY (Timestamp, ServiceName, StatusCode);
+</code></pre>
+
+And then define the incremental materialized view that continuously maintains those states as data is inserted:
+
+<pre><code type='click-ui' language='sql'>
+CREATE MATERIALIZED VIEW otel_v2.otel_traces_1m_mv
+TO otel.otel_traces_1m
+AS
+SELECT
+    toStartOfMinute(Timestamp) AS Timestamp,
+    ServiceName,
+    StatusCode,
+    count() AS count__,
+    avgState(Duration) AS avg__Duration
+FROM otel.otel_traces
+GROUP BY Timestamp, ServiceName, StatusCode;
+</code></pre>
+
+Querying the pre-aggregated table is then lightweight, using less resources:
+
+<pre><code type='click-ui' language='sql'>
+SELECT
+    toStartOfMinute(Timestamp) AS time,
+    ServiceName,
+    StatusCode,
+    sum(count) AS count,
+    avgMerge(avg__Duration) AS avg_duration
+FROM otel_v2.otel_traces_1m
+WHERE Timestamp >= now() - INTERVAL 24 HOUR
+GROUP BY time, ServiceName, StatusCode
+ORDER BY time;
+</code></pre>
+
+```shell
+38246 rows in set. Elapsed: 0.027 sec. Processed 41.22 thousand rows, 1.57 MB (1.52 million rows/s., 57.80 MB/s.) Peak memory usage: 21.34 MiB.
+```
+
+In this example our query is 30x faster and uses 28x less memory.
+
+Once a materialized view is created, users simply register them with a source:
+
+![](https://clickhouse.com/uploads/clickstack_mar2026_image6_a5473bd3d5.png)
+
+When a visualization or alert runs, ClickStack evaluates the base table and any registered views, rewrites the query for each compatible candidate, and selects the best option using a cost model driven by ClickHouse [`EXPLAIN ESTIMATE`](https://clickhouse.com/docs/sql-reference/statements/explain#explain-estimate). This indicates the number of rows the query will need to read:
+
+<pre><code type='click-ui' language='sql'>
+EXPLAIN ESTIMATE
+SELECT
+    toStartOfMinute(Timestamp) AS time,
+    ServiceName,
+    StatusCode,
+    sum(count) AS count,
+    avgMerge(avg__Duration) AS avg_duration
+FROM otel.otel_traces_1m
+WHERE Timestamp >= (now() - toIntervalHour(24))
+GROUP BY
+    time,
+    ServiceName,
+    StatusCode
+ORDER BY time ASC
+</code></pre>
+
+```shell
+   ┌─database─┬─table──────────┬─parts─┬──rows─┬─marks─┐
+1. │ otel_v2  │ otel_traces_1m │     1 │ 41220 │     5 │
+   └──────────┴────────────────┴───────┴───────┴───────┘
+1 row in set. Elapsed: 0.006 sec.
+```
+
+If multiple materialized views could satisfy the query, ClickStack automatically chooses the view which minimizes the scanned rows and granules. If no view is compatible, it falls back to the source table, so dashboards keep working without changes while still benefiting from acceleration whenever possible.
+
+From the end user's perspective, this acceleration is completely automatic. They continue to build dashboards and explore data exactly as before. There is no need to rewrite queries, change chart definitions, or select a specific table. When a compatible materialized view exists, ClickStack transparently routes the query to it.
+
+
+<video autoplay="1" muted="1" loop="1" controls="0">
+  <source src="https://clickhouse.com/uploads/Click_Stack_Product_Video_3fc96b5f89.mp4" type="video/mp4" />
+</video>
+
+The only visible differences are improved performance and a subtle acceleration indicator in the UI. A lightning bolt icon signals that the visualization is being served from a materialized view. Users can click this icon to see which view was selected and confirm that the query was accelerated. Otherwise, the experience remains unchanged, just faster performance at scale.
+
+<h2 id="query-rewriting-to-exploit-indices">Query rewriting to exploit indices</h2>
+
+ClickHouse provides several types of [data skipping indices](https://clickhouse.com/docs/use-cases/observability/clickstack/performance_tuning#adding-skip-indices), including MinMax, set, Text and Bloom filters. These indices store metadata at the granule level, typically around 8,192 rows per granule. Instead of indexing individual rows, they allow ClickHouse to determine whether an entire granule can be skipped before reading it. The fastest data to process is the data you never read.
+
+Users can attach MinMax indices to numeric columns, Bloom filters to string columns, or text indices for [tokenized full text search](https://clickhouse.com/blog/full-text-search-ga-release). However, for these indices to be used effectively, queries must be written in a way that matches the index expression. Not all functions can exploit all index types. This is a deliberate design choice in ClickHouse to ensure correctness and predictable behavior.
+
+ClickStack detects the skip indices defined on a table and rewrites queries to ensure the analyzer correctly infers their use. This guarantees that the correct index-aware functions are used, minimizing IO and avoiding unnecessary granule scans.
+
+Consider the common case where users search logs using a Lucene-style query string. They are not writing SQL.
+
+
+<video autoplay="1" muted="1" loop="1" controls="0">
+  <source src="https://clickhouse.com/uploads/Click_Stack_Lucene_800d47a4c0.mp4" type="video/mp4" />
+</video>
+
+Consider the full-text logs schema:
+
+<pre><code type='click-ui' language='sql'>
+CREATE TABLE otel_logs (
+    Body String,
+    ...
+    INDEX idx_body_text Body TYPE text(tokenizer = splitByNonAlpha)
+)
+</code></pre>
+
+Suppose a user searches for the term "error" over a defined time period. A naive implementation might issue the following:
+
+<pre><code type='click-ui' language='sql'>
+SELECT *
+FROM otel_logs
+WHERE (Timestamp >= '2026-01-01')
+  AND (Timestamp < '2026-03-14')
+  AND (Body ILIKE '% error %');
+</code></pre>
+
+```shell
+1 row in set. Elapsed: 0.708 sec. Processed 91.56 million rows, 14.91 GB (129.37 million rows/s., 21.06 GB/s.)
+```
+
+This works, but does not exploit the text index. ClickStack, however, detects the index is available and uses the `hasAllTokens()` function - specifically designed to leverage the text index:
+
+<pre><code type='click-ui' language='sql'>
+SELECT *
+FROM otel_logs
+WHERE (Timestamp >= '2026-01-01')
+  AND (Timestamp < '2026-03-14')
+  AND hasAllTokens(Body, 'error');
+</code></pre>
+
+```shell
+1 row in set. Elapsed: 0.029 sec. Processed 2.86 million rows, 22.92 MB (97.87 million rows/s., 784.96 MB/s.)
+```
+
+For multi-word phrases such as "connection refused", ClickStack combines index usage with a confirmation filter to preserve ordering semantics:
+
+<pre><code type='click-ui' language='sql'>
+SELECT *
+FROM otel_logs
+WHERE (Timestamp >= '2026-01-01')
+  AND (Timestamp < '2026-03-14')
+  AND hasAllTokens(Body, 'connection refused')
+  AND (lower(Body) LIKE lower('%connection refused%'));
+</code></pre>
+
+The result is a single multi-token lookup against the text index, dramatically reducing scanned granules.
+
+Similar care is needed if exploiting bloom filters. In this case, ClickStack detects the expression used for the bloom filter index and ensures it combines this appropriately with the appropriate functions for matching. Consider the following (simplified) schema for logs:
+
+<pre><code type='click-ui' language='sql'>
+CREATE TABLE otel_logs (
+    Body String,
+    INDEX idx_body_bloom tokens(lower(Body))
+        TYPE bloom_filter(0.001)
+        GRANULARITY 8
+)
+</code></pre>
+
+> Note we lower the body to achieve case insensitive matching.
+
+Suppose a user searches for "error", this requires use of the [`hasToken`](https://clickhouse.com/docs/sql-reference/functions/string-search-functions#hasToken) function but also requires us to combine this with the [`lower`](https://clickhouse.com/docs/sql-reference/functions/string-functions#lower) function to ensure the index is used. ClickStack detects the expression, reflecting this in the final transpiled SQL:
+
+<pre><code type='click-ui' language='sql'>
+SELECT *
+FROM otel_logs
+WHERE (Timestamp >= '2026-01-01')
+  AND (Timestamp < '2026-03-14')
+  AND hasAll(
+      tokens(lower(Body)),
+      tokens(lower('error'))
+  );
+</code></pre>
+
+The key is that the left side exactly matches the stored index expression. This allows ClickHouse to activate the Bloom filter and skip granules that definitely do not contain the token.
+
+The same principle applies to Map-based columns, such as LogAttributes and ResourceAttributes for default OTel tables. These often have Bloom filter indices on `mapKeys(...)` and `mapValues(...)` designed to allow granules to be skipped if an attribute key or value is not present.
+
+When a user searches for:
+
+<pre><code type='click-ui' language='sql'>
+LogAttributes.error.message:"Failed"
+</code></pre>
+
+ClickStack must do more than translate this to:
+
+<pre><code type='click-ui' language='sql'>
+LogAttributes['error.message'] ILIKE '%Failed%'
+</code></pre>
+
+To activate a Bloom filter on `mapKeys(LogAttributes)`, ClickStack appends an index hint that signals to the planner that the key is being accessed:
+
+<pre><code type='click-ui' language='sql'>
+AND indexHint(mapContains(LogAttributes, 'error.message'))
+</code></pre>
+
+This hint does not change query correctness - it simply tells ClickHouse to return the granules which match the filter but NOT read them (saving the Map I/O access). This allows ClickHouse to skip entire granules that do not contain that key at all. For high-cardinality semi structured data, this can eliminate vast portions of the dataset before any row-level evaluation occurs.
+
+Skip indices in ClickHouse are powerful, but they only work when queries precisely match the index definition. Small differences in function usage can mean the difference between skipping granules and scanning them and thus fast queries and slow.
+
+By inspecting the schema and rewriting queries to mirror index expressions exactly, ClicKStack ensures defined indices are actually used, delivering predictable performance without requiring users to hand-tune SQL.
+
+<h2 id="primary-key-awareness">Primary key awareness</h2>
+
+In ClickHouse, the [primary key plays a central role in data pruning](https://clickhouse.com/docs/guides/best-practices/sparse-primary-indexes). Unlike traditional databases where primary keys enforce uniqueness, in ClickHouse the primary key defines the physical sort order of data. Queries that filter or order using expressions aligned with the primary key allow the engine to quickly eliminate large ranges of data without scanning them.
+
+In ClickStack, users are free to define their own schemas and primary keys - aligning these with their common access patterns. However, we provide sensible defaults for OpenTelemetry logs, traces, and metrics that are optimized for common observability workloads. These typically combine temporal components with Timestamp. For example, a common key might look like:
+
+<pre><code type='click-ui' language='sql'>
+ORDER BY (toStartOfMinute(Timestamp), ServiceName)
+</code></pre>
+
+This structure allows queries to efficiently prune data both by time and by service.
+
+To ensure the primary key is fully exploited, ClickStack rewrites timestamp filters so they align with the expressions used in the key. For example, if a user filters on a time range, the naïve query might look like:
+
+<pre><code type='click-ui' language='sql'>
+SELECT *
+FROM otel_logs
+WHERE Timestamp >= '2026-03-14 10:00:00'
+  AND Timestamp < '2026-03-14 11:00:00'
+ORDER BY Timestamp DESC;
+</code></pre>
+
+If the table is ordered by toStartOfMinute(Timestamp), ClickStack augments the filter to match the key expression:
+
+<pre><code type='click-ui' language='sql'>
+SELECT *
+FROM otel_logs
+WHERE toStartOfMinute(Timestamp) >= toStartOfMinute('2026-03-14 10:00:00')
+  AND toStartOfMinute(Timestamp) < toStartOfMinute('2026-03-14 11:00:00')
+  AND Timestamp >= '2026-03-14 10:00:00'
+  AND Timestamp < '2026-03-14 11:00:00'
+ORDER BY toStartOfMinute(Timestamp) DESC;
+</code></pre>
+
+By including the primary key expression in the filter, ClickHouse can prune partitions and granules much more aggressively. In practice, this can significantly reduce the amount of data scanned.
+
+The same optimization applies when the primary key uses coarser expressions such as `toStartOfDay(Timestamp).` ClickStack automatically adds filters on both the derived expression and the raw timestamp, ensuring precise filtering across narrow time windows while still enabling efficient index pruning. In internal testing, this approach reduced query latency by roughly 25%, with larger gains possible for complex queries.
+
+<h2 id="intelligent-sampling">Intelligent sampling</h2>
+
+Some ClickStack features require analyzing very large datasets to generate visual insights. Running these queries across billions of rows would be computationally expensive and could significantly increase latency and resource consumption. To keep the interface responsive while still providing accurate insights, ClickStack applies **intelligent sampling techniques** that reduce the amount of data read while preserving representative results.
+
+The goal of sampling is not simply to reduce the dataset size. It must also ensure that the sample is deterministic when necessary and statistically representative of the larger dataset. Depending on the feature, ClickStack applies different sampling strategies that balance accuracy and performance.
+
+Below are several examples of how sampling is used throughout ClickStack.
+
+<h3 id="event-deltas-deterministic-part-offset-sampling">Event Deltas - deterministic part-offset sampling</h3>
+
+The [Event Deltas feature](https://clickhouse.com/blog/%20faster-root-cause-for-slow-traces-with-clickstack-event-deltas) compares the attribute distribution of events inside a selected time-series region ("outliers") with those outside it ("inliers"). This requires retrieving full rows for a small set of representative events from each group.
+
+![](https://clickhouse.com/uploads/clickstack_mar2026_image1_7659047573.png)
+
+For example, suppose a user selected the inliers as being the subset between a specific date range where the Duration was between 500 and 1000. A naive approach to sampling might attempt to fetch rows using:
+
+<pre><code type='click-ui' language='sql'>
+SELECT *
+FROM otel_traces
+WHERE Timestamp >= 1700000000
+  AND Timestamp <= 1700003600
+  AND Duration >= 500
+  AND Duration <= 1000
+ORDER BY rand()
+LIMIT 1000;
+</code></pre>
+
+However, in ClickHouse LIMIT is applied after rows are read and filtered. When combined with `ORDER BY rand()`, this results in a full scan and global sort.
+
+ClickStack instead uses a two-pass deterministic sampling technique based on internal row addresses.
+
+<pre><code type='click-ui' language='sql'>
+WITH PartIds AS (
+    SELECT tuple(_part, _part_offset)
+    FROM otel_traces
+    WHERE Timestamp >= 1700000000
+      AND Timestamp <= 1700003600
+      AND Duration >= 500
+      AND Duration <= 1000
+    ORDER BY cityHash64(SpanId) DESC
+    LIMIT 1000
+)
+</code></pre>
+
+The _part and _part_offset columns represent the internal storage location of rows within ClickHouse parts. To keep samples stable across queries, ClickStack orders rows using `cityHash64(SpanId)`. Since span IDs are randomly generated identifiers, their hash distributes rows uniformly. This produces a stable sample without relying on `rand()`. The effective sample size is also adaptive i.e. `sampleSize = clamp(500, ceil(totalRows * 0.01), 5000)`.
+
+The resulting offsets returned from this query are used to select a subset of rows.
+
+<pre><code type='click-ui' language='sql'>
+SELECT *
+FROM otel_traces
+WHERE Timestamp >= 1700000000
+  AND Timestamp <= 1700003600
+  AND Duration >= 500
+  AND Duration <= 1000
+  AND indexHint((_part, _part_offset) IN PartIds)
+ORDER BY cityHash64(SpanId) DESC
+LIMIT 1000;
+</code></pre>
+
+Wrapping these addresses inside `indexHint()` allows the planner to prune granules that do not contain the selected rows, while avoiding any reading of the data. The result is a deterministic sample that avoids scanning the entire dataset.
+
+<h3 id="value-distribution-sampling-for-facets">Value distribution sampling for facets</h3>
+
+Another common workflow is showing top attribute values within a filtered dataset. When searching in ClickStack, facets appear alongside the results to show which fields are present and provide a representative sample of values for those fields. This helps users quickly understand the shape of the data and guides them in refining their filters.
+
+![](https://clickhouse.com/uploads/clickstack_mar2026_image2_1036405e6d.png)
+
+Computing exact distributions over billions of rows would be expensive. Instead, ClickStack performs adaptive modulo sampling. For example, suppose we wish to generate values for the resource attribute `http.status_code`.
+
+<pre><code type='click-ui' language='sql'>
+WITH tableStats AS (
+    SELECT
+        count() AS total,
+        greatest(CAST(total / 100000 AS UInt32), 1) AS sample_factor
+    FROM otel_logs
+    WHERE Timestamp >= '2024-01-01'
+      AND Timestamp < '2024-03-01'
+)
+SELECT
+    SpanAttributes['http.status_code'] AS value,
+    count() AS count
+FROM otel_logs
+WHERE Timestamp >= '2026-01-01'
+  AND Timestamp < '2026-03-01'
+  AND cityHash64(Timestamp, rand()) %
+      (SELECT sample_factor FROM tableStats) = 0
+GROUP BY value
+ORDER BY count DESC
+LIMIT 100;
+</code></pre>
+
+The `sample_factor` dynamically adjusts the sampling rate so that roughly 100,000 rows are processed regardless of dataset size. This ensures the query remains fast while still producing a representative distribution.
+
+Unlike the delta sampling technique, this query still scans matching rows but dramatically reduces the number of rows passed into the `GROUP BY`, which is where most of the computational cost occurs.
+
+> Note that if users wish to obtain the complete set of values for a column, they can select "Show More" for a full analysis of the dataset.
+
+<h3 id="sampling-for-event-patterns">Sampling for Event Patterns</h3>
+
+ClickStack also [provides Event Patterns](https://clickhouse.com/blog/event-patterns-clickstack), allowing users to identify recurring log templates and anomalies.
+
+![](https://clickhouse.com/uploads/clickstack_mar2026_image8_9a054085d6.png)
+
+Under the hood, this feature uses Drain3, a high-performance log template mining algorithm. Drain3 incrementally builds clusters of similar log messages using a fixed-depth parse tree, allowing it to identify patterns quickly even in large datasets.
+
+Rather than running clustering at ingestion time, ClickStack executes it at query time. This allows users to analyze patterns dynamically within any filtered subset of data. Running clustering during ingestion would introduce significant overhead at ClickStack's ingestion rates, which can reach gigabytes per second across petabytes of data.
+
+> To read more about Event patterns see our [dedicated blog post](https://clickhouse.com/blog/event-patterns-clickstack).
+
+To keep the analysis interactive, ClickStack samples a representative subset of events before clustering:
+
+<pre><code type='click-ui' language='sql'>
+WITH
+    now64(3) AS ts_to,
+    ts_to - INTERVAL 900 SECOND AS ts_from,
+    tableStats AS (
+        SELECT count() AS total
+        FROM otel_logs
+        WHERE TimestampTime >= ts_from
+          AND TimestampTime <= ts_to
+    )
+SELECT
+    Body,
+    TimestampTime,
+    SeverityText,
+    ServiceName
+FROM otel_logs
+WHERE TimestampTime >= ts_from
+  AND TimestampTime <= ts_to
+  AND if(
+      (SELECT total FROM tableStats) &lt;= 10000,
+      1,
+      cityHash64(TimestampTime, rand()) % greatest(CAST((SELECT total FROM tableStats) / 10000, 'UInt32'), 1) = 0
+  )
+LIMIT 10000;
+</code></pre>
+
+This query adaptively samples up to 10,000 events, ensuring that clustering completes in a few seconds while still capturing dominant and anomalous patterns.
+
+These sampling strategies highlight a recurring theme in ClickStack's design: interactive observability requires balancing accuracy, performance, and resource usage, with many features relying on careful use of the underlying database engine.
+
+<h2 id="importance-of-settings">Importance of settings</h2>
+
+Many of the optimizations described above involve deliberate query rewrites or algorithmic techniques. However, a significant portion of ClickStack's performance comes from ensuring the right settings are used with ClickHouse.
+
+ClickHouse is an evolving system, with new performance features and execution optimizations introduced in nearly every release. Taking advantage of these improvements requires understanding when they apply and enabling the right settings to ensure they are used effectively. ClickStack continuously tracks these developments and adjusts its query settings accordingly, ensuring that new optimizations benefit observability workloads without requiring any manual configuration from users.
+
+One example is **Top-N query optimization**. Queries such as "show the latest logs", "top error messages", or "slowest requests" typically take the form ORDER BY … LIMIT N. Recent ClickHouse releases introduced [skip-index-driven Top-N filtering](https://clickhouse.com/blog/clickhouse-top-n-queries-granule-level-data-skipping) through the `use_skip_indexes_for_top_k` setting. This allows the engine to use metadata from skip indices to eliminate entire granules before reading any rows. Instead of scanning a table and sorting afterward, ClickHouse can prune large sections of data up front. In testing with typical ClickStack log search workloads, this alone has delivered **2-3x performance improvements**, with larger gains depending on the data distribution.
+
+Another recent improvement is **streaming evaluation of skip indices**. Historically, ClickHouse evaluated skip indexes before reading table data, which could introduce startup delays, particularly when the index itself was large. Modern versions now interleave index evaluation with data reads, allowing the engine to skip granules dynamically during execution.
+
+> ① Index scan, granule selection, and ② query execution are concurrent
+
+This significantly reduces query startup time and improves performance for queries with LIMIT, since the engine can stop both index evaluation and data reads as soon as enough rows are found. More details here.
+
+Finally, ClickStack takes advantage of **lazy materialization**, a newer optimization that defers loading non-essential columns until they are actually needed by the query plan. For example, when executing a query such as:
+
+<pre><code type='click-ui' language='sql'>
+ORDER BY Timestamp DESC
+LIMIT 100;
+</code></pre>
+
+ClickHouse can first identify the top rows using only the ordering column, and only then fetch the remaining columns for those rows. This reduces I/O and memory usage, especially for wide observability tables containing many attributes.
+
+By default, ClickHouse applies this optimization only when result sets are relatively small. Based on typical ClickStack access patterns, we found that significantly larger result sets still benefit from this behavior. As a result, ClickStack increases the threshold (`query_plan_max_limit_for_lazy_materialization`) so that lazy materialization applies to a broader range of queries.
+
+Individually, these improvements may appear minor. Together, they represent an important principle in building a high-performance observability platform: performance is about consistently taking advantage of small optimizations throughout the stack.
+
+<h2 id="exposing-clickstack-apis-for-faster-observability-for-all">Exposing ClickStack APIs for faster observability for all</h2>
+
+All of the optimizations described above exist for a simple reason: users should not have to think about how to write the perfect SQL query to analyze observability data. ClickStack abstracts these details away.
+
+Today, all the above optimizations are primarily exposed through the ClickStack interface itself. The UI generates queries, applies the appropriate settings, rewrites predicates, and selects the most efficient execution strategy. The user simply asks questions of their data.
+
+Our longer-term goal is to make these optimizations available beyond the UI through a set of **purpose-built APIs**. Rather than exposing raw SQL endpoints, these APIs will represent common observability tasks as focused operations. For example, an endpoint might retrieve the most recent errors for a service, identify anomalous traces, or compute latency trends over time. Internally, these operations may involve multiple queries, optimized execution strategies, and carefully tuned settings, but externally they appear as simple, high-level functions.
+
+This approach has several benefits. It allows developers to embed ClickStack directly into their own observability workflows and applications without needing deep ClickHouse expertise. It also provides a more reliable interface for automation and AI-driven analysis.
+
+Our recently introduced **[Notebooks experience](/blog/clickstack-ai-notebooks)**, currently in private preview, already uses these internal tools. Instead of relying on an LLM to generate complex SQL queries, notebooks call specialized endpoints designed for specific analytical tasks. These endpoints encapsulate the best query strategies for ClickStack, delivering better performance and more predictable results. In practice, this also improves reliability, since large language models are not yet well suited to consistently producing highly optimized ClickHouse SQL.
+
+Over time, we plan to make these tools publicly accessible. External applications will be able to call them directly, or connect through protocols such as **Model Context Protocol (MCP)** to power AI-driven observability experiences. This will allow developers to build custom tools, assistants, and workflows that inherit the same performance characteristics as the ClickStack interface.
+
+This is an ongoing journey. It involves defining the right abstractions, building stable APIs, and introducing authentication and access controls. But the goal is clear: make the performance benefits of ClickStack available everywhere, enabling anyone to build fast, scalable observability solutions on top of ClickHouse.
+
+
+---
+
+## Get started today
+
+Interested in seeing how ClickHouse works on your data? Get started with ClickHouse Cloud in minutes and receive $300 in free credits.
+
+[Sign up](https://console.clickhouse.cloud/signUp?loc=blog-cta-109-get-started-today-sign-up&utm_blogctaid=109)
+
+---
+
+---
+
+## Introducing AI observability notebooks for Managed ClickStack in Private Preview
+Published: 2026-03-18T12:22:46+00:00
+URL: https://clickhouse.com/blog/clickstack-ai-notebooks
+
+---
+title: "Introducing AI observability notebooks for Managed ClickStack in Private Preview"
+date: "2026-03-18T12:22:46.974Z"
+author: "Mike Shi"
+category: "Product"
+excerpt: "AI-native observability notebooks for Managed ClickStack let engineers investigate logs, metrics, and traces with AI as a collaborator — keeping humans in control at every step."
+---
+
+# Introducing AI observability notebooks for Managed ClickStack in Private Preview
+
+We are launching AI Notebooks for Managed ClickStack in private preview.
+
+This new feature introduces a new way to investigate systems with ClickHouse-powered observability assisted by AI. It brings AI directly into the core SRE workflow, embedding it inside a structured workspace rather than isolating it in a chat window. Engineers can use it to explore logs, metrics, and traces with AI (via Anthropic's Claude models) as a collaborator in the loop. Notebooks is an AI-native workflow where the engineer remains in control and guides every step of the investigation, not an autonomous AI SRE operating independently.
+
+Notebooks provide a persistent workspace where investigations unfold step by step against live data. Engineers can ask questions in natural language to explore anomalies, inspect the model's intermediate reasoning, run and edit real ClickHouse queries, and branch into alternative lines of inquiry without losing context. Each action becomes part of a visible workflow that can be reviewed, refined, or extended, with no hidden logic behind the scenes.
+
+The result is a transparent, human guided environment for deep analysis across logs, metrics, and traces, where AI accelerates the work but the engineer directs the outcome.
+
+> If you are interested in early access, you can [sign up through our private preview form](https://clickhouse.com/cloud/ai-notebooks-in-clickstack-waitlist). We are onboarding teams gradually and working closely with early users to refine the experience.
+
+<h2 id="why_build_a_custom_ai_interface">Why build a custom AI interface?</h2>
+
+AI is quickly becoming part of every developer tool, and observability is no exception. Rather than centering the experience around chat alone, we're providing a collaborative notebook approach that reflects how real investigations happen. Engineers have long used notebooks for exploratory analysis, iterating through queries, visualizations, and notes as they refine their understanding of a problem. Bringing that model to observability creates a space where investigations unfold step by step, with AI assisting along the way while engineers remain firmly in control.
+
+Production debugging is iterative and structured. Engineers move between logs, metrics, and traces. They drill into aggregates, inspect raw events, adjust time ranges, and test hypotheses. Any AI system in this environment needs to support that workflow. It should accelerate analysis without pretending to replace the engineer.
+
+For this reason, Notebooks are designed as a collaborative workflow. The SRE defines what to investigate and guides the process, using the same investigative primitives they already rely on.
+
+<h3 id="designing_for_human_oversight">Designing for human oversight</h3>
+
+AI can accelerate analysis, but it will never be perfect. Any production workflow has to assume that engineers will review, validate, and sometimes correct what it produces. Notebooks are designed around that reality, making collaboration between the SRE and the model efficient and explicit.
+
+<video autoplay="1" muted="1" loop="1" controls="0">
+  <source src="https://clickhouse.com/uploads/Notebook_Video_1_118f674a6e.mp4" type="video/mp4" />
+</video>
+
+<blockquote>
+<p style="font-size: 15px">
+Notebooks capture each step of an investigation as a cell on a shared canvas. A cell can contain a user prompt, the model's reasoning and generated query, or fully manual charts, searches, and notes added by the SRE. The investigation unfolds as a visible sequence of steps that can be inspected, edited, or extended at any time.
+</p>
+</blockquote>
+
+LLM-powered steps generate ClickHouse queries and render each decision stage of the analysis as its own cell making the path to a conclusion visible before a concise summary is delivered. Responses stream in real time, allowing users to follow the investigation as it unfolds.
+
+Importantly, engineers can modify queries or insert manual cells containing charts and searches with Notebooks designed to support a hybrid workflow. You can move from a natural language prompt to a manually crafted SQL query without leaving the workspace - adding charts, tables, event searches, or markdown notes at any stage of the investigation. Keyboard shortcuts and inline editing keep iteration fast.
+
+
+<video autoplay="1" muted="1" loop="1" controls="0">
+  <source src="https://clickhouse.com/uploads/Notebook_Video_Product_546ad0be34.mp4" type="video/mp4" />
+</video>
+
+<blockquote>
+<p style="font-size: 15px">
+Engineers are free to refine, or override AI-generated steps. The collaboration model is explicit: the AI proposes and accelerates, and the engineer inspects and decides.
+</p>
+</blockquote>
+
+<h3 id="branching_workflows">Branching workflows</h3>
+
+Users can also redirect the investigation at any point using branching capabilities.
+
+We believe this capability is critical to effective SRE-AI collaboration. Complex incidents rarely follow a single line of inquiry. A spike in latency might prompt questions about region, deployment timing, or a downstream dependency. Each hypothesis can evolve independently.
+
+To support this, Notebooks can branch from any cell with the user providing the context to guide the new change in direction.
+
+
+<video autoplay="1" muted="1" loop="1" controls="0">
+  <source src="https://clickhouse.com/uploads/Notebook_Video_Product_1_3c913f51dd.mp4" type="video/mp4" />
+</video>
+
+Alternative investigative paths will be investigated without losing prior work, preserving each line of reasoning as part of a navigable tree, where each leaf represents a concluded investigation rather than a transient chat history.
+
+<h2 id="a_native_integration_with_clickstack_tools">A native integration with ClickStack tools</h2>
+
+Notebooks go beyond a chat interface layered on top of SQL. They also go beyond simply exposing a database connection through an MCP server. The integration point is deeper and more opinionated, connecting the model directly to ClickStack's investigative primitives and internal APIs.
+
+These internal APIs act as tools the model can call. Some retrieve metadata about available signals. Others perform structured searches, compute error rates for a specific service, or generate time series charts for selected metrics. Rather than asking the model to construct everything from raw SQL, we give it access to the same building blocks that power the ClickStack interface itself.
+
+![Diagram showing the ClickStack Notebook AI flow, with tools (runSearch, runTime DrTable, getResults Slice, getFile Details, final Conclusion) feeding into ClickHouse, and the numbered request flow from user prompt through LLM to rendered notebook tile](https://clickhouse.com/uploads/564343730_b160aaa9_45e4_4997_9b19_d3e07662c2a0_8603259bae.jpg)
+
+When you ask a question such as "Show error rate by service" or "Find the top slow queries in the last three hours," the model does not simply emit a single SQL query string. It selects and orchestrates the appropriate tools. Behind the scenes, those tools may execute multiple optimized queries, apply predefined aggregation patterns, or route requests through materialized views to assemble the final result efficiently.
+
+This approach has several advantages. The model benefits from the same [performance optimizations built into ClickStack](/blog/clickstack-faster-observability), such as query chunking to avoid large table scans, incremental result streaming, and automatic use of precomputed views. Instead of generating unconstrained SQL, it produces a structured query specification that captures both analytical intent and visualization details, routed through focused endpoints designed for consistency.
+
+However, everything still executes on ClickHouse. The generated SQL is visible, and engineers can modify `WHERE` and `GROUP BY` clauses or apply any supported aggregate function. The system is optimized and opinionated, but not opaque.
+
+Today, these tools are internal to ClickStack. Over time, we expect to expose more of this surface area, enabling other systems to benefit from the same optimized investigative primitives.
+
+<h2 id="built_for_teams">Built for teams</h2>
+
+Notebooks are designed for collaborative environments. Investigations rarely belong to a single engineer, and our long term direction assumes multiple SREs contributing to the same analysis simultaneously. Notebooks can remain private or be shared with team members, with clear visibility into permissions and ownership. Tagging and search make them easy to organize and discover, and automatic saving ensures that investigative context is preserved rather than lost in chat history.
+
+![The Notebooks list view in ClickStack showing private and shared notebooks with name, tags, owner, and timestamps](https://clickhouse.com/uploads/notebooks_mar2026_image2_6d2239d35e.png)
+
+<blockquote>
+<p style="font-size: 15px">
+Today, shared notebooks follow a simple last write wins model while we remain in private preview. Support for more advanced concurrent collaboration is in progress as we refine the experience with early users.
+</p>
+</blockquote>
+
+AI capabilities can also be enabled or disabled at the team level, giving organizations control over how and when AI assisted workflows are introduced.
+
+<h2 id="clickhouse_as_an_ai_data_platform">ClickHouse as an AI data platform</h2>
+
+Our approach to AI inside ClickStack is opinionated by design. Notebooks provide a structured, collaborative workspace where SREs stay within their existing observability workflows, accelerating analysis across logs, metrics, and traces. The engineer remains in control inside ClickStack, with AI assisting and proposing next steps as alternative paths are explored towards a root cause.
+
+At the same time, this is not the only way to build AI-powered observability. ClickHouse serves as an open foundation for a growing ecosystem of AI-driven observability and agentic SRE platforms. Tools such as Resolve, WildMoose, and Traversal can build on ClickHouse as their SQL engine, benefiting from its high concurrency, low latency, and long-term data retention, which AI systems rely on for context and performance.
+
+Each platform will bring its own abstractions and opinionated layer. We believe there is room for multiple approaches, with a shared high-performance foundation underneath them.
+
+<h2 id="conclusion_and_looking_forward">Conclusion & looking forward</h2>
+
+We are releasing Notebooks in private preview because we believe this workflow is useful on day one. At the same time, there is meaningful work ahead. In the near term, we are focused on refining the experience: improving sharing, enabling true concurrent editing, and tightening the overall collaboration model as more teams begin using Notebooks together.
+
+Beyond usability improvements, there are several longer term directions we are actively exploring.
+
+One is exposing an MCP server built on the same internal tools that power Notebooks today. These tools encapsulate optimized searches, aggregations, and charting primitives inside ClickStack. Making them accessible externally would allow other platforms, or custom user interfaces, to integrate directly with ClickStack while benefiting from the same acceleration, query optimizations, and structured constructs that Notebooks use internally. The boundary would remain clean: investigative primitives exposed with structured data and text out and accelerated SQL and underneath.
+
+We are also exploring ways to customize global context at both the personal and team level. Observability investigations are shaped by environment, ownership, and conventions. Giving teams control over shared context will make AI assistance more aligned with how they operate.
+
+In the shorter term, we expect to introduce Slack integration before general availability, enabling users to initiate and interact with investigations directly from Slack while preserving the structured Notebook workspace as the source of truth.
+
+Finally, while Notebooks are intentionally collaborative and SRE guided today, we do expect workflows to evolve. AI capabilities are advancing quickly, and it is difficult to predict how autonomous these systems will become over the next year. Rather than betting on building increasingly complex orchestration to compensate for current model limitations, we are focused on getting the interaction primitives right: transparency, structured workflows, strong investigative building blocks, and tight integration with ClickHouse.
+
+---
+
+## Get started today
+
+Interested in seeing how ClickHouse works on your data? Get started with ClickHouse Cloud in minutes and receive $300 in free credits.
+
+[Sign up](https://console.clickhouse.cloud/signUp?loc=blog-cta-108-get-started-today-sign-up&utm_blogctaid=108)
+
+---
+
+---
+
+## How Socialpruf built a faster, more reliable data stack by replacing Neon with Postgres managed by ClickHouse
+Published: 2026-03-17T12:18:28+00:00
+URL: https://clickhouse.com/blog/socialpruf
+
+---
+title: "How Socialpruf built a faster, more reliable data stack by replacing Neon with Postgres managed by ClickHouse"
+date: "2026-03-17T12:18:28.357Z"
+author: "ClickHouse"
+category: "User stories"
+excerpt: "Socialpruf migrated from Neon to Postgres managed by ClickHouse, eliminating network transfer costs and achieving up to 5x faster query performance while powering real-time social analytics dashboards that aggregate millions of rows in milliseconds."
+---
+
+# How Socialpruf built a faster, more reliable data stack by replacing Neon with Postgres managed by ClickHouse
+
+## Summary
+
+Socialpruf leverages Postgres and ClickHouse, fully managed in ClickHouse Cloud, to deliver real-time social analytics for brands, talent agencies, and sports media companies. Migrating from Neon, a Databricks company, reducing network transfer costs and delivered up to 5x faster Postgres query performance with zero connectivity issues. ClickHouse Cloud powers Socialpruf's customer-facing analytics, aggregating millions of rows in milliseconds to deliver near-instant dashboards at scale.
+
+The creator economy generates enormous amounts of performance data, but most of it still gets trapped in screenshots, stale PDFs, and gut instinct. [Socialpruf](https://socialpruf.com/) was built to change that.
+
+The Toronto-based platform calls itself a "social operating system" for brands, talent agencies, and sports media companies, aggregating performance data across Instagram, TikTok, YouTube, and X into real-time dashboards, campaign trackers, and shareable reports.
+
+Powering that kind of product at scale is a major infrastructure challenge. Today, Socialpruf ingests hundreds of posts per second. Getting data to customers quickly and reliably is core to what makes the product work.
+
+We caught up with Semyon Khlavich, Founder and CTO, and Evgenii Baldin, Principal Engineer, to learn how Socialpruf built their data stack to maximize speed and reliability—moving their analytics workload to [ClickHouse Cloud](https://clickhouse.com/cloud) for near-instant query performance, and becoming one of the first teams in production on [Postgres managed by ClickHouse](https://clickhouse.com/cloud/postgres).
+
+## Solving the analytics problem
+
+Socialpruf runs on a modern, event-driven architecture. A Tanstack Start web app serves as the customer-facing product, backed by a Node.js pipeline that continuously collects and processes social media data—ingesting posts, analyzing video hooks, extracting demographic data, processing mentions, and aggregating co-author data across platforms. Python workers handle data collection from external providers and browser-based collectors, and everything flows into Postgres as the system of record.
+
+"Postgres is a wonderful database with a lot of functionality, and we started building on it because it was easy to stand up and get running," Evgenii says.
+
+As Socialpruf grew, however, the analytics layer struggled to keep up. Customer-facing dashboards were being computed on the fly from Postgres, and load times were climbing to one, two, sometimes three seconds. "We didn't even have that much data at the time," Semyon adds. "We predicted that as we grew and added more customers, it would only get slower."
+
+In the summer of 2025, they began looking at how larger players in the data space were handling analytical workloads. That led them to ClickHouse, and the impact was immediate. By replicating data from Postgres to ClickHouse via CDC and routing all front-end analytics queries there, Socialpruf was able to aggregate millions of rows in milliseconds, a huge improvement over what Postgres could deliver at scale.
+
+The effect on the product was tangible. "It gives a real 'wow' effect for customers," Semyon says. "We have a great UX, and combining that with the speed of ClickHouse makes for a great user experience."
+
+<video autoplay="1" muted="1" loop="1" controls="0">
+  <source src="https://clickhouse.com/uploads/Screen_Recording_2026_03_17_at_6_36_35_PM_optimised_ee01dfc7f9.mp4" type="video/mp4" />
+</video>
+
+## Addressing reliability issues and network costs with Neon Postgres
+
+From the beginning, Socialpruf had been running Postgres on Neon, a Databricks company. It was an easy choice early on: quick to set up, a good developer experience, and more than capable for their needs at the time. "We used it for a while, and it worked well," Evgenii says. "But then once we started reaching scale, we faced two problems."
+
+The first was stability. They began experiencing occasional connection dropouts and restarts that would disrupt their data processing pipeline. Background jobs would stall, requiring manual intervention to identify and restart affected services. "It's not extremely time-consuming, but it's a bottleneck you have to keep an eye on and check periodically," Semyon says.
+
+The second problem was cost. With CDC replication now streaming a constant flow of data from Neon to ClickHouse, network transfer charges added up. "Even though they live in the same AWS region, Neon was charging us for network transfer," Semyon explains. "It was more than half of what we were paying for compute and just started racking up our bill."
+
+The team discussed trying another solution. "We considered PlanetScale at one point, but kept putting it off, partly because we thought it could have similar problems to Neon," Evgenii says.
+
+When [Postgres managed by ClickHouse](https://clickhouse.com/cloud/postgres) was announced, as an existing ClickHouse customer, the value proposition was immediately clear: an enterprise-grade service built to sit natively alongside ClickHouse, with both systems physically collocated in the same infrastructure, eliminating the network transfer costs and backed by NVMe storage for reliability and performance.
+
+"It aligned with our vision of having both the analytical engine and the transactional engine live together on the same platform," Semyon says. "This architecture would bring the seamless analytical experience we wanted our customers to have."
+
+## Up to 5x faster Postgres performance with zero connection dropouts and restarts
+
+It's still early, but the biggest impact of migrating to ClickHouse's managed Postgres service has been stability. "We haven't experienced any connectivity issues or restarts since switching," Semyon says. For a team that prides itself on shipping fast, eliminating those dropouts (and the manual intervention they required) makes a huge difference.
+
+"We value stability and velocity," Evgenii adds. "Keeping that balance is important to us."
+
+On the performance side, the numbers tell a clear story. Query performance on Postgres has improved by around 30% overall, with some queries showing up to 5x gains. Looking at Datadog metrics, specific queries dropped from 42 milliseconds to 22 milliseconds, roughly a 50% improvement. Those gains may also create room to downscale their instance as data volumes grow. With these performance gains, NVMe-backed Postgres is expected to improve price-performance, enabling Socialpruf to manage resources much more efficiently.
+
+The image below shows a live dashboard displaying the P50 and P99 latency of Socialpruf’s top queries before and after the migration. As you can observe, all the queries are faster than before, with up to 5× performance gains for some queries.
+
+![Image 565019671 2022x420.jpg](https://clickhouse.com/uploads/Image_565019671_2022x420_457bae3940.jpg)
+
+Meanwhile, the ClickHouse analytics layer—what Semyon calls "the magical part about ClickHouse"—continues to underpin the core product experience. Aggregating millions of rows in milliseconds, it powers dashboards that load near-instantly regardless of data volume.
+
+"At the end of the day, we want to make the best product for our customer," Semyon says. "The managed Postgres piece is more about operational simplicity and reliability on the tech side—having the analytical and transactional layers together reduces technical overhead, lowers costs, and allows us to work with a single platform. ClickHouse is a key differentiator in the value we deliver to customers."
+
+## A seamless migration from Neon to Postgres managed by ClickHouse
+
+One of the deciding factors in Socialpruf's move to Postgres managed by ClickHouse was the migration itself—specifically, the role ClickHouse's team played in making it work.
+
+"We initially tried using Postgres logical replication to migrate around 0.5 TB of data, but the process failed after a day," Semyon recalls. "The ClickHouse team then proposed using PeerDB and worked closely with us to make the migration straightforward and reliable."
+
+The migration began by creating the required schema on the target database and initiating a Neon-to-Postgres managed by ClickHouse mirror with the necessary tables. The 0.5 TB dataset was copied within a few hours, after which the target database remained continuously synchronized with the source.
+
+Socialpruf ran this mirrored setup for about a week, testing the application by spinning up forks from the syncing database. Once thoroughly validated, a production cutover window was scheduled. During this phase, the ClickHouse team worked closely alongside Socialpruf to complete the final migration steps.
+
+## Managing connections at scale with PgBouncer
+
+One unexpected challenge during cutover was connection volume. The number of connections exceeded Postgres's `max_connections` limit. That's when they turned to [PgBouncer](https://clickhouse.com/docs/cloud/managed-postgres/connection#pgbouncer), which comes included with Postgres managed by ClickHouse.
+
+Between the application and ingestion workers, Socialpruf can generate thousands of database connections simultaneously. PgBouncer has handled that load reliably since the migration, without any issues.
+
+A key differentiator of ClickHouse's approach is support for multiple parallel, peered PgBouncer instances, allowing connection handling to scale horizontally while keeping the operational complexity hidden from customers. This enabled Socialpruf to efficiently handle large volumes of connections in production. (We'll cover more on our PgBouncer architecture in future technical blog posts.)
+
+## A future-proof foundation by bringing OLTP and OLAP together
+
+For Semyon and Evgenii, the decision to migrate to ClickHouse's managed Postgres service wasn't a drawn-out deliberation. The timing was right, the solution made sense, and they trusted ClickHouse to deliver based on how it had already transformed their analytics.
+
+That pragmatism reflects a broader team philosophy. Socialpruf is a product company first—the infrastructure exists to serve the product, not the other way around. Today, ClickHouse powers a [real-time analytics](https://clickhouse.com/resources/engineering/what-is-real-time-analytics) experience that makes customers say "wow," while the managed Postgres service provides the stable, high-performance transactional foundation beneath.
+
+Semyon says the team has "big plans" for Socialpruf—and now, with the data infrastructure to match, they can focus on executing them. "We're very satisfied with the combination of Postgres and ClickHouse. It just works and fulfills our needs. As we grow, it'll play a bigger role."
+
+Asked to sum up their experience with Postgres managed by ClickHouse, Semyon and Evgenii look at each other for a moment before answering: "Reliable. Fast. Premium quality."
+
+---
+
+## Get started today
+
+Interested in seeing how ClickHouse works on your data? Get started with ClickHouse Cloud in minutes and receive $300 in free credits.
+
+[Sign up](https://console.clickhouse.cloud/signUp?loc=blog-cta-106-get-started-today-sign-up&utm_blogctaid=106)
+
+---
+
+---
+
+## AI is redrawing the database market
+Published: 2026-03-17T12:02:27+00:00
+URL: https://clickhouse.com/blog/ai-redrawing-database-market
+
+---
+title: "AI is redrawing the database market"
+date: "2026-03-17T12:02:27.390Z"
+author: "Tanya Bragin"
+category: "Product"
+excerpt: "AI is reshaping database market requirements across real-time analytics, data warehousing, and observability — and ClickHouse is uniquely positioned to meet them."
+---
+
+# AI is redrawing the database market
+
+## Summary
+
+* Adopting AI means not only re-thinking user experiences, but also getting your data strategy right. If you do not, your AI initiatives will fail.
+* AI workloads demand high-concurrency, real-time query processing, and full-fidelity data at scale. Legacy batch-oriented architectures weren't built for it.
+* Previously siloed use cases, such as data warehousing and observability, are converging at the data layer.
+* ClickHouse is evolving into a unified platform for powering AI workloads across AI Apps, AI Analyst, and AI SRE experiences… read on for more.
+
+AI isn't just another workload on top of your data platform. It fundamentally changes workload expectations across every existing use case.
+
+The three big shifts happening right now are: 1) Applications are becoming agentic, 2) Analytics interfaces are becoming conversational, 3) Observability is shifting from static dashboards to AI-driven investigations. In each case, the underlying data requirements converge around high concurrency, real-time query performance, and full-fidelity data at scale.
+
+These are not requirements that incumbent data platforms were designed for. The data platform choices made over the next few years will shape what's possible: how fast teams can move, what products can be built, what insights are accessible to your business. The question worth asking now is not just whether your current platform handles today's workloads, but whether it's the right foundation for what AI-driven applications actually demand.
+
+In a [previous post](https://clickhouse.com/blog/the-unbundling-of-the-cloud-data-warehouse), I wrote about the unbundling of the cloud data warehouse — how the shift toward interactive, customer-facing applications exposed the architectural mismatch between batch-oriented warehouses and real-time workloads. What I want to describe here is the next wave of that disruption, across three markets: real-time analytics, data warehousing, and observability.
+
+![Data-platform-AI.png](https://clickhouse.com/uploads/Data_platform_AI_67dafd4b5a.png)
+<h2 id="real-time_analytics">Real-time analytics: The dawn of the "best of breed" database</h2>
+
+**Stakeholders: Developers building next-generation user-facing and AI-powered applications**
+
+Postgres has become the default database for building modern user-facing applications, because of its superior ability to handle row-oriented transactional data. This worked fine until applications became genuinely data-intensive, driven by real-time dashboards, usage analytics, customer-facing metrics, event streams with millions of rows per second. For these increasingly analytical workloads, Postgres alone stopped scaling. The queries were too slow, the indexes too expensive, the concurrency too low.
+
+The solution the industry landed on was Postgres + ClickHouse: Postgres for transactions and application state, ClickHouse for analytics. This pairing became the de facto modern data stack for any customer-facing application with serious analytical requirements. ClickHouse evolved to be the obvious choice for analytical workloads: fast ingestion, sub-second queries on billions of rows, efficient at the concurrency levels customer-facing applications demand. The data moved from Postgres to ClickHouse via [CDC pipelines](https://clickhouse.com/blog/clickhouse-welcomes-peerdb-adding-the-fastest-postgres-cdc-to-the-fastest-olap-database), and ClickHouse powered everything from embedded product analytics to customer-facing dashboards.
+
+Now AI is accelerating the need for a best-in-class transactional and analytical base for building modern AI applications and agents that power them. LLM-based features including AI-generated insights, anomaly detection, recommendations, and natural language interfaces to product data, require a tighter feedback loop between transactional writes and analytical reads. This is why we are doubling down and [building a native Postgres + ClickHouse](https://clickhouse.com/blog/postgres-managed-by-clickhouse) data stack: a single unified experience where Postgres handles transactional workloads and ClickHouse handles analytics, tightly integrated at the engine level via a native extension – for automatic data replication and management and a unified developer experience.
+
+For platform decision-makers building customer-facing experiences, the trajectory is clear – transactional and analytical capabilities at the datastore layer are required. And tight integration between transactional and analytical capabilities, without losing "best of breed" benefits, is an additional advantage speeding up developer workflow and enabling you to ship new AI-powered capabilities faster.
+
+![](https://clickhouse.com/uploads/ai_march2026_2_6b0c8065e3.jpg)
+
+<h2 id="data_warehousing">Data warehousing: AI Analyst workloads break batch-oriented DWH architectures</h2>
+
+**Stakeholders: Data engineering teams modernizing data warehousing and business analytics**
+
+In the [unbundling post](https://clickhouse.com/blog/the-unbundling-of-the-cloud-data-warehouse), I described how cloud data warehouses like Snowflake were architected for batch ingestion, heavy ETL, and periodic reporting, and how that made them a poor fit for interactive, customer-facing applications.
+
+Now the role of traditional data warehouses is being questioned in their "bread-and-butter" use case with the advent of the "AI Analyst" - business analytics starting with natural language prompts deriving downstream assets, including ad-hoc reports and dashboards.
+
+[Agent-facing analytics](https://clickhouse.com/blog/agent-facing-analytics), powered by text-to-SQL tools and natural language analytics interfaces are moving from experimentation to production. The UX implication is obvious: users ask questions in plain English and expect answers in seconds. The infrastructure implication is less obvious but more consequential:  each natural language query doesn't just generate one SQL query — it can trigger dozens in rapid succession, as it explores available datasets and reasons through many parallel possibilities. What looks like a single user question becomes a burst of concurrent database queries. As a result, internal analyst-generated workloads start to resemble external customer-facing workloads – high-concurrency, low-latency, interactive responses. The same pattern extends to agents autonomously querying data platforms to find the right data points to base a decision on while solving a problem.
+
+This inverts the assumptions that legacy data warehouse architectures are built around. Platforms like Snowflake and Databricks were designed for ad-hoc, batch-oriented analytics. Their compute models assume queries are infrequent and non-interactive in nature. They optimize for high overall throughput across many queries, not high concurrency and low latency for each query. AI analyst experiences make queries fast and very frequent, and running that workload on a legacy DWH architecture means either unacceptable latency, making the AI assistant feel slow, or costs that scale faster than the value delivered.
+
+ClickHouse was built from the ground up to excel at these requirements: petabyte-scale data, high query concurrency, sub-second response times. It was designed to serve thousands of concurrent users running interactive queries against billions of rows, not occasional analysts running batch reports. It turns out these are exactly the properties the agentic era demands.
+
+For teams making long-term platform bets, the calculus is straightforward: AI-powered business analytics is not a future possibility, it is already here. The platforms that were right for the previous era of batch reporting do not meet its technical requirements. The switching costs of migrating off legacy data warehousing systems are real, but finite. The cost of spending the next five years on the wrong platform, paying a concurrency tax while competitors run interactive AI analytics, is larger.
+
+![](https://clickhouse.com/uploads/ai_march2026_3_69dc9fcbf2.jpg)
+
+<h2 id="observability">Observability: AI SRE demands granular data at scale</h2>
+
+**Stakeholders: Platform and infrastructure teams owning observability strategy**
+
+The traditional observability stack is built around three separate pillars (metrics, logs, and traces) each stored in its own specialized system. That architecture made sense when storage and compute were expensive: you pre-aggregated metrics, sampled logs, and kept trace retention short to control costs. The tradeoff was manageable.
+
+AI SRE workflows disrupt this model by introducing two new pressures: a high volume of concurrent natural language queries and a constant need for granular, high-cardinality, long-retention data to drive automated incident triage, root cause analysis and anomaly correlation. Sampled logs and downsampled metrics are not useful for an AI agent trying to correlate an error pattern with a deployment event from three days ago. The more capable you want your AI tooling to be, the more data you need to keep, and the more the cost structure of incumbent platforms works against you.
+
+This is the core shift that Charity Majors has been describing as [Observability 2.0](https://charity.wtf/tag/observability-2-0/): replacing the three-pillar model with a single source of truth based on wide structured events stored in a columnar storage engine. Rather than pre-deciding what questions you'll ask and pre-aggregating for them, you store full-fidelity events and derive metrics, traces, and SLOs from them at query time. Every modern observability company is now built on this model, and many use ClickHouse as the main storage engine.
+
+Traditional observability players like Datadog are facing a real "innovator's dilemma" here. As they are priced on data volumes and significantly rate-limit their platforms, their customers have been trained to ingest *less* data — sampling logs, downsampling metrics, limiting trace retention — to control costs. Reducing per-GB pricing to enable AI SRE workflows means cannibalizing the revenue model the business is built on. Rebuilding around wide events and columnar storage means abandoning the specialized data structures and pricing mechanics they've scaled for decades.
+
+ClickHouse, on the other hand, is uniquely well-suited here for straightforward reasons: high compression on log and event data, sub-second queries on high-cardinality wide events, efficient at the ingestion volumes that production infrastructure generates, and a cost model based on compute and storage rather than per-GB data ingestion fees.
+
+This is also why we are investing in a turnkey observability stack, [ClickStack](https://clickhouse.com/clickstack), observability based on OpenTelemetry and ClickHouse, with an opinionated UI and AI SRE capabilities, available both in [open source](https://clickhouse.com/docs/use-cases/observability/clickstack/getting-started/oss) and as a [managed offering](https://clickhouse.com/blog/introducing-managed-clickstack-beta).
+
+![](https://clickhouse.com/uploads/ai_march2026_4_144b78aea2.jpg)
+
+<h2 id="observability_and_dwh">Observability and DWH are converging: Two markets, one architecture</h2>
+
+Data warehousing and observability have been treated as separate domains for the last decade: separate buyers, separate vendors, separate stacks. And historically, that separation made some technical sense: storage backends, user interface, and consumption patterns. Even the datasets were different, because at first few businesses were fueled by their online presence.
+
+Today, this separation is an outdated convention rather than a technical necessity. On the storage side, virtually all modern data platforms, whether business analytics or observability, now write to object stores. And the compute engines require interactive, low latency queries at high concurrency, as well as support for AI Analyst or AI SRE capabilities.
+
+Finally, in the past, most teams treated observability data as purely operational. But in reality today, API calls are purchases and errors are failed transactions. Instead of looking at the same source of truth, the same events are often being stored twice, on two platforms, by two teams, with a fragile synchronization layer in between.
+
+Teams that reframe all of it as business data, stored once in open formats and queryable by both AI Analyst and AI SRE tooling, eliminate that duplication and unlock context that neither silo had alone.
+
+![](https://clickhouse.com/uploads/ai_march2026_5_e7e91c2ca3.jpg)
+
+<h2 id="the_platform_layer">The platform layer: Agentic analytics and LLM observability</h2>
+
+A complete data platform in 2026 is more than just a database. It is a database plus the tools that make it accessible to AI agents and the instrumentation to understand how those agents behave.
+
+Two things are happening simultaneously. First, AI agents are becoming the primary interface to data. Users increasingly don't write SQL, but instead ask questions in natural language, and agents decompose those questions into queries, execute them, and synthesize results. This means a data platform needs to expose its capabilities to agents natively: ready-made UIs, MCP-compatible APIs, agent frameworks that can reach into your data without bespoke integration work for every use case. This is why we acquired [LibreChat](https://clickhouse.com/blog/librechat-open-source-agentic-data-stack), the leading open-source AI chat platform, and made it a core component of what we call the Agentic Data Stack. LibreChat combined with ClickHouse gives teams a turnkey way to deploy analytics agents over their data, without building the agent layer from scratch.
+
+Second, as AI agents proliferate, understanding and governing how they behave becomes a first-order engineering problem. LLM observability (tracing agent execution, monitoring model performance, tracking costs, debugging failures across multi-step agentic workflows) is not optional infrastructure. It is the difference between running AI in production with confidence or having it get stuck in the POC/experimentation stage. The observability problem for agentic systems is harder than for traditional software: the execution graphs are dynamic, the inputs and outputs are high-dimensional, and failures are often subtle rather than binary. [Langfuse](https://clickhouse.com/blog/langfuse-llm-analytics), which runs on ClickHouse Cloud to power real-time LLM observability at scale, is solving this problem.
+
+![AI is Redrawing the Database Market #1409.jpg](https://clickhouse.com/uploads/AI_is_Redrawing_the_Database_Market_1409_eac7cc339d.jpg)
+
+For platform decision-makers, the takeaway is clear: the database is necessary, but not sufficient. The complete picture includes agent-ready interfaces and LLM observability tooling, natively integrated into the data platform experience.
+
+<h2 id="a_unified_data_platform">A unified data platform for interactive AI-driven applications</h2>
+
+ClickHouse is evolving into what we see as the **unified data platform for interactive AI-driven applications**: one platform that handles transactional and analytical workloads, modern real-time data warehousing and conversational BI, and evolving AI-SRE driven observability workflows, at the performance and cost profile that AI-native applications demand.
+
+The market is moving fast, and the platforms winning the next era are already visible. The question for every team making long-term infrastructure decisions is whether they are making the right bet now, while the switching costs are manageable, or whether they will be making a harder, more expensive decision later.
+
+
+---
+
+## Get started today
+
+Interested in seeing how ClickHouse works on your data? Get started with ClickHouse Cloud in minutes and receive $300 in free credits.
+
+[Sign up](https://console.clickhouse.cloud/signUp?loc=blog-cta-105-get-started-today-sign-up&utm_blogctaid=105)
+
+---
+
+---
+
+## Designing the new async-native ClickHouse Python client
+Published: 2026-03-16T13:43:03+00:00
+URL: https://clickhouse.com/blog/python-async-native-client
+
+---
+title: "Designing the new async-native ClickHouse Python client"
+date: "2026-03-16T13:43:03.815Z"
+author: "Joe Spadola"
+category: "Product"
+excerpt: "clickhouse-connect v0.12.0 ships a ground-up async-native Python client using the half-sync/half-async pattern, delivering 1.16x better throughput and dramatically more stable tail latency   under high concurrency."
+---
+
+# Designing the new async-native ClickHouse Python client
+
+<style>
+div.w-full + p,
+span.relative + p {
+  text-align: center;
+  font-style: italic;
+}
+</style>
+
+<h2 id="introduction">Introduction</h2>
+
+`clickhouse-connect` is the official ClickHouse Python client. It's open source, Apache-2.0 licensed, and the code can be found on [GitHub](https://github.com/ClickHouse/clickhouse-connect). It's available on [PyPI](https://pypi.org/project/clickhouse-connect/) and can be installed with `pip install clickhouse-connect`.
+
+Work on the project started in February 2022 and was first published to PyPI at v0.2.8 in September 2022\. The original author built it out as a side project, and for the first 2.5 years the focus was on building out a feature-rich sync client, which it has become.
+
+An async-native client had been a popular request for some time, but without a dedicated resource it just wasn't going to happen quickly. As a workaround, in July 2024 we followed the common pattern of wrapping the sync client in a thread pool executor. This was performant enough and unblocked users who needed `clickhouse-connect` in async contexts. It worked well (and still does) for many use cases, but it carries inherent limitations like thread pool exhaustion under high concurrency, threads contending for the GIL ([global interpreter lock](https://wiki.python.org/moin/GlobalInterpreterLock)), and the memory overhead of maintaining OS thread stacks.
+
+According to our cloud usage stats, `clickhouse-connect` is used by nearly 2200 organizations and has run almost 30 billion queries. 13% of `clickhouse-connect` users use it in async mode, but async mode accounts for 24% of all queries. In other words, async users run more than twice as many queries on average, which tells us async is disproportionately used by high-volume, performance-sensitive workloads.
+
+<h2 id="motivation-for-the-async-native-client">Motivation for the async-native client</h2>
+
+For I/O-heavy Python workloads, an [event loop](https://en.wikipedia.org/wiki/Event_loop) is significantly more efficient at managing concurrency than OS threads. The GIL limits what threads can do in parallel, and threads can only scale so far. An event loop can efficiently manage hundreds of concurrent I/O operations. Spawning hundreds of OS threads to do the same is simply not practical for this use case.
+
+So while the executor-based approach provides a usable async client, it is not ideal for high-concurrency workloads. As load increases, the thread pool saturates, I/O blocks, and tail latencies rise.
+
+![Diagram comparing native-async network I/O with CPU parsing offloaded to a thread versus wrapping a synchronous client in a ThreadPoolExecutor](https://clickhouse.com/uploads/Async_IO_Comparison_2_1_073764f5a3.svg)
+
+
+Schematic showing the conceptual difference between native-async network I/O (with offloaded CPU parsing) and wrapping an entire synchronous client operation in a ThreadPoolExecutor. Note that numbers are illustrative. Native async per-host concurrency is configurable.
+
+<h2 id="high-level-design-choices">High-level design choices</h2>
+
+<h3 id="choosing-an-async-http-library">Choosing an async HTTP library</h3>
+
+The sync client uses the excellent [urllib3](https://urllib3.readthedocs.io/en/stable/) HTTP library, but it's synchronous only. We needed an async replacement. In Python, there are two main production-grade choices: [aiohttp](https://docs.aiohttp.org/en/stable/) and [httpx](https://www.python-httpx.org/).
+
+`httpx` is known for:
+
+* its [requests](https://requests.readthedocs.io/)-compatible API  
+* a clean, modern design  
+* unified sync and async interfaces  
+* a pure-Python protocol stack ([httpcore](https://www.encode.io/httpcore/) & [h11](https://h11.readthedocs.io/en/latest/))  
+* built-in HTTP/2 support
+
+`aiohttp` is known for:
+
+* a longstanding asyncio-native design  
+* being both an HTTP client and server framework  
+* high throughput in async workloads  
+* compiled accelerators for HTTP parsing and URL/header handling
+
+For a high-throughput database client, raw speed is the top priority, so `aiohttp` was the natural choice. And despite the client having many methods and helpers, relatively few of them actually touch the HTTP library directly. Most operations flow through a small number of internal methods that make the actual requests. This meant that whatever library we did end up choosing, it would be relatively straightforward to swap out later if needed, though, spoiler alert, we didn’t.
+
+<h3 id="the-core-challenge-cpu-heavy-parsing-with-async-io">The core challenge: CPU-heavy parsing with async I/O</h3>
+
+`clickhouse-connect` already has a mature, well-tested data transformation layer that handles the heavy lifting of parsing [ClickHouse's Native binary format](https://clickhouse.com/blog/clickhouse-input-format-matchup-which-is-fastest-most-efficient#native-interface) into Python objects like column types, nullability, nested structures, etc. The main problem we faced is that this code is inherently CPU-bound and synchronous. Rewriting it for async would mean duplicating thousands of lines of battle-tested logic for no real benefit, since there's no I/O to await during parsing. Reusing the existing parsing machinery was a given from the start. The question was *how*.
+
+<h4 id="naïve-approaches">Naïve approaches</h4>
+
+One approach is to read the full HTTP response body first, then hand those bytes to the existing parser in an executor thread. This is simple, but it’s a poor fit for a database client where result sets can be hundreds of megabytes or larger. Buffering the entire response before parsing increases peak memory usage and delays time-to-first-row, because parsing cannot begin until the download is complete. Then parsing runs as a separate phase, so network I/O and CPU parsing do not overlap for that query. To be clear, `aiohttp`’s `await response.read()` still yields to the event loop so other coroutines can run but the core issue is loss of pipelining and avoidable memory pressure on large results.
+
+Another approach goes the other direction. We could stream the response and parse it directly on the event loop as chunks arrive. This avoids the memory problem, but now the CPU-bound parsing blocks the event loop. Parsing ClickHouse's Native format involves deserializing potentially millions of rows of typed columnar data. That takes real CPU time, and every millisecond spent parsing is a millisecond the application can't serve other requests.
+
+Even worse, doing CPU-heavy parsing on the event loop can throttle the query itself. While the loop is busy parsing, it’s not servicing socket reads. As receive buffers fill, TCP flow control slows the sender, so throughput drops and transfer becomes bursty instead of smooth. For large responses, this is a poor tradeoff, so this approach also doesn’t work for us.
+
+So we're stuck between two bad options. We either block on I/O or block on CPU. What we really need is a way to stream data from the network asynchronously while parsing it synchronously in a separate thread, with the two sides coordinating without either one blocking the other.
+
+<h4 id="the-half-synchalf-async-pattern">The half-sync/half-async pattern</h4>
+
+This problem isn't uncommon. There's a well-established concurrency pattern called the "half-sync/half-async" pattern. (See [here for the academic treatment](https://www.cs.wm.edu/~dcschmidt/PDF/PLoP-95.pdf), and [here for a more accessible read](https://java-design-patterns.com/patterns/half-sync-half-async/) with Java examples.) The idea is pretty straightforward. We separate the async I/O world from the synchronous processing world and connect them with a bounded queue that provides backpressure in both directions. This pattern shows up across many systems, from [Android's AsyncTask framework](https://www.linux.com/training-tutorials/android-asynctask-internal-half-sync-half-async-design-pattern/) to [ASGI servers](https://github.com/abersheeran/a2wsgi) that bridge async HTTP handling with synchronous WSGI applications.
+
+In our case, the pattern has three parts:
+
+1. First, we have an async producer that runs on the event loop. This is fine since it's pure I/O, just `await`ing socket reads. It reads chunks from the `aiohttp` response stream and pushes them into a bounded queue. The queue has a maximum size, so the producer naturally slows down if the consumer can't keep up. This backpressure is what keeps memory usage predictable.  
+2. Second, we have the sync consumer which runs in a thread pool executor. It pulls chunks from the queue, decompresses them if needed, and feeds them into the existing synchronous parser. The beauty of this is that as far as the parser is concerned, it's just reading from a byte stream. It doesn't know or care that there's an event loop on the other side feeding it data.  
+3. Finally, there is the queue itself which serves as the bridge. We built this around an `AsyncSyncQueue` class that exposes both sync and async interfaces to the same underlying buffer. It's bounded at 10 chunks, where each chunk is up to 1MB from the socket read. That means at most \~10MB of response data is buffered at any time, regardless of total response size. Errors are handled across the boundary too. If the server returns an error mid-stream or the network drops, the producer pushes the exception object through the queue so the consumer sees it and can re-raise on the parser side.
+
+To be explicit, this is async-native for network I/O, while CPU-bound parsing intentionally remains synchronous and runs off the event loop in executor threads. And because the producer and consumer run concurrently, they naturally overlap. So while the parser crunches through chunk `N`, the event loop is already downloading chunk `N+1`. Compare this to the sync client (and the legacy async client, which wraps it), where these operations are strictly sequential:
+
+![Animation showing pipelined read and parse with the half-sync/half-async pattern versus sequential processing in the legacy client](https://clickhouse.com/uploads/Click_House_Python_Client_Animation_1_54f305eb3d.svg)
+
+_Animation showing the difference between a sequential and a pipelined read & parse design_
+
+The bounded queue is what makes this overlap work well in practice. However, you have to be sensible with the max allowed size of the queue. If it's too small, you end up with ping-pongy behavior that approaches sequential behavior. If you allow it to be too large, or even unbounded, you end up back with the memory problem if the consumer can't keep up. For large result sets, this pipelining effect meaningfully improves total query time since network I/O and CPU parsing happen in parallel rather than taking turns.
+
+The same pattern works in reverse for inserts. The existing serialization logic builds insert blocks synchronously in an executor thread and pushes them into the queue. The event loop pulls from the other side and streams them over the network via `aiohttp`. It's the same queue primitive, with the same backpressure effect, but the roles are reversed.
+
+<h2 id="benchmarks">Benchmarks</h2>
+
+Ok, enough theory. Let's see how it actually performs. We benchmarked the new async-native client against the "legacy" async client (the executor-based wrapper around the sync client).
+
+<h3 id="setup">Setup</h3>
+
+We ran the benchmark against a ClickHouse Cloud instance with the following configuration:
+
+* **ClickHouse Cloud instance:**  
+  * Server version 25.10.1.7462  
+  * AWS r5ad.2xlarge (fractional pod)  
+  * us-west-2 (Ohio)  
+  * 4 vCPUs / 8 GiB RAM  
+  * 30 GiB local NVMe SSD cache + S3 storage  
+* **Client machine:**  
+  * MacOS Tahoe 26.3  
+  * M4 Max  
+  * 36 GB RAM  
+  * 14 CPU cores  
+  * Location, west coast US  
+* **Network:** 64.4ms avg latency  
+* **clickhouse-connect version:** v0.12.0.rc1  
+* **Python:** 3.12.11
+
+Both clients were configured with 32 connection/thread pool workers. The async client uses `aiohttp` with `connector_limit=32`, while the legacy client uses `urllib3` with a matching pool size and 32 executor threads.
+
+A few notes on methodology. Each scenario executes 50 to 200 individually timed operations per run depending on the scenario, and each scenario runs 5 times. We report mean throughput with standard deviation. P95 latencies are computed per-run and reported as mean ± standard deviation across runs, giving us a measure of how *stable* tail latency is, not just how fast it is. Scenario execution order is randomized and within each scenario, as is which client goes first. There's a brief cooldown between scenarios to let the server settle. We use geometric mean for the aggregate speedup ratio.
+
+<h3 id="results">Results</h3>
+
+| Scenario | Concurrency | Async (op/s) | Legacy (op/s) | Async P95 | Legacy P95 | Speedup |
+| ----- | ----- | ----- | ----- | ----- | ----- | ----- |
+| Select 100 rows | 1 | 12.9 ± 0.2 | 13.1 ± 0.0 | 78.0 ± 0.7 ms | 77.7 ± 0.4 ms | 0.99x |
+| Filtered query | 16 | 157.0 ± 17.4 | 158.5 ± 12.5 | 139.4 ± 28.9 ms | 135.2 ± 30.2 ms | 0.99x |
+| Join query | 16 | 139.3 ± 15.7 | 118.6 ± 51.0 | 154.7 ± 68.0 ms | 439.2 ± 722.2 ms | 1.17x |
+| Aggregation | 32 | 290.4 ± 49.1 | 258.5 ± 123.2 | 191.9 ± 60.3 ms | 882.3 ± 1580.6 ms | 1.12x |
+| Large result (10k rows) | 4 | 35.4 ± 3.0 | 25.0 ± 3.4 | 209.9 ± 164.1 ms | 330.3 ± 212.7 ms | 1.41x |
+| Insert 10 rows | 32 | 28.1 ± 0.8 | 26.9 ± 0.7 | 1276.9 ± 70.6 ms | 1317.8 ± 11.6 ms | 1.05x |
+| Insert 100 rows | 32 | 28.3 ± 2.0 | 24.5 ± 5.8 | 1234.2 ± 21.9 ms | 1955.2 ± 1592.9 ms | 1.15x |
+| Mixed workload | 32 | 69.5 ± 15.1 | 46.2 ± 10.5 | 1160.2 ± 68.8 ms | 1810.6 ± 1338.3 ms | 1.51x |
+|  |  |  |  |  | **Geometric mean:** | **1.16x** |
+
+<h3 id="what-the-numbers-tell-us">What the numbers tell us</h3>
+
+The geometric mean across all scenarios is **1.16x**. We ran this benchmark several times and while individual scenarios do vary between runs (which is natural and expected against a real cloud instance), the geometric mean consistently settles in the 1.16-1.18x range.
+
+A few things worth pointing out:
+
+1. **The async client gets faster as concurrency goes up.** At `concurrency=1`, the two clients are dead even at 0.99x. That makes sense because with a single concurrent operation, there's nothing for the event loop to manage. At 32 concurrent operations, the differences emerge: 1.12x on aggregation, 1.51x on the mixed workload. The event loop is simply better at juggling many concurrent I/O operations than a thread pool, especially in Python where the GIL limits what threads can actually do in parallel.
+
+2. **Tail latency tells an even more interesting story than throughput.** Look at the P95 columns, and not just the values but the ± numbers. The legacy client's P95 standard deviations are enormous: ±722ms on joins, ±1581ms on aggregation, ±1593ms on inserts, ±1338ms on the mixed workload. Its tail latency is essentially a coin flip between "decent" and "terrible" from one run to the next. The async client's worst P95 standard deviation is ±164ms on large results. Across all scenarios, the average P95 is 556ms for async vs 869ms for legacy.
+
+    This matters for production workloads. When P95 can swing from sub-200ms to over 4 seconds between runs, that kind of variance can be problematic. The async client gives you *predictable* tail latency, not just faster tail latency.
+
+3. **Throughput is also more stable.** The legacy client's aggregation throughput has a standard deviation of ±123.2, which is nearly half its mean of 258.5. The async client on the other hand shows ±49.1 on a mean of 290.4. For inserts, the async client varies by ±0.8 and ±2.0 op/s while the legacy client swings by ±0.7 and ±5.8. You don't just want fast. You want *consistently* fast.
+
+So where does this improvement come from? At low concurrency, the async client matches the legacy one, which tells us the overhead of the queue bridge is negligible and the underlying HTTP libraries are roughly on par. The gains at high concurrency come from two places: the event loop handles many concurrent connections without OS thread scheduling overhead, and the pipelining effect means network I/O and parsing overlap instead of taking turns. The legacy client's thread pool saturates earlier because each thread holds a connection, occupies a stack, and contends for the GIL.
+
+It's worth noting that this benchmark is deliberately conservative. We capped both clients at 32 connections/threads to create a strict apples-to-apples comparison of per-operation efficiency. In practice, the event loop's advantage grows as concurrency increases. An event loop can comfortably manage hundreds of concurrent connections with negligible overhead because a suspended coroutine is just a small state object in memory. A thread pool doing the same means hundreds of OS threads, each with its own heavy stack, all contending for the GIL and competing for CPU time on the OS scheduler. And eventually we reach a point where the threads aren't doing useful work, they're just waiting. The 1.16x geometric mean reflects what you gain even when the thread pool isn't being pushed past its comfort zone. At even higher concurrency levels, the gap widens even more.
+
+<h2 id="try-it-out">Try it out!</h2>
+
+If you've made it this far, you're either genuinely interested in this stuff or you have a vested interest in it. If the former, cool, we're nerds too. If the latter, you can help! `clickhouse-connect` v0.12.0rc1 is published and ready to test. The [release notes are on GitHub](https://github.com/ClickHouse/clickhouse-connect/releases/tag/v0.12.0rc1) and you can install it with:
+
+<pre><code type='click-ui' language='bash'>
+pip install clickhouse-connect[async]==0.12.0rc1
+</code></pre>
+
+We're actively seeking feedback on how the new async client works for your workloads.
+
+<h2 id="conclusion">Conclusion</h2>
+
+To be clear, the executor-based async client served us well for nearly two years and it's still a perfectly valid option. It unblocked a lot of users and handled real production workloads quite well. But having a dedicated resource on the project means we can invest in these kinds of deeper improvements that just weren't feasible before. The result is a ground-up async-native client that's faster, more stable under load, and more efficient with resources. It's been one of the most requested features for the project, and we're glad to finally ship it!
+
+As [ClickHouse](https://github.com/clickhouse/clickhouse) grows in popularity, so does the ecosystem of language clients around it. `clickhouse-connect` is the officially supported ClickHouse Python client, maintained by a dedicated team at ClickHouse. If you run into bugs, have feature requests, or want to contribute, we'd love to hear from you. Issues and PRs are always welcome on [GitHub](https://github.com/ClickHouse/clickhouse-connect)!
+
+
+---
+
+## Get started today
+
+Interested in seeing how ClickHouse works on your data? Get started with ClickHouse Cloud in minutes and receive $300 in free credits.
+
+[Sign up](https://console.clickhouse.cloud/signUp?loc=blog-cta-104-get-started-today-sign-up&utm_blogctaid=104)
+
+---
+
+---
+
+## ClickHouse Release 26.2
+Published: 2026-03-16T10:47:57+00:00
+URL: https://clickhouse.com/blog/clickhouse-release-26-02
+
+---
+title: "ClickHouse Release 26.2"
+date: "2026-03-16T10:47:57.285Z"
+author: "ClickHouse"
+category: "Engineering"
+excerpt: "ClickHouse 26.2 is here! In this post,  text-index and QBit data type become production-ready."
+---
+
+# ClickHouse Release 26.2
+
+Another month goes by, which means it’s time for another release! 
+
+<p>ClickHouse Winter Release contains 25 new features &#129508; 43 performance optimizations &#128759; 183 bug fixes &#9924;</p>
+
+This release sees the text-index and QBit data type become production-ready. It’s also now possible to batch "infinite" inserts by time, and there are performance improvements for joins, JSON parsing, and inserts with min-max indices.
+
+<h2 id="new-contributors">New contributors</h2>
+
+A special welcome to all the new contributors in 26.2! The growth of ClickHouse's community is humbling, and we are always grateful for the contributions that have made ClickHouse so popular.
+
+Below are the names of the new contributors:
+
+*4ertus2,Aaron Knudtson,AlyHKafoury,Andre Hora,Andrey Tarasov,Ashwath,Ben Wu,Christoph Viebig,Dan McCombs,Dmitry Kovalev,Dmitry Plotnikov,Federico Ginosa,Gerald Latkovic,Hasyimi Bahrudin,Ivan Gorin,Kien Nguyen Tuan,Mostafa Mohamed Salah,MyeongjunKim,Padraic Slattery,Rahul,Raquel Barbadillo,Visakh Unnikrishnan,daun-gatal,dimbo4ka,dk-github,jayvenn21,murphy-4o,phulv94,sunyeongchoi,vanchaklar,Álvaro Niño*
+
+Hint: if you’re curious how we generate this list… [here](https://gist.github.com/gingerwizard/5a9a87a39ba93b422d8640d811e269e9).
+
+<iframe width="768" height="432" src="https://www.youtube.com/embed/7qHba08vNfo?si=S6bjyZCSQY5g4l3-" title="YouTube video player" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" referrerpolicy="strict-origin-when-cross-origin" allowfullscreen></iframe>
+
+You can also [view the slides from the presentation](https://presentations.clickhouse.com/2026-release-26.2/).
+
+<h2 id="batching-of-infinite-inserts-by-time">Batching of "infinite" inserts by time</h2>
+
+<h3 id="contributed-by-mostafa-mohamed-salah">Contributed by Mostafa Mohamed Salah</h3>
+
+One of my favorite real-time datasets is the Wikimedia recent changes feed, which streams changes across various Wikimedia properties. 
+
+You can see how it works by navigating to [https://stream.wikimedia.org/v2/stream/recentchange](https://stream.wikimedia.org/v2/stream/recentchange). An example of an event is shown below:
+
+<pre><code type='click-ui' language='bash'>
+event: message
+id: [{"topic":"eqiad.mediawiki.recentchange","partition":0,"offset":-1},{"topic":"codfw.mediawiki.recentchange","partition":0,"timestamp":1772536525049}]
+data: {"$schema":"/mediawiki/recentchange/1.0.0","meta":{"uri":"https://commons.wikimedia.org/wiki/Category:Taken_with_Nikon_D3100","request_id":"55711a7f-6053-4592-97c4-45d54e6319f7","id":"9106b913-64f9-4dff-a325-ac43492cc81d","domain":"commons.wikimedia.org","stream":"mediawiki.recentchange","dt":"2026-03-03T11:15:25.048Z","topic":"codfw.mediawiki.recentchange","partition":0,"offset":2029032842},"id":3219900521,"type":"categorize","namespace":14,"title":"Category:Taken with Nikon D3100","title_url":"https://commons.wikimedia.org/wiki/Category:Taken_with_Nikon_D3100","comment":"[[:File:Ferrari 550 Maranello - Flickr - Alexandre Prévot (3).jpg]] added to category","timestamp":1772536523,"user":"Rkieferbot","bot":true,"notify_url":"https://commons.wikimedia.org/w/index.php?diff=1175166536&oldid=1019467923&rcid=3219900521","server_url":"https://commons.wikimedia.org","server_name":"commons.wikimedia.org","server_script_path":"/w","wiki":"commonswiki","parsedcomment":"<a href=\"/wiki/File:Ferrari_550_Maranello_-_Flickr_-_Alexandre_Pr%C3%A9vot_(3).jpg\" title=\"File:Ferrari 550 Maranello - Flickr - Alexandre Prévot (3).jpg\">File:Ferrari 550 Maranello - Flickr - Alexandre Prévot (3).jpg</a> added to category"}
+</code></pre>
+
+Each event has three properties;
+
+* `event` - The event type, which is almost always `message`.  
+* `id` - An identifier for the event.  
+* `data` - A JSON object representing the change itself.
+
+We can use cURL at the terminal to stream just the `data` part of each event:
+
+<pre><code type='click-ui' language='bash'>
+curl -sS --globoff \
+  -H 'Accept: application/json' \
+  --no-buffer \
+  "https://stream.wikimedia.org/v2/stream/recentchange"
+</code></pre>
+
+To load this data into ClickHouse, we need to first create a table. We could break the data down into individual columns, but this is a good opportunity to use the `JSON` data type:
+
+<pre><code type='click-ui' language='sql'>
+CREATE table wiki (
+  json JSON
+);
+</code></pre>
+
+We can then update our cURL command to stream the data in:
+
+<pre><code type='click-ui' language='bash'>
+curl -sS --globoff \
+  -H 'Accept: application/json' \
+  --no-buffer \
+  "https://stream.wikimedia.org/v2/stream/recentchange" |
+./clickhouse client --query="INSERT INTO wiki FORMAT JSONAsObject"
+</code></pre>
+
+If we open another tab and connect to our ClickHouse Server, we’ll see that no data has been ingested. This is because the default values for [`min_insert_block_size_rows`](https://clickhouse.com/docs/operations/settings/settings#min_insert_block_size_rows) and [`min_insert_block_size_bytes`](https://clickhouse.com/docs/operations/settings/settings#max_insert_block_size_bytes) are 1,000,000 and 268 MB, respectively. The Wikimedia changes dataset only produces 10 rows per second, so we’ll be waiting for quite some time!
+
+We can set these parameters to low values to work around this problem, as we saw how to do in the following video:
+
+<iframe width="768" height="432" src="https://www.youtube.com/embed/ZC-25cFadYU?si=fMFbJcy2RL8b127o" title="YouTube video player" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" referrerpolicy="strict-origin-when-cross-origin" allowfullscreen></iframe>
+
+This works, but we don’t know how often the data will be flushed to the table. ClickHouse 26.2 introduces a new setting, [`input_format_max_block_wait_ms`](https://clickhouse.com/docs/operations/settings/formats#input_format_max_block_wait_ms), that lets you define the block flush interval in terms of time rather than size. This setting only works when used with [`input_format_connection_handling`](https://clickhouse.com/docs/operations/settings/formats#input_format_connection_handling), which ensures that if the connection closes unexpectedly, any remaining data in the buffer will be parsed and processed instead of being treated as an error
+
+We can therefore update our ingestion code to read like this if we want to ingest data every 3 seconds:
+
+<pre><code type='click-ui' language='bash'>
+curl -sS --globoff \
+  -H 'Accept: application/json' \
+  --no-buffer \
+  "https://stream.wikimedia.org/v2/stream/recentchange" |
+./clickhouse client --query="INSERT INTO wiki FORMAT JSONAsObject" --min_insert_block_size_rows=0 \
+--min_insert_block_size_bytes=0 \
+--input_format_max_block_wait_ms 3000 \
+--input_format_connection_handling 1
+</code></pre>
+
+On another tab, we can check how many records have been ingested, sleeping for one second after each execution of the query:
+
+<pre><code type='click-ui' language='bash'>
+while true; do
+    ./clickhouse client "SELECT now(), count() FROM wiki FORMAT TabSeparated"
+    sleep 1
+done
+</code></pre>
+
+We’ll see the following output, where the count updates more or less every third row:
+
+<pre><code type='click-ui' language='bash'>
+2026-03-03 11:47:11	13898
+2026-03-03 11:47:12	13898
+2026-03-03 11:47:13	14008
+2026-03-03 11:47:14	14008
+2026-03-03 11:47:15	14008
+2026-03-03 11:47:17	14128
+2026-03-03 11:47:18	14128
+2026-03-03 11:47:19	14128
+2026-03-03 11:47:20	14213
+</code></pre>
+
+The animation below illustrates how the input_format_max_block_wait_ms setting works.
+This setting defines a time-based flush interval for the in-memory blocks the server builds while processing incoming data. When the timeout expires, the current block is written to a new data part, allowing the inserted rows to become visible for queries 
+
+<video autoplay="1" muted="1" loop="1" controls="0">
+  <source src="https://clickhouse.com/uploads/Untitled_9ac4d7046c.mp4" type="video/mp4" />
+</video>
+
+
+
+<h2 id="embedded-clickstack">Embedded ClickStack</h2>
+
+ClickStack is our observability platform that unifies logs, traces, metrics, and sessions into a single high-performance solution. It comprises ClickHouse, OpenTelemetry, and the ClickStack UI (previously known as HyperDX). 
+
+Before ClickHouse 26.2, if you wanted to use ClickStack, you had two options: spin up [Docker containers](https://clickhouse.com/docs/use-cases/observability/clickstack/getting-started/oss) or use [Managed ClickStack](https://clickhouse.com/cloud/clickstack).
+
+As of ClickHouse 26.2, we are introducing a new distribution method: ClickStack UI embedded in ClickHouse. The ClickStack UI is now distributed and embedded directly in the ClickHouse binary, making it easier than ever to explore observability data with ClickHouse. Simply navigate to [https://localhost:8123](https://localhost:8123), select “ClickStack”, and start exploring.
+
+You can read more in [Introducing ClickStack embedded in ClickHouse](https://clickhouse.com/blog/clickstack-embedded-clickhouse). 
+
+<h2 id="production-ready-text-index-and-qbit-data-type">Production-ready: Text index and QBit data type</h2>
+
+The [text index](https://clickhouse.com/docs/engines/table-engines/mergetree-family/textindexes) has been in development since 2022, reaching experimental status in ClickHouse 25.9 and going into beta in ClickHouse 25.12. As of ClickHouse 26.2, the text index is production-ready, so give it a try and let us know how you get on.
+
+Joining the text-index in production-ready status is the [QBit data type](https://clickhouse.com/blog/qbit-vector-search) for vector embeddings, which enables runtime tuning of search precision. Introduced in ClickHouse 25.10 and promoted to beta in 26.1, QBit is now fully production-ready as of 26.2.
+
+<h2 id="table-function-primes">Table function primes</h2>
+
+<h3 id="contributed-by-nihal-miaji">Contributed by Nihal Miaji</h3>
+
+The ClickHouse 26.2 release also introduces a new `system.primes` table. As the name suggests, this table returns prime numbers.
+
+The following query returns the first ten prime numbers, the sum of those prime numbers, and the tenth prime number:
+
+<pre><code type='click-ui' language='sql'>
+SELECT groupArray(prime), max(prime), sum(prime)
+FROM primes(10);
+</code></pre>
+
+```shell
+Row 1:
+──────
+groupArray(prime): [2,3,5,7,11,13,17,19,23,29]
+max(prime):        29
+sum(prime):        129
+```
+
+This function is super fast. The following query calculates the min, max, and sum of the first 1 billion prime numbers:
+
+<pre><code type='click-ui' language='sql'>
+SELECT min(prime), max(prime), sum(prime)
+FROM primes(1000000000);
+</code></pre>
+
+```shell
+┌─min(prime)─┬──max(prime)─┬───────────sum(prime)─┐
+│          2 │ 22801763489 │ 11138479445180240497 │
+└────────────┴─────────────┴──────────────────────┘
+
+1 row in set. Elapsed: 36.444 sec. Processed 1.00 billion rows, 8.00 GB (27.44 million rows/s., 219.51 MB/s.)
+Peak memory usage: 348.15 KiB.
+```
+
+<p>And it took just over 36 seconds! &#129327;</p>
+
+It's been a couple of days since Pi Day, but did you know that Euler's solution to the Basel problem connects prime numbers to π? Euler proved that ∑ 1/n² = π²/6, which can also be expressed as an infinite product over all primes. We can approximate this with ClickHouse's primes table function:
+
+<pre><code type='click-ui' language='sql'>
+SELECT sqrt(6 * exp(sum(log(pow(prime, 2) / (pow(prime, 2) - 1)))))
+FROM primes(10000000)
+</code></pre>
+
+```shell
+┌─sqrt(multipl⋯), 1)))))))─┐
+│        3.141592653079655 │
+└──────────────────────────┘
+
+1 row in set. Elapsed: 0.415 sec. Processed 10.00 million rows, 80.00 MB (24.10 million rows/s., 192.78 MB/s.)
+Peak memory usage: 141.38 KiB.
+```
+
+
+<h2 id="faster-right-and-full-join">Faster RIGHT and FULL JOIN</h2>
+
+<h3 id="contributed-by-yarik-briukhovetskyi">Contributed by Yarik Briukhovetskyi</h3>
+
+This release improves the performance of **RIGHT OUTER** and **FULL OUTER JOINs**, two of the many [join types](https://clickhouse.com/blog/clickhouse-fully-supports-joins-part1#join-types-supported-in-clickhouse) supported by ClickHouse.
+
+As a reminder, when a left table and a right table are joined:
+
+<pre><code type='click-ui' language='sql'>
+SELECT...
+FROM left_table JOIN right_table ON ...
+
+</code></pre>
+
+a **RIGHT OUTER JOIN** also returns rows from the right_table that have no match on the left side, filling the left-table columns with default values.
+
+A **FULL OUTER JOIN** returns unmatched rows from both tables, filling the missing columns with default values on the respective side.
+
+These join types require additional work compared to inner or left joins, so to understand the optimization in this release, we first need to look at how ClickHouse executes joins internally.
+
+<h3 id="join-pipeline-in-clickhouse">Join pipeline in ClickHouse</h3>
+
+ClickHouse executes joins using a [parallel hash-join algorithm](https://clickhouse.com/blog/clickhouse-fully-supports-joins-hash-joins-part2#parallel-hash-join) by default, whose physical query plan (“query pipeline”) is sketched below.
+
+![](https://clickhouse.com/uploads/Screenshot_2026_03_16_at_11_36_59_e99ac8e95c.png)
+
+① The right table is partitioned into N buckets, which are processed by N threads in parallel (N \= max_threads, by default the number of CPU cores, 2 in the example), with one in-memory hash table built per bucket.
+
+② The left table is partitioned the same way and processed in parallel, so matching rows reach the corresponding hash table.
+
+③ Rows are joined by probing the matching hash table, producing the final result.
+
+With this execution model in mind, the behavior of different OUTER JOIN types becomes easier to understand.
+
+<h3 id="why-left-outer-join-is-cheap">Why LEFT OUTER JOIN is cheap</h3>
+
+In a **LEFT OUTER JOIN**, unmatched rows are naturally available in the pipeline.
+
+All rows from the left table are streamed (②) and probed against the hash tables (③).   
+If no match is found, the row can immediately be emitted with default values for the right table columns.
+
+<h3 id="why-right-full-outer-join-is-harder">Why RIGHT / FULL OUTER JOIN is harder</h3>
+
+For **RIGHT OUTER JOIN** and **FULL OUTER JOIN**, the situation is different.
+
+These joins must also return rows from the right table that never matched any left-side row.
+
+But the right table is consumed earlier when building the hash tables (①), so those rows are no longer visible in the main pipeline flow.
+
+To produce the final result, ClickHouse must iterate over the right table data and generate the rows that were never matched.
+
+<h3 id="parallel-generation-of-unmatched-rows-262">Parallel generation of unmatched rows (26.2)</h3>
+
+Previously, this post-processing step ran in a single thread.
+
+Since 26.2, unmatched rows from the right table are generated in parallel, with one thread per right table bucket.
+
+This is controlled by a new [parallel_non_joined_rows_processing](https://clickhouse.com/docs/operations/settings/settings#parallel_non_joined_rows_processing) setting (enabled by default).
+
+<h3 id="performance-improvement">Performance improvement</h3>
+
+To illustrate the impact, we use the [anonymized web analytics dataset](https://clickhouse.com/docs/getting-started/example-datasets/metrica) that we [loaded](https://pastila.nl/?00239aa4/4acd8d1e7c548d73fb3681859739d0f4#Ho1IpeLvb21ELTi9hfr8rw==GCM) on an AWS m6i.8xlarge instance (32 cores, 128 GB RAM) backed by a gp3 EBS volume.
+
+The query below performs a FULL OUTER self-join counting user navigation steps, including page-to-page transitions as well as entry and exit visits.
+
+<pre><code type='click-ui' language='sql'>
+SELECT count()
+FROM hits AS t1
+FULL JOIN hits AS t2
+    ON t1.URL = t2.Referer
+   AND t1.UserID = t2.UserID
+   AND t1.URL != ''
+   AND t2.Referer != '';
+</code></pre>
+
+First, we run the same query three times with `parallel_non_joined_rows_processing = 0`, reproducing the behavior of previous releases.
+
+Below are the execution statistics printed by clickhouse-client:
+
+<pre><code type='click-ui' language='bash'>
+1 row in set. Elapsed: 35.367 sec. Processed 199.99 million rows, 17.91 GB (5.65 million rows/s., 506.30 MB/s.)
+Peak memory usage: 19.53 GiB.
+
+1 row in set. Elapsed: 35.128 sec. Processed 199.99 million rows, 17.91 GB (5.69 million rows/s., 509.74 MB/s.)
+Peak memory usage: 19.53 GiB.
+
+1 row in set. Elapsed: 35.538 sec. Processed 199.99 million rows, 17.91 GB (5.63 million rows/s., 503.86 MB/s.)
+Peak memory usage: 19.53 GiB.
+</code></pre>
+
+   
+Next, we run the same query three times with `parallel_non_joined_rows_processing = 1` (the default setting):
+
+<pre><code type='click-ui' language='bash'>
+1 row in set. Elapsed: 11.226 sec. Processed 299.98 million rows, 18.11 GB (26.72 million rows/s., 1.61 GB/s.)
+Peak memory usage: 19.66 GiB.
+
+
+1 row in set. Elapsed: 11.133 sec. Processed 299.98 million rows, 18.11 GB (26.94 million rows/s., 1.63 GB/s.)
+Peak memory usage: 19.64 GiB.
+
+1 row in set. Elapsed: 11.210 sec. Processed 299.98 million rows, 18.11 GB (26.76 million rows/s., 1.62 GB/s.)
+Peak memory usage: 19.67 GiB.
+</code></pre>
+
+This is a **3.2× speedup**, reducing runtime from \~35s to \~11s.
+
+<h2 id="more-performance-improvements">More performance improvements</h2>
+
+<h3 id="contributed-by-pavel-kruglov-and-raúl-marín">Contributed by Pavel Kruglov and Raúl Marín</h3>
+
+OUTER JOINs are not the only thing that got faster.
+
+This release also includes optimizations for JSON parsing, uniq calculations, and minmax index creation.
+
+<h3 id="faster-json-parsing">Faster JSON parsing</h3>
+
+Parsing for the JSON data type has been optimized.
+
+Each bar in the [PR](https://github.com/ClickHouse/ClickHouse/pull/93614#issuecomment-3751234129)’s test screenshot compares old vs. new performance, showing roughly 1.2×–2.8× speedups.
+
+![](https://clickhouse.com/uploads/release_262_mar2026_image1_13cfd43e49.png)
+
+<h3 id="faster-uniq-calculation">Faster uniq calculation</h3>
+
+For queries without GROUP BY, uniq over numeric types now batches inserts when possible, reducing CPU overhead and improving performance.
+
+The [PR](https://github.com/ClickHouse/ClickHouse/pull/95904#issuecomment-3843235930)’s performance tests show consistent improvements, with speedups of roughly \~1.15×.
+
+![](https://clickhouse.com/uploads/release_262_mar2026_image6_17ecdacd1c.png)
+
+<h3 id="faster-insert-with-minmax-indexes">Faster INSERT with minmax indexes</h3>
+
+Minmax index computation during INSERT is now more efficient, removing an unnecessary data copy and using vectorized min/max values calculation for numeric columns. This reduces insert latency when many indexed columns are present.
+
+The [PR](https://github.com/ClickHouse/ClickHouse/pull/97392#issuecomment-3932970004)’s performance tests show roughly \~1.2× faster inserts into tables with minmax indexes.
+
+![](https://clickhouse.com/uploads/release_262_mar2026_image2_dcb3e802f0.png)
+
+Speaking of minmax indexes, this release also makes them easier to use.
+
+<h2 id="automatic-enabling-of-minmax-indices">Automatic enabling of minmax indices</h2>
+
+<h3 id="contributed-by-michael-jarrett">Contributed by Michael Jarrett</h3>
+
+This release introduces a simpler way to enable minmax indexes at the table level automatically for temporal columns.
+
+Minmax indexes are one of the key mechanisms ClickHouse uses to prune data early for queries that filter on indexed columns, alongside the sparse primary index and lightweight projections.
+
+Before looking at the syntax, let’s briefly recap how pruning works in ClickHouse and where minmax indexes fit.
+
+<h3 id="a-quick-reminder-pruning-in-clickhouse">A quick reminder: pruning in ClickHouse</h3>
+
+The fastest analytical queries are the ones that read the least data.
+
+Analytical workloads typically filter contiguous ranges of rows and then aggregate the results, so performance depends on skipping as much data as possible.
+
+ClickHouse achieves this by storing data sorted by the primary key, `C1` in the chart below, and organizing rows into granules (g1–g4), the smallest processing units in ClickHouse, each covering 8,192 rows by default (shown with only 3 rows per granule in the chart for clarity).
+
+![](https://clickhouse.com/uploads/Screenshot_2026_03_16_at_11_36_46_a8f2bcc539.png)
+
+Based on this granule organization, ClickHouse can apply different pruning techniques to skip entire granules for queries that filter on indexed columns:
+
+<h4 id="primary-index">① Primary index</h4>
+
+The [primary index](https://clickhouse.com/docs/primary-indexes) (①) stores the first primary key column value from each granule and allows entire granules to be skipped before reading them, based on the filter condition on the primary key.
+
+For example, for `WHERE C1 > 60`, granules g1 and g2 are pruned using the index, so only the remaining data is read.
+
+<h4 id="lightweight-projections">② Lightweight projections</h4>
+
+For filters on a column that is not part of the primary key, such as` WHERE C2 > 900`, ClickHouse can use a [lightweight projection](https://clickhouse.com/blog/projections-secondary-indices), which stores the sorted projection key (C2) values plus  _part_offset values and provides its own primary index (②) that allows granules to be pruned for filters on the projection key.
+
+<h4 id="minmax-indexes">③ Minmax indexes</h4>
+
+However, even lightweight projections still duplicate the projection key column values on disk.
+
+If the filtered column, for example, C3, is correlated with the primary-key order, ClickHouse can prune granules using a minmax index instead of a projection.
+
+In the chart above, the minmax index (③) records the minimum and maximum values of C3 for each granule.  
+
+For a filter like `WHERE C3 > 600`, granules g1–g3 can be skipped because their maximum value is below 600, so only g4 needs to be read.
+
+The same minmax metadata can also [accelerate Top-N queries](https://clickhouse.com/blog/clickhouse-top-n-queries-granule-level-data-skipping) like  
+`SELECT * FROM T ORDER BY C3 DESC LIMIT 3`, allowing ClickHouse to skip granules that cannot influence the result.
+
+<h3 id="automatically-enabling-minmax-indexes">Automatically enabling minmax indexes</h3>
+
+Because minmax indexes are so useful, ClickHouse provides a simple way to enable them automatically for entire classes of columns, without defining them manually per column.
+
+Version 25.1 [introduced](https://clickhouse.com/blog/clickhouse-release-25-01#minmax-indices-at-the-table-level) MergeTree table settings  
+  • add_minmax_index_for_numeric_columns    
+  • add_minmax_index_for_string_columns  
+
+Version 26.2 extends this to temporal columns (Date / DateTime / Time types) with the setting  
+  • add_minmax_index_for_temporal_columns
+
+As an example:
+
+<pre><code type='click-ui' language='sql'>
+CREATE TABLE pageviews (
+  event_time DateTime,
+  ...
+)
+SETTINGS add_minmax_index_for_temporal_columns = 1;
+</code></pre>
+
+Since `event_time` is a temporal column, ClickHouse automatically creates a minmax index for it when this setting is enabled, without requiring an explicit index definition.
+
+This approach has several advantages:
+
+* No need to think about which columns should have a minmax index  
+* No need to define indexes manually per column  
+* Minmax indexes are compact and only loaded when a query filters on the corresponding column, so they add little overhead but can significantly speed up queries when needed
+
+<h2 id="time-based-one-time-passwords">Time-Based One-Time Passwords</h2>
+
+### Contributed by Denis Kamenskii, Vladimir Cherkasov
+
+You can now do secure interactive authentication in clickhouse-client, with Google Authenticator, 1Password, Okta, and similar.
+
+You'll first need to generate a TOTP-compatible secret:
+
+<pre><code type='click-ui' language='bash'>
+base32 -w32 < /dev/urandom | head -1
+</code></pre>
+
+
+```shell
+5RN2JMUDXJARFMPUYKXGH3N35DPGRCSU
+```
+
+Then you can use that to generate a QR code that you can scan with your authenticator app:
+
+<pre><code type='click-ui' language='bash'>
+qrencode -t ansiutf8 'otpauth://totp/ClickHouse?issuer=ClickHouse&secret=5RN2JMUDXJARFMPUYKXGH3N35DPGRCSU'
+</code></pre>
+
+This will generate a QR code that you can scan with your authenticator app.
+
+Next, we'll configure the user in ClickHouse:
+
+
+*config.d/users.yaml*
+
+<pre><code type='click-ui' language='yaml'>
+users:
+    totp_user:
+        password_sha256_hex: 1464acd6765f91fccd3f5bf4f14ebb7ca69f53af91b0a5790c2bba9d8819417b
+        time_based_one_time_password:
+            secret: 5RN2JMUDXJARFMPUYKXGH3N35DPGRCSU
+            period: 30
+            digits: 6
+            algorithm: SHA1
+        networks:
+            ip: '::/0'
+        profile: default
+        quota: default
+</code></pre>
+
+And then we can connect to ClickHouse using the user we just created:
+
+```shell
+./clickhouse client --user totp_user
+```
+
+You'll be prompted to enter your password, followed by the TOTP code from your authenticator app.
+
+---
+
+## Unordered mode for GCS ClickPipes is now available
+Published: 2026-03-16T09:28:23+00:00
+URL: https://clickhouse.com/blog/clickpipes-gcs-unordered-mode
+
+---
+title: "Unordered mode for GCS ClickPipes is now available"
+date: "2026-03-16T09:28:23.928Z"
+author: "Marta Paes"
+category: "Product"
+excerpt: "You can now ingest data from Google Cloud Storage into ClickHouse Cloud in any order for event-driven, blazing-fast analytics."
+---
+
+# Unordered mode for GCS ClickPipes is now available
+
+> *Ingest data from Google Cloud Storage into ClickHouse Cloud in **any** **order** for event-driven, blazing-fast analytics. Files are no longer required to follow lexicographical order.*
+
+A few months ago, we removed one of the biggest usability wrinkles in S3 ClickPipes by [supporting ingesting files in any order](https://clickhouse.com/blog/clickpipes-s3-unordered-mode) (*aka* unordered mode). We’re now extending that functionality to the Google Cloud Storage (GCS) connector, with a little help from [Google Cloud Pub/Sub notifications for Cloud Storage](https://docs.cloud.google.com/storage/docs/pubsub-notifications).
+
+![gcs-unordered-mode.png](https://clickhouse.com/uploads/gcs_unordered_mode_fd4559c5df.png)
+
+This means that you no longer need to worry about ensuring files land in your bucket in lexicographical order: with unordered mode, we’ll simply listen to notifications for new files and ingest files as they land in the GCS bucket. Whether you’re dealing with backfills, retries, late-arriving data, or some other source of out-of-orderness — this is now covered.
+
+---
+
+## Get started today
+
+Sign up for ClickHouse Cloud today to try out the GCS connector for ClickPipes!
+
+[Sign up](https://console.clickhouse.cloud/signUp?loc=blog-cta-103-get-started-today-sign-up&utm_blogctaid=103)
+
+---
+
+## Why is this a big deal? {#why-is-this-a-big-deal}
+
+By default, the GCS ClickPipe assumes files are added to a bucket in lexicographical order, and relies on this implicit order to ingest files sequentially. This means that any new file *must* be lexically greater than the last ingested file, which isn’t always true in the real world. For example, files named `events_2024-12-01.parquet`, `events_2024-12-02.parquet`, and `events_2024-12-03.parquet` will be ingested in order, but if a backfill named `events_2024-11-30.parquet` lands later in the bucket, it will be ignored.
+
+Not cool.
+
+With unordered mode, this limitation no longer applies: instead of polling the bucket every 30 seconds looking for the next file to process, the ClickPipe waits for new file notifications. When a notification arrives, ClickPipes just goes and processes that file regardless of its relative order to previously processed files. Although this requires a little extra configuration, it's a more robust and scalable approach when you’re dealing with millions of objects.
+
+## How does it work? {#how-does-it-work}
+
+To configure a GCS ClickPipe to ingest files that don’t have an implicit order, you need to configure notifications from the bucket to a Pub/Sub topic. ClickPipes can then listen for `OBJECT_FINALIZE` events and ingest any new files regardless of the file naming convention.  
+
+![564927906-277a62f5-799d-4d30-951d-35ebc8b346f2.jpg](https://clickhouse.com/uploads/564927906_277a62f5_799d_4d30_951d_35ebc8b346f2_56abffa4ed.jpg)
+
+_**Unordered mode:** Files land in GCS in **any order** (A) and trigger Pub/Sub notifications (B-C). ClickPipes polls and processes files in the specified path, using a metadata store to track state (1-5). Data is inserted into the target tables with exactly-once guarantees (6)._
+
+***“What about failures?”*** Since the steps above span multiple systems and don’t happen in a single transaction, failures can occur at any step — reading from GCS, marking files as processed, inserting data into ClickHouse, and so on. If a failure occurs, ClickPipes automatically reprocesses the batch. ***"But what about duplicates?”*** Even if files are reprocessed multiple times, the GCS ClickPipe guarantees exactly-once semantics, so no duplicates make it into your target table.
+
+Let’s see it in action!
+
+### Create a Pub/Sub topic {#create-a-pubsub-topic}
+
+*The following instructions assume you already have a GCS bucket with some data in it, as well as enough permissions to manage IAM roles and create new resources in your Google Cloud account.*
+
+**1\.** In the Google Cloud Console, navigate to **Pub/Sub > Topics > Create topic**. Create a new topic with a default subscription and note the **Topic Name**.
+
+**2\.** Configure a [service account](http://docs.cloud.google.com/iam/docs/keys-create-delete) with the minimum required set of permissions to allow ClickPipes to list and fetch objects in the specified bucket, as well as consume and monitor notifications from the Pub/Sub subscription.
+
+![](https://clickhouse.com/uploads/gcs_unordered_mar2026_image1_5969bf8711.png)
+
+**3\.** Configure your GCS bucket to send notifications to Pub/Sub when a new object lands in the bucket. This step cannot be performed in the Google Cloud Console, so you must use `gcloud` or your preferred programmatic interface.
+
+**3.1.** Using `gcloud`, add a notification configuration to your GCS bucket that triggers notifications for the `OBJECT_FINALIZE` [event type](https://docs.cloud.google.com/storage/docs/pubsub-notifications#events):
+
+<pre><code language='bash'>
+# Create a Pub/Sub notification for new objects in the bucket
+gcloud storage buckets notifications create "gs://${YOUR_BUCKET_NAME}" \
+--topic="projects/${YOUR_PROJECT_ID}/topics/${YOUR_TOPIC_NAME}" \
+--event-types="OBJECT_FINALIZE" \
+--payload-format="json"
+
+# List the Pub/Sub notifications in the bucket
+gcloud storage buckets notifications describe
+</code></pre>
+
+We strongly recommend configuring a [**Dead-Letter topic**](https://docs.cloud.google.com/pubsub/docs/dead-letter-topics), too, so it's easier to debug and retry failed notifications. But that’s it — you’re ready to create a ClickPipe to continuously ingest data from your bucket whenever a new file lands!
+
+### Create a ClickPipe {#create-a-clickpipe}
+
+**1\.** In the ClickHouse Cloud console, navigate to **Data Sources > Create ClickPipe**, then choose **Google Cloud Storage**. Enter the details to connect to your GCS bucket, using **Service account** as the authentication method and providing the `.json` service account key.
+
+**2\.** Toggle on **Continuous ingestion**, then select the new **Any order** ingestion mode to enable unordered mode. Enter the path to your Pub/Sub subscription.
+
+![](https://clickhouse.com/uploads/gcs_unordered_mar2026_image5_01fc577707.png)
+
+**3\.** Click **Incoming data**. Define a **Sorting key** for the target table (very important) and make any necessary adjustments to the mapped schema. Finally, configure a role for the ClickPipes database user.
+
+![cp-gcs-unordered.gif](https://clickhouse.com/uploads/cp_gcs_unordered_26a91e8d0f.gif)
+
+**4\.** **Sit back and relax.** ClickPipes will now perform an initial scan of your bucket, then start processing files as new notification events arrive. 🚀
+
+If that seems like a lot of clicking, the good news is that ClickPipes is fully supported in the [ClickHouse Terraform provider](https://registry.terraform.io/providers/ClickHouse/clickhouse/latest/docs), so you can configure this setup as code from start to finish.
+
+## What’s next? {#whats-next}
+
+We’re excited to enable more complex ingestion patterns from object storage into ClickHouse Cloud with the new unordered mode in GCS ClickPipes — you get the same fully-managed, full-speed experience with a little extra flexibility! This feature is also available for Amazon S3 as a data source. We plan to extend support to Azure Blob Storage in the near future, to ensure feature parity across **all** Object Storage ClickPipes.
+
+If you have any feedback or run into any snags while setting up ClickPipes, reach out to our team! For step-by-step instructions, frequently asked questions, and gotchas, check out the [documentation for GCS ClickPipes](https://clickhouse.com/docs/integrations/clickpipes/object-storage/gcs/get-started).
+
+*Ready to eliminate your ETL complexity and reduce your data movement costs? [Try the GCS ClickPipe connector today](https://clickhouse.com/cloud/clickpipes) and experience a fully managed, native integration experience with ClickHouse Cloud — the world’s fastest analytics database.*
+
+
+---
+
+## Ready to eliminate your ETL complexity and reduce your data movement costs?
+
+Try the GCS ClickPipe connector today  and experience a fully managed, native integration experience with ClickHouse Cloud — the world’s fastest analytics database.
+
+[Try the GCS ClickPipe connector today](https://clickhouse.com/cloud/clickpipes?loc=blog-cta-102-ready-to-eliminate-your-etl-complexity-and-reduce-your-data-movement-costs-try-the-gcs-clickpipe-connector-today&utm_blogctaid=102)
+
+---
 
 ---
 
@@ -1054,6 +2818,293 @@ Want to deploy GitTrends locally or build something similar on your own dataset?
 
 Give the demo a try at <https://gittrends.clickhouse.com> and share with us [any feedback](https://github.com/ClickHouse/gitTrends/issues/new).
 
+
+---
+
+## Define once, use everywhere: a metrics layer for ClickHouse with MooseStack
+Published: 2026-03-10T14:46:25+00:00
+URL: https://clickhouse.com/blog/metrics-layer-with-fiveonefour
+
+---
+title: "Define once, use everywhere: a metrics layer for ClickHouse with MooseStack"
+date: "2026-03-10T14:46:25.293Z"
+author: "Fiveonefour and Nakul Mishra (AWS)"
+category: "Engineering"
+excerpt: "This post shows a lightweight metrics layer for ClickHouse using MooseStack, an open source developer agent harness for ClickHouse."
+---
+
+# Define once, use everywhere: a metrics layer for ClickHouse with MooseStack
+
+Let’s say you’re tracking data on revenue in your ClickHouse database. Metrics about revenue might be served up to interested parties in a variety of places: BI tools, custom dashboards, API endpoints, agentic tools, MCP servers, AI chat, etc. Are the numbers the same in every place? Maybe, maybe not. When the same metric is re-defined in multiple locations (or generated on the fly by an LLM), it's easy for that definition to skew. It happens more often than you might think. 
+
+The below example is based on something we saw at one of our customers: their custom chat client vibe-SQLed a definition of revenue that made sense (sum of `amount`), but didn’t exclude transactions that were incomplete (Figure A: chat overstates revenue). That kind of mistake becomes impossible with a well-defined metrics layer (Figure B: chat matches actual revenue).
+
+![](https://clickhouse.com/uploads/1_cdd0a13188.png)
+
+![](https://clickhouse.com/uploads/2_0e4864ac05.png)
+
+*Image 1 shows chat going rogue on the definition of revenue. Image 2 shows how the metrics layer keeps everything consistent.*
+
+When I was at Nike, we had to work hard to make sure this didn’t happen just across our APIs. Now, there’s APIs, dashboard, chats and AI, MCP… The surface area for inconsistency has multiplied.
+
+And what happens when we need to change that definition? We end up with two problems:
+
+1. Metrics need to be consistent everywhere. Same definition, same answer, across chat, APIs, dashboards, and MCP. One mistake kills credibility.  
+2. Metrics need to be easy to define and change safely. Add a metric once, update it once, and have every surface stay in sync when the schema changes. The developer experience needs to be better than manually crafting all this.
+
+In this post, we’ll introduce an approach for a lightweight metrics layer (or “query layer” or “semantic layer”) on top of ClickHouse. We’ll use MooseStack, an open source developer agent harness for ClickHouse, to implement our metrics layer in code, where our coding agents can help accelerate the process.
+
+If you want to jump straight into some sample code, check out [the repo for the demo app](https://github.com/514-labs/financial-query-layer-demo) that you can see in the screenshots above. If you want to go straight to implementing this yourself, check out [the docs](https://docs.fiveonefour.com/moosestack/reference/query-layer) or the [tutorial guide](https://docs.fiveonefour.com/guides/chat-in-your-app/tutorial). 
+
+## Define once, project everywhere
+
+There are a bunch of semantic / metric layer approaches out there that all have their own advantages and disadvantages (take cube.dev, dbt metrics, MetricFlow, Looker; and frontend first approaches like TanStack Table and AG Grid).
+
+The approach we’ll cover today doesn’t rely on external systems or human processes for correctness: it's an as-code metrics layer. Define your metrics once in code. Project them to every surface.
+
+A metric has three components:
+
+1. The aggregation: the SQL expression (what to calculate). `SUM(amount)`, `COUNT(DISTINCT user_id)`, `AVG(duration)`.  
+2. Dimensions: what to group by (how to slice it). Region, month, status. Column keys or SQL expressions.  
+3. Filters: what constraints are valid (how to scope it). Which columns can be filtered, which operators are allowed.
+
+These three components assemble into any query your surfaces need. "Revenue by region this quarter" becomes: aggregation = `sumIf(amount, status = 'completed') AS revenue`, dimension = `region`, filter = `timestamp >= Q1 start`.
+
+Another benefit is that multiple metrics can share the same dimensions and filters. That helps keep not just business logic consistent, but also grain: how data is sliced, grouped, and compared.
+
+The query model is the source of truth. Each surface consumes it differently:
+
+- First party chat: the model constrains which metrics the LLM can query. No freestyle SQL. The model is the guardrail. (When you build your own chat, you have much more control over the user experience, including how tools are called).  
+- MCP: the model becomes a tool definition. Same metrics in Claude Desktop, Cursor, any agent client.  
+- API: the model generates parameterized SQL. Deterministic. No LLM in the loop.  
+- Dashboard: the model's metadata drives the UI. Dimension pickers, metric selectors, filter controls.
+
+[The demo application covers all of these with some toy data, so you can see how metrics are defined, and how they interact with these different surfaces.](https://github.com/514-labs/financial-query-layer-demo)
+
+## A type-safe query model
+
+Let’s assume you are doing your data modeling in ClickHouse, and want *everything* as easy, type-safe code, that comes with a developer harness (dev MCP, skills etc.) to make it easy to work with. If you want to implement metrics with the approach above, you can use [MooseStack's](https://github.com/514-labs/moosestack) open source `QueryModel`. 
+
+![3.png](https://clickhouse.com/uploads/3_d129fddf9a.png)
+
+QueryModels take Data Model objects as inputs, that represent ClickHouse tables (`OlapTable`), Views (`View`) or Materialized Views (`MaterializedView`), and let you define metrics, dimensions, and filters on top.
+
+```typescript
+// The data model — defines the table schema 
+interface EventModel {
+  /** When the event occurred */
+  // MooseStack propagates JSDocs describing the tables and columns 
+  // to ClickHouse as comments 
+  event_time: Date;
+  /** Unique identifier for the user who triggered the event */
+  user_id: string;
+  /** Lifecycle state: active, completed, or refunded */
+  status: "active" | "completed" | "refunded";
+  /** Geographic region where the event originated */
+  region: string;
+  /** Transaction value in USD */
+  amount: number;
+}
+
+// The OlapTable — typed reference to the ClickHouse table
+export const Events = new OlapTable<EventModel>("events", {
+  orderBy: "event_time",
+});
+
+// Your query model — references the data model directly
+export const eventsModel = defineQueryModel({
+  name: "events",
+  description: "Event analytics: user activity and engagement metrics",
+  table: Events,  // <-- typed reference to the OlapTable
+
+  dimensions: {
+    region: { column: "region", description: "Geographic region" }, 
+    day: {
+      expression: sql.fragment`toDate(${Events.columns.event_time})`,  // <-- Column object, not a string 
+      as: "time", 
+      description: "Daily time bucket",
+    },
+    month: {
+      expression: sql.fragment`toStartOfMonth(${Events.columns.event_time})`,
+      as: "time",
+      description: "Monthly time bucket",
+    },
+  },
+
+  metrics: {
+    totalEvents: { agg: sql.fragment`count(*)`, description: "Total number of events" },
+    totalAmount: { agg: sql.fragment`sum(${Events.columns.amount})`, description: "Sum of all event amounts" },  // <-- Column object
+    uniqueUsers: { agg: sql.fragment`uniq(${Events.columns.user_id})`, description: "Distinct users" },  // <-- Column object
+  },
+
+  filters: {
+    timestamp: { column: "event_time", operators: ["gte", "lte"] as const },  // <-- typed against EventModel keys
+    region: { column: "region", operators: ["eq", "in"] as const },
+  },
+
+  sortable: ["totalAmount", "totalEvents", "uniqueUsers"] as const,
+});
+```
+
+[Run code block](null)
+
+### Type safety back to the table
+
+Since metrics are built on Data Models, you get type-safety end-to-end. In the example below, dimensions and filters are generic over `keyof Transaction`. Metrics reference `TransactionTable.columns.totalAmount` (a `Column` object, not a string). Rename or remove a field in your data model and the query model gets a compile error, not a silent wrong answer in production.  
+
+![4.png](https://clickhouse.com/uploads/4_e21e0fc3f9.png)
+
+Here, I changed `totalAmount` to `total_Amount` (ugh) and you can see all the dependent query models show the type-error. That keeps the metrics layer and the ClickHouse tables defined in code necessarily in sync.
+
+### One definition, every surface
+
+The same `eventsModel` object then becomes a chat tool, an MCP tool, and an API:
+
+<pre><code type='click-ui' language='typescript'>
+// Chat — Vercel AI SDK tool
+const tool = createModelTool(transactionMetrics);
+// tool.schema has the zod params, tool.buildRequest parses them, transactionMetrics.toSql generates the query
+</code></pre>
+
+<pre><code type='click-ui' language='typescript'>
+// MCP — register as tool for Claude Desktop, Cursor, etc.
+registerModelTools(server, [transactionMetrics], mooseUtils.client.query);
+</code></pre>
+
+<pre><code type='click-ui' language='typescript'>
+// REST API — deterministic SQL, no LLM
+const data = await buildQuery(transactionMetrics)
+  .metrics(["revenue"])
+  .dimensions(["region"])
+  .orderBy(["revenue", "DESC"])
+  .execute(client.query);
+</code></pre>
+
+Add a metric to the model, it shows up on every surface. 
+
+### Metrics are still code
+
+Importantly, it's not a config of a dashboard, or a fingers crossed attempt at prompt engineering.
+
+Your metric definitions go through the same PR review, CI, and deployment pipeline as everything else.
+
+## The dev harness in action
+
+MooseStack isn’t just a developer framework. The framework and the tooling surrounding it (the dev MCP, the skills, the CLI) make up the dev agent harness ([the guide will walk you through setting it up](https://docs.fiveonefour.com/guides/chat-in-your-app/tutorial?lang=typescript)). This agent harness turns your regular coding agent (Claude Code, Cursor, etc) into a ClickHouse specialist, which can drastically accelerate your implementation of a metrics layer.
+
+Once the harness is ready, one prompt can add a metric:
+
+```
+"Add a revenue metric. Revenue is the sum of amount for completed events only."
+```
+
+The dev harness knows your data models and your query models. It adds the metric using TypeScript and moose-lib to extend the query model object.
+
+### The diff
+
+```diff
+metrics: {
+  totalTransactions: {
+    agg: count(),
+    as: "totalTransactions",
+    description: "Total transaction count across all statuses",
+  },
+
+  completedTransactions: {
+    agg: sql`countIf(${TransactionTable.columns.status} = 'completed')`,
+    as: "completedTransactions",
+    description: "Count of completed (settled) transactions",
+  },
+
++ revenue: {
++   agg: sql`
++     sumIf(
++       ${TransactionTable.columns.totalAmount},
++       ${TransactionTable.columns.status} = 'completed'
++     )
++   `,
++   as: "revenue",
++   description: "Total revenue from completed transactions only",
++ },
+},
+```
+
+One edit only: add the metric to the model, and it propagates across all existing query surfaces.
+
+### Check the blast radius
+
+The infra map shows every surface that consumes `transactionMetrics`, which the agent can retrieve with the MooseDev MCP infra map tool call:
+
+<pre><code type='click-ui' language='bash'>
+$ get_infra_map search="transactionMetrics"
+
+Components:
+  WEB_APP  /tools               → pulls_data_from: [transactions]   # MCP tools (registerModelTools)
+  WEB_APP  /revenue/by-region   → pulls_data_from: [transactions]   # Dashboard API (buildQuery)
+  WEB_APP  /transaction/metrics → pulls_data_from: [transactions]   # Report builder API (buildQuery)
+  CHAT     /api/chat            → pulls_data_from: [/tools]         # Chat UI (AI SDK → MCP client)
+</code></pre>
+
+Four surfaces. The new `revenue` metric is now available on all of them. Chat users can ask for it. MCP clients can query it. The API endpoint can serve it. The dashboard can display it.
+
+### Validate the SQL
+
+Call the MCP tool with "revenue by region this quarter" and inspect the generated SQL:
+
+<pre><code type='click-ui' language='sql'>
+SELECT
+    region,
+    sumIf(totalAmount, status = 'completed') AS revenue  -- constraint from the metric definition
+FROM transactions
+WHERE timestamp >= toStartOfQuarter(now())
+     AND timestamp <= now()
+GROUP BY region
+ORDER BY revenue DESC
+</code></pre>
+
+The `sumIf` came from the metric definition. The `WHERE` came from the filter. The `GROUP BY` came from the dimension. Nothing was improvised. The model produced the SQL, and you can read it to verify.
+
+<video autoplay="0" muted="0" loop="0" controls="0">
+  <source src="https://clickhouse.com/uploads/harness_demo_descript_b2a0c8fcac.mp4" type="video/mp4" />
+</video>
+
+## Putting Metrics into practice
+
+A query model only helps if your team treats it as the contract for production analytics. What we recommend is a practice like:
+
+**Ad-hoc SQL for discovery. Query model for production.**
+
+Chat in your product, dashboard cards, report APIs, MCP tools exposed to users or internal teams: all of those should consume the same model. That is how "revenue" stops being three implementations and becomes one definition.
+
+Freeform chat/chat-to-SQL still has a place. We keep it for development, exploration, debugging, and analyst/admin workflows. But that is a discovery path, not a production path. Once a number matters enough to appear in a product surface, it gets promoted into the query model.
+
+In practice, adoption looks like this:
+
+* **Exploration first.** A developer, analyst, or PM asks a question in chat or writes an ad hoc query.  
+* **Codify the metric.** Once the definition is useful and stable, it gets added to `defineQueryModel()`.  
+* **Project it everywhere.** Chat tools, MCP tools, APIs, and dashboards all consume that definition.  
+* **Review it like code.** Changes to metric definitions go through PR review, tests, and normal deployment.  
+* **Limit bypass paths.** Production surfaces do not ship hand-written SQL for metrics that already exist in the model.
+
+This is where the "as code" part matters. The model is not just a convenience for generating SQL. It gives the team a shared artifact to review, version, and own. Product’s definition is in that code, not in a document. Engineering refers to the same code for analytical feature development. Agents can consume it. 
+
+The goal is not to eliminate ad hoc analysis, but to make sure ad hoc analysis is not the thing your product depends on.
+
+That is the adoption pattern we think works best: **explore freely, standardize deliberately, serve consistently.**
+
+## Try it out
+
+One `defineQueryModel()`. Type-safe back to your tables and views. Chat, MCP, and API from the same definition. The dev harness builds it. The type system keeps it in sync. Code review and SDLC keeps it safe. Try it out yourself:
+
+- [**The guide**](https://docs.fiveonefour.com/guides/chat-in-your-app/tutorial?lang=typescript)**.** Step-by-step from zero to production: data models, query models, query builder, chat, MCP, brownfield setup (`moose init --from-remote`), auth, and deployment.  
+- [**The demo app**](https://github.com/514-labs/financial-query-layer-demo)**.** Check out the example implementation, including frontend with dashboard, AI chat, and report builder.   
+- [**Start from 514 Hosting**](https://fiveonefour.boreal.cloud/sign-up)**.** Sign up for Fiveonefour, get a hosted ClickHouse backend, and deploy with preview branches and schema migration support. 514 Hosting proudly uses ClickHouse Cloud.
+
+### Acknowledgements
+
+Thanks to Nakul Mishra from AWS for feedback on the post, and for validating the Fiveonefour agent harness with AWS’s agentic coding IDE, Kiro - including the newly developed [Kiro Power for ClickHouse](https://github.com/nklmish/clickhouse-kiro-power). Nakul’s views and opinions are Nakul’s own.
+
+Thanks to MooseStack / ClickHouse community members Lukáš Kozelnický and Michael Klein for the hands-on feedback, and the F45 team, Loyalsnap team and Oliver Naaris for feedback on the demo.
 
 ---
 

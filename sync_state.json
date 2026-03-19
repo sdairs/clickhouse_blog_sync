@@ -1,5 +1,5 @@
 {
-  "last_sync": "2026-03-18T06:28:51.113216Z",
+  "last_sync": "2026-03-19T06:25:52.315752Z",
   "processed_blogs": {
     "https://clickhouse.com/blog/clickhouse-raises-400-million-series-d-acquires-langfuse-launches-postgres": {
       "title": "ClickHouse raises $400M Series D led by Dragoneer to accelerate expansion across analytics and AI infrastructure",
@@ -4302,9 +4302,57 @@
       "pub_date": "2026-03-12T17:20:54+00:00",
       "file_path": "blogs/2026-03-12-5-ways-to-parse-dates-and-datetimes-in-clickhouse.md",
       "processed_at": "2026-03-13T15:40:30.403513Z"
+    },
+    "https://clickhouse.com/blog/clickstack-faster-observability": {
+      "title": "How ClickStack makes ClickHouse faster for observability",
+      "pub_date": "2026-03-18T12:55:57+00:00",
+      "file_path": "blogs/2026-03-18-how-clickstack-makes-clickhouse-faster-for.md",
+      "processed_at": "2026-03-19T06:25:50.545871Z"
+    },
+    "https://clickhouse.com/blog/clickstack-ai-notebooks": {
+      "title": "Introducing AI observability notebooks for Managed ClickStack in Private Preview",
+      "pub_date": "2026-03-18T12:22:46+00:00",
+      "file_path": "blogs/2026-03-18-introducing-ai-observability-notebooks-for.md",
+      "processed_at": "2026-03-19T06:25:50.849051Z"
+    },
+    "https://clickhouse.com/blog/socialpruf": {
+      "title": "How Socialpruf built a faster, more reliable data stack by replacing Neon with Postgres managed by ClickHouse",
+      "pub_date": "2026-03-17T12:18:28+00:00",
+      "file_path": "blogs/2026-03-17-how-socialpruf-built-a-faster-more-reliable-data.md",
+      "processed_at": "2026-03-19T06:25:51.119916Z"
+    },
+    "https://clickhouse.com/blog/ai-redrawing-database-market": {
+      "title": "AI is redrawing the database market",
+      "pub_date": "2026-03-17T12:02:27+00:00",
+      "file_path": "blogs/2026-03-17-ai-is-redrawing-the-database-market.md",
+      "processed_at": "2026-03-19T06:25:51.302718Z"
+    },
+    "https://clickhouse.com/blog/python-async-native-client": {
+      "title": "Designing the new async-native ClickHouse Python client",
+      "pub_date": "2026-03-16T13:43:03+00:00",
+      "file_path": "blogs/2026-03-16-designing-the-new-async-native-clickhouse-python.md",
+      "processed_at": "2026-03-19T06:25:51.604825Z"
+    },
+    "https://clickhouse.com/blog/clickhouse-release-26-02": {
+      "title": "ClickHouse Release 26.2",
+      "pub_date": "2026-03-16T10:47:57+00:00",
+      "file_path": "blogs/2026-03-16-clickhouse-release-26-2.md",
+      "processed_at": "2026-03-19T06:25:51.832957Z"
+    },
+    "https://clickhouse.com/blog/clickpipes-gcs-unordered-mode": {
+      "title": "Unordered mode for GCS ClickPipes is now available",
+      "pub_date": "2026-03-16T09:28:23+00:00",
+      "file_path": "blogs/2026-03-16-unordered-mode-for-gcs-clickpipes-is-now-available.md",
+      "processed_at": "2026-03-19T06:25:52.003406Z"
+    },
+    "https://clickhouse.com/blog/metrics-layer-with-fiveonefour": {
+      "title": "Define once, use everywhere: a metrics layer for ClickHouse with MooseStack",
+      "pub_date": "2026-03-10T14:46:25+00:00",
+      "file_path": "blogs/2026-03-10-define-once-use-everywhere-a-metrics-layer-for.md",
+      "processed_at": "2026-03-19T06:25:52.226828Z"
     }
   },
-  "total_blogs": 717,
+  "total_blogs": 725,
   "failed_blogs": [
     {
       "url": "https://clickhouse.com/jp/blog/clickhouse-gcp-japan-availability",
