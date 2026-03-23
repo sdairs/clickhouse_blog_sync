@@ -1,5 +1,5 @@
 # ClickHouse Blogs
-Last updated: 2026-03-22 06:21:45 UTC
+Last updated: 2026-03-23 06:31:55 UTC
 Total blogs: 725
 
 ---
