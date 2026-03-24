@@ -1,5 +1,5 @@
 {
-  "last_sync": "2026-03-23T06:31:55.352882Z",
+  "last_sync": "2026-03-24T06:28:27.803772Z",
   "processed_blogs": {
     "https://clickhouse.com/blog/clickhouse-raises-400-million-series-d-acquires-langfuse-launches-postgres": {
       "title": "ClickHouse raises $400M Series D led by Dragoneer to accelerate expansion across analytics and AI infrastructure",
@@ -4350,9 +4350,21 @@
       "pub_date": "2026-03-10T14:46:25+00:00",
       "file_path": "blogs/2026-03-10-define-once-use-everywhere-a-metrics-layer-for.md",
       "processed_at": "2026-03-19T06:25:52.226828Z"
+    },
+    "https://clickhouse.com/blog/querying-datetimes": {
+      "title": "Querying DateTimes in ClickHouse",
+      "pub_date": "2026-03-13T10:25:02+00:00",
+      "file_path": "blogs/2026-03-13-querying-datetimes-in-clickhouse.md",
+      "processed_at": "2026-03-24T06:28:27.322591Z"
+    },
+    "https://clickhouse.com/blog/202603-newsletter": {
+      "title": "March 2026 newsletter",
+      "pub_date": "2026-03-19T11:15:47+00:00",
+      "file_path": "blogs/2026-03-19-march-2026-newsletter.md",
+      "processed_at": "2026-03-24T06:28:27.716956Z"
     }
   },
-  "total_blogs": 725,
+  "total_blogs": 727,
   "failed_blogs": [
     {
       "url": "https://clickhouse.com/jp/blog/clickhouse-gcp-japan-availability",

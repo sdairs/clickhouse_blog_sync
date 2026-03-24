@@ -1,6 +1,213 @@
 # ClickHouse Blogs
-Last updated: 2026-03-23 06:31:55 UTC
-Total blogs: 725
+Last updated: 2026-03-24 06:28:27 UTC
+Total blogs: 727
+
+---
+
+## March 2026 newsletter
+Published: 2026-03-19T11:15:47+00:00
+URL: https://clickhouse.com/blog/202603-newsletter
+
+---
+title: "March 2026 newsletter"
+date: "2026-03-19T11:15:47.686Z"
+author: "Mark Needham"
+category: "Community"
+excerpt: "Welcome to the March 2026 ClickHouse newsletter, which will round up what’s happened in real-time data warehouses over the last month."
+---
+
+# March 2026 newsletter
+
+Hello, and welcome to the March 2026 ClickHouse newsletter!
+
+This month, we have an overview of Geospatial, the launch of chDB 4, how Hookdeck made payload search 60 times faster, The Agentic Data Stack, and more!
+
+## Featured community member: Jamie Herre {#featured-community-member}
+
+This month's featured community member is Jamie Herre, Sr. Director of Engineering at Cloudflare.
+
+![](https://clickhouse.com/uploads/mar2026_nl_image4_2c5abe927e.png)
+
+Jamie leads engineering on Cloudflare's analytics infrastructure - a system that processes over 1.61 quadrillion events every day across more than 300 global data centers, built on ClickHouse.
+
+At the <a href="https://clickhouse.com/blog/cloudflare" target="_blank">ClickHouse meetup in August 2025</a>, Jamie shared how his team designed for both explosive growth and catastrophic failure simultaneously. In one live demonstration, a single query scanned 96 trillion events in under 2 seconds - while a simulated North American outage caused European clusters to silently absorb the load without missing a beat.
+
+➡️ <a href="https://www.linkedin.com/in/jherre/" target="_blank">Connect with Jamie on LinkedIn</a>
+
+## Upcoming events {#upcoming-events}
+
+### Global virtual events {#global-virtual-events}
+
+* <a href="https://clickhouse.com/company/events/v26-3-community-release-call" target="_blank">v26.3 Community Call</a> - Mar 26, 2026
+* <a href="https://clickhouse.com/company/events/202604-APJ-Korea-Webinar-CDC-ClickPipes" target="_blank">CDC ClickPipes: 데이터베이스를 ClickHouse로 복제하는 가장 빠른 방법</a> - Apr 1, 2026
+* <a href="https://clickhouse.com/company/events/202603-AMER-Webinar-MaterializedViews" target="_blank">Under-the-Hood: ClickHouse Incremental Materialized Views and Dictionaries</a> - Apr 9, 2026
+* <a href="https://clickhouse.com/company/events/202604-APJ-Webinar-Unified-Data-Stack-ClickHouse-Postgres" target="_blank">Combining Postgres & ClickHouse to Build a Unified Data Stack</a> - Apr 22, 2026
+
+### Virtual training {#virtual-training}
+
+* <a href="https://clickhouse.com/company/events/202603-AMER-EMEA-Observabiity-with-ClickStackLevel3" target="_blank">Observability with ClickStack: Level 3</a> - Mar 25, 2026
+* <a href="https://clickhouse.com/company/events/202604-AMER-EMEA-Observabiity-with-ClickStackLevel2" target="_blank">Observability with ClickStack: Level 2</a> - Apr 7, 2026
+* <a href="https://clickhouse.com/company/events/202604-APJ-query-optimization" target="_blank">Query Optimization with ClickHouse Workshop</a> - Apr 7, 2026
+
+### Events in AMER {#events-in-amer}
+
+* <a href="https://clickhouse.com/company/events/20250325" target="_blank">SRECon</a> - Seattle - Mar 25, 2026
+* <a href="https://clickhouse.com/company/events/20260324RSA" target="_blank">Bay Area Iceberg Meetup: RSA Edition</a> - San Francisco - Mar 24, 2026
+* <a href="https://clickhouse.com/company/events/20260326OBS" target="_blank">Seattle Observability Meetup</a> - Seattle - Mar 26, 2026
+* <a href="https://clickhouse.com/company/events/20260331SF" target="_blank">Fireside Chat in San Francisco: Column Stores & the Evolution of Observability</a> - San Francisco - Mar 31, 2026
+* <a href="https://clickhouse.com/company/events/20260401Start" target="_blank">Seattle Startup Summit</a> - Seattle - Apr 1, 2026
+* <a href="https://clickhouse.com/company/events/2026048ICEY" target="_blank">Iceberg Summit</a> - San Francisco - Apr 8, 2026
+* <a href="https://clickhouse.com/company/events/20260409SF" target="_blank">AI Demo Night</a> - San Francisco - Apr 9, 2026
+* <a href="https://clickhouse.com/company/events/google-cloud-next-2026" target="_blank">Google Cloud Next 2026</a> - Las Vegas - Apr 22, 2026
+* <a href="https://clickhouse.com/company/events/2026-houseparty-google-next" target="_blank">House Party, Google Cloud Next</a> - Las Vegas - Apr 22, 2026
+* <a href="https://clickhouse.com/company/events/202605-global-open-house" target="_blank">Open House</a> - San Francisco - May 26, 2026
+
+### Events in EMEA {#events-in-emea}
+
+* <a href="https://clickhouse.com/company/events/202603-EMEA-Munich-meetup" target="_blank">ClickHouse Meetup Munich</a> - Munich - Mar 19, 2026
+* <a href="https://talk.clickhouse.com/MjM4LUZQQy0zMTcAAAGgUzZGmrCsh9LwlOhfQ5S4NuJ8xeCq3mUb8G5BcC77kIWCSLiIIgxcRMEPPICfZJY68i42uok=" target="_blank">KubeCon EU</a> - Amsterdam, 23-26 March - Hall 2 stand 261
+* <a href="https://talk.clickhouse.com/MjM4LUZQQy0zMTcAAAGgUzZGmmaesRMWlmOCJFDfP-dRMIF62KX7wSNwW7XuKDPuAZhovJEFU7vmLZKWfQhES_NXQvg=" target="_blank">DW&BI</a> - Utrecht, 24 March
+* <a href="https://clickhouse.com/company/events/202603-EMEA-Milan-meetup" target="_blank">ClickHouse x Apache Kafka x AWS</a> - Milan - Mar 26, 2026
+* <a href="https://ti.to/maltaawsusergroup/gen-a-i-day-malta/with/lpqxlepi9ww" target="_blank">ClickHouse x AWS x DoiT - Gaming and Betting AI Workshop</a> - Malta - March 26, 2026
+* <a href="https://clickhouse.com/company/events/202603-EMEA-Benelux-Amsterdam-LunchandLearn" target="_blank">Lunch & Learn with ClickHouse</a> - Amsterdam - Mar 31, 2026
+* <a href="https://aws.amazon.com/events/summits/paris/" target="_blank">AWS Summit Paris</a> - Paris, 1 April - Level 1 (nr. G3)
+* <a href="https://clickhouse.com/company/events/202604-EMEA-Observability-with-ClickStack" target="_blank">Amsterdam In-Person Training: Observability with ClickStack</a> - Amsterdam - Apr 8, 2026
+* <a href="https://events.confluent.io/awsstartupexchangevienna2026" target="_blank">CTO Networking Event with ClickHouse, AWS, Confluent & DoiT</a> - Vienna - Apr 9, 2026
+* <a href="https://luma.com/wjv3v1tn" target="_blank">Scaling the Enterprise AI Operating Model</a> - Berlin - Apr 14, 2026
+* <a href="https://clickhouse.com/company/events/202604-EMEA-Paris-Real-time-Analytics-w-ClickHouse" target="_blank">Paris In-Person Training: Real-time Analytics with ClickHouse</a> - Paris - Apr 15, 2026
+* <a href="https://www.meetup.com/clickhouse-ireland-user-group/events/313793261" target="_blank">ClickHouse Meetup in Dublin</a> - Dublin - Apr 16, 2026
+* <a href="https://grafana.com/events/grafanacon/" target="_blank">GrafanaCON</a> - Barcelona - Apr 20-22, 2026
+* <a href="https://clickhouse.com/company/events/202604-EMEA-Barcelona-Real-time-Analytics-w-ClickHouse" target="_blank">Barcelona In-Person Training: Real-time Analytics with ClickHouse</a> - Barcelona - Apr 20, 2026
+* <a href="https://aws.amazon.com/events/summits/london/" target="_blank">AWS Summit London</a> - London - Apr 22 - Booth G18
+* <a href="https://riseof.ai/conference-2026/" target="_blank">Rise of AI Berlin</a> - Berlin - May 5-6, 2026
+* <a href="https://aws.amazon.com/events/summits/tel-aviv/" target="_blank">AWS Summit Tel Aviv</a> - Tel Aviv - May 6, 2026
+* <a href="https://datainnovationsummit.com/" target="_blank">Data Innovation Summit</a> - Stockholm - May 6-8, 2026
+* <a href="http://gartner.com/en/data-analytics" target="_blank">Gartner Data & Analytics</a> - London - May 11-13, 2026
+* <a href="https://www.revolutionbanking.es/" target="_blank">Revolution Banking</a> - Madrid - May 12, 2026
+* <a href="https://www.platfor-ma.com/" target="_blank">Platforma 2026</a> - Tel Aviv - May 20, 2026
+* <a href="https://aws.amazon.com/events/summits/hamburg/" target="_blank">AWS Summit Hamburg</a> - Hamburg - May 20, 2026
+* <a href="https://clickhouse.com/company/events/202605-EMEA-London-Real-time-Analytics-w-ClickHouse" target="_blank">London 2-day In-Person Training: Real-time Analytics with ClickHouse</a> - London - May 19, 2026
+* <a href="https://www.meetup.com/clickhouse-london-user-group/events/313759007/" target="_blank">ClickHouse Meetup London</a> - London - May 19, 2026
+* <a href="https://cloudonair.withgoogle.com/events/cloud-ai-live-madrid-2026" target="_blank">Google Summit Madrid</a> - Madrid - May 28, 2026
+
+### Events in APAC {#events-in-apac}
+
+* <a href="https://2026.pythonasia.org/" target="_blank">Python Asia 2026</a> - Manila - Mar 21-22, 2026
+* <a href="https://clickhouse.com/company/events/meetup-nz-23mar2026" target="_blank">Postgres + ClickHouse: Building a Real-Time Open-Source Data Stack</a> - Auckland - Mar 23, 2026
+* <a href="https://dataengbytes.com/2026/auckland" target="_blank">DataEngBytes Auckland</a> - Mar 24, 2026
+* <a href="https://clickhouse.com/company/events/meetup-nz-25mar2026" target="_blank">Wellington Data Eng Meetup</a> - Wellington - Mar 25, 2026
+* <a href="https://clickhouse.com/company/events/202603-apj-shenzhen-meetup" target="_blank">ClickHouse Shenzhen Meetup</a> - Shenzhen - Mar 28, 2026
+* <a href="https://clickhouse.com/company/events/202604-APJ-Korea-Webinar-CDC-ClickPipes" target="_blank">Korean Webinar: CDC ClickPipes: 데이터베이스를 ClickHouse로 복제하는 가장 빠른 방법</a> - Apr 1, 2026
+* <a href="https://events.confluent.io/dswt2026mumbai" target="_blank">Data Streaming World Mumbai</a> - Apr 13, 2026
+* <a href="https://events.confluent.io/dswt2026bangalore" target="_blank">Data Streaming World Bangalore</a> - Apr 16, 2026
+* <a href="https://clickhouse.com/company/events/taipei-open-source-meetup" target="_blank">Taipei Open Source Meetup</a> - Taipei - Apr 16, 2026
+* <a href="https://www.meetup.com/clickhouse-bangalore-user-group/events/313739871/" target="_blank">Bangalore Meetup with Alexey Milovidov</a> - Apr 18, 2026
+* <a href="https://events.confluent.io/dswt2026jakarta" target="_blank">Data Streaming World Jakarta</a> - Apr 21, 2026
+* <a href="https://clickhouse.com/company/events/202604-APJ-Webinar-Unified-Data-Stack-ClickHouse-Postgres" target="_blank">APJ Webinar: Combining Postgres & ClickHouse to Build a Unified Data Stack</a> - Apr 22, 2026
+* <a href="https://clickhouse.com/company/events/202604-APJ-HoChiMinh-Real-time-Analytics-with-ClickHouse" target="_blank">Ho Chi Minh In-Person Training: Real-time Analytics with ClickHouse</a> - Ho Chi Minh - Apr 22, 2026
+* <a href="https://aws.amazon.com/events/summits/bengaluru/" target="_blank">AWS Summit Bengaluru</a> - Apr 22-23, 2026
+
+## 26.2 release {#26-2-release}
+
+![](https://clickhouse.com/uploads/mar2026_nl_image9_00d00cbf75.png)
+
+My favorite feature in the recent ClickHouse 26.2 release is time-based block flushing for streaming data. This lets you batch inserts by time interval rather than row count, which is useful for low-throughput feeds like Wikimedia recent changes.
+
+The release also brings production-ready text index and QBit data types, 3.2x faster RIGHT/FULL JOINs, and embedded ClickStack for in-product observability.
+
+➡️ <a href="https://clickhouse.com/blog/clickhouse-release-26-02" target="_blank">Read the release post</a>
+
+## Building towards an enterprise-grade Postgres service in ClickHouse Cloud {#building-towards-an-enterprise-grade-postgres-service}
+
+![](https://clickhouse.com/uploads/mar2026_nl_image3_b4e4cebe10.jpg)
+
+Sai Srirampur introduces the enterprise-grade Postgres service, coming soon to ClickHouse Cloud, bringing cross-AZ high availability, point-in-time recovery, automated backups, and failover-safe CDC slots for ClickHouse integration.
+
+In other Postgres news, Kaushik Iska introduces <a href="https://clickhouse.com/blog/pg_stat_ch-postgres-extension-stats-to-clickhouse" target="_blank">pg_stat_ch</a>, an open-source Postgres extension that streams query metrics directly into ClickHouse for latency analysis and error tracking without impacting production performance.
+
+➡️ <a href="https://clickhouse.com/blog/enterprise-postgres-service-in-clickhouse-cloud" target="_blank">Read the blog post</a>
+
+## Announcing chDB 4: Write Pandas, Run ClickHouse, Now on Hex {#announcing-chdb-4}
+
+![](https://clickhouse.com/uploads/mar2026_nl_image10_d4f00e1d08.png)
+
+Ryadh Dahimene and Auxten Wang introduce chDB 4, which adds a Pandas-compatible DataStore API that executes on ClickHouse's engine under the hood.
+
+Operations run lazily as an optimized pipeline, with automatic routing between ClickHouse and Pandas engines, and it's now available natively in Hex notebooks.
+
+➡️ <a href="https://clickhouse.com/blog/chdb.4-0-pandas-hex" target="_blank">Read the release post</a>
+
+## How Trigger.dev built a custom SQL language on top of ClickHouse {#how-trigger-dev-built-a-custom-sql-language}
+
+![](https://clickhouse.com/uploads/mar2026_nl_image6_3d154dfd7b.png)
+
+Matt Aitken, CEO of Trigger.dev, explains how they gave users SQL access to a shared multi-tenant ClickHouse cluster without risking data leaks.
+
+Their solution is TRQL, a SQL-style DSL that compiles to tenant-isolated ClickHouse queries - dangerous operations are grammatically impossible, and tenant filters are injected at compile time.
+
+➡️ <a href="https://trigger.dev/blog/how-trql-works" target="_blank">Read the blog post</a>
+
+## Announcing General Availability of ClickHouse Full-text Search {#announcing-general-availability-of-full-text-search}
+
+![](https://clickhouse.com/uploads/mar2026_nl_image7_a3a43dd469.png)
+
+Melvyn Peignon announces the general availability of full-text search in ClickHouse, which uses native inverted indexes to enable fast token-based filtering at scale.
+
+The implementation supersedes Bloom filters for string matching, delivering deterministic results without false positives and reducing the number of granules scanned by up to 96%.
+
+To see it in action, Lionel Palacin built <a href="https://clickhouse.com/blog/gittrends" target="_blank">GitTrends</a>, an open-source demo that searches and aggregates nearly 10 billion GitHub events in real time, with a live comparison tool showing the performance differences between full-text search, Bloom filters, and a full table scan.
+
+➡️ <a href="https://clickhouse.com/blog/full-text-search-ga-release" target="_blank">Read the blog post</a>
+
+## How we made payload search 60x faster in ClickHouse {#how-we-made-payload-search-60x-faster}
+
+![](https://clickhouse.com/uploads/mar2026_nl_image5_7eaefa6d9a.png)
+
+Maurice Kherlakian at Hookdeck describes how webhook payload search across millions of semi-structured JSON records was timing out at 30+ seconds, making debugging nearly impossible.
+
+The fix: hashing values into typed bucket columns so queries scan a single bucket instead of all, combined with iterative time-window scanning that stops once enough results are found, bringing latency down to under 400ms.
+
+➡️ <a href="https://hookdeck.com/blog/how-we-made-payload-search-60x-faster-in-clickhouse" target="_blank">Read the blog post</a>
+
+## The Agentic Data Stack {#the-agentic-data-stack}
+
+![](https://clickhouse.com/uploads/mar2026_nl_image1_9d8086f2d3.png)
+
+Dustin Healy outlines an open-source agentic data stack that lets AI agents query ClickHouse directly via natural language, replacing dashboards and data tickets with real-time conversational access.
+
+The architecture combines ClickHouse's MCP server with an open-source LLM interface and Langfuse for observability, keeping data and infrastructure under the user's control.
+
+➡️ <a href="https://clickhouse.com/blog/the-agentic-data-stack" target="_blank">Read the blog post</a>
+
+## ClickHouse TTL in production: A safe strategy for data retention and disk optimization {#clickhouse-ttl-in-production}
+
+![](https://clickhouse.com/uploads/mar2026_nl_image8_5f21853f75.png)
+
+Aliakbar Hosseinzadeh shares a production runbook for implementing ClickHouse TTL policies after his cluster hit 97% disk utilization, covering the key mental model shift: TTL runs during background merges, not at insert time.
+
+The winning combination is to align partitioning with your TTL time unit and `set ttl_only_drop_parts=1`, which lets ClickHouse drop whole parts cleanly rather than triggering expensive mutation-style rewrites.
+
+➡️ <a href="https://medium.com/@aliakbarhosseinzadeh/clickhouse-ttl-in-production-a-safe-strategy-for-data-retention-and-disk-optimization-9f1546fe673f" target="_blank">Read the blog post</a>
+
+## Quick reads {#quick-reads}
+
+* Mark Needham <a href="https://clickhouse.com/blog/state-of-geospatial-march-2026" target="_blank">surveys everything ClickHouse can do with geospatial data in 2026</a> - from Geometry types and spatial operations to H3 grid-based analytics that run 12x faster than bounding-box queries on 10 million rows.
+* Fiona J. Sylvester shows how to run <a href="https://medium.com/@fiona.j.sylvester/wait-you-can-do-anomaly-detection-directly-inside-a-database-ba6ec8dceb8c" target="_blank">STL-based anomaly detection directly in ClickHouse</a>, catching subtle deviations like a silent 4% transaction drop that would be missed by fixed thresholds.
+* Parade suggests that <a href="https://medium.com/@parade4940/stop-calling-it-saas-why-you-should-dump-microsoft-fabric-and-use-clickhouse-for-data-analytics-62e73b3cffbe" target="_blank">Microsoft Fabric's shared capacity model creates unpredictable performance</a> and runaway costs, and that swapping in ClickHouse as the analytics engine keeps Power BI intact while cutting bills from tens to thousands of dollars a month.
+* Tom Schreiber <a href="https://clickhouse.com/blog/table-cloning" target="_blank">explains how the CLONE AS command</a> creates instant copies of tables of any size by hard-linking immutable data parts rather than copying bytes, enabling safe experimentation on production-scale data with near-zero storage overhead.
+* Shuva Jyoti Kar <a href="https://medium.com/google-cloud/agentic-threat-hunting-conversational-telemetry-with-clickhouse-the-new-mcp-java-sdk-and-google-bb3d98aff1f3" target="_blank">built a SecOps agent</a> that uses Google's MCP Toolbox and ClickHouse to let analysts query millions of rows of security telemetry in plain English, without exposing the schema or letting the LLM write raw SQL.
+* Mohamed Hussain S explains how <a href="https://medium.com/@mohhddhassan/the-clickhouse-mental-model-most-engineers-miss-c1f39b18f46f" target="_blank">understanding two ClickHouse internals</a> - aggregation states and argMax - unlocks simpler, more powerful query design that would require subqueries and joins in traditional SQL databases.
+
+
+---
+
+## Get started today
+
+Interested in seeing how ClickHouse works on your data? Get started with ClickHouse Cloud in minutes and receive $300 in free credits.
+
+[Sign up](https://console.clickhouse.cloud/signUp?loc=blog-cta-110-get-started-today-sign-up&utm_blogctaid=110)
+
+---
 
 ---
 
@@ -1763,6 +1970,326 @@ If you have any feedback or run into any snags while setting up ClickPipes, reac
 Try the GCS ClickPipe connector today  and experience a fully managed, native integration experience with ClickHouse Cloud — the world’s fastest analytics database.
 
 [Try the GCS ClickPipe connector today](https://clickhouse.com/cloud/clickpipes?loc=blog-cta-102-ready-to-eliminate-your-etl-complexity-and-reduce-your-data-movement-costs-try-the-gcs-clickpipe-connector-today&utm_blogctaid=102)
+
+---
+
+---
+
+## Querying DateTimes in ClickHouse
+Published: 2026-03-13T10:25:02+00:00
+URL: https://clickhouse.com/blog/querying-datetimes
+
+---
+title: "Querying DateTimes in ClickHouse"
+date: "2026-03-13T10:25:02.132Z"
+author: "Mark Needham"
+category: "Engineering"
+excerpt: "How to query datetime columns in ClickHouse - from hourly bucketing to rush hour analysis with real taxi data."
+---
+
+# Querying DateTimes in ClickHouse
+
+In this post we're going to look at some of the most useful ClickHouse functions for querying and filtering by dates and datetimes - things like rounding to the nearest hour or 15-minute window, filtering by time of day, and computing durations between two timestamps.
+
+If you're working with raw date strings or timestamps that need converting first, check out another post that I wrote about [parsing dates and datetimes in ClickHouse](https://clickhouse.com/blog/parsing-dates-datetimes). This post picks up from there and focuses on what to do once your data is already in a `DateTime` column.
+
+
+<iframe width="768" height="432" src="https://www.youtube.com/embed/odWa7rAtI5k?si=PkUSvscWY19bmDcu" title="YouTube video player" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" referrerpolicy="strict-origin-when-cross-origin" allowfullscreen></iframe>
+
+## Importing the New York City taxi dataset {#importing_the_new_york_city_taxi_dataset}
+
+Our dataset of choice is the [New York City taxi dataset](https://clickhouse.com/docs/getting-started/example-datasets/nyc-taxi), so let's get that set up in ClickHouse. First we'll create a database:
+
+<pre><code type='click-ui' language='sql'>
+CREATE DATABASE nyc_taxi;
+</code></pre>
+
+And a table:
+
+<pre><code type='click-ui' language='sql'>
+CREATE TABLE nyc_taxi.trips_small (
+    trip_id             UInt32,
+    pickup_datetime     DateTime,
+    dropoff_datetime    DateTime,
+    pickup_longitude    Nullable(Float64),
+    pickup_latitude     Nullable(Float64),
+    dropoff_longitude   Nullable(Float64),
+    dropoff_latitude    Nullable(Float64),
+    passenger_count     UInt8,
+    trip_distance       Float32,
+    fare_amount         Float32,
+    extra               Float32,
+    tip_amount          Float32,
+    tolls_amount        Float32,
+    total_amount        Float32,
+    payment_type        Enum('CSH' = 1, 'CRE' = 2, 'NOC' = 3, 'DIS' = 4, 'UNK' = 5),
+    pickup_ntaname      LowCardinality(String),
+    dropoff_ntaname     LowCardinality(String)
+)
+ENGINE = MergeTree
+PRIMARY KEY (pickup_datetime, dropoff_datetime);
+</code></pre>
+
+We can then run the following command to import the data:
+
+<pre><code type='click-ui' language='sql'>
+INSERT INTO nyc_taxi.trips_small
+SELECT
+    trip_id,
+    pickup_datetime,
+    dropoff_datetime,
+    pickup_longitude,
+    pickup_latitude,
+    dropoff_longitude,
+    dropoff_latitude,
+    passenger_count,
+    trip_distance,
+    fare_amount,
+    extra,
+    tip_amount,
+    tolls_amount,
+    total_amount,
+    payment_type,
+    pickup_ntaname,
+    dropoff_ntaname
+FROM s3(
+    'https://datasets-documentation.s3.eu-west-3.amazonaws.com/nyc-taxi/trips_{0..2}.gz',
+    'TabSeparatedWithNames'
+);
+</code></pre>
+
+This query imports just over 3 million records, as we can see in the output below:
+
+```shell
+3000317 rows in set. Elapsed: 32.077 sec. Processed 3.00 million rows, 256.38 MB (93.53 thousand rows/s., 7.99 MB/s.)
+Peak memory usage: 536.51 MiB.
+```
+
+We can adjust the `{0..2}` in the URI to include more files if we want to import more data.
+
+Now that we're loaded the data, it's time to write some queries. 
+We'll be working with the `pickup_datetime` and `dropoff_datetime` columns:
+
+## Trips by hour {#trips_by_hour}
+
+Let's start by exploring taxi journeys taken on July 1st, 2015. We'll use [`toStartOfHour`](https://clickhouse.com/docs/en/sql-reference/functions/date-time-functions#tostartofhour) to round datetimes down to the nearest hour, [`toDate`](https://clickhouse.com/docs/en/sql-reference/functions/date-time-functions#todate) to filter to a single day, and [`toHour`](https://clickhouse.com/docs/en/sql-reference/functions/date-time-functions#tohour) to restrict to morning hours:
+
+<pre><code type='click-ui' language='sql'>
+SELECT
+  toStartOfHour(pickup_datetime) as hour,
+  count() as trips,
+  round(avg(passenger_count), 1) as avg_passengers
+FROM nyc_taxi.trips_small
+WHERE toDate(pickup_datetime) = '2015-07-01'
+AND toHour(pickup_datetime) < 13
+GROUP BY hour
+ORDER BY hour;
+</code></pre>
+
+```shell
+┌────────────────hour─┬─trips─┬─avg_passengers─┐
+│ 2015-07-01 00:00:00 │   663 │            1.7 │
+│ 2015-07-01 01:00:00 │   381 │            1.6 │
+│ 2015-07-01 02:00:00 │   249 │            1.8 │
+│ 2015-07-01 03:00:00 │   155 │            1.6 │
+│ 2015-07-01 04:00:00 │   159 │            1.5 │
+│ 2015-07-01 05:00:00 │   197 │            1.5 │
+│ 2015-07-01 06:00:00 │   530 │            1.6 │
+│ 2015-07-01 07:00:00 │   849 │            1.6 │
+│ 2015-07-01 08:00:00 │  1034 │            1.6 │
+│ 2015-07-01 09:00:00 │  1033 │            1.7 │
+│ 2015-07-01 10:00:00 │   898 │            1.7 │
+│ 2015-07-01 11:00:00 │   900 │            1.6 │
+│ 2015-07-01 12:00:00 │   961 │            1.7 │
+└─────────────────────┴───────┴────────────────┘
+```
+
+It was quiet overnight, trips start to pick up around 6am, and peak around 8–9am. But was July 1st typical? Let's remove the date filter and look across all days. To do that we cast `toStartOfHour` down to a `Time` type using [`::Time`](https://clickhouse.com/docs/en/sql-reference/data-types/time) - that strips out the date and leaves just the time, so all days are grouped together:
+
+<pre><code type='click-ui' language='sql'>
+SELECT
+  toStartOfHour(pickup_datetime)::Time as hour,
+  count() as trips,
+  round(avg(passenger_count), 1) as avg_passengers
+FROM nyc_taxi.trips_small
+WHERE toHour(pickup_datetime) < 13
+GROUP BY hour
+ORDER BY hour;
+</code></pre>
+
+```shell
+┌─────hour─┬──trips─┬─avg_passengers─┐
+│ 00:00:00 │ 118268 │            1.7 │
+│ 01:00:00 │  86495 │            1.7 │
+│ 02:00:00 │  65246 │            1.7 │
+│ 03:00:00 │  47377 │            1.7 │
+│ 04:00:00 │  34840 │            1.7 │
+│ 05:00:00 │  32328 │            1.6 │
+│ 06:00:00 │  68644 │            1.6 │
+│ 07:00:00 │ 107494 │            1.6 │
+│ 08:00:00 │ 132596 │            1.6 │
+│ 09:00:00 │ 136228 │            1.6 │
+│ 10:00:00 │ 134286 │            1.7 │
+│ 11:00:00 │ 137561 │            1.7 │
+│ 12:00:00 │ 145282 │            1.7 │
+└──────────┴────────┴────────────────┘
+```
+
+When we look across all days we still see a reduction in journeys over night, but the increase starts a couple of hours earlier, from 6am to 7am. The number of trips then stays reasonably stable for the next four hours.
+
+## Rush hour in 15-minute windows {#rush_hour}
+
+When exactly does the morning rush start? Let's zoom in using [`toStartOfFifteenMinutes`](https://clickhouse.com/docs/en/sql-reference/functions/date-time-functions#tostartoffifteenminutes) to bucket by 15-minute intervals, and [`formatDateTime`](https://clickhouse.com/docs/en/sql-reference/functions/date-time-functions#formatdatetime) to make the output readable. In the `WHERE` clause we cast `pickup_datetime` to `Time` to filter just by time of day - no date needed:
+
+<pre><code type='click-ui' language='sql'>
+SELECT
+  formatDateTime(toStartOfFifteenMinutes(pickup_datetime), '%r') AS timeWindow,
+  count() as trips,
+  round(avg(trip_distance), 2) as avgDistance
+FROM nyc_taxi.trips_small
+WHERE pickup_datetime::Time BETWEEN '06:00:00'::Time AND '09:59:59'::Time
+AND trip_distance > 0
+GROUP BY timeWindow
+ORDER BY timeWindow;
+</code></pre>
+
+```shell
+┌─timeWindow─┬─trips─┬─avgDistance─┐
+│ 06:00 AM   │ 11601 │        4.47 │
+│ 06:15 AM   │ 14645 │        3.97 │
+│ 06:30 AM   │ 19033 │        3.67 │
+│ 06:45 AM   │ 22795 │         3.2 │
+│ 07:00 AM   │ 23179 │        3.27 │
+│ 07:15 AM   │ 25465 │        3.12 │
+│ 07:30 AM   │ 28350 │        3.04 │
+│ 07:45 AM   │ 29914 │        2.89 │
+│ 08:00 AM   │ 30444 │           3 │
+│ 08:15 AM   │ 32063 │        2.91 │
+│ 08:30 AM   │ 34293 │         2.8 │
+│ 08:45 AM   │ 35116 │        2.63 │
+│ 09:00 AM   │ 33776 │        2.74 │
+│ 09:15 AM   │ 33800 │        2.72 │
+│ 09:30 AM   │ 33694 │        2.73 │
+│ 09:45 AM   │ 34235 │        2.63 │
+└────────────┴───────┴─────────────┘
+```
+
+The surge begins at 6:30, accelerates until 7:30, and peaks at 8:45.
+
+## What does rush hour feel like? {#rush_hour_speed}
+
+We know when rush hour starts - but what does it feel like if you're in a taxi? We can use [`dateDiff`](https://clickhouse.com/docs/en/sql-reference/functions/date-time-functions#datediff) to compute journey duration in minutes, which lets us calculate average speed. We also use `dateDiff` in the `WHERE` clause to filter out zero-duration trips (bad data):
+
+<pre><code type='click-ui' language='sql'>
+WITH buckets AS (
+  SELECT
+    formatDateTime(toStartOfFifteenMinutes(pickup_datetime), '%r') AS timeWindow,
+    count() as trips,
+    round(avg(trip_distance), 2) as avgDist,
+    round(avg(dateDiff('minute', pickup_datetime, dropoff_datetime)), 1) AS avgDuration,
+    round(avg(
+      trip_distance /
+      (dateDiff('minute', pickup_datetime, dropoff_datetime) / 60)
+    ), 1) AS avgSpeed
+  FROM nyc_taxi.trips_small
+  WHERE pickup_datetime::Time BETWEEN '06:00:00'::Time AND '09:59:59'::Time
+  AND trip_distance > 0
+  AND dateDiff('minute', pickup_datetime, dropoff_datetime) > 0
+  GROUP BY timeWindow
+  ORDER BY timeWindow
+)
+SELECT timeWindow, trips, avgDuration, avgDist, avgSpeed,
+       bar(avgSpeed, 0, (SELECT max(avgSpeed) FROM buckets), 20) AS speedBar
+FROM buckets
+ORDER BY timeWindow ASC;
+</code></pre>
+
+```shell
+┌─timeWindow─┬─trips─┬─avgDuration─┬─avgDist─┬─avgSpeed─┬─speedBar─────────────┐
+│ 06:00 AM   │ 11562 │        13.2 │    4.48 │     19.3 │ ████████████████████ │
+│ 06:15 AM   │ 14609 │        13.1 │    3.98 │     18.2 │ ██████████████████▊  │
+│ 06:30 AM   │ 18993 │        12.5 │    3.67 │     17.3 │ █████████████████▉   │
+│ 06:45 AM   │ 22754 │        11.5 │    3.21 │     16.1 │ ████████████████▋    │
+│ 07:00 AM   │ 23139 │        12.3 │    3.27 │     15.4 │ ███████████████▉     │
+│ 07:15 AM   │ 25428 │        12.7 │    3.12 │     14.3 │ ██████████████▊      │
+│ 07:30 AM   │ 28313 │        13.9 │    3.04 │     13.5 │ █████████████▉       │
+│ 07:45 AM   │ 29873 │        13.8 │    2.89 │     12.7 │ █████████████▏       │
+│ 08:00 AM   │ 30411 │        14.2 │       3 │       12 │ ████████████▍        │
+│ 08:15 AM   │ 32017 │        15.2 │    2.91 │     11.5 │ ███████████▉         │
+│ 08:30 AM   │ 34258 │        15.4 │     2.8 │       11 │ ███████████▍         │
+│ 08:45 AM   │ 35071 │        14.9 │    2.64 │     10.8 │ ███████████▏         │
+│ 09:00 AM   │ 33718 │        15.3 │    2.74 │     10.9 │ ███████████▎         │
+│ 09:15 AM   │ 33754 │        15.3 │    2.72 │     10.8 │ ███████████▏         │
+│ 09:30 AM   │ 33657 │        15.4 │    2.73 │     10.8 │ ███████████▏         │
+│ 09:45 AM   │ 34188 │        14.8 │    2.63 │     10.9 │ ███████████▎         │
+└────────────┴───────┴─────────────┴─────────┴──────────┴──────────────────────┘
+```
+
+The [`bar`](https://clickhouse.com/docs/en/sql-reference/functions/other-functions#bar) function draws an ASCII bar chart scaled to the max value - a handy way to visualize relative values inline.
+
+At 6am taxis are moving at just over 19 mph. By 8am that's down to around 12 mph - slow, but pretty standard for a big city during rush hour. It keeps getting slower as the morning wears on.
+
+## Weekdays vs weekends {#weekdays_vs_weekends}
+
+We've confirmed rush hour exists - but does it happen on weekends too? We can split weekday and weekend trips using [`countIf`](https://clickhouse.com/docs/en/sql-reference/aggregate-functions/combinators#-if) with [`toDayOfWeek`](https://clickhouse.com/docs/en/sql-reference/functions/date-time-functions#todayofweek): values 1–5 are weekdays, 6–7 are weekends. We then use the [`lag`](https://clickhouse.com/docs/en/sql-reference/window-functions) window function to compute the percentage change in trips between each 15-minute window:
+
+<pre><code type='click-ui' language='sql'>
+WITH trips AS (
+  SELECT
+    formatDateTime(toStartOfFifteenMinutes(pickup_datetime), '%r') AS timeWindow,
+    countIf(toDayOfWeek(pickup_datetime) <= 5) as wdTrips,
+    countIf(toDayOfWeek(pickup_datetime) > 5) as weTrips
+  FROM nyc_taxi.trips_small
+  WHERE trip_distance > 0
+  AND pickup_datetime::Time BETWEEN '06:00:00'::Time AND '09:59:59'::Time
+  GROUP BY timeWindow
+  ORDER BY timeWindow
+)
+SELECT timeWindow, wdTrips,
+  round((
+    (wdTrips - lag(wdTrips) OVER (ORDER BY timeWindow)) /
+    lag(wdTrips) OVER (ORDER BY timeWindow)) * 100,
+  1) as wdPctChange,
+  weTrips,
+  round(
+    ((weTrips - lag(weTrips) OVER (ORDER BY timeWindow)) /
+    lag(weTrips) OVER (ORDER BY timeWindow)) * 100,
+  1) as wePctChange
+FROM trips
+ORDER BY timeWindow;
+</code></pre>
+
+```shell
+┌─timeWindow─┬─wdTrips─┬─wdPctChange─┬─weTrips─┬─wePctChange─┐
+│ 06:00 AM   │    9398 │         inf │    2203 │         inf │
+│ 06:15 AM   │   12254 │        30.4 │    2391 │         8.5 │
+│ 06:30 AM   │   16106 │        31.4 │    2927 │        22.4 │
+│ 06:45 AM   │   19727 │        22.5 │    3068 │         4.8 │
+│ 07:00 AM   │   20285 │         2.8 │    2894 │        -5.7 │
+│ 07:15 AM   │   22129 │         9.1 │    3336 │        15.3 │
+│ 07:30 AM   │   24494 │        10.7 │    3856 │        15.6 │
+│ 07:45 AM   │   25681 │         4.8 │    4233 │         9.8 │
+│ 08:00 AM   │   26259 │         2.3 │    4185 │        -1.1 │
+│ 08:15 AM   │   27509 │         4.8 │    4554 │         8.8 │
+│ 08:30 AM   │   28891 │           5 │    5402 │        18.6 │
+│ 08:45 AM   │   29154 │         0.9 │    5962 │        10.4 │
+│ 09:00 AM   │   27872 │        -4.4 │    5904 │          -1 │
+│ 09:15 AM   │   27268 │        -2.2 │    6532 │        10.6 │
+│ 09:30 AM   │   26426 │        -3.1 │    7268 │        11.3 │
+│ 09:45 AM   │   26070 │        -1.3 │    8165 │        12.3 │
+└────────────┴─────────┴─────────────┴─────────┴─────────────┘
+```
+
+Weekdays show a sharp spike at 6:15–6:30, a second (smaller) increase around 7:15–7:30, and peak at 8:45 before leveling off. Weekends are different: the increase at 6:30 is gentler, and trips keep growing steadily well into the morning.
+
+
+---
+
+## Get started today
+
+Interested in seeing how ClickHouse works on your data? Get started with ClickHouse Cloud in minutes and receive $300 in free credits.
+
+[Sign up](https://console.clickhouse.cloud/signUp?loc=blog-cta-101-get-started-today-sign-up&utm_blogctaid=101)
 
 ---
 
