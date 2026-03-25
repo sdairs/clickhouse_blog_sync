@@ -1,5 +1,5 @@
 {
-  "last_sync": "2026-03-24T06:28:27.803772Z",
+  "last_sync": "2026-03-25T06:27:55.763658Z",
   "processed_blogs": {
     "https://clickhouse.com/blog/clickhouse-raises-400-million-series-d-acquires-langfuse-launches-postgres": {
       "title": "ClickHouse raises $400M Series D led by Dragoneer to accelerate expansion across analytics and AI infrastructure",
@@ -4362,9 +4362,21 @@
       "pub_date": "2026-03-19T11:15:47+00:00",
       "file_path": "blogs/2026-03-19-march-2026-newsletter.md",
       "processed_at": "2026-03-24T06:28:27.716956Z"
+    },
+    "https://clickhouse.com/blog/clickhouse-full-text-search-object-storage": {
+      "title": "Building high-performance full-text search for object storage",
+      "pub_date": "2026-03-24T08:25:58+00:00",
+      "file_path": "blogs/2026-03-24-building-high-performance-full-text-search-for.md",
+      "processed_at": "2026-03-25T06:27:55.445380Z"
+    },
+    "https://clickhouse.com/blog/cogent-security": {
+      "title": "Intelligent security at ClickHouse speed: How Cogent Security built an AI-native vulnerability management platform",
+      "pub_date": "2026-03-24T06:58:00+00:00",
+      "file_path": "blogs/2026-03-24-intelligent-security-at-clickhouse-speed-how.md",
+      "processed_at": "2026-03-25T06:27:55.674534Z"
     }
   },
-  "total_blogs": 727,
+  "total_blogs": 729,
   "failed_blogs": [
     {
       "url": "https://clickhouse.com/jp/blog/clickhouse-gcp-japan-availability",
