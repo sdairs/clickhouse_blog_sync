@@ -1,6 +1,709 @@
 # ClickHouse Blogs
-Last updated: 2026-03-26 06:30:39 UTC
-Total blogs: 731
+Last updated: 2026-03-27 06:31:59 UTC
+Total blogs: 734
+
+---
+
+## Top 10 best practices tips for ClickHouse
+Published: 2026-03-26T13:54:41+00:00
+URL: https://clickhouse.com/blog/10-best-practice-tips
+
+---
+title: "Top 10 best practices tips for ClickHouse"
+date: "2026-03-26T13:54:41.977Z"
+author: "Yonatan Dolan"
+category: "Engineering"
+excerpt: "Ten best practices for getting the most out of ClickHouse, from primary key design and data types to materialized views,   ReplacingMergeTree, and join optimization — illustrated with benchmarks on a 150M row dataset."
+---
+
+# Top 10 best practices tips for ClickHouse
+
+**ClickHouse** is an open-source columnar database management system designed for real-time analytical queries on massive datasets. It excels at aggregating billions of rows in milliseconds, making it a popular choice for analytics platforms, observability systems, real-time dashboards, and data warehouses. ClickHouse achieves this through its columnar storage format, aggressive compression, and vectorized query execution, but getting optimal performance requires understanding how to work with its architecture.
+
+While ClickHouse is remarkably fast out of the box, poorly designed schemas, inefficient queries, or suboptimal configurations can leave significant performance on the table. A table that could return results in milliseconds might take seconds. Storage that could compress 50x might only achieve 10x. The difference often comes down to understanding how ClickHouse stores, compresses, and queries data and applying the right techniques to align your use case with its strengths.
+
+Whether you're inserting billions of events per day, running complex analytical queries, or trying to reduce storage costs, the right optimizations can dramatically improve both performance and efficiency. Small changes to data types, table engines, or sorting keys can yield order-of-magnitude improvements.
+
+In this post, I'll share 10 best practices that I've found make the biggest difference in my work as a Solutions Architect at ClickHouse, working hands-on with customers every day. These aren't theoretical recommendations, they're the patterns I find myself coming back to repeatedly across deployments of various shapes and sizes, covering topics from schema design and data modeling to query optimization and monitoring. 
+
+<blockquote style="font-size: 15px;"><strong>Using ClickHouse with AI agents?</strong><br /> If you're querying ClickHouse from an AI agent or LLM application, check out <a href="https://clickhouse.com/blog/introducing-clickhouse-agent-skills">ClickHouse best practices for AI agents</a> for guidance tailored to that use case.</blockquote>
+
+## 1. Choose the Right Primary Key and Order By {#choose_the_right_primary_key_and_order_by}
+
+In ClickHouse, the `ORDER BY` clause in your table definition is one of the most important decisions you'll make. It determines how data is physically sorted in storage, which directly controls how efficiently queries can skip irrelevant data through primary index pruning. It also impacts compression efficiency since sorted data compresses far better as adjacent rows often share similar values.
+
+When ClickHouse writes data, it sorts rows based on your `ORDER BY` columns and stores in memory the first values of each granule (by default 8,192 rows). At query time, filters on those columns allow ClickHouse to skip entire granules that can't contain matching data. 
+
+The key is aligning your `ORDER BY` with your most common query patterns. Put low-cardinality columns like `tenant_id`, `region`, or `category` first, followed by time-based columns. Avoid leading with high-cardinality fields like UUIDs or timestamp as they offer almost no pruning benefit.
+
+Let’s take the [Amazon reviews dataset](https://www.kaggle.com/datasets/kritanjalijain/amazon-reviews) which contains just over 150M rows as an example. With a default table ordered by `(marketplace, customer_id, review_date)`, this query:
+
+<pre><code type=’click-ui’ language=’sql’>
+SELECT product_category,
+       toStartOfMonth(review_date) AS month,
+       count()                     AS review_count,
+       avg(star_rating)            AS avg_rating
+FROM   amazon_reviews
+WHERE  product_category = 'Electronics'
+       AND toYear(review_date) = 1999
+GROUP  BY product_category,
+          month
+ORDER  BY month; 
+</code></pre>
+
+Does a full table scan, reviewing all 150 millions of rows to find a small slice of data. If we use a table with `ORDER BY` that is set to `(product_category, review_date),` our query filters based on those columns and makes the same query run **3x faster** while scanning **347x less data**. Same query, same dataset, that aligns to our query pattern can make a huge difference.
+
+![ClickHouse Blog Banner-Tips-1.jpg](https://clickhouse.com/uploads/Click_House_Blog_Banner_Tips_1_e37027a209.jpg)
+
+## 2. Use Efficient Data Types {#use_efficient_data_types}
+
+Data types in ClickHouse aren't just about correctness, they directly impact storage size, compression ratios, and query speed. Choosing the smallest type that fits your data, avoiding `Nullable` unless nulls are genuinely meaningful, using `LowCardinality(String)` for low-cardinality text columns, and preferring `Enum` over free-text strings for fixed value sets can meaningfully improve both performance and storage efficiency. The same logic applies to integers, using UInt8 or UInt32 instead of UInt64 when your range allows it means less data to read, decompress, and process on every query.  
+Columns marked as `Nullable` require ClickHouse to store a separate `UInt8` column to track null values, adding overhead to both storage and query execution. So unless nulls are genuinely meaningful, it’s better to avoid using them. In most cases a sensible default can be a viable replacement: an empty string for text fields, `0` for numeric counts, or a sentinel value like `-1` for IDs where zero is a valid entry. For string columns with a bounded set of values, `LowCardinality(String)` uses dictionary encoding under the hood, making it far more efficient for columns with fewer than \~10,000 distinct values.
+
+Let’s continue with the Amazon reviews dataset as an example which has 150 million rows. A table which is poorly designed and many columns are `Nullable`, numeric fields are oversized, and low-cardinality text columns are plain `String` occupies **30.16 GB**. Optimizing it and switching to more aligned data types by dropping `Nullable`, right-sizing numeric columns, and applying `LowCardinality(String)` where appropriate, brings storage down to **26.8 GB.** But the value is not only on storage, it also has significant improvement on performance as can be seen in the below example, speeding queries making them **2x faster**.
+
+![](https://clickhouse.com/uploads/Click_House_Blog_Banner_Tips_2_4eb06c0819.jpg)
+
+## 3. Consider Your Partitioning strategy, or avoid one {#consider_your_partitioning_strategy_or_avoid_one}
+
+Partitioning is one of the most misunderstood features in ClickHouse, and the most common mistake is using it as a performance optimization. Partitioning in ClickHouse is primarily a data management feature, not a general-purpose performance accelerator. ClickHouse is already extremely fast at skipping data through primary index pruning. Partitioning on top of that rarely helps and often hurts. The reason is that ClickHouse needs large parts (up to 150GB, often times billions of rows) to compress and query efficiently, and parts never merge across partition boundaries. Over-partitioning such as by day or by a high-cardinality column such as tenant_id often leads to a large number of small parts, slower merges, higher memory usage, and degraded query performance. A good rule of thumb: if you're creating more than a few dozen partitions, you're likely over-partitioning.
+
+So when should you partition? There are two cases when it’s valuable to partition your data. The first is TTL-based data expiration, partitioning by month or year makes it efficient to drop entire partitions of old data without triggering a mutation or merge, which is far more efficient than row-level TTL for large datasets. The second is with merge-oriented table engines like ReplacingMergeTree, CollapsingMergeTree, or AggregatingMergeTree, where we can have significant gains for queries with FINAL by having one part for historical partitions. 
+
+Outside of these two scenarios, think carefully before adding a PARTITION BY clause. The default, no partitioning, or a simple partition by month or year is often the right choice.
+
+To illustrate the cost of unnecessary partitioning, we tested the same 150 million row Amazon reviews dataset on two identical tables: one partitioned by month of `review_date` and one unpartitioned. Ingestion time was roughly the same (294s vs 314s), though the partitioned table consumed 55% more memory during load (4.71 GB vs 3.03 GB). The real damage shows up at query time. A simple aggregation across all `product_category` values ran in 0.4 seconds on the unpartitioned table and 20 seconds on the partitioned one, a 46x slowdown despite scanning the exact same number of rows. A top-100 sort by `helpful_votes` showed a similar although less significant story: 40 seconds unpartitioned vs 92 seconds partitioned. Same data, same query, twice as slow. The partitioning offered no pruning benefit since neither query filtered on `review_date`, while the fragmented parts added merge and scheduling overhead on every scan.
+
+![ClickHouse Blog Banner Tips-3.jpg](https://clickhouse.com/uploads/Click_House_Blog_Banner_Tips_3_71645c4500.jpg)
+
+## 4. Optimize Data Scans with Skipping Indexes {#optimize_data_scans_with_skipping_indexes}
+
+ClickHouse's primary index is a sparse index on your ORDER BY columns and is your most powerful tool for fast data access. But in practice, your queries don't always filter on primary key columns, and when they don't, skipping indexes allows you to extend that same granule-pruning capability to any other column in your schema. Skipping indexes are secondary indexes stored alongside your data without changing how your data is stored and sorted. 
+
+There are several types, and it helps to think of them in two buckets: lightweight and heavyweight. Lightweight indexes have minimal impact on write performance and storage, so you can add them freely wherever they'd help. Heavyweight indexes carry higher costs in terms of storage overhead and write amplification, so they're worth adding only when the query acceleration clearly justifies the tradeoff.
+
+**Lightweight indexes:**
+
+* **`minmax`** - stores the min and max value per granule. Best for numeric or date columns but can also be useful for strings. Extremely cheap to build and maintain, with negligible storage overhead.  
+* **`set`** - stores a small set of distinct values per granule. Best for low-cardinality columns you filter on frequently but that aren't part of your `ORDER BY`. Use `set(0)` to store all distinct values, or cap with `set(N)` to fall back to a full scan when exceeded.
+
+**Heavyweight indexes:** 
+
+* **`bloom_filter`** - a probabilistic structure that answers "is this value definitely not in this granule?". Best for high-cardinality string columns like IDs or URLs. Accepts false positives but never false negatives. Adds meaningful storage and write overhead, so only add it where the scan reduction justifies the cost.  
+* **`ngrambf_v1` / `tokenbf_v1`** - bloom filter variants optimized for `LIKE` or `hasToken` queries on free-text columns. Powerful for substring and token search but expensive to build and store - use them only on columns you actively search on.  
+* **`Text`** - a new (GA from version 26.2) full inverted index for text search, similar to what you'd find in systems such as Lucene/Elasticsearch. Supports exact term, prefix, and substring matches with high precision. The most powerful option for text search scenarios, but also the heaviest in terms of storage and write amplification. Use it when `Bloom_filter` is not fast enough for your needs.
+
+The Amazon reviews dataset can help illustrate the benefit of skipping indexes well. A query filtering on `total_votes > 1000` with no skipping index performs a full table scan of all 150 million rows. Adding a `minmax` index on the `total_votes` column, one of the cheapest indexes you can add, reduces scanned rows to just 29 million, an **80% reduction** with very minimal to no overhead.
+
+![](https://clickhouse.com/uploads/Click_House_Blog_Banner_Tips_4_a3e3410925.jpg)
+
+## 5. Leveraging the JSON Data Type for semi-structured data {#leveraging_the_json_data_type_for_semi_structured_data}
+
+ClickHouse's native `JSON` type is a powerful tool for handling semi-structured data where keys are unpredictable, change over time, or carry values of varying types. It automatically infers types at insert time and stores each discovered path as a separate subcolumn (up to the max\_dynamic\_paths defined), giving you columnar performance on dynamic data.
+
+However this flexibility comes with trade-offs. The `JSON` type performs type inference on every insert, which adds overhead compared to a static schema. It also consumes more storage when paths contain values of more than one type. For data with a known, consistent structure, even if it arrives in JSON format a static schema with explicit column types will always outperform it.
+
+A key parameter to understand when using JSONs is `max_dynamic_paths`, which controls how many distinct JSON paths ClickHouse will store as individual subcolumns. By default once that limit is exceeded, additional paths are stored together in a single shared structure, which is less efficient to query. The default is 1024, but for payloads with a bounded and well-known set of paths, setting it lower keeps things tighter and more predictable. When you know that certain paths will always be present and always carry the same type, you can use JSON hints to declare them explicitly. For example: 
+
+<pre><code type='click-ui' language='sql'>
+CREATE TABLE events (
+  id UInt64, 
+  payload JSON(`timestamp` DateTime, `level` LowCardinality(String))
+) 
+ENGINE = MergeTree 
+ORDER BY id;
+</code></pre>
+
+Hints provide ClickHouse more information about those paths, they're stored and compressed like regular columns while the rest of the payload remains fully dynamic.   
+When converting Amazon Reviews dataset to a document based dataset, using hints reduced storage by 38% vs JSON without hints and this example query was 26% faster when using hints vs. without ones. 
+
+<pre><code type='click-ui' language='sql'>
+SELECT count(*),
+       review_data.product_category PC
+FROM   amazon_reviews_json
+GROUP  BY pc 
+</code></pre>
+
+However this is not only for storage and improving performance, hinted paths are also reliable targets for skipping indexes, whereas fully dynamic paths can be inconsistent across granules and yield lower index effectiveness. It's important to call out that you can add a skipping index on any JSON path, but casting would be required.   
+The bottom line: if data is flat with predictable structure, use explicit columns. If it has a predictable core with dynamic variations, consider using static columns for the known parts and a single `JSON` column for the rest. Reserve a fully dynamic `JSON` column for cases where the schema is genuinely unpredictable.
+
+## 6. Getting data into ClickHouse the right way {#getting_data_into_clickhouse_the_right_way}
+
+Inserting data into ClickHouse efficiently is an important topic to consider. There are four common ingestion patterns, and each has a recommended approach and best practices. 
+
+**Object storage** (Amazon S3, GCS, Azure Blob) is one of the most common sources for bulk loading. When you have a choice of format, prefer columnar formats like Parquet or ORC over row-based ones like JSON or Avro; ClickHouse can read only the columns it needs from Parquet and ORC, skipping the rest entirely, while JSON requires parsing every field on every row. But even when loading all columns, columnar formats are still faster as the data arrives already organized the way ClickHouse stores it internally, reducing the conversion overhead during ingestion. Loading the Amazon reviews dataset illustrates this clearly: Parquet and ORC loaded in **79 seconds**, Avro in **94 seconds**, and JSON in **105 seconds**.
+
+![](https://clickhouse.com/uploads/Click_House_Blog_Banner_Tips_5_f05b99b445.jpg)
+
+For managed, ongoing ingestion from object storage, ClickPipes supports S3 and GCS sources directly.
+
+**CDC from databases** (Postgres, MySQL, MongoDB, etc) and **event streams** (Kafka, Kinesis, etc) are best handled through [ClickPipes](https://clickhouse.com/docs/integrations/clickpipes), ClickHouse Cloud's native managed ingestion service. ClickPipes handles schema mapping, offset management, error handling, and backpressure out of the box. For CDC specifically, it uses a log-based approach that captures every row-level change with minimal load on the source database. If your database lives in a private VPC, ClickPipes supports reverse PrivateLink, allowing secure connectivity without exposing your database to the public internet.
+
+**Backend applications** writing directly to ClickHouse is a very common way companies use, however it does require taking into account a few considerations. ClickHouse is optimized for large, infrequent batches, not the small, frequent inserts typical of application code. Each insert creates at least one part in the storage layer, and too many small parts lead to merge pressure, elevated memory usage, and eventual insert throttling. The two solutions are batching on the client side (accumulate rows and flush every few seconds or a few thousand rows), or enabling **async inserts**, which lets ClickHouse buffer incoming inserts and flush them in batches automatically:
+
+<pre><code type='click-ui' language='sql'>
+SET async_insert = 1;
+SET wait_for_async_insert = 1; 
+</code></pre>
+
+With `wait_for_async_insert = 1`, the client waits for confirmation that the data has been flushed to a part providing you the convenience of small writes with proper acknowledgement and reliable error handling. You can monitor async insert behavior via `system.asynchronous_insert_log` to tune flush intervals and buffer sizes for your workload.
+
+Regardless of the ingestion method: avoid inserting one row at a time, prefer native binary formats over JSON where possible, and monitor part counts in `system.parts` to identify ingestion problems early.
+
+## 7. Compute on write, faster reads with materialized views and projections {#compute_on_write_faster_reads_with_materialized_views_and_projections}
+
+Both materialized views and projections follow the same core idea: do work at insert time so that reads are faster and less compute heavy. Instead of scanning and aggregating at query time, you pre-compute and store results as data arrives. The tradeoff is the same for both: faster reads come at the cost of increased storage and additional write overhead.
+
+**Projections** are alternative sort orders or pre-aggregations stored physically inside the same table. When ClickHouse executes a query, it automatically selects the best projection if one matches the query's filter and sort pattern so no query changes are required. This makes them transparent to the application and easy to adopt. The downside is that every insert must write and sort data for each projection, increasing both insert latency and storage footprint. Before building a query optimization strategy around projections, it's worth validating that they're actually being selected at query time. The easiest way is to use:
+
+<pre><code type='click-ui' language='sql'>
+SET force_optimize_projection = 1;
+</code></pre>
+
+With this setting enabled, ClickHouse will throw an error if no suitable projection is found for your query making it immediately clear whether your projection is being used or silently ignored. 
+
+An important callout on projections is that they are oftentimes being added "just in case" and impacts storage and insert costs. It’s important to first use a well-designed primary key and identify queries that are actually slow, then add projections only where they're needed. Let real usage data guide projection definitions. 
+
+**Materialized views** have two flavors. **Refreshable materialized views** work like you'd expect from a traditional data warehouse, they recompute the result on a schedule, making them suitable for complex transformations but oftentimes requiring you to manage bookmarks, understanding what was processed already vs what hasn’t, require reprocessing in cases of late arrivals or backfills to historical data and strongly recommended to handle taking into consideration idempotency. **Incremental materialized views** are more unique to ClickHouse and more flexible but require more deliberate design. They act as insert triggers, running a `SELECT` on each incoming batch and writing the result to a target table which makes them extremely efficient for continuously maintaining aggregations, summaries, or fan-out pipelines as data arrives. The important constraint is that they are only triggered on inserts: deletes and updates to the source table are not propagated, so they're best suited for append-only or immutable data patterns.
+
+Joins inside incremental materialized views deserve special attention as only the left-hand table in the join triggers the view. If the right-hand side changes, the materialized view won't update. It's also worth knowing that materialized views compose well: a single source table can fan out to multiple MVs, each maintaining a different aggregation or transformation, and multiple MVs from different source tables can feed into the same destination table, making them a powerful building block for more complex data pipelines.
+
+A common pattern in ClickHouse is to use materialized views to maintain pre-aggregated summary tables for dashboards and high-frequency queries, while keeping the raw table for ad-hoc exploration. 
+
+## 8. Know your system tables {#know_your_system_tables}
+
+ClickHouse's system tables are one of its most powerful built-in features. Everything happening inside your cluster: queries, merges, background activity, errors, it is all captured and queryable with standard SQL, giving you deep observability using standard SQL. 
+
+On a multi replica service, querying system tables only shows you the logs from the replica your query runs against. To get a full picture across all replicas, use `clusterAllReplicas`. And since many system tables rotate, historical data might not show up unless you explicitly merge across them using the `merge` table function. Here is an example of how to query `system.query_log` to ensure you get all service logs for the table: 
+
+<pre><code type='click-ui' language='sql'>
+SELECT event_time, query_id, query, type
+FROM   clusterAllReplicas('default', merge('system', '^query_log*'))
+WHERE  event_time > Now() - toIntervalMinute(5); 
+</code></pre>
+
+2 of the most useful system tables to get familiar with are `system.query_log` and `system.parts`.
+
+**`system.query_log`** is a primary tool for understanding query behavior. Every query generates one row per event: `QueryStart`, `QueryFinish`, `ExceptionBeforeStart`, or `ExceptionWhileProcessing` providing a complete lifecycle view of every query that runs on the service. Each row captures timing (`query_duration_ms`), resource usage (`read_rows`, `read_bytes`, `memory_usage`), the query text itself, and which databases, tables, columns, and projections were involved. For error investigation, `exception_code`, `exception`, and `stack_trace` are available. The `ProfileEvents` column goes deeper,  it's a map of low-level execution counters that can reveal exactly where time is being spent, from CPU cycles to I/O reads to cache hits. When a query is slower than expected, `ProfileEvents` often tells whether the bottleneck is I/O, CPU or network.
+
+**`system.parts`** exposes detailed information about every physical data part in your storage for all MergeTree-family tables. Each row corresponds to one part, making it the go-to table for monitoring storage, diagnosing merge behavior, and understanding the health of tables. The most important columns to know are: `active` tells whether a part is currently live or a leftover from a completed merge so filtering on `active = 1` keeps queries focused on relevant parts. `partition` and `partition_id` show which partition each part belongs to, while `rows`, `bytes_on_disk`, `data_compressed_bytes`, and `data_uncompressed_bytes` give a clear picture of size and compression efficiency. `part_type` distinguishes between `Wide` and `Compact` parts, which affects how columns are stored. In `Wide` format, each column is stored in its own separate file, this is the standard format for larger parts and enables efficient column pruning at read time. `Compact` format stores all columns in a single file (by default less than 10MB), which reduces the number of file handles and is more efficient for small parts with few rows. 
+
+2 queries that can be valuable to keep handy are:
+
+**Part count and size per table:**
+
+<pre><code type='click-ui' language='sql'>
+SELECT table, count() AS parts, sum(rows) AS total_rows,
+       formatReadableSize(sum(bytes_on_disk)) AS size_on_disk
+FROM   system.parts
+WHERE  active
+GROUP  BY table
+ORDER  BY parts DESC; 
+</code></pre>
+
+**Over-partitioned tables:**
+
+<pre><code type='click-ui' language='sql'>
+SELECT table, partition, count() AS parts
+FROM   system.parts
+WHERE  active
+GROUP  BY table, partition
+HAVING parts > 10
+ORDER  BY parts DESC; 
+</code></pre>
+
+## 9. Perfecting ReplacingMergeTree {#perfecting_replacingmergetree}
+
+`ReplacingMergeTree` is one of the more popular table engines, it is used for supporting use-cases in which you need to support deduplication or upserts. This table engine keeps the latest version of each row based on a defined column (e.g. version/timestamp). The deduplication takes place based on the uniqueness of the defined `ORDER BY` columns. The discarding of older duplicates occurs during background merges. The thing to remember is that these merges happen asynchronously, meaning duplicate rows can exist at query time. Getting correct results requires either the use of `FINAL` or the `argMax` pattern, and understanding the tradeoff between them.
+
+`FINAL` is the simplest approach, adding it to the query and ClickHouse handles deduplication transparently. The cost is that `FINAL` must reconcile all parts before returning results, and its performance is directly tied to how many parts exist at query time. On a well-merged table with a single part in a partition, `FINAL` would be just as fast as not using `FINAL`. On a table mid-ingestion with many parts, it can carry a significant overhead.
+
+<pre><code type='click-ui' language='sql'>
+SELECT star_rating
+FROM   mytests.amazon_reviews_rmt FINAL
+WHERE  review_id = '<review_id>' 
+</code></pre>
+
+The `argMax` pattern is an alternative that folds deduplication into the aggregation itself, picking the value from the row with the highest version:
+
+<pre><code type='click-ui' language='sql'>
+SELECT argMax(star_rating, review_date)
+FROM   mytests.amazon_reviews_rmt
+WHERE  review_id = '<review_id>' 
+</code></pre>
+
+On the Amazon reviews dataset with 152 million rows (150M originals \+ 2M duplicates), the difference between the two approaches depends heavily on table state. With 9 unmerged parts, the above query using `FINAL` took 1.5 seconds vs `argMax` at 1.0 seconds.   
+To demonstrate the difference with fewer parts, we forced the parts to consolidate to a single part, both dropped to roughly the same level: 0.48s vs 0.40s. Results can vary depending on query shape, cardinality, and part count, but the pattern holds: `argMax` tends to be more consistent regardless of merge state, while `FINAL` improves significantly as parts consolidate.
+
+In practice, `FINAL` is a simpler choice for queries or when the table is well-merged. `argMax` is worth reaching for when you need predictable latency on a table receiving active inserts. 
+
+One way to reduce the variability of `FINAL` in production is to configure background merges to be more aggressive on older data. By default, ClickHouse merges parts based on internal heuristics which factors part size, count, and age but has no obligation to ever consolidate a partition down to a single part. This means a table can sit indefinitely with multiple parts per partition, keeping `FINAL` overhead. The `min_age_to_force_merge_seconds` setting changes this behavior by forcing ClickHouse to keep merging parts older than the specified threshold until only one part per partition remains:
+
+<pre><code type='click-ui' language='sql'>
+min_age_to_force_merge_seconds = 600, 
+min_age_to_force_merge_on_partition_only = 1;
+</code></pre>
+
+Keep in mind that this can increase background merge workload as ClickHouse will continuously merge parts until each partition has only one, consuming more CPU and I/O that could otherwise be used for queries or inserts.
+
+The `min_age_to_force_merge_on_partition_only = 1` flag ensures this only triggers on partitions where all parts are old enough, avoiding interference with partitions still actively receiving writes. It’s important to call out that for this setting to be effective in practice, tables should be partitioned. Without partitioning, all data lives in a single partition that can accumulate too much data. Since ClickHouse by default won't merge parts that would result in a part exceeding 150GB, consolidating down to a single part becomes unrealistic. With partitioning by month or year, each partition stays within a manageable size range where merging down to a single part is achievable, which is exactly the state where `FINAL` performs best.
+
+## 10. Optimize your joins {#optimize_your_joins}
+
+Historically, JOINs in ClickHouse were something users were advised to approach with caution, and the common guidance was to avoid them where possible through denormalization, dictionaries, or materialized views. That advice made sense at the time, but significant engine-level improvements have made JOINs increasingly viable for high-concurrency production workloads. The introduction of the Analyzer (query planner) as the default query execution layer brought major improvements to join planning: ClickHouse 24.4 introduced better predicate pushdown that can deliver 10x query improvements by pushing filter conditions to both sides of a JOIN, version 24.12 gained the ability to automatically reorder two-table joins to place the smaller table on the right-hand side, and 25.9 extended this to queries joining three or more tables. Combined with a wide selection of join algorithms to cover different memory and performance tradeoffs, JOINs in ClickHouse today are meaningfully more capable and easier to use correctly than they were even a year ago.
+
+That said, JOINs still come with a cost in an analytical database, and a few principles are worth following. For real-time workloads where millisecond latency matters, aim for a maximum of 3 to 4 joins per query. In addition, denormalization, dictionaries, or pre-aggregated materialized views are tools worth considering for even faster query performance. 
+
+For static or slowly changing lookups it’s recommended to use dictionaries. When enriching a large table with data from a smaller reference table that doesn't change frequently, a dictionary will outperform a regular join. Dictionaries are loaded entirely into memory and accessed via `dictGet`, bypassing the hash join process entirely. On the Amazon reviews dataset enriched with customer metadata, the difference is significant: a regular `JOIN` on 150M rows ran in **2.3 seconds**, a join against a dictionary table completed **1.36 seconds**, and `dictGet` took **0.86 seconds**; Nearly 3x faster than the baseline join, with no change to the underlying data.
+
+![ClickHouse Blog Banner Tips-6.jpg](https://clickhouse.com/uploads/Click_House_Blog_Banner_Tips_6_6243a66bcb.jpg)
+
+## Wrapping Up {#wrapping_up}
+
+ClickHouse is extremely fast out of the box, but getting the most out of it requires understanding how it stores, merges, and queries data. The best practices in this post aren't isolated tips, they build on each other. A well-chosen ORDER BY often makes skipping indexes more effective. Good data types reduce the work that materialized views and projections have to do. Sensible partitioning makes ReplacingMergeTree and TTL-based expiration work cleanly. Getting ingestion right keeps your part counts healthy, which in turn keeps FINAL fast.
+
+The Amazon reviews dataset benchmarks throughout this post illustrate that these aren't marginal gains, the right primary key scans 347x less data, the right data types cut storage by 12% and shorten query time by 50%, unnecessary partitioning can slow queries by 46x, and a dictionary lookup can be 3x faster than a regular join. These are order-of-magnitude differences that come purely from design decisions, not hardware.
+
+If you're just getting started, focus on the first two: primary key design and data types. They have the broadest impact and apply to every table you create. From there, add skipping indexes where your queries need them, partition only when you have a clear reason to, and reach for materialized views and ReplacingMergeTree as your use case demands.
+
+ClickHouse rewards users who understand its architecture. The more your schema and queries align with how ClickHouse manages data, the faster and more efficient your system will be. At its best, that means allowing you to ingest billions of rows and querying them in milliseconds.
+
+
+---
+
+## Get started today
+
+Interested in seeing how ClickHouse works on your data? Get started with ClickHouse Cloud in minutes and receive $300 in free credits.
+
+[Sign up](https://console.clickhouse.cloud/signUp?loc=blog-cta-278-get-started-today-sign-up&utm_blogctaid=278)
+
+---
+
+---
+
+## ClickHouse is data lake ready
+Published: 2026-03-26T10:12:30+00:00
+URL: https://clickhouse.com/blog/clickhouse-is-data-lake-ready
+
+---
+title: "ClickHouse is data lake ready"
+date: "2026-03-26T10:12:30.479Z"
+author: "Karolina Ruiz Rogelj and Melvyn Peignon"
+category: "Product"
+excerpt: "ClickHouse now supports direct querying of Iceberg and Delta Lake formats across major cloud catalogs without requiring data   migration."
+---
+
+# ClickHouse is data lake ready
+
+## **Introduction**
+
+Many organizations have standardized on data lakes built on open table formats like Apache Iceberg and Delta Lake. As the cost of cloud storage dropped and the pain of vendor lock-in grew, open formats gave teams a way to store data once and query it from anywhere. The benefit is that data stays open, portable, and queryable by multiple engines, giving organizations the freedom to choose the tools that best fit their stack. But that flexibility comes at a cost for real-time analytics.
+
+Teams hit a wall because lake formats were designed for open storage and interoperability, not for speed. Without the specialized indexes, caching, and tight query engine optimizations required for real-time workloads, queries in data lakes quickly become slow and expensive at scale. 
+
+Today, we're announcing that ClickHouse is [data lake ready](https://clickhouse.com/clickhouse-for-data-lakes). You can query your data in place, pointing ClickHouse directly at your Iceberg and Delta Lake files or through any number of vendor or open-source catalogs. You can accelerate your analytics by loading data into ClickHouse's native storage engine for sub-second, high-concurrency queries. And you can write results back to open formats, keeping your entire ecosystem interoperable.
+
+![writes.png](https://clickhouse.com/uploads/writes_a12d9106db.png)
+
+## **The road to data lake ready**
+
+Two years of engineering went into making this possible. Here's how we got here.
+
+<iframe src="/uploads/datalakes_timeline_a985788dd3.html?v5" width="100%" height="300" style="height: 300px; border-radius: 10px; border: 1px solid #414141;"></iframe>
+
+To be truly data lake ready, a query engine needs to do three things well: process Parquet files quickly, work with open table formats like Iceberg and Delta Lake, and integrate with the catalogs that sit on top. Here's how we've built out each of these capabilities over the past two years.
+
+We started by shipping initial support for the Apache Iceberg format ([23.3](https://clickhouse.com/blog/clickhouse-release-23-02#iceberg-right-ahead---support-for-apache-iceberg-ucasfl)), allowing the data to be read natively on object storage and giving users their first way to use **ClickHouse as a query engine for lake data**. We followed that with Parallel Replicas ([25.8](https://clickhouse.com/blog/clickhouse-release-25-08)), enabling query execution to be distributed across multiple nodes for lake-scale workloads.
+
+From there, we invested heavily in [Parquet](https://clickhouse.com/blog/clickhouse-and-parquet-a-foundation-for-fast-lakehouse-analytics), the foundational file format underneath Iceberg and Delta Lake tables. We added row group skipping using Parquet metadata [(23.8)](https://clickhouse.com/blog/clickhouse-release-23-08), enabled fast counts, and allowed file name metadata to be used in filters to avoid unnecessary file reads. In ([23.7](https://clickhouse.com/blog/clickhouse-release-23-07#parquet-writing-improvements-michael-kolupaev))we improved Parquet write performance. On the storage side, we extended support to Azure Blob Storage ([23.5](https://clickhouse.com/blog/clickhouse-release-23-05)), so ClickHouse wasn't limited to S3 and GCS.
+
+In [24.12](https://clickhouse.com/blog/clickhouse-release-24-12), we introduced our first catalog support with Unity Catalog, along with schema evolution. Users could now query Iceberg data from a catalog managed by an external service, with ClickHouse automatically detecting when columns were added, removed, renamed, or their types changed. The Polaris catalog was supported as well.
+
+We also put significant effort in integrating the Delta Rust Kernel into ClickHouse, replacing our original Delta Lake reader. Rather than reinventing the wheel, we built on the community's open-source kernel, and in doing so unlocked Delta Lake reads, writes, changed data feed support, schema evolution, time travel, partition pruning, and statistic-based pruning. 
+
+Catalog support kept expanding in [25.3](https://clickhouse.com/blog/clickhouse-release-25-03) where we added AWS Glue and Delta Lake support for the Unity Catalog. Since then we've added support for Microsoft OneLake, Iceberg REST Catalog, and AWS Glue, providing a truly catalog-agnostic solution, letting users decide how they wish to manage their tables. In [25.4](https://clickhouse.com/blog/clickhouse-release-25-04), we added time travel for Iceberg, letting users query previous snapshots of their data. This is especially important for data warehouse-style workloads where auditability and point-in-time queries matter. In [25.6](https://clickhouse.com/blog/clickhouse-release-25-06), we shipped JSON in Parquet support and deeper Iceberg history introspection, giving users more visibility into how their tables evolve over time.
+
+[25.8](https://clickhouse.com/blog/clickhouse-release-25-08) was one of the most significant releases for our data lake evolution. A new native Parquet reader brought page-level parallelism and removed the extra Arrow layer, reading Parquet files directly into ClickHouse's in-memory format. The result? [1.8x faster reads](https://clickhouse.com/blog/clickhouse-release-25-08#parquet-reader-performance) on average across ClickBench and blazing fast performance.
+
+![benchmark.png](https://clickhouse.com/uploads/benchmark_f10303f9c7.png)
+
+We also added full support for insert, delete, update, and alter schema operations on Iceberg tables, enabling interactive DML without importing data into ClickHouse. Investments continued in our support for underlying object storage, with significant performance improvements for Azure Blob Storage.
+
+In [(25.9)](https://clickhouse.com/blog/clickhouse-release-25-09#data-lake-improvements), we focused on stability across Iceberg, Delta Lake, and cloud storage integrations, with improvements to schema resolution and metadata consistency.
+
+And we're not done. Later this year, we'll ship even more catalog support and continue investing in performance and interoperability. Lots of exciting developments ahead!
+
+So what does all of this engineering work add up to?
+
+## **Three ways to use ClickHouse with your data lake**
+
+![3ways.png](https://clickhouse.com/uploads/3ways_72f6222a5b.png)
+
+Your data lake now gets the full power of ClickHouse. Same SQL, same experience, no matter which catalog or cloud you’re on. Here are three ways to use it today.
+
+### **Query in place, at speed**
+
+ClickHouse can now query data directly on your data lake without moving it anywhere. Point it at your Iceberg, Delta Lake, or Parquet data in S3, GCS, or Azure, and query it immediately. Under the hood, ClickHouse reads metadata from the open table format and infers the schema automatically. It works with catalogs like AWS Glue, Unity Catalog, REST Catalog, and more.
+
+In some cases ClickHouse will also be faster than other query engines. But the bigger advantage is flexibility: ClickHouse is both cloud-agnostic and catalog-agnostic. No matter where your data lives or which catalog manages it, ClickHouse provides a single query engine that can access it all.
+
+You can even federate across multiple catalogs and JOIN data between them using the same SQL. 
+
+**Your data lake simply appears as another database in ClickHouse.**
+
+Let’s take this scenario: imagine your data team needs to investigate a spike in user churn. The data lives in Iceberg on S3 and is managed through AWS Glue. Instead of building a pipeline to move that data somewhere queryable, they point ClickHouse at it and start exploring immediately. Same SQL, instant access, no waiting on engineering.
+
+The following query points directly at an Iceberg table in S3 and returns the number of records and quantiles for the fare amount:
+
+<pre><code type='click-ui' language='sql'>
+SELECT
+    count(),
+    quantiles(0.5, 0.75, 0.9, 0.99)(fare_amount)
+FROM icebergS3('https://storage.googleapis.com/biglake-public-nyc-taxi-iceberg/public_data/nyc_taxicab/');
+</code></pre>
+
+```shell
+┌────count()─┬─quantiles(0.⋯are_amount)─┐
+│ 1293069366 │ [9,14,22,52]             │
+└────────────┴──────────────────────────┘
+
+1 row in set. Elapsed: 50.068 sec. Processed 1.29 billion rows, 17.55 GB (25.83 million rows/s., 350.58 MB/s.)
+Peak memory usage: 63.12 MiB.
+```
+
+Or connect to a catalog and query any table it manages. 
+You'll first need to set up some permissions that will charge usage to your own Google account:
+
+```bash
+export PROJECT_ID="<project_id>"
+export EMAIL="<email>"
+
+gcloud services enable biglake.googleapis.com  --project=$PROJECT_ID
+
+gcloud projects add-iam-policy-binding $PROJECT_ID
+  --member="user:$EMAIL"
+  --role="roles/biglake.viewer"
+
+gcloud projects add-iam-policy-binding $PROJECT_ID
+  --member="user:$EMAIL"
+  --role="roles/storage.objectViewer"
+
+gcloud auth application-default set-quota-project $PROJECT_ID
+
+gcloud auth application-default login
+  --scopes="https://www.googleapis.com/auth/cloud-platform,https://www.googleapis.com/auth/iam"
+```
+
+Once you've done that, you can create a database that points to the BigLake catalog:
+
+<pre><code type='click-ui' language='sql'>
+CREATE DATABASE biglake
+ENGINE = DataLakeCatalog('https://biglake.googleapis.com/iceberg/v1/restcatalog')
+SETTINGS
+    catalog_type = 'biglake',
+    google_adc_client_id = '<client-id>',
+    google_adc_client_secret = '<client-secret>',
+    google_adc_refresh_token = '<refresh-token>',
+    google_adc_quota_project_id = '<gcp-project-id>',
+    warehouse = 'gs://<bucket_name>/<optional-prefix>';
+</code></pre>
+
+You'll need to read the credentials from your credentials file into the settings in the example above.
+
+> At the time of writing, Iceberg support is still beta, so you'll need to configure the `allow_database_iceberg=1` setting
+
+Once the database is created, you can query the tables in it:
+
+<pre><code type='click-ui' language='sql'>
+SELECT
+    count(),
+    avg(fare_amount),
+    max(fare_amount),
+    quantiles(0.5, 0.75, 0.9, 0.99)(fare_amount),
+    median(fare_amount)
+FROM biglake.`public_data.nyc_taxicab`
+GROUP BY ALL;
+</code></pre>
+
+```shell
+Row 1:
+──────
+count():                  1293069366 -- 1.29 billion
+avg(fare_amount):         12.325858933602774
+max(fare_amount):         998310
+quantiles(0.⋯are_amount): [9,14,22,52]
+median(fare_amount):      9
+
+1 row in set. Elapsed: 51.147 sec. Processed 1.29 billion rows, 17.55 GB (25.28 million rows/s., 343.19 MB/s.)
+Peak memory usage: 122.69 MiB.
+```
+
+<pre><code type='click-ui' language='sql'>
+SELECT
+    toHour(pickup_datetime) AS hour,
+    avg(trip_distance) AS avg_distance,
+    avg(total_amount) AS avg_fare,
+    count() AS trips
+FROM biglake.`public_data.nyc_taxicab`
+GROUP BY hour
+ORDER BY hour ASC;
+</code></pre>
+
+```shell
+┌─hour─┬───────avg_distance─┬───────────avg_fare─┬────trips─┐
+│    0 │  8.112041044132008 │ 15.526927635270393 │ 47879195 │ -- 47.88 million
+│    1 │  6.785222437788446 │ 15.052749704027802 │ 34934869 │ -- 34.93 million
+│    2 │  7.407750625736156 │  14.76697933689647 │ 25650987 │ -- 25.65 million
+│    3 │  7.657523650630094 │ 15.283234402593072 │ 18652780 │ -- 18.65 million
+│    4 │   9.31540622346101 │ 17.573114561330925 │ 13776900 │ -- 13.78 million
+│    5 │ 11.588025098571462 │ 19.706420763167998 │ 12637532 │ -- 12.64 million
+│    6 │  9.745398309303608 │  15.61424064665526 │ 27208315 │ -- 27.21 million
+│    7 │  5.029114605823485 │ 14.334673041209152 │ 46858474 │ -- 46.86 million
+│    8 │  5.997686015180531 │ 14.345667705243487 │ 58135645 │ -- 58.14 million
+│    9 │ 6.3355125177348155 │ 14.340152953723262 │ 60083794 │ -- 60.08 million
+│   10 │  4.418390507581312 │ 14.416366144054908 │ 59271469 │ -- 59.27 million
+│   11 │  5.419518100945745 │  14.62377920076008 │ 61551480 │ -- 61.55 million
+│   12 │  6.216885853896169 │ 14.697381827240532 │ 64966072 │ -- 64.97 million
+│   13 │  5.475978455895815 │ 15.154941814778102 │ 64817919 │ -- 64.82 million
+│   14 │  6.652825409842271 │ 15.684872166503094 │ 67360670 │ -- 67.36 million
+│   15 │  6.423309499236642 │ 15.801439058909274 │ 64772331 │ -- 64.77 million
+│   16 │  6.299770010900412 │  16.67369163194398 │ 56957482 │ -- 56.96 million
+│   17 │   4.95315626472069 │ 16.038749112293292 │ 67184352 │ -- 67.18 million
+│   18 │  4.456214572757751 │ 15.188949293837657 │ 79296851 │ -- 79.30 million
+│   19 │  5.145068799707873 │ 14.685932167610192 │ 80469021 │ -- 80.47 million
+│   20 │  4.601634515827461 │   14.8398186781247 │ 75007166 │ -- 75.01 million
+│   21 │  5.646558343981034 │ 15.039326033758444 │ 73539351 │ -- 73.54 million
+│   22 │   6.50326126765614 │ 15.357166060024737 │ 70622385 │ -- 70.62 million
+│   23 │ 6.2432607112900405 │ 15.618929242378396 │ 61432633 │ -- 61.43 million
+│ ᴺᵁᴸᴸ │               ᴺᵁᴸᴸ │               ᴺᵁᴸᴸ │     1693 │
+└──────┴────────────────────┴────────────────────┴──────────┘
+
+25 rows in set. Elapsed: 129.854 sec. Processed 1.29 billion rows, 17.55 GB (9.96 million rows/s., 135.17 MB/s.)
+Peak memory usage: 651.80 MiB.
+```
+
+### **Accelerate your analytics**
+
+Querying data directly on your lake works well for exploration and ad hoc analysis. But when you need sub-second response times at high concurrency, reading files over the network becomes a bottleneck. That’s when you load your data into MergeTree, ClickHouse’s native storage engine. It applies indexing, compression, and smart data skipping. The same query that took seconds scanning files on S3 now runs orders of magnitude faster.
+
+Think about what that unlocks. Say you’re building a customer-facing analytics dashboard. Your users expect sub-second response times, and you’ve got hundreds of them querying concurrently. Querying files directly on object storage for every query isn’t going to cut it. Milliseconds of latency matter.
+
+Once the data is stored in MergeTree, ClickHouse can apply a range of optimizations designed specifically for analytical workloads. [Sparse primary indexes](https://clickhouse.com/docs/primary-indexes) ensure only the relevant data granules are read instead of scanning entire datasets. [Multiple layers of caching](https://clickhouse.com/docs/operations/caches), including query result caching, predicate-level caching, local SSD caching, and [distributed caches](https://clickhouse.com/blog/building-a-distributed-cache-for-s3), further reduce the amount of data that needs to be read from storage.
+
+Just as importantly, the data format and query engine are designed together. MergeTree supports rich data types, including [efficient JSON handling](https://clickhouse.com/blog/json-data-type-gets-even-better), and enables engine-level optimizations that simply aren’t possible when querying open files directly. The result is the difference between offering analytics and delivering real-time, sub-second analytics at scale.
+
+Let's have a look at what the acceleration workflow with BigLake looks like. First, we'll create a native table in ClickHouse:
+
+<pre><code type='click-ui' language='sql'>
+CREATE TABLE nyc_taxi
+(
+    `pickup_datetime` DateTime64(6, 'UTC'),
+    `dropoff_datetime` DateTime64(6, 'UTC'),
+    `passenger_count` Int64,
+    `trip_distance` Decimal(10, 0),
+    `payment_type` String,
+    `fare_amount` Decimal(10, 0),
+    `tip_amount` Decimal(10, 0),
+    `total_amount` Decimal(10, 0),
+    `pickup_location_id` String,
+    `dropoff_location_id` String
+)
+ENGINE = MergeTree
+ORDER BY pickup_datetime
+</code></pre>
+
+Next, we'll ingest the data from the BigLake catalog:
+
+<pre><code type='click-ui' language='sql'>
+INSERT INTO nyc_taxi
+  SELECT
+      pickup_datetime,
+      dropoff_datetime,
+      passenger_count,
+      trip_distance,
+      payment_type,
+      fare_amount,
+      tip_amount,
+      total_amount,
+      pickup_location_id,
+      dropoff_location_id
+  FROM biglake.`public_data.nyc_taxicab`;
+</code></pre>
+
+```shell
+1293069366 rows in set. Elapsed: 683.687 sec. Processed 1.29 billion rows, 17.55 GB (1.89 million rows/s., 25.67 MB/s.)
+Peak memory usage: 2.65 GiB.
+```
+
+And then, we can write some queries against it:
+
+<pre><code type='click-ui' language='sql'>
+SELECT
+    toHour(pickup_datetime) AS hour,
+    avg(trip_distance) AS avg_distance,
+    avg(total_amount) AS avg_fare,
+    count() AS trips
+FROM nyc_taxi
+GROUP BY hour
+ORDER BY hour ASC;
+</code></pre>
+
+```shell
+┌─hour─┬───────avg_distance─┬───────────avg_fare─┬────trips─┐
+│    0 │  8.111754213915164 │ 15.526378625225163 │ 47880888 │ -- 47.88 million
+│    1 │  6.785222437788446 │ 15.052749704027802 │ 34934869 │ -- 34.93 million
+│    2 │  7.407750625736156 │  14.76697933689647 │ 25650987 │ -- 25.65 million
+│    3 │  7.657523650630094 │ 15.283234402593072 │ 18652780 │ -- 18.65 million
+│    4 │   9.31540622346101 │ 17.573114561330925 │ 13776900 │ -- 13.78 million
+│    5 │ 11.588025098571462 │ 19.706420763167998 │ 12637532 │ -- 12.64 million
+│    6 │  9.745398309303608 │  15.61424064665526 │ 27208315 │ -- 27.21 million
+│    7 │  5.029114605823485 │ 14.334673041209152 │ 46858474 │ -- 46.86 million
+│    8 │  5.997686015180531 │ 14.345667705243487 │ 58135645 │ -- 58.14 million
+│    9 │ 6.3355125177348155 │ 14.340152953723262 │ 60083794 │ -- 60.08 million
+│   10 │  4.418390507581312 │ 14.416366144054908 │ 59271469 │ -- 59.27 million
+│   11 │  5.419518100945745 │  14.62377920076008 │ 61551480 │ -- 61.55 million
+│   12 │  6.216885853896169 │ 14.697381827240532 │ 64966072 │ -- 64.97 million
+│   13 │  5.475978455895815 │ 15.154941814778102 │ 64817919 │ -- 64.82 million
+│   14 │  6.652825409842271 │ 15.684872166503094 │ 67360670 │ -- 67.36 million
+│   15 │  6.423309499236642 │ 15.801439058909274 │ 64772331 │ -- 64.77 million
+│   16 │  6.299770010900412 │  16.67369163194398 │ 56957482 │ -- 56.96 million
+│   17 │   4.95315626472069 │ 16.038749112293292 │ 67184352 │ -- 67.18 million
+│   18 │  4.456214572757751 │ 15.188949293837657 │ 79296851 │ -- 79.30 million
+│   19 │  5.145068671830865 │ 14.685932167610192 │ 80469021 │ -- 80.47 million
+│   20 │  4.601634515827461 │   14.8398186781247 │ 75007166 │ -- 75.01 million
+│   21 │  5.646558343981034 │ 15.039326033758444 │ 73539351 │ -- 73.54 million
+│   22 │   6.50326126765614 │ 15.357166060024737 │ 70622385 │ -- 70.62 million
+│   23 │ 6.2432607112900405 │ 15.618929242378396 │ 61432633 │ -- 61.43 million
+└──────┴────────────────────┴────────────────────┴──────────┘
+
+24 rows in set. Elapsed: 13.578 sec. Processed 1.29 billion rows, 31.03 GB (95.23 million rows/s., 2.29 GB/s.)
+Peak memory usage: 26.40 MiB.
+```
+
+If you want to run through this comparison yourself, head over to our [getting started guide](https://clickhouse.com/docs/use-cases/data-lake/getting-started) to run through this yourself. 
+
+But what about the data you’ve just accelerated? What if you want those results available to other tools in your ecosystem?
+
+### **Interoperability**
+
+Just because your data is in MergeTree doesn’t mean it has to stay there. You can write results back out to Iceberg or Delta Lake for reverse ETL scenarios. Whether you’re writing directly to the data lake or pulling data in to accelerate and then pushing results back, ClickHouse maintains full interoperability with the open ecosystem. It’s in our open-source DNA. You’re not locked in.
+
+Your analytics team runs a segmentation model in ClickHouse and identifies your highest-value customers. Instead of exporting a CSV and emailing it around, they write the results back to Iceberg. Now your data science team picks it up in Spark, marketing accesses it through their BI tool, and the data never left the data lake.
+
+For example, if we want to write aggregated results back to an Iceberg table, we can do the following:
+
+<pre><code type='click-ui' language='sql'>
+CREATE TABLE output_iceberg (  
+  Url String,  
+  Cnt UInt64  
+) ENGINE = IcebergS3(‘[https://your-bucket.s3.amazonaws.com/output/](https://your-bucket.s3.amazonaws.com/output/)’, ‘key’, ‘secret’);
+</code></pre>
+
+<pre><code type='click-ui' language='sql'>
+INSERT INTO output_iceberg  
+SELECT url, count() AS cnt  
+FROM hits_accelerated  
+GROUP BY url  
+ORDER BY cnt DESC;
+</code></pre>
+
+> As of 25th March 2026, Iceberg write support to a catalog is not yet possible, but the capability is coming soon.
+
+The resulting Iceberg table is readable by any Iceberg-compatible engine: Spark, Trino, DuckDB, you name it.
+
+With ClickHouse you can now read from the lake and query in place, accelerate your queries by loading into MergeTree, and write results back to open formats. You may find yourself using all three or just one. The source of truth always remains your data lake.
+
+Does this work with your stack? Yes. It should.
+
+## **What’s supported**
+
+ClickHouse works with the formats, catalogs, and cloud storage you’re already using. On the format side: Iceberg, Delta Lake, Parquet, ORC, Avro, and Hudi. For catalogs: AWS Glue, Unity Catalog, REST Catalog, Polaris, and more. For storage: S3, GCS, and Azure Blob Storage. And the operations go beyond reads. You get writes, DML, time travel, and schema evolution.
+
+For the full breakdown, [check out the support matrix](https://clickhouse.com/docs/use-cases/data-lake/support-matrix)
+
+## **Conclusion**
+
+Open formats gave teams the freedom to store data once and query it from anywhere. With ClickHouse, that data lake is now a first-class database. Point it at any catalog, on any cloud, and you're querying immediately. Same SQL, same engine, full interoperability with the open ecosystem. You don't have to migrate your data, rebuild your pipelines, or trade the openness you built your stack on for performance.
+
+And this matters more now than it did two years ago. As teams build agentic applications, AI-powered observability tools, and natural language analytics interfaces on top of their lake data, the requirements look a lot like real-time analytics: high concurrency, low latency, and access to full-fidelity data at scale. Tanya Bragin, VP of Product & Marketing, wrote about how this shift toward [AI is redrawing the database market](https://clickhouse.com/blog/ai-redrawing-database-market) and why the infrastructure choices teams make today will shape what they can build tomorrow.
+
+We’re excited about what’s ahead. Try it out for yourself and let us know what you think.
+
+## **Get started**
+
+[Get started with the data lake guide](https://clickhouse.com/docs/use-cases/data-lake/getting-started) | [View the full support matrix](https://clickhouse.com/docs/use-cases/data-lake/support-matrix) | [Try ClickHouse Cloud](https://clickhouse.com/cloud)
+
+
+---
+
+##  
+
+Interested in seeing how ClickHouse works on your data? Get started with ClickHouse Cloud in minutes and receive $300 in free credits.
+
+[Sign up](https://console.clickhouse.cloud/signUp?loc=blog-cta-273-sign-up&utm_blogctaid=273)
+
+---
+
+---
+
+## More Visibility, Less Guesswork: ClickHouse Cloud's New Monitoring Capabilities
+Published: 2026-03-25T21:17:28+00:00
+URL: https://clickhouse.com/blog/clickhouse-cloud-new-monitoring-capabilities
+
+---
+title: "More Visibility, Less Guesswork: ClickHouse Cloud's New Monitoring Capabilities"
+date: "2026-03-25T21:17:28.529Z"
+author: "Mihir Gokhale"
+category: "Product"
+excerpt: " ClickHouse Cloud's new monitoring capabilities give platform administrators deeper visibility into their deployments, with a unified   Overview page, infrastructure scaling insights, and automatic email and Slack notifications for common issues."
+---
+
+# More Visibility, Less Guesswork: ClickHouse Cloud's New Monitoring Capabilities
+
+ClickHouse gives users an incredible amount of control to optimize database performance. Platform administrators sit at the center of this experience: they tune scaling controls, configure server settings, and ultimately own the health of their deployment. On ClickHouse Cloud, we're releasing a set of improvements designed to give deeper visibility into how the ClickHouse server is behaving to proactively surface warnings before they become problems.
+
+<h2 id="more-dashboards">More dashboards</h2>
+
+The ClickHouse Cloud console already comes built-in with several monitoring dashboards. We added a few more.
+
+<h3 id="new-overview-page">New overview page</h3>
+
+The new Overview page brings the most important signals about your deployment into a single, unified view. Designed to give administrators an at-a-glance health check of their ClickHouse environment, you can now spend less time hunting for information and more time acting on it.
+
+<h3 id="infrastructure-page-deeper-scaling-visibility">Infrastructure page: Deeper scaling visibility</h3>
+
+The new Infrastructure page gives administrators a clearer view into how their services are scaling over time. CPU and Memory utilization metrics, now with additional aggregation types, show how much utilization your ClickHouse cluster is getting.
+
+New modals showcase ClickHouse's [automatic scaling](https://clickhouse.com/docs/manage/scaling) behavior to help users better understand why and how their cluster scaled, and also make better decisions around custom scaling configurations like vertical scaling limits and idling behavior.
+
+![](https://clickhouse.com/uploads/clicklens_mar2026_image1_621e99285e.png)
+
+<h2 id="get-ahead-of-issues-with-new-notifications">Get ahead of issues with new notifications</h2>
+
+When users onboard onto ClickHouse, a common set of issues frequently come up. Administrators will be automatically notified via email when a service is at risk of degraded performance or failures, including due to:
+
+* **Too many parts**: a common cause of merge pressure and query slowdowns
+* **Failed mutations**: which can silently stall data changes if left undetected
+* **Query concurrency**: helping you catch saturation before high query concurrency impacts end users
+
+<h3 id="slack-notifications">Slack notifications</h3>
+
+You can configure all these notifications, and more, to be sent directly to Slack via your organization's notification settings.
+
+These improvements provide administrators with better visibility into ClickHouse behavior, so you can spend less time diagnosing issues and more time optimizing your performance.
+
+These features are being rolled out now in ClickHouse Cloud. Log in to your console to explore the new dashboards and configure your notification preferences.
+
+
+---
+
+## Get started today
+
+Interested in seeing how ClickHouse works on your data? Get started with ClickHouse Cloud in minutes and receive $300 in free credits.
+
+[Sign up](https://console.clickhouse.cloud/signUp?loc=blog-cta-271-get-started-today-sign-up&utm_blogctaid=271)
+
+---
 
 ---
 

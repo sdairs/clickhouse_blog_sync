@@ -1,5 +1,5 @@
 {
-  "last_sync": "2026-03-26T06:30:39.108852Z",
+  "last_sync": "2026-03-27T06:31:59.197510Z",
   "processed_blogs": {
     "https://clickhouse.com/blog/clickhouse-raises-400-million-series-d-acquires-langfuse-launches-postgres": {
       "title": "ClickHouse raises $400M Series D led by Dragoneer to accelerate expansion across analytics and AI infrastructure",
@@ -4386,9 +4386,27 @@
       "pub_date": "2026-03-25T10:42:22+00:00",
       "file_path": "blogs/2026-03-25-structured-logging-in-net-with-serilog-and.md",
       "processed_at": "2026-03-26T06:30:39.045440Z"
+    },
+    "https://clickhouse.com/blog/10-best-practice-tips": {
+      "title": "Top 10 best practices tips for ClickHouse",
+      "pub_date": "2026-03-26T13:54:41+00:00",
+      "file_path": "blogs/2026-03-26-top-10-best-practices-tips-for-clickhouse.md",
+      "processed_at": "2026-03-27T06:31:58.550420Z"
+    },
+    "https://clickhouse.com/blog/clickhouse-is-data-lake-ready": {
+      "title": "ClickHouse is data lake ready",
+      "pub_date": "2026-03-26T10:12:30+00:00",
+      "file_path": "blogs/2026-03-26-clickhouse-is-data-lake-ready.md",
+      "processed_at": "2026-03-27T06:31:58.839624Z"
+    },
+    "https://clickhouse.com/blog/clickhouse-cloud-new-monitoring-capabilities": {
+      "title": "More Visibility, Less Guesswork: ClickHouse Cloud's New Monitoring Capabilities",
+      "pub_date": "2026-03-25T21:17:28+00:00",
+      "file_path": "blogs/2026-03-25-more-visibility-less-guesswork-clickhouse-cloud-s.md",
+      "processed_at": "2026-03-27T06:31:59.108434Z"
     }
   },
-  "total_blogs": 731,
+  "total_blogs": 734,
   "failed_blogs": [
     {
       "url": "https://clickhouse.com/jp/blog/clickhouse-gcp-japan-availability",
