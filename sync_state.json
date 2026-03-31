@@ -1,5 +1,5 @@
 {
-  "last_sync": "2026-03-30T06:43:43.332983Z",
+  "last_sync": "2026-03-31T06:34:45.744037Z",
   "processed_blogs": {
     "https://clickhouse.com/blog/clickhouse-raises-400-million-series-d-acquires-langfuse-launches-postgres": {
       "title": "ClickHouse raises $400M Series D led by Dragoneer to accelerate expansion across analytics and AI infrastructure",
@@ -4404,9 +4404,21 @@
       "pub_date": "2026-03-25T21:17:28+00:00",
       "file_path": "blogs/2026-03-25-more-visibility-less-guesswork-clickhouse-cloud-s.md",
       "processed_at": "2026-03-27T06:31:59.108434Z"
+    },
+    "https://clickhouse.com/blog/padlet": {
+      "title": "How Padlet uses ClickHouse Cloud to power real-time classroom analytics",
+      "pub_date": "2026-03-30T12:51:17+00:00",
+      "file_path": "blogs/2026-03-30-how-padlet-uses-clickhouse-cloud-to-power-real.md",
+      "processed_at": "2026-03-31T06:34:45.443222Z"
+    },
+    "https://clickhouse.com/blog/building-a-data-platform-for-agents": {
+      "title": "How we’re building a data platform for a new user: agents",
+      "pub_date": "2026-03-27T09:21:52+00:00",
+      "file_path": "blogs/2026-03-27-how-we-re-building-a-data-platform-for-a-new-user.md",
+      "processed_at": "2026-03-31T06:34:45.661450Z"
     }
   },
-  "total_blogs": 734,
+  "total_blogs": 736,
   "failed_blogs": [
     {
       "url": "https://clickhouse.com/jp/blog/clickhouse-gcp-japan-availability",
