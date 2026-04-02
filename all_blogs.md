@@ -1,6 +1,181 @@
 # ClickHouse Blogs
-Last updated: 2026-04-01 06:40:34 UTC
-Total blogs: 736
+Last updated: 2026-04-02 06:31:53 UTC
+Total blogs: 738
+
+---
+
+## Announcing Role Based Access Control in ClickStack
+Published: 2026-04-01T11:08:23+00:00
+URL: https://clickhouse.com/blog/role-based-access-control-clickstack
+
+---
+title: "Announcing Role Based Access Control in ClickStack"
+date: "2026-04-01T11:08:23.888Z"
+author: "Mike Shi"
+category: "Engineering"
+excerpt: "ClickStack now supports Role-Based Access Control, giving teams precise control over who can access dashboards, searches, and notebooks. With flexible roles, fine-grained permissions, and seamless ClickHouse Cloud integration."
+---
+
+# Announcing Role Based Access Control in ClickStack
+
+We've shipped one of the most requested features since launching ClickStack: Role-Based Access Control (RBAC) for Managed ClickStack. ClickStack RBAC allows teams to define permissions based on roles and control who can access specific resources such as dashboards, saved searches, and notebooks. Access can be granted at a broad level or scoped down to individual resources, while also governing who can create, modify, or manage key features across the platform.
+
+This ensures the platform is enterprise-ready and also lays the foundation for more advanced access controls, with future updates planned to expand RBAC capabilities such as row-based access control.
+
+## Foundations of RBAC
+
+Before RBAC, all ClickStack users belonged to the same group and shared the same permissions across the application, with no way to differentiate access between users or teams within a single instance.
+
+To introduce any level of isolation, teams had to rely on separate HyperDX instances. Each instance would be configured with its own connection credentials and data sources, effectively segmenting access at the environment level rather than within the product itself. While this provided a workaround for restricting access to underlying data, it came at the cost of duplicated setups and increased operational overhead.
+
+This model didn’t scale to real-world teams. It offered no way to control access to specific dashboards, enforce read-only permissions, or limit access to features such as dashboard creation or notebooks. It was clear a more flexible and centralized approach to access control was needed.
+
+## A group based model for access control
+
+Based on feedback from our users, it became clear that ClickStack needed a more flexible, group-based approach to access control. At its core, RBAC introduces the ability to define roles and assign users to them, with each role governing access to key resources across the platform. These include dashboards, saved searches, sources, alerts, webhooks, and notebooks.
+
+For each resource type, roles can be assigned one of three access levels: no access, read, or manage. This model covers the majority of use cases, allowing teams to control who can view data, who can make changes, and who has full control. Manage access enables users to create, edit, and delete resources, while read access ensures visibility without the risk of modification.
+
+![example_role.png](https://clickhouse.com/uploads/example_role_9592821de7.png)
+
+Beyond resource access, RBAC also introduces administrative controls at the role level. Teams can define which roles are allowed to view team members and their assigned roles, while restricting sensitive actions such as managing users and permissions to admins only. This ensures a clear separation between users who consume data and those responsible for governing access.
+
+
+---
+
+## Get started today
+
+Interested in seeing how Managed ClickStack works for your observability data? Get started in minutes and receive $300 in free credits.
+
+[Start free trial](https://console.clickhouse.cloud/signUp?intent=o11y&loc=blog-cta-294-get-started-today-start-free-trial&utm_blogctaid=294)
+
+---
+
+## Fine grained control
+
+While the ability to assign no access, read access, or manage access at a resource level provides a strong foundation, many teams require more precise control. For this, RBAC in ClickStack supports fine-grained access rules, allowing permissions to be scoped down to specific resources rather than applied uniformly.
+
+![manage_role.png](https://clickhouse.com/uploads/manage_role_7775b966a9.png)
+
+By default, each resource type uses a single access policy that applies to all resources. Switching to fine-grained controls allows roles to define multiple access rules, each evaluated independently. A resource is accessible to users who belong to the group, if it matches any rule, while resources that do not match remain inaccessible. This makes it possible to selectively expose only assets relevant to a given team or role.
+
+![fine_grained_control.png](https://clickhouse.com/uploads/fine_grained_control_824d3ea149.png)
+
+Access rules can be defined using resource attributes such as name, ID, or tags. For example, above the role has been granted read access to all saved searches containing the term “errors”, as well as managed access to any searches tagged with a specific team label. Each rule specifies both the matching condition **and the level of access**, enabling a flexible and targeted permission model. This same fine grained filter can be applied to dashboards, sources, and notebooks.
+
+For a full definition of the supported filtering conditions, see the [RBAC documentation](https://clickhouse.com/docs/use-cases/observability/clickstack/rbac).
+
+## Integrated into ClickHouse Cloud
+
+RBAC in ClickStack is designed to work seamlessly with ClickHouse Cloud, ensuring that user management and permissions remain consistent across the platform. Users are managed at the ClickHouse Cloud level, where they are invited to an organization and assigned baseline access through the Cloud console.
+
+![cloud_users_roles.png](https://clickhouse.com/uploads/cloud_users_roles_bb0173e545.png)
+
+Once a user has access to a ClickHouse Cloud as a member, they become available in the ClickStack Team Settings UI, where roles can be assigned. Users must have at least SQL console read-only access to use ClickStack, while full administrators require SQL console admin access - necessary to enable features such as alerts.
+
+This model keeps user lifecycle management centralized in ClickHouse Cloud, while ClickStack focuses on role-based permissions within the application itself. In practice, this means teams manage who a user is and what they can access at the Cloud level, then use ClickStack roles to control what that user can see and do within observability workflows.
+
+To make this experience as seamless as possible, new users are assigned a default role - this can be configured within the ClickStack team settings.
+
+![security_policies.png](https://clickhouse.com/uploads/security_policies_ec73a11cf5.png)
+
+## Adding even more control
+
+This release establishes the foundation for RBAC in ClickStack, but it is only the first step. While it introduces structured control over features and resources, it is clear that access policies need to become more granular as well as extending beyond the application layer into the data itself.
+
+Today, restricting access at the data level typically involves configuring permissions in ClickHouse and mapping these to specific connections and sources. In practice, ClickStack sources map to tables, and access can be limited by controlling which roles can see or use those sources through the fine-grained permissions described above. This works well for scenarios where access needs to be restricted at the table level.
+
+However, row-level access introduces additional complexity. In this scenario, different roles have access to different rows in each source, typically defined through SQL filtering conditions e.g. “only access logs for the payment Service”.
+
+To achieve this today, administrators must manage access through ClickHouse itself by [assigning roles to individual SQL console users](https://clickhouse.com/docs/cloud/security/common-access-management-queries#granular-access-control). These roles follow a pattern of `sql-console-role:<email>` and define the permissions that control access to specific datasets for each user. These SQL console users are exposed in ClickStack, where they can be assigned to a ClickStack role as described earlier.
+
+ While this enables a level of control, it introduces a split model, with roles defined both in ClickHouse and separately in ClickStack, requiring administrators to coordinate permissions across both layers. As the number of users and roles grows, this quickly becomes difficult to manage and does not scale effectively.
+
+Our goal is to bring this level of control directly into ClickStack. Future updates will focus on enabling more fine-grained data access and the ability to define filtering conditions at the role level to support these row-level access requirements. This will allow teams to manage both application and data access in a single place, without relying on fragmented or manual workarounds.
+
+## Conclusion
+
+RBAC marks an important step forward for ClickStack, bringing structured, scalable access control to both resources and workflows within the platform. By introducing roles, fine-grained permissions, and seamless integration with ClickHouse Cloud, teams can now manage access with far greater precision while reducing operational overhead. 
+
+We plan to continue to expand these capabilities to cover even more granular data access. Stay tuned for future updates.
+
+
+---
+
+## ClickHouse BYOC on Google Cloud  now Generally Available
+Published: 2026-03-31T17:25:17+00:00
+URL: https://clickhouse.com/blog/byoc-gcp-ga
+
+---
+title: "ClickHouse BYOC on Google Cloud  now Generally Available"
+date: "2026-03-31T17:25:17.237Z"
+author: "Aashish Kohli and Yiyang Shao"
+category: "Product"
+excerpt: "Run ClickHouse in your own Google Cloud account : with full data sovereignty, zero-trust networking, and a managed control plane."
+---
+
+# ClickHouse BYOC on Google Cloud  now Generally Available
+
+Since launching [BYOC on AWS](https://clickhouse.com/blog/announcing-general-availability-of-clickhouse-bring-your-own-cloud-on-aws), we've seen organizations adopt it because they want the operational simplicity of a fully managed ClickHouse service, but they need their data to stay inside their own cloud account. With today's announcement, Google Cloud users can now get exactly that : no waitlist, no private preview access request.
+
+## **What is BYOC?** {#what_is_byoc}
+
+BYOC splits the control plane and data plane into separate VPCs."
+
+* **ClickHouse-managed control plane**: Runs in ClickHouse's own VPC. Handles orchestration, scaling, upgrades, monitoring, and billing. It never touches your query data.  
+* **Your data plane**: Runs entirely inside your Google Cloud project. Your GKE cluster, ClickHouse servers, object storage (Google Cloud Storage), backups, and metrics all live within your account boundary.
+
+The control plane communicates with your environment over a Tailscale zero-trust tunnel -  outbound-only, encrypted, and scoped to orchestration traffic only. ClickHouse engineers with support access are restricted to system tables, with time-bound and audited sessions.
+
+The result: you get a fully managed service without giving up data residency.
+
+## **Why Google Cloud?** {#why_google_cloud}
+
+Google Cloud is home to a significant share of enterprise data infrastructure. Organizations running BigQuery, Dataflow, and Pub/Sub pipelines naturally want their high-performance OLAP layer in the same environment - with the same IAM primitives, the same VPC controls, and the same compliance perimeter.
+
+BYOC on Google Cloud makes ClickHouse native to  that environment. Your service runs on GKE, stores data and backups in your GCS buckets, and connects to the rest of your Google Cloud workloads over private networking - no data crosses account or project boundaries.
+
+ClickHouse BYOC is already available across all public ClickHouse Cloud Google regions. Over time we will expand support to additional Google Cloud regions.
+
+## **Initial Set up** {#initial_set_up}
+
+Onboarding uses a three-step Terraform-based setup:
+
+**1\. Account setup:** Run a Terraform module that creates the IAM roles and trust permissions needed for the BYOC controller to manage infrastructure in your Google Cloud project. We follow least-privilege principles - the controller gets only what it needs to provision and maintain the cluster.
+
+**2\. Infrastructure provisioning:** In the ClickHouse Cloud console, select your Google Cloud region, configure your VPC CIDR range, and align availability zones. We recommend a dedicated Google Cloud project for BYOC - this gives you clean cost attribution and a clear resource isolation boundary.
+
+**3\. Service creation:** Specify a service name, select your BYOC environment and region, choose CPU/memory allocation, and configure replica count for high availability. Your GKE cluster, ClickHouse nodes, and monitoring stack are provisioned automatically.
+
+If you have custom networking requirements or want to integrate with an existing VPC, reach out to ClickHouse Support - we support customized onboarding for those configurations.
+
+## **What's Included** {#whats_included}
+
+BYOC on Google Cloud ships with the full set of capabilities you need to run production ClickHouse workloads:
+
+* **SharedMergeTree** for efficient distributed storage  
+* **Managed backups and restore** : stored in your GCS buckets, never leaving your project  
+* **Vertical and horizontal scaling** : adjust replica count and node size per workload  
+* **Auto Idling / Wake up** : automatically idle services during quiet periods to reduce costs  
+* **Compute-compute separation** via [Warehouses](https://clickhouse.com/blog/introducing-warehouses-compute-compute-separation-in-clickhouse-cloud) - isolate different query workloads across dedicated compute groups  
+* **Prometheus / Grafana / AlertManager** monitoring stack  
+* **Datadog integration** for teams with centralized observability pipelines  
+* **VPC Peering and Private Service Connect** for enterprise network configurations
+
+## **Upgrades and Maintenance** {#upgrades_and_maintenance}
+
+ClickHouse handles both ClickHouse database upgrades and supporting infrastructure upgrades (Kubernetes operator, Istio, monitoring components) in the background via ArgoCD. Database upgrades follow a [make-before-break strategy](https://clickhouse.com/blog/make-before-break-faster-scaling-mechanics-for-clickhouse-cloud): updated replicas are added before old ones are removed, minimizing disruption. You can select Fast, Regular, or Slow release channels, with upgrades aligned to your configured maintenance window.
+
+---
+
+## Get started today
+
+BYOC on Google Cloud is available now. Contact our support team or reach out to your account team for a guided onboarding session. The BYOC documentation covers the full architecture, security model, and configuration options in detail.
+
+
+[Read the BYOC documentation](https://clickhouse.com/docs/cloud/reference/byoc/overview?loc=blog-cta-288-get-started-today-read-the-byoc-documentation&utm_blogctaid=288)
+
+---
 
 ---
 

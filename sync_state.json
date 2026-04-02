@@ -1,5 +1,5 @@
 {
-  "last_sync": "2026-04-01T06:40:34.430971Z",
+  "last_sync": "2026-04-02T06:31:53.965478Z",
   "processed_blogs": {
     "https://clickhouse.com/blog/clickhouse-raises-400-million-series-d-acquires-langfuse-launches-postgres": {
       "title": "ClickHouse raises $400M Series D led by Dragoneer to accelerate expansion across analytics and AI infrastructure",
@@ -4416,9 +4416,21 @@
       "pub_date": "2026-03-27T09:21:52+00:00",
       "file_path": "blogs/2026-03-27-how-we-re-building-a-data-platform-for-a-new-user.md",
       "processed_at": "2026-03-31T06:34:45.661450Z"
+    },
+    "https://clickhouse.com/blog/role-based-access-control-clickstack": {
+      "title": "Announcing Role Based Access Control in ClickStack",
+      "pub_date": "2026-04-01T11:08:23+00:00",
+      "file_path": "blogs/2026-04-01-announcing-role-based-access-control-in-clickstack.md",
+      "processed_at": "2026-04-02T06:31:53.621239Z"
+    },
+    "https://clickhouse.com/blog/byoc-gcp-ga": {
+      "title": "ClickHouse BYOC on Google Cloud  now Generally Available",
+      "pub_date": "2026-03-31T17:25:17+00:00",
+      "file_path": "blogs/2026-03-31-clickhouse-byoc-on-google-cloud-now-generally.md",
+      "processed_at": "2026-04-02T06:31:53.882878Z"
     }
   },
-  "total_blogs": 736,
+  "total_blogs": 738,
   "failed_blogs": [
     {
       "url": "https://clickhouse.com/jp/blog/clickhouse-gcp-japan-availability",
