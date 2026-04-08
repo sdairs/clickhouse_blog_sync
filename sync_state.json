@@ -1,5 +1,5 @@
 {
-  "last_sync": "2026-04-07T06:36:28.518183Z",
+  "last_sync": "2026-04-08T06:37:57.003465Z",
   "processed_blogs": {
     "https://clickhouse.com/blog/clickhouse-raises-400-million-series-d-acquires-langfuse-launches-postgres": {
       "title": "ClickHouse raises $400M Series D led by Dragoneer to accelerate expansion across analytics and AI infrastructure",
@@ -4428,9 +4428,45 @@
       "pub_date": "2026-03-31T17:25:17+00:00",
       "file_path": "blogs/2026-03-31-clickhouse-byoc-on-google-cloud-now-generally.md",
       "processed_at": "2026-04-02T06:31:53.882878Z"
+    },
+    "https://clickhouse.com/blog/clickhouse-release-26-03": {
+      "title": "ClickHouse Release 26.3",
+      "pub_date": "2026-04-07T08:14:28+00:00",
+      "file_path": "blogs/2026-04-07-clickhouse-release-26-3.md",
+      "processed_at": "2026-04-08T06:37:55.491528Z"
+    },
+    "https://clickhouse.com/blog/respan-ai-llm-observability": {
+      "title": "How Respan is scaling LLM observability with ClickHouse Cloud",
+      "pub_date": "2026-04-06T15:11:14+00:00",
+      "file_path": "blogs/2026-04-06-how-respan-is-scaling-llm-observability-with.md",
+      "processed_at": "2026-04-08T06:37:55.743518Z"
+    },
+    "https://clickhouse.com/blog/postgresbench": {
+      "title": "PostgresBench: A Reproducible Benchmark for Postgres Services",
+      "pub_date": "2026-04-02T15:27:52+00:00",
+      "file_path": "blogs/2026-04-02-postgresbench-a-reproducible-benchmark-for.md",
+      "processed_at": "2026-04-08T06:37:56.070048Z"
+    },
+    "https://clickhouse.com/blog/clickstack-read-logs-detective-novel": {
+      "title": "We taught ClickStack to read your logs like a detective novel",
+      "pub_date": "2026-04-02T08:49:37+00:00",
+      "file_path": "blogs/2026-04-02-we-taught-clickstack-to-read-your-logs-like-a.md",
+      "processed_at": "2026-04-08T06:37:56.334281Z"
+    },
+    "https://clickhouse.com/blog/rill": {
+      "title": "Rill and ClickHouse: real-time operational BI for a metered world",
+      "pub_date": "2026-04-01T17:42:05+00:00",
+      "file_path": "blogs/2026-04-01-rill-and-clickhouse-real-time-operational-bi-for.md",
+      "processed_at": "2026-04-08T06:37:56.560709Z"
+    },
+    "https://clickhouse.com/blog/agentic-coding": {
+      "title": "Agentic coding at ClickHouse",
+      "pub_date": "2026-04-01T17:20:23+00:00",
+      "file_path": "blogs/2026-04-01-agentic-coding-at-clickhouse.md",
+      "processed_at": "2026-04-08T06:37:56.812510Z"
     }
   },
-  "total_blogs": 738,
+  "total_blogs": 744,
   "failed_blogs": [
     {
       "url": "https://clickhouse.com/jp/blog/clickhouse-gcp-japan-availability",

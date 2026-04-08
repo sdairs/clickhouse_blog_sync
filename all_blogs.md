@@ -1,6 +1,1561 @@
 # ClickHouse Blogs
-Last updated: 2026-04-07 06:36:28 UTC
-Total blogs: 738
+Last updated: 2026-04-08 06:37:56 UTC
+Total blogs: 744
+
+---
+
+## ClickHouse Release 26.3
+Published: 2026-04-07T08:14:28+00:00
+URL: https://clickhouse.com/blog/clickhouse-release-26-03
+
+---
+title: "ClickHouse Release 26.3"
+date: "2026-04-07T16:13:19.556Z"
+category: "Engineering"
+excerpt: "ClickHouse 26.3 is here! In this release, async inserts are turned on by default, we've got more JOIN reordering, materialized CTES have arrived, and more!"
+---
+
+# ClickHouse Release 26.3
+
+Another month goes by, which means it’s time for another release! 
+
+<p>ClickHouse 26.3 contains 27 new features &#127799; 40 performance optimizations &#128007; 202 bug fixes &#128029;</p>
+
+This release sees async inserts turned on by default, JOIN reordering for ANTI, SEMI, FULL, materialized CTES, and more!
+
+## New contributors
+
+A special welcome to all the new contributors in 26.3! The growth of ClickHouse's community is humbling, and we are always grateful for the contributions that have made ClickHouse so popular.
+
+Below are the names of the new contributors:
+
+*Alex Soffronow-Pagonidis, Alexey Smirnov, Amy Chen, Andrii Beskomornyi, Artem Brustovetskii, Artem Kytkin, Caio Ishizaka Costa, Cursor Agent, Daniel Q, Den Kalantaevskii, Desel72, Enric Calabuig, Finn, Fisnik Kastrati, François Martin, Herman Schaaf, JIaQi Tang, Maksim Kozlov, Nazarii Piontko, NeedmeFordev, Onyx2406, Riyane El Qoqui, Semen Checherinda, Vasily Chekalkin, Victor Zhou, Vikash, Yash, lioshik, martinfrancois, mcalfin, paf91, spider-yamet, tanner-bruce, vyalamar, wangzhibo*
+
+Hint: if you’re curious how we generate this list… [here](https://gist.github.com/gingerwizard/5a9a87a39ba93b422d8640d811e269e9).
+
+<iframe width="768" height="432" src="https://www.youtube.com/embed/\_bY0ucNB1lQ?si=m\_mhFlrMP1nhzHZQ" title="YouTube video player" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" referrerpolicy="strict-origin-when-cross-origin" allowfullscreen\></iframe\>
+
+You can also [view the slides from the presentation](https://presentations.clickhouse.com/2026-release-26.3/).
+
+## Materialized CTE
+
+### Contributed by Dmitry Novik
+
+The 26.3 release introduces the `MATERIALIZED` clause, which means that CTEs (subqueries in the WITH clause) will only be evaluated only once and stored in temporary tables.
+
+Let’s have a look at how to use it with the [UK property prices dataset](https://clickhouse.com/docs/getting-started/example-datasets/uk-price-paid). The following query returns the most expensive properties alongside the average price of properties sold in that county that year and over all time.
+
+<pre><code type='click-ui' language='sql'>
+WITH county_year_avg AS MATERIALIZED
+    (
+        SELECT county, toYear(date) AS year, avg(price) AS avg_price
+        FROM uk_price_paid3
+        GROUP BY county,year
+    )
+SELECT p.price, p.addr1, p.town,
+    p.county,
+    toYear(p.date) AS year,
+    round(cya.avg_price) AS countyYear,
+    round(ca.avg_price) AS countyAllTime
+FROM uk_price_paid3 AS p
+INNER JOIN county_year_avg AS cya 
+ON (p.county = cya.county) AND (toYear(p.date) = cya.year)
+INNER JOIN
+(
+    SELECT county, avg(avg_price) AS avg_price
+    FROM county_year_avg
+    GROUP BY county
+) AS ca ON p.county = ca.county
+ORDER BY p.price DESC
+LIMIT 10;
+</code></pre>
+
+The CTE will only be materialized if the following setting is configured:
+
+<pre><code type='click-ui' language='sql'>
+SET enable_materialized_cte=1;
+</code></pre>
+
+The results of running this query are shown below:
+
+```shell
+┌─────price─┬─street────────────┬─p.county───────┬─year─┬─ctyYear─┬─ctyAllTime─┐
+│ 900000000 │ VICTORIA ROAD     │ KENT           │ 2021 │  457070 │     251980 │
+│ 594300000 │ BAKER STREET      │ GREATER LONDON │ 2017 │  797029 │     466002 │
+│ 569200000 │ STANHOPE ROW      │ GREATER LONDON │ 2018 │  821394 │     466002 │
+│ 542540820 │ FORTESS ROAD      │ GREATER LONDON │ 2019 │  837867 │     466002 │
+│ 523000000 │ NINE ELMS LANE    │ GREATER LONDON │ 2021 │  800579 │     466002 │
+│ 494400000 │ NEWMARKET LANE    │ WEST YORKSHIRE │ 2019 │  244610 │     154516 │
+│ 494400000 │ NEWMARKET LANE    │ WEST YORKSHIRE │ 2019 │  244610 │     154516 │
+│ 480000000 │ SUTHERLAND AVENUE │ WEST MIDLANDS  │ 2022 │  343339 │     170087 │
+│ 480000000 │ COOPER STREET     │ WEST MIDLANDS  │ 2022 │  343339 │     170087 │
+│ 480000000 │ SUTHERLAND AVENUE │ WEST MIDLANDS  │ 2022 │  343339 │     170087 │
+└───────────┴───────────────────┴────────────────┴──────┴─────────┴────────────┘
+```
+
+And the running time when the CTE is not materialized:
+
+```shell
+10 rows in set. Elapsed: 2.590 sec. Processed 91.36 million rows, 892.55 MB (35.27 million rows/s., 344.56 MB/s.)
+Peak memory usage: 1.50 GiB.
+
+10 rows in set. Elapsed: 2.707 sec. Processed 91.36 million rows, 892.55 MB (33.75 million rows/s., 329.71 MB/s.)
+Peak memory usage: 1.50 GiB.
+
+10 rows in set. Elapsed: 2.636 sec. Processed 91.36 million rows, 892.55 MB (34.66 million rows/s., 338.59 MB/s.)
+Peak memory usage: 1.50 GiB.
+```
+
+And when it is materialized:
+
+```shell
+10 rows in set. Elapsed: 1.243 sec. Processed 60.91 million rows, 679.63 MB (49.02 million rows/s., 546.98 MB/s.)
+Peak memory usage: 87.40 MiB.
+
+10 rows in set. Elapsed: 1.219 sec. Processed 60.91 million rows, 679.63 MB (49.98 million rows/s., 557.68 MB/s.)
+Peak memory usage: 88.97 MiB.
+
+10 rows in set. Elapsed: 1.229 sec. Processed 60.91 million rows, 679.63 MB (49.58 million rows/s., 553.17 MB/s.)
+Peak memory usage: 87.43 MiB.
+```
+
+The materialized version is a little over twice as fast. This dataset is reasonably small at 30 million records, so we’d see even more of an improvement at bigger scale.
+
+## Pretty EXPLAIN
+
+### Contributed by Kirill Kopnev
+
+The 26.3 release also introduces new settings when using the `EXPLAIN` clause:
+
+* `pretty=1` - tree-style indented output.  
+* `compact=1` - collapses Expression steps.
+
+If we prefix the query from the previous section with:
+
+<pre><code type='click-ui' language='sql'>
+EXPLAIN indexes=1, pretty=1, compact=1
+</code></pre>
+
+We see the following output for the not materialized CTE:
+
+![2026-03-30_12-38-17.png](https://clickhouse.com/uploads/2026_03_30_12_38_17_9f6175afa7.png)
+
+
+And the following output for the materialized one:
+
+![2026-03-30_12-38-05.png](https://clickhouse.com/uploads/2026_03_30_12_38_05_15e7da3a8d.png)
+
+## Natural sorting
+
+### Contributed by Nazarii Piontko
+
+The `naturalSortKey` function enables human-friendly sorting. 
+
+For example, if we wanted to work out when Geospatial functions were added to ClickHouse, we could write the following query:
+
+<pre><code type='click-ui' language='sql'>
+SELECT introduced_in, count()
+FROM system.functions
+WHERE categories LIKE '%Geo%'
+GROUP BY ALL
+ORDER BY introduced_in;
+</code></pre>
+
+```shell
+┌─introduced_in─┬─count()─┐
+│ 1.1.0         │       5 │
+│ 20.1.0        │      10 │
+│ 20.3.0        │       6 │
+│ 20.4.0        │       1 │
+│ 21.11.0       │       4 │
+│ 21.4.0        │      24 │
+│ 21.9.0        │      11 │
+│ 22.1.0        │       3 │
+│ 22.2.0        │       5 │
+│ 22.6.0        │      15 │
+│ 25.10.0       │       4 │
+│ 25.11.0       │       6 │
+│ 25.12.0       │       1 │
+│ 25.6.0        │       2 │
+│ 25.7.0        │       2 │
+└───────────────┴─────────┘
+```
+
+In the normal sort order, `21.11.0` comes before `21.4.0` and `21.9.0`, which isn’t what we’d expect. We can use the new function to sort this data in the expected order:
+
+<pre><code type='click-ui' language='sql'>
+SELECT introduced_in, count()
+FROM system.functions
+WHERE categories LIKE '%Geo%'
+GROUP BY ALL
+ORDER BY naturalSortKey(introduced_in);
+</code></pre>
+
+```shell
+┌─introduced_in─┬─count()─┐
+│ 1.1.0         │       5 │
+│ 20.1.0        │      10 │
+│ 20.3.0        │       6 │
+│ 20.4.0        │       1 │
+│ 21.4.0        │      24 │
+│ 21.9.0        │      11 │
+│ 21.11.0       │       4 │
+│ 22.1.0        │       3 │
+│ 22.2.0        │       5 │
+│ 22.6.0        │      15 │
+│ 25.6.0        │       2 │
+│ 25.7.0        │       2 │
+│ 25.10.0       │       4 │
+│ 25.11.0       │       6 │
+│ 25.12.0       │       1 │
+└───────────────┴─────────┘
+```
+
+## JSONExtract works with JSON type
+
+### Contributed by Fisnik Kastrati
+
+Before ClickHouse 26.3, the [`JSONExtract` function](https://clickhouse.com/docs/sql-reference/functions/json-functions#JSONExtract) could only be used to extract fields from JSON strings, as shown in the example below:
+
+<pre><code type='click-ui' language='sql'>
+WITH '{"ClickHouse":{"version":"26.3"}}' AS s
+SELECT s, toTypeName(s), JSONExtractString(s, 'ClickHouse', 'version');
+</code></pre>
+
+```shell
+┌─s─────────────────────────────────┬─toTypeName(s)─┬─JSONExtractS⋯ 'version')─┐
+│ {"ClickHouse":{"version":"26.3"}} │ String        │ 26.3                     │
+└───────────────────────────────────┴───────────────┴──────────────────────────┘
+```
+
+If you tried to use this function to extract fields from a JSON type, you’d get the following exception:
+
+<pre><code type='click-ui' language='sql'>
+WITH '{"ClickHouse":{"version":"26.3"}}'::JSON AS s
+SELECT s, toTypeName(s), JSONExtractString(s, 'ClickHouse', 'version');
+</code></pre>
+
+```shell
+Received exception:
+Code: 43. DB::Exception: The first argument of function JSONExtractString should be a string containing JSON, illegal type: JSON: In scope WITH CAST('{"ClickHouse":{"version":"26.3"}}', 'JSON') AS s SELECT JSONExtractString(s, 'ClickHouse', 'version'). (ILLEGAL_TYPE_OF_ARGUMENT)
+```
+
+If you run the same query in 26.3, it will return the following output:
+
+```shell
+┌─s─────────────────────────────────┬─toTypeName(s)─┬─JSONExtractS⋯ 'version')─┐
+│ {"ClickHouse":{"version":"26.3"}} │ JSON          │ 26.3                     │
+└───────────────────────────────────┴───────────────┴──────────────────────────┘
+```
+
+## Vertical merge for TTL DELETE
+
+### Contributed by murphy-4o
+
+In ClickHouse, every INSERT creates a new [data part](https://clickhouse.com/docs/parts) sorted by the table’s sorting key. To keep inserts [fast](https://clickhouse.com/docs/concepts/why-clickhouse-is-so-fast#storage-layer-concurrent-inserts-are-isolated-from-each-other), additional data processing is [deferred](https://clickhouse.com/docs/concepts/why-clickhouse-is-so-fast#storage-layer-merge-time-computation) to [background part merges](https://clickhouse.com/docs/merges).
+
+These merges run continuously, combining smaller parts into larger ones. In the process, ClickHouse not only improves data layout for [data skipping](https://clickhouse.com/docs/primary-indexes), but also performs maintenance work such as [replacing rows](https://clickhouse.com/blog/updates-in-clickhouse-1-purpose-built-engines), [deleting rows](https://clickhouse.com/docs/guides/developer/ttl), [updating rows](https://clickhouse.com/blog/updates-in-clickhouse-2-sql-style-updates), or [pre-aggregating data](https://clickhouse.com/docs/materialized-view/incremental-materialized-view).
+
+To perform merges efficiently, ClickHouse automatically selects one of two merge algorithms based on factors such as table width, number of rows, and data size:
+
+
+### **1. Horizontal merge**
+
+
+
+* Reads and merges **all columns together**, block by block 
+
+* Writes the merged data back to disk
+
+
+### **2. Vertical merge**
+
+
+
+* Reads and merges **only the sorting key columns first**
+
+* Temporarily records the final row order for the remaining columns
+
+* Then processes and writes **remaining columns one by one**
+
+To see the difference more clearly, let’s look at how each merge strategy works in practice.
+
+
+### Horizontal merge: simple and CPU efficient
+
+Horizontal merging is straightforward. Since all parts are already sorted by the same key, ClickHouse performs a single linear merge pass, similar to [merge sort](https://en.wikipedia.org/wiki/Merge_sort):
+
+* Parts are read sequentially 
+
+* Rows are compared on the fly 
+
+* A new merged part is written 
+
+
+The animation below illustrates this using example data parts from a table with a sorting key `(town, street)`:
+
+
+<video autoplay="1" muted="1" loop="1" controls="1">
+  <source src="https://clickhouse.com/uploads/Blog_release_26_03_animation_01_f97b6f50a5.mp4" type="video/mp4" />
+</video>
+
+The animation shows the horizontal merge process in three steps:
+
+**① Merge blocks**  
+ 
+Data from multiple parts is read in blocks and merged in memory based on the sorting key in a single linear merge pass. For simplicity, the animation shows full parts instead of block-by-block processing.
+
+**② Write blocks into a new part** 
+
+The merged data is written into a new data part. Again, the animation shows this as a single step for simplicity.
+
+**③ Deactivate old parts** 
+
+Once the merge is complete, the original parts are marked as inactive and eventually removed.
+
+> For wide tables (e.g. 100+ columns), this approach can be memory-intensive.
+
+Because merges operate on row blocks, ClickHouse must load entire blocks of wide rows into memory. The wider the table, the more expensive this becomes.
+
+To address this, ClickHouse uses an alternative merge strategy.
+
+
+### Vertical merge: memory-optimized for wide tables
+
+Vertical merging reduces memory usage by processing columns separately.
+
+The animation below shows this for a table with a sorting key `(town, street)`. For simplicity, only one additional column `price` is shown; other columns are processed the same way.
+
+
+<video autoplay="1" muted="1" loop="1" controls="1">
+  <source src="https://clickhouse.com/uploads/Blog_release_26_03_animation_02_bc2e57e442.mp4" type="video/mp4" />
+</video>
+
+The animation shows the vertical merge process in five steps:
+
+**① Merge sorting key columns first**  
+
+Data from multiple parts is read block by block and merged in memory using the sorting key in a single linear pass. For simplicity, the animation shows full columns instead of several column-blocks.
+
+**② Record row order and write key columns**  
+
+The resulting final row order is temporarily stored, and the merged sorting key columns are written to the new data part.
+
+**③ Merge next column by recorded row order** 
+
+The remaining columns are processed one by one. For each column, data is read block by block from all parts and merged according to the previously recorded final row order. The animation illustrates this as a single step and for one column only.
+
+**This combination of column-by-column and block-by-block processing is what makes vertical merges memory efficient.**
+
+**④ Add column data to the new part** 
+
+The merged column data is appended to the new data part after each column is processed.
+
+**⑤ Deactivate old parts** 
+
+Once all columns are processed, the original parts are marked as inactive and eventually removed.
+
+> This merge strategy is more efficient for wide tables, where loading all columns at once would be memory-expensive.
+
+In practice, ClickHouse uses vertical merges only when it is expected to be beneficial.
+
+
+### When does ClickHouse use vertical merge?
+
+With default settings, vertical merge becomes eligible when the to be merged parts contain at least [131,072 rows](https://clickhouse.com/docs/operations/settings/merge-tree-settings#vertical_merge_algorithm_min_rows_to_activate) in total or at least [11 non-primary-key columns](https://clickhouse.com/docs/operations/settings/merge-tree-settings#vertical_merge_algorithm_min_columns_to_activate).
+
+In other words, for merges where the memory savings are expected to outweigh the extra bookkeeping, ClickHouse automatically switches to the more memory-efficient vertical merge algorithm.
+
+This is often the case in TTL-driven workloads, where large volumes of data accumulate over time and are often stored in wide tables.
+
+
+### Efficient TTL DELETEs for wide tables
+
+In ClickHouse, you can define [TTL rules](https://clickhouse.com/docs/guides/developer/ttl) to [automatically delete table data](https://clickhouse.com/docs/engines/table-engines/mergetree-family/mergetree#mergetree-removing-expired-data) after a certain period.
+
+This is particularly useful for data that naturally ages out, such as logs, events, telemetry streams, or rolling analytics datasets.
+
+These workloads typically accumulate large volumes of data over time, and in modern observability use cases, that data is often stored as [wide events](https://clickhouse.com/blog/breaking-free-from-rising-observability-costs-with-open-cost-efficient-architectures),  with [each row containing a large number of attributes](https://clickhouse.com/blog/scaling-observability-beyond-100pb-wide-events-replacing-otel).
+
+As a result, TTL-based deletions frequently operate on large, wide tables, where merge operations become memory-intensive.
+
+As mentioned earlier, [TTL DELETE is executed during background merges](https://clickhouse.com/docs/knowledgebase/when_is_ttl_applied), even though it doesn’t combine parts, instead reading individual parts, filtering them by TTL rules, and rewriting them.
+
+> Starting with version 26.3, TTL DELETE operations can use vertical merges, reducing memory usage during these operations.
+
+This behavior is controlled by the new [vertical_merge_optimize_ttl_delete](https://clickhouse.com/docs/operations/settings/merge-tree-settings#vertical_merge_optimize_ttl_delete) MergeTree setting (enabled by default).
+
+## Async Insert by default
+
+
+### Contributed by Sema Checherinda
+
+As described in the “Vertical merge for TTL DELETE” section above, ClickHouse achieves [high insert throughput](https://clickhouse.com/docs/concepts/why-clickhouse-is-so-fast#storage-layer-concurrent-inserts-are-isolated-from-each-other) by writing independent [data parts](https://clickhouse.com/docs/parts) and [merging](https://clickhouse.com/docs/concepts/why-clickhouse-is-so-fast#storage-layer-merge-time-computation) them later in the background.
+
+Creating and merging many small parts in a short time window is resource-intensive, so [inserts should be batched for optimal performance](https://clickhouse.com/blog/asynchronous-data-inserts-in-clickhouse#data-needs-to-be-batched-for-optimal-performance).
+
+Either client-side, or you can use asynchronous inserts in ClickHouse. 
+
+[Asynchronous inserts](https://clickhouse.com/docs/optimize/asynchronous-inserts) shift data batching from the client side to the server side: data from insert queries is inserted into a buffer first and then written to storage during the next buffer flush, triggered by a timeout, accumulated data size, or number of inserts.
+
+![Screenshot 2026-04-06 at 15.02.48.png](https://clickhouse.com/uploads/Screenshot_2026_04_06_at_15_02_48_25984a0ae6.png)
+
+
+Since we originally [blogged](https://clickhouse.com/blog/asynchronous-data-inserts-in-clickhouse) about asynchronous inserts, we refined and optimized them further. 
+
+For example, since 24.2, asynchronous inserts use an [adaptive algorithm](https://clickhouse.com/blog/clickhouse-release-24-02#adaptive-asynchronous-inserts) to automatically adjust the buffer flush timeout based on the frequency of inserts. 
+
+In version 26.1, we introduced a [consistent deduplication mechanism](https://clickhouse.com/blog/clickhouse-release-26-01#deduplication-of-asynchronous-inserts-with-materialized-views) for asynchronous inserts with materialized views.
+
+**And now, starting with 26.3 LTS, asynchronous inserts are enabled by default.** 
+
+ClickHouse automatically batches small inserts, reducing the number of parts created by frequent writes, without requiring configuration changes for most users.
+
+
+## JOIN reordering for ANTI, SEMI, FULL
+
+
+### Contributed by Hechem Selmi
+
+> "When will you stop optimizing join performance?" We will never stop!
+
+It’s not just asynchronous inserts that have come a long way. JOIN reordering has also seen significant improvements in recent months (and slightly related, just last month we [improved](https://clickhouse.com/blog/clickhouse-release-26-02#faster-right-and-full-join) the performance of RIGHT OUTER and FULL OUTER JOINs).
+
+
+### Join reordering primer
+
+As a quick reminder, when multiple tables are joined, the join order does not affect correctness, but it can dramatically affect performance. Because different join orders can produce vastly different amounts of intermediate data. Since ClickHouse’s default [hash-based join algorithms](https://clickhouse.com/blog/clickhouse-fully-supports-joins-hash-joins-part2) build in-memory structures from one side of each join, choosing a join order that keeps build inputs small is critical for fast and efficient execution.
+
+
+### Evolution of JOIN reordering in ClickHouse
+
+JOIN reordering in ClickHouse has evolved significantly over recent releases:
+
+
+
+* **Local automatic join reordering** for two joined tables was introduced first, enabling the optimizer to move the smaller of both tables to the right (build) side and therefore reducing the effort needed to build the hash table. ([24.12](https://clickhouse.com/blog/clickhouse-release-24-12#automatic-join-reordering)) 
+
+* This was followed by **global automatic join reordering**, allowing efficient optimization of complex join graphs across dozens of tables and **across the most common join types** (inner, outer, cross, semi, anti). ([25.09](https://clickhouse.com/blog/clickhouse-release-25-09#join-reordering)) 
+ 
+> This resulted in significant improvements, for example, a [1,450× speedup and 25× reduction in memory usage](https://clickhouse.com/blog/clickhouse-release-25-09#benchmarks-tpc-h-results) on one TPC-H example query. 
+
+* To further improve decision-making, ClickHouse introduced **automatic column statistics**, enabling better cost estimation for join ordering. ([25.10](https://clickhouse.com/blog/clickhouse-release-25-10#automatically-build-column-statistics-for-mergetree-tables)) 
+
+* Finally, a more powerful join reordering algorithm (**DPsize**) was added for INNER JOINs, exploring a larger space of join orders and often producing more efficient execution plans. ([25.12](https://clickhouse.com/blog/clickhouse-release-25-12#faster-joins-with-a-more-powerful-join-reordering-algorithm)) 
+
+
+
+### Now: JOIN reordering for all major join types supported in ClickHouse
+
+ClickHouse can now reorder **all major [join types](https://clickhouse.com/blog/clickhouse-fully-supports-joins-part1)**, including **ANTI, SEMI, and FULL** joins.
+
+Previously limited to INNER and LEFT/RIGHT joins, the optimizer now automatically selects the most efficient build side across all major join types, producing better plans and reducing memory usage.
+
+This relies on [statistics being enabled](https://clickhouse.com/blog/clickhouse-release-25-10#automatically-build-column-statistics-for-mergetree-tables) for tables.
+
+
+## Sharded Map
+
+
+### Contributed by Pavel Kruglov
+
+This release not only introduces “Vertical merges for TTL DELETE”, an optimization particularly useful for observability workloads, but also improves the internal storage of the ClickHouse Map data type, speeding up access patterns common in those workloads.
+
+
+### Maps in observability workloads
+
+Observability data, such as [OpenTelemetry (OTEL) events](https://clickhouse.com/blog/clickhouse-and-open-telemtry), often includes a large number of [tags](https://opentelemetry.io/docs/languages/dotnet/instrumentation/). These tags are simple key–value pairs that provide additional context for each recorded event.
+
+Since tags are inherently flat, they don’t benefit from a datatype like [JSON](https://clickhouse.com/docs/sql-reference/data-types/newjson) supporting deeply nested structures.
+
+Instead, the [Map](https://clickhouse.com/docs/sql-reference/data-types/map) data type, a collection of key–value pairs, maps naturally to the tags structure.
+
+
+### How Map is stored today
+
+Internally, Map is [Array](https://clickhouse.com/docs/sql-reference/data-types/array)([Tuple](https://clickhouse.com/docs/sql-reference/data-types/tuple)(Key, Value)) in ClickHouse. The diagram below shows how two rows inserted into a table with a tags column of type Map are stored on disk.
+
+![Screenshot 2026-04-06 at 15.06.48.png](https://clickhouse.com/uploads/Screenshot_2026_04_06_at_15_06_48_a178079a8d.png)
+
+As the diagram shows, a Map column is stored on disk as two separate arrays: one containing all keys and one containing the corresponding values. Each array is paired with an offsets file, which maps entries back to the table rows they belong to.
+
+
+### The limitation
+
+In practice, queries usually access only a small subset of keys within a map. Because keys and values are stored as plain arrays without indexing, every lookup requires scanning the arrays, leading to unnecessary data reads.
+
+
+### The solution
+
+To address this, the new storage format splits map data into multiple sub-arrays by grouping keys into hash-based buckets. As a result, accessing a single key, such as `tags['status']`, requires reading only the corresponding bucket instead of the entire column.
+
+> This significantly reduces the amount of data processed for common lookup patterns.
+
+
+### No insert penalty
+
+Importantly, this optimization does not impact insert performance. New data is written using the existing format, and the bucketed layout is applied later during background merges.
+
+The next diagram sketches this for two inserts into a table with a tags column of type Map.
+
+![Screenshot 2026-04-06 at 15.07.07.png](https://clickhouse.com/uploads/Screenshot_2026_04_06_at_15_07_07_585aa5bdb3.png)
+
+The diagram shows three steps:
+
+**① Insert → Level 0 parts (default format)**
+
+Each insert creates a new [data part](https://clickhouse.com/docs/parts) using the standard Map layout: keys and values are stored as two flat arrays, without any bucketing.
+
+**② Another insert → another Level 0 part**
+
+A second insert produces another part in the same format. At this stage, all map data is still stored as full key and value arrays. 
+
+Accessing a single key would require scanning the entire arrays, but this is typically **not an issue since Level 0 parts are small**.
+
+**③ Background merge → bucketed Map storage**
+
+During the next [background merge](https://clickhouse.com/docs/merges), ClickHouse reorganizes the Map data by splitting keys into hash-based buckets. Each bucket stores a subset of keys and their corresponding values in smaller arrays.
+
+When accessing a key such as `tags['status']`, ClickHouse uses the hash of the key to locate the corresponding bucket (e.g., `bucket 3`) and reads only those arrays, significantly reducing the amount of data that needs to be scanned.
+
+
+### Performance impact
+
+In practice, this results in 2–49x faster single-key lookups depending on map size.
+
+
+### Configuration
+
+This behavior is controlled by the new [map_serialization_version](https://clickhouse.com/docs/operations/settings/merge-tree-settings#map_serialization_version) MergeTree setting set to `with_buckets`, and [max_buckets_in_map](https://clickhouse.com/docs/operations/settings/merge-tree-settings#max_buckets_in_map) specifies into how many buckets the data is split at a maximim (`32` by default). 
+
+Additional settings further control the exact layout. In the example shown in the diagram above, the bucketed structure results from the following configuration:
+
+* map_serialization_version_for_zero_level_parts = 'basic'
+* map_serialization_version = 'with_buckets'
+* max_buckets_in_map = 3
+* map_buckets_strategy = 'const'
+* map_buckets_min_avg_size = 0.
+
+
+
+
+
+---
+
+## Get started today
+
+Interested in seeing how ClickHouse works on your data? Get started with ClickHouse Cloud in minutes and receive $300 in free credits.
+
+[Sign up](https://console.clickhouse.cloud/signUp?loc=blog-cta-340-get-started-today-sign-up&utm_blogctaid=340)
+
+---
+
+---
+
+## How Respan is scaling LLM observability with ClickHouse Cloud
+Published: 2026-04-06T15:11:14+00:00
+URL: https://clickhouse.com/blog/respan-ai-llm-observability
+
+---
+title: "How Respan is scaling LLM observability with ClickHouse Cloud"
+date: "2026-04-06T15:11:14.157Z"
+author: "ClickHouse"
+category: "User stories"
+excerpt: "Respan AI uses ClickHouse Cloud to power high-throughput LLM observability across 50 million daily events. After outgrowing Postgres at 50-100 writes per second, the team migrated ingestion and analytics to ClickHouse Cloud. Incremental materialized views"
+---
+
+# How Respan is scaling LLM observability with ClickHouse Cloud
+
+## Summary
+
+- Respan uses ClickHouse Cloud to power high-throughput LLM observability across 50 million daily events.
+- After outgrowing Postgres at 50-100 writes per second, the team migrated ingestion and analytics to ClickHouse Cloud.
+- Incremental materialized views and trace aggregations keep dashboards fast even as datasets scale into the billions of rows.
+
+
+[Respan](https://www.respan.ai/) (formerly Keywords AI) is building an AI gateway with built-in observability. Designed for LLM applications running in production, the platform routes requests across models and providers while giving teams visibility into performance, evaluations, and prompt management.
+
+Part of YC’s W24 cohort, the company quickly gained traction with thousands of developers, and traffic grew from a few hundred requests per day to roughly 30 million requests per day, or close to one billion requests per month. Alongside live LLM calls, cached requests also generate observability data, pushing overall event volume even higher.
+
+Today, Respan processes around 50 million events per day. At that scale, activity is constant. "There are thousands of events going through our pipeline as we speak," said co-founder and CTO Raymond Huang at a [December 2025 meetup in San Francisco](https://clickhouse.com/videos/meetupsf_dec_20251).
+
+At the meetup, Raymond walked through a live demo showing how Respan’s backend evolved from a simple Postgres-based setup to [ClickHouse Cloud](https://clickhouse.com/cloud), which now powers high-throughput ingestion, fast analytics, and production-grade LLM observability.
+
+## From Postgres to ClickHouse
+
+Respan is a lean team with a true startup mentality. "We move fast and we build fast," Raymond says. Early on, the platform’s backend reflected that scrappy mindset: a Django app backed by Postgres, logging each request as it arrived. "One request comes in, it goes into Postgres, and we store it," Raymond explains. "It’s that simple."
+
+At low volumes, the approach worked. The system handled tens of events per second without trouble, and the mental model was easy to reason about. But as workloads climbed into the 50 to 100 requests per second range, transactions started to contend with one another.
+
+Postgres was behaving exactly as it should, serializing work to preserve correctness, but under steady write pressure, each insert had to complete its transaction and be recorded in the write-ahead log before subsequent writes could proceed. As Raymond puts it, “Things start to pile up, and from there they escalate quickly.”
+
+There was a clear mismatch between Postgres’s transactional model and the demands of real-time observability at scale. Squeezing more out of their current setup wasn’t an option, so the team decided to look for a better solution. They found it in ClickHouse Cloud.
+
+"We decided to move to ClickHouse," Raymond says. "That helped significantly. We can now easily handle the scale that we couldn’t before."
+
+## Designing logs for sustained ingestion
+
+As they began migrating to ClickHouse, the team focused on getting the schema right. They knew it could handle the write volume, but only if the data model supported it.
+
+Logs were designed to be compact and structured, storing only the fields that would actually be queried or aggregated. Metrics and metadata—latency, throughput, routing time, cost—are written as typed columns optimized for analytical workloads.
+
+Larger text fields, like prompt inputs and model outputs, are deliberately truncated before ingestion. The goal isn’t to capture full transcripts, but to preserve enough context for debugging and analysis without letting row size grow unchecked.
+
+"We don’t store big data in ClickHouse because memory efficiency is important," Raymond says. "We store minimal information so we can keep each message small and the ingestion rate as high as possible."
+
+
+---
+
+## Get started today
+
+Interested in seeing how ClickHouse works on your data? Get started with ClickHouse Cloud in minutes and receive $300 in free credits.
+
+[Sign up](https://console.clickhouse.cloud/signUp?loc=blog-cta-329-get-started-today-sign-up&utm_blogctaid=329)
+
+---
+
+## Building fast analytics with materialized views
+
+Ingesting data at scale is only useful if the analytics layer can keep up. Respan's customers expect dashboards that load quickly and support common slices of data without delay. To make that happen, the team relies heavily on [incremental materialized views](https://clickhouse.com/docs/materialized-view/incremental-materialized-view).
+
+Raw logs are first aggregated into minute-level windows, partitioned by organization, then cascaded into hourly rollups. Each materialized view targets a specific dimension—organization and API key, customer identifier, environment, deployment or model—so dashboards query pre-aggregated data instead of scanning raw logs.
+
+"This way, we don’t have to recompute all the aggregations," Raymond says. "That saves us a lot of query power."
+
+By aggregating early and limiting recomputation, the team keeps query costs predictable and avoids full-table scans as the dataset grows. “With this breakdown, we can easily grab data and have optimal performance,” Raymond adds.
+
+## Separating real-time metrics from user metadata
+
+Not every query needs to be real-time. Some dashboards require sorting and joining against user-level metadata—customer IDs, names, email addresses—alongside aggregated metrics. Grouping by every metadata column would make queries heavier and more expensive, especially as row counts grow.
+
+Instead, the team uses [refreshable materialized views](https://clickhouse.com/docs/materialized-view/refreshable-materialized-view) for this layer of analytics. These views aggregate the necessary fields and refresh on a fixed cadence—every 10 minutes in Raymond’s demo—rather than updating on every insert.
+
+"The user data doesn’t have to be real-time," Raymond explains. By separating high-frequency metrics from slightly delayed metadata, the system avoids wide [GROUP BY](https://clickhouse.com/docs/sql-reference/statements/select/group-by) clauses and keeps joins efficient.
+
+Everything is written into [MergeTree](https://clickhouse.com/docs/engines/table-engines/mergetree-family/mergetree) tables, partitioned by time, so queries can filter aggressively before joining. The result is dashboards that remain fast and sortable, even when combining behavioral metrics with user attributes.
+
+## Traces without expensive reconciliation
+
+Understanding complex LLM workflows doesn’t end with logs. Respan also supports tracing to show how individual requests move through the system. Each trace is composed of spans, which may arrive out of order in distributed environments.
+
+Rather than enforcing strict ingestion order, the system encodes relationships directly in the data. Spans reference their parents, and those relationships are resolved analytically at query time. "Everything can be asynchronous as long as eventually they meet each other in the database," Raymond says. By avoiding coordination at write time, the pipeline remains fully asynchronous.
+
+When building trace aggregations, the team is equally deliberate. They avoid using the [FINAL](https://clickhouse.com/docs/sql-reference/statements/select/from#final-modifier) modifier, which can force ClickHouse to recompute and merge large portions of a table at query time. Instead, trace metrics such as span counts, token usage, cost, and error rates are computed using aggregate functions. Functions like [argMax](https://clickhouse.com/docs/sql-reference/aggregate-functions/reference/argmax) allow the system to select the latest point-in-time values without triggering expensive full-table processing. The result is trace analytics that remain predictable and memory-efficient as span volume grows.
+
+## A system that’s easier to operate at scale
+
+As Respan’s system scaled, operational simplicity became increasingly important. One of ClickHouse’s biggest strengths, Raymond says, is the simplicity of its [indexing model](https://clickhouse.com/docs/guides/best-practices/sparse-primary-indexes), which reduces what engineers have to manage day to day.
+
+"This enables me to sort really quickly without having to worry about index-tree structure," he says. "I only have to worry about if the partition is right and whether the querying data fits into the memory. If it doesn’t, I just scale the instance—it’s that simple."
+
+That predictability extends to everyday workflows like log search. Even without relying on advanced full-text search features, straightforward string queries can scan tens of millions of rows in sub-second time. As Raymond says, "That’s pretty impressive."
+
+Today, ClickHouse underpins Respan’s observability stack from ingestion through customer-facing analytics. Most importantly, it provides a solid foundation that scales with the product, without forcing constant architectural revisions as usage grows.
+
+"Big shoutout to the ClickHouse team," Raymond says. "We built one of the best products in the LLM observability space—this wouldn’t have been possible without ClickHouse’s support."
+
+---
+
+## PostgresBench: A Reproducible Benchmark for Postgres Services
+Published: 2026-04-02T15:27:52+00:00
+URL: https://clickhouse.com/blog/postgresbench
+
+---
+title: "PostgresBench: A Reproducible Benchmark for Postgres Services"
+date: "2026-04-02T15:27:52.553Z"
+author: "Lionel Palacin"
+category: "Engineering"
+excerpt: "Discover how Postgres managed by ClickHouse compares to its peers in a reproducible, open benchmark."
+---
+
+# PostgresBench: A Reproducible Benchmark for Postgres Services
+
+For years, we have focused on building fast systems. ClickHouse is an example of that focus. Performance is not a feature we add later. It is a core design goal from the start.
+
+We applied a similar approach when building [our managed Postgres service](https://clickhouse.com/cloud/postgres). The result is offering one of the fastest managed Postgres services to our customers. Postgres handles transactional workloads, while ClickHouse handles analytical workloads. Together they form a unified data stack enabling a "[best-of-breed](https://clickhouse.com/blog/ai-redrawing-database-market#real-time_analytics)" foundation SaaS and AI applications. 
+
+With that in mind, it felt natural to evaluate it the same way we evaluate ClickHouse: with a public, reproducible benchmark.
+
+That is why we built [PostgresBench](https://postgresbench.clickhouse.com/), a benchmark to compare managed Postgres services.
+
+![CleanShot 2026-04-02 at 12.04.50.png](https://clickhouse.com/uploads/Clean_Shot_2026_04_02_at_12_04_50_54c3552a58.png)
+
+## From ClickBench to PostgresBench
+
+[ClickBench is a widely referenced OLAP benchmark](https://benchmark.clickhouse.com/). It benchmarks more than 40 databases using a transparent and reproducible methodology. All queries, datasets, and results are public and anyone can validate the numbers or submit improvements.
+
+PostgresBench applies the same methodology to transactional Postgres workloads. The rules are straightforward:
+
+-   Use a well-understood, standard workload
+-   Keep infrastructure consistent across all services tested
+-   Publish all configuration so results can be reproduced
+-   Allow anyone to submit results or flag issues
+
+If a number looks wrong, it can be checked. If a configuration is unfair, it can be fixed. That is the point.
+
+## Benchmark design
+
+### Workload
+
+PostgresBench is built on `pgbench`, the [standard Postgres benchmarking tool](https://www.postgresql.org/docs/current/pgbench.html). We use the TPC-B-like workload it includes out of the box, which simulates short concurrent transactions with frequent writes and updates. It is a reasonable proxy for common transactional patterns: payments, order processing, inventory updates, and similar workloads that hit the database hard with small, frequent writes.
+
+We chose `pgbench` deliberately. Tools like `sysbench` and `Percona TPCC` are designed originally for MySQL workloads. For a Postgres benchmark, `pgbench` feels more natural, and it ships with Postgres, which makes it easy for anyone to reproduce results without additional tooling.
+
+### Running parameters
+
+Each benchmark run uses the following parameters:
+
+```
+pgbench -c 256 -j 16 -T 600 -M prepared -P 30 \
+  -s $SCALE_FACTOR \
+  -h $PGHOST -p $PGPORT -U $PGUSER -d $PGDATABASE
+```
+
+We ran each benchmark with 256 clients and 16 threads, which reflects realistic concurrency for a production transactional workload. Each run lasts 10 minutes, long enough to move past warmup and capture stable throughput.
+
+We tested two scale factors: 6849 (~100 GB) and 34247 (~500 GB). These correspond to dataset sizes typical of real Postgres deployments: one where the app is getting started, growing quickly and working set reasonably fits in cache and the other that has achieved reasonable scale, is growing and working set starts spilling to disk The gap between results at these two sizes tells you something useful about how a service handles storage pressure as data grows.
+
+### Metrics captured
+
+We report average TPS, average latency, P95 latency, and P99 latency across all three runs per configuration. We publish the ranking for the best and worst run, and the details of each individual run are available in the repository.
+
+## Fairness
+
+No benchmark is perfectly neutral. Every choice, from instance type to Postgres configuration, can favor one system over another. We explain our thinking behind each decision below, and document the exact settings used for each system in the benchmark repository alongside the results.
+
+### Client machine setup
+
+We provisioned a 16 vCPU, 64 GB instance in the us-east-2 region to run the benchmark client, sized to ensure the client is never the bottleneck. All services were tested in the same region, so results reflect only database performance, not cross-region network latency. We also do not colocate client and database by availability zone, since not all services offer this capability. However, to ensure fairness for those that do, this is something we may consider adding in the future. [Contributions are welcome](https://github.com/ClickHouse/PostgresBench/issues).
+
+### Instance selection
+
+For most services, we targeted a 1:4 CPU-to-RAM ratio and tested two sizes: 4 vCPUs/16GB RAM and 16 vCPUS/64GB RAM. Aurora does not offer an instance class that provides this ratio so we used a 1:8 ratio at two sizes as well: 4 vCPUs/32 GB RAM and 16 vCPUS/128 GB RAM.
+
+We used [Graviton instances](https://en.wikipedia.org/wiki/AWS_Graviton) with NVMe caching for all services that support them, including AWS RDS and Aurora. This gives competitors the same hardware advantage, even though NVMe in those cases is used for caching rather than primary storage.
+
+### Single-node
+
+While all services offer high availability, the underlying architectures differ. Some use standby replication, others use shared or distributed storage layers. Since we are focused on single-node compute and storage performance, we tested without HA enabled to isolate that. We may add HA configurations as a separate dimension in the future.
+
+### Default Postgres configuration
+
+We do not modify default PostgreSQL configurations across services; each system is tested using its out-of-the-box settings. This reflects typical user behavior, where most expect performance without tuning. We may incorporate Postgres configs as an additional dimension in the future.
+
+### A note on pricing
+
+We did not compare pricing. Postgres managed by ClickHouse had not yet been released at the time of testing. We expect pricing to be competitive for similar hardware profiles and you'll be able to extrapolate price-performance from the results here once it is available.
+
+## The first cohort
+
+### Systems included
+
+The first release of PostgresBench covers five services, each tested in two instance configurations: a smaller 4 vCPU / 16 GB setup and a larger 16 vCPU / 64 GB setup, or equivalent. This lets us observe how each service scales with more resources, not just how it performs at a single point.
+
+All services were tested in us-east-2 with HA disabled, using Postgres 17 or 18 depending on what each provider supports. Aurora is the only service in this cohort still on Postgres 17 at time of testing.
+
+| System | T-shirt size | Instance | vCPUs | RAM | Instance storage | Primary storage |
+| :---- | :---- | :---- | :---- | :---- | :---- | :---- |
+| Postgres managed by ClickHouse  | Small | m8gd.xlarge | 4 | 16 GB | 237 GB \- NVMe | NVMe |
+| Postgres managed by ClickHouse  | Large | m8gd.4xlarge | 16 | 64 GB | 950 GB \- NVMe | NVMe |
+| AWS Aurora PostgreSQL | Small | db.r6gd.xlarge | 4 | 32 GB | 237 GB \- NVMe | Aurora storage |
+| AWS Aurora PostgreSQL | Large | db.r6g.4xlarge | 16 | 128 GB | 950 GB \- NVMe | Aurora storage |
+| AWS RDS for PostgreSQL | Small | db.m8gd.xlarge | 4 | 16 GB | 237 GB \- NVMe | 1000 GB \- GP3 (16K IOPS) |
+| AWS RDS for PostgreSQL | Large | db.m8gd.4xlarge | 16 | 64 GB | 950 GB \- NVMe | 1000 GB \- GP3 (16K IOPS) |
+| Neon | Small | Serverless | 4 | 16 GB | N/A | N/A |
+| Neon | Large | Serverless | 16 | 64 GB | N/A | N/A |
+| Crunchy Bridge | Small | Standard-16 | 4 | 16 GB | N/A | 6,000 Baseline IOPS / 40,000 Maximum IOPS  |
+| Crunchy Bridge | Large | Standard-64 | 16 | 64 GB | N/A | 20,000 Baseline IOPS/ 40,000 Maximum IOPS |
+
+### Results
+
+The same script runs the same benchmark on all systems. Each run is done in isolation, no other concurrent processes are running on the machine or the database. Below is a summary table of the results. All results are available on PostgresBench. 
+
+**Scale factor 6849 (\~100 GB)**
+
+| Service | T-shirt size | TPS | Avg Latency (ms) | P95 (ms) | P99 (ms) |
+| :---- | :---- | ----- | ----- | ----- | ----- |
+| Postgres managed by Clickhouse | Small | 6172 | 41.466 | 64.027 | 80.89 |
+| Postgres managed by Clickhouse | Large | 28668 | 8.908 | 10.231 | 11.683 |
+| AWS Aurora | Small | 2685 | 95.297 | 165.546 | 298.391 |
+| AWS Aurora | Large | 12628 | 20.242 | 30.972 | 39.044 |
+| AWS RDS | Small | 4882 | 52.419 | 98.005 | 124.198 |
+| AWS RDS | Large | 8133 | 31.435 | 72.509 | 97.688 |
+| Neon | Small | 2847 | 89.907 | 106.145 | 116.473 |
+| Neon | Large | 8563 | 29.832 | 41.423 | 49.213 |
+| Crunchy Bridge | Small | 6338 | 40.376 | 66.109 | 85.837 |
+| Crunchy Bridge | Large | 14790 | 17.269 | 28.322 | 34.61 |
+
+**Scale factor 34247 (\~500 GB)**
+
+| Service | T-shirt size | TPS | Avg Latency (ms) | P95 (ms) | P99 (ms) |
+| :---- | :---- | ----- | ----- | ----- | ----- |
+| Postgres managedby Clickhouse | Large | 26328 | 9.703 | 11.402 | 13.197 |
+| AWS Aurora | Large | 10402 | 24.581 | 36.178 | 46.493 |
+| AWS RDS | Large | 5092 | 50.239 | 88.656 | 117.905 |
+| Neon | Large | 7802 | 32.804 | 47.539 | 56.302 |
+| Crunchy Bridge | Large | 11113 | 22.996 | 36.402 | 41.683 |
+
+
+
+
+---
+
+## Get started with our native Postgres Service
+
+To try ClickHouse's native Postgres service, sign up for Private Preview using this link.
+
+[Sign up](https://clickhouse.com/cloud/postgres?loc=blog-cta-318-get-started-with-our-native-postgres-service-sign-up&utm_blogctaid=318)
+
+---
+
+## Why Postgres managed by ClickHouse leads this benchmark
+
+The TPC-B workload blends both read and write operations and can become I/O-intensive due to continuous DML (UPDATE) activity generating WAL records. This pattern is typical of fast-growing OLTP workloads, where sustained write activity drives WAL generation and makes disk performance a critical dimension for Postgres performance.
+
+Postgres managed by ClickHouse is backed by NVMe storage that is physically co-located with compute. This enables microsecond-scale disk access latency, rather than milliseconds, along with consistently high IOPS that are neither shared across tenants nor constrained by network bandwidth. As a result, it can deliver significantly better performance than architectures built on shared storage, such as EBS or object storage, without compromising [availability](https://clickhouse.com/blog/enterprise-postgres-service-in-clickhouse-cloud?loc=postgresWeek5#cross-az-ha) or [durability](https://clickhouse.com/blog/enterprise-postgres-service-in-clickhouse-cloud?loc=postgresWeek5#backups-pitr-and-forks) 
+
+In contrast, alternatives like EBS-backed volumes introduce network latency into the I/O path. While reads may benefit from the kernel page cache, every `fsync`, including transaction commits, must still be acknowledged by the remote storage layer. For write-heavy workloads like the one used in this benchmark, that per-commit overhead accumulates quickly and directly impacts performance.
+
+> TL;DR: Most of the time, Postgres isn’t slow, your storage is. Stay tuned for a deeper technical dive on this topic coming soon.
+
+The image below shows the reduction in P99 latency for disk-bound workloads when moving from traditional Postgres to NVMe-backed Postgres.
+
+![postgres-launch-1.png](https://clickhouse.com/uploads/postgres_launch_1_5e02d22e1a.png)
+
+> For Postgres workloads that are primarily throttled by disk IOPS and latency, this architectural difference is a decisive factor. The benchmark results reflect that directly.
+
+## Built to be verified
+
+The full benchmark repository is open source. 
+
+Publishing structured JSON for every run means results can be compared programmatically, not just visually. The repository includes, script to run the benchmark and all raw results. If a configuration is incorrect or gives an unfair advantage to any service, it can be reviewed and corrected in the open. 
+
+The repository is available at [github.com/ClickHouse/PostgresBench](http://github.com/ClickHouse/PostgresBench).
+
+### Submit results
+
+To run the benchmark against your own instance, simply execute this command. It takes between 30 and 40 minutes to run. 
+
+```
+# Set connection parameters
+export PGHOST="your-database-host"
+export PGPORT=5432
+export PGUSER="postgres"
+export PGPASSWORD="your-password"
+export PGDATABASE="postgres"
+
+# Required: instance hardware details
+export VCPUS=16
+export RAM_GB=64
+
+# Required: instance metadata
+export SYSTEM_NAME="Postgres by ClickHouse"
+export INSTANCE_TYPE="m8gd.4xlarge"       
+export INSTANCE_STORAGE="950 GB - NVMe"  
+export PRIMARY_STORAGE="NVMe"  
+          
+# Optional: output
+export OUT_JSON="results.json"   # Output file name (default: oltpbench_result.json)
+
+# Run the benchmark
+./run.sh
+```
+
+The script handles the data initialization, runs the benchmark three times and writes the result in a JSON file. 
+
+To add your system:
+
+1. Clone the benchmark repository  
+2. Follow the documented infrastructure setup to match the tested instance specs  
+3. Run `run.sh` with the published parameters  
+4. Create a Pull-Request to submit your results  
+5. We will review the configuration and publish the results
+
+## PostgresBench is live
+
+[PostgresBench](https://postgresbench.clickhouse.com/) is now live, with all benchmark results publicly available to explore and compare. 
+
+Interested in adding your system to the board? Contributions are welcome! Clone the [repository](https://github.com/ClickHouse/PostgresBench), run the benchmark, submit your results, and help make this the most complete Postgres performance reference available.
+
+---
+
+## Get started with our native Postgres Service
+
+To try ClickHouse's native Postgres service, sign up for Private Preview using this link.
+
+[Sign up](https://clickhouse.com/cloud/postgres?loc=blog-cta-319-get-started-with-our-native-postgres-service-sign-up&utm_blogctaid=319)
+
+---
+
+---
+
+## We taught ClickStack to read your logs like a detective novel
+Published: 2026-04-02T08:49:37+00:00
+URL: https://clickhouse.com/blog/clickstack-read-logs-detective-novel
+
+---
+title: "We taught ClickStack to read your logs like a detective novel"
+date: "2026-04-02T08:49:37.240Z"
+author: "The ClickStack Team"
+category: "Engineering"
+excerpt: "ClickStack gets a literary upgrade with \"AI Summarize\", transforming raw logs into vivid, story-driven narratives that finally explain what's really happening in your systems."
+---
+
+# We taught ClickStack to read your logs like a detective novel
+
+## We taught ClickStack to read your logs like a detective novel
+
+If you've ever been paged at 3am and stared at a wall of `EmptyCartAsync called with userId=a0cd950c-39ec-11f0-8ddd-a2eca416a8a4` wondering what it means for the business -- you're not alone.
+
+Logs are written by machines, for machines. Traces are trees of span with nanosecond timestamps. Log patterns are clusters of identical messages that tell you *something* is happening 113,526 times but won't tell you *why you should care*. The gap between raw telemetry and human understanding is where SRE time goes to die.
+
+Today we're shipping **AI Summarize** -- a new feature in HyperDX that generates narrative summaries of your logs, traces, and log patterns. It works on any event in the side panel and on the pattern drawer. One click, and your cryptic span becomes a story.
+
+## What It Looks Like
+
+Open any log entry, trace span, or log pattern in HyperDX. You'll see a new **Summarize** button below the event body. Click it, and after a brief analysis you get something like this:
+
+![april_fools_ai_clickstack_1.png](https://clickhouse.com/uploads/april_fools_ai_clickstack_1_112d4f71ce.png)
+
+Or maybe you'll get David Attenborough narrating your checkout flow:
+
+![april_fools_ai_clickstack_2.png](https://clickhouse.com/uploads/april_fools_ai_clickstack_2_2b7d270393.png)
+
+Or Shakespeare lamenting your latency:
+
+![april_fools_ai_clickstack_3.png](https://clickhouse.com/uploads/april_fools_ai_clickstack_3_01357825e5.png)
+
+Hit **Regenerate** to get a new version. The theme adapts to context -- errors get Detective Noir, performance issues get Shakespearean Drama, and normal info events get the Nature Documentary treatment.
+
+## It knows your stack
+
+The summaries aren't random mad-libs. AI Summarize understands the OpenTelemetry and Kubernetes attributes already present in your telemetry -- service names, versions, HTTP endpoints, database systems, RPC calls, exceptions, pod names, namespaces, durations, and more. It reads what's there and weaves it into the narrative.
+
+A 1ms Redis call gets *"extraordinarily swift -- the peregrine falcon of API calls, diving at breathtaking speed."* A checkout span that errors out with a cache exception gets *"Then I found the body -- the kind of exception that ends careers and starts postmortems."* A 5-second database query gets *"an age! Methinks the user doth grow weary, staring at the spinning wheel of fortune."*
+
+The mood adapts too. Errors and exceptions trigger darker themes. Warnings get suspicious. Healthy spans get the nature documentary they deserve.
+
+For **log patterns**, the summary incorporates the repeat count -- because a message that appears 113,526 times deserves to be called out:
+
+*"Hark! A refrain most persistent: 'EmptyCartAsync called with &lt;*>'. 113,526 times it echoes through the cluster, like a chorus that hath forgotten how to stop."*
+
+## Zero tokens. Zero data sharing. Zero cost.
+
+Here's the part we're most proud of: **AI Summarize doesn't use any LLM.** There is no API call to OpenAI, Anthropic, or any other provider. No tokens are consumed. Your data never leaves the browser.
+
+The summaries are generated entirely on the client side using hand-written phrase pools and OTel-aware data extraction. The "AI" in "AI Summarize" stands for "Artisanally Improvised."
+
+This means:
+
+* **No cost** -- works on every HyperDX deployment, open source or cloud, with no AI API key required
+* **No privacy concerns** -- event data stays in your browser tab, never sent to a third-party model
+* **No latency** -- the ~2 second "analysis" delay is theatrical, not computational
+* **No hallucinations** -- every fact in the summary comes directly from your event attributes
+
+Click the `(i)` icon next to any summary to see the disclosure. If the feature isn't for you, the same popover has a "Don't show again" link that persists via localStorage.
+
+## Try it
+
+**AI Summarize** is going live today in HyperDX. Open any log, trace, or pattern and look for the sparkle icon.
+
+After the first week the button is hidden by default to keep the UI clean, but you can bring it back anytime by adding `?smart=true` to your HyperDX URL. It stays active through the end of April 2026.
+
+We're also evaluating a version that uses actual AI on the backend -- the infrastructure is already in place. If you'd like to see real LLM-powered summaries as a permanent feature, let us know on [GitHub](https://github.com/hyperdxio/hyperdx) in [Slack](https://clickhousedb.slack.com/archives/C09GJFL66FK).
+
+Happy April Fools! The joke is the delivery, not the feature. Every fact in the summary comes from your real OTel attributes. Every Kubernetes pod name is accurate. We just thought your 3am pages deserved better writing.
+
+*"We are such stuff as spans are made on, and our little traces are rounded with a timeout."*
+
+
+---
+
+## Rill and ClickHouse: real-time operational BI for a metered world
+Published: 2026-04-01T17:42:05+00:00
+URL: https://clickhouse.com/blog/rill
+
+---
+title: "Rill and ClickHouse: real-time operational BI for a metered world"
+date: "2026-04-01T17:42:05.926Z"
+author: "ClickHouse"
+category: "User stories"
+excerpt: "Rill uses ClickHouse to power real-time operational BI for 100B+ daily events, enabling instant exploration and conversational analytics directly against live datasets through a declarative, BI-as-code workflow."
+---
+
+# Rill and ClickHouse: real-time operational BI for a metered world
+
+Modern business is becoming increasingly granular. Cloud providers record usage down to individual operations. Payment platforms track transactions in real time. AI systems meter tokens, requests, and compute consumption. What started as observability inside IT systems has spilled outward, turning the rest of the business into a living stream of events.
+
+"We have this sort of mirror digital universe, where everything we do is an event," says Mike Driscoll, co-founder and CEO of [Rill](https://www.rilldata.com/), an operational BI-as-code tool focused on [real-time analytics](https://clickhouse.com/resources/engineering/what-is-real-time-analytics). "And when we have this data, we want to make sense of it."
+
+As Mike puts it, the challenge isn't collecting data so much as understanding how it fits together. A company might see cloud costs in AWS or Google Cloud, revenue in Stripe, and product usage tracked somewhere else entirely, yet none of these systems explain how the business is doing as a whole. "You can't rely on another company's dashboard to make sense of your business," he says. "Ultimately, you have to integrate all of that data yourself."
+
+BI tools like Rill have emerged as a way to bridge that gap, bringing operational and financial data together so teams can understand what they're spending and why. But that approach requires analytics systems capable of aggregating huge volumes of data quickly and efficiently. "ClickHouse is amazing at doing aggregation at massive scale," Mike says.
+
+At a [December 2025 ClickHouse meetup in San Francisco](https://clickhouse.com/videos/meetupsf_dec_20253), Mike shared how Rill combines declarative ingestion with dlt, high-performance aggregation in ClickHouse, and a metrics-first operational BI layer to build a system designed to make sense of a metered world.
+
+<iframe width="768" height="432" src="https://www.youtube.com/embed/ejOKXO2159M" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe>
+
+## A fast BI tool for real-time databases
+
+Rill's approach to analytics grew out of more than a decade spent working on real-time event data at scale. In 2010, Mike co-founded Metamarkets, the company behind Apache Druid, one of the first databases built for interactive analytics on streaming data. After Metamarkets was acquired by Snap in 2017, Mike and Nishant Bangarwa founded Rill in 2020, applying what they had learned building analytics infrastructure to rethink BI for a real-time world.
+
+Today, Rill processes more than 100 billion daily events across thousands of users, serving digital media giants such as Bloomberg and Comcast, large enterprises like AT&T, and a growing number of fintech and ecommerce companies. "A lot of our customers look like the kinds of customers that love and use ClickHouse," Mike says. "So it's no accident that we found a great fit using ClickHouse as our database."
+
+Rill takes a BI-as-code, developer-friendly, and agent-first approach. Data sources, transformations, and business logic are defined as code, allowing teams to develop with modern tools like Cursor, version changes through Git, and deploy analytics the same way they ship software. "We really are proponents of this declarative data stack," Mike says. "Between SQL and YAML, you can build [data applications](https://clickhouse.com/resources/engineering/data-application), not just dashboards."
+
+That philosophy extends into Rill's metrics-first design. Teams declare metrics using SQL expressions, creating a shared semantic layer from which dashboards are generated, not created. As Mike says, this becomes increasingly relevant as AI and conversational analytics enter the workflow. "SQL is valuable," he explains, "but it turns out agents do a lot better when they've got something like a semantic layer to interact with."
+
+Underneath it all is real-time performance. Traditional BI tools often treat heavy queries as something to be avoided, relying on caching to keep dashboards responsive. "But when you're using something like ClickHouse," Mike says, "there's no need to avoid hitting the dashboard hundreds or thousands of times." For Rill's customers, that translates into instant drilling, slicing, and dicing, alongside fast conversational agents that operate directly on live data.
+
+As Mike puts it, "Because we've built around a real-time database like ClickHouse, we're able to do things other dashboards wouldn't even attempt to do."
+
+## Inside Rill's ClickHouse-based architecture
+
+Rill's architecture keeps analytics close to the database while defining everything else as code. Instead of introducing new layers between ingestion, modeling, and analysis, the system connects them into a single workflow built around declarative configuration.
+
+![](https://clickhouse.com/uploads/Rill_User_Story_Issue_1250_0_7064f28ae6.png)
+
+*Rill's architecture: declarative data ingestion, ClickHouse-powered aggregation, and operational BI.*
+
+Data ingestion is orchestrated using software like dlt (data load tool), an open-source Python framework for declarative data loading. Operational databases, object stores, data lakes, and warehouses are extracted through reusable connectors, with transformations and source credentials defined in SQL and YAML. Rather than maintaining custom pipelines, teams describe how data should move, and dlt handles extraction and loading into ClickHouse automatically.
+
+Once loaded, ClickHouse serves as the [analytical engine](https://clickhouse.com/resources/engineering/what-is-columnar-database), with queries executing directly against large-scale event data. Business logic is expressed through measure expressions and dimension metadata, compiled into SQL models that power aggregations at query time. These definitions form the shared metrics layer, ensuring dashboards, APIs, and programmatic access all rely on the same logic.
+
+Atop this foundation sits Rill's operational BI layer, where role-based security policies and dashboard configurations are also defined as code. Because dashboards are generated from metric definitions rather than built manually, analytics applications remain lightweight interfaces querying ClickHouse in real time.
+
+The result is a composable system where data flows from source systems into ClickHouse, delivering interactive analysis to product, operations, and finance teams, as well as external partners, without duplicating business logic across tools.
+
+## How BI-as-code works in practice
+
+At the meetup in San Francisco, Mike fired up his laptop and walked through a live demo. "We were inspired by how easy it is to launch ClickHouse on your local machine," he said, noting that, like ClickHouse, Rill lets developers start a local instance that runs in the browser, connecting to either a local ClickHouse database or [ClickHouse Cloud](https://clickhouse.com/cloud).
+
+The demo centered around three core building blocks inside Rill: sources, metrics, and dashboards. Mike began by loading roughly a million rows of Google Cloud usage data from a Parquet file. He then used an agent-assisted workflow to generate the YAML configuration needed to ingest the dataset into ClickHouse.
+
+Once connected, Rill analyzed the table structure and generated metric definitions and dashboards automatically. Within seconds, he could explore cloud spending trends—drilling into services, zooming across time ranges, and slicing costs by dimension—all backed by ClickHouse queries. "What's great is how easy and fast it is," Mike says.
+
+With Rill, developers can use AI-assisted coding tools to define configurations as code. In his demo, Mike used Cursor to generate ingestion syntax, adjust formatting, and modify dashboards. Tasks that once required extensive UI configuration, like changing currency formatting across dashboards, can be done in seconds. "That's the difference between BI-as-clicks and BI-as-code," he says.
+
+As Mike explained, development happens locally first. Teams iterate against small data partitions, validate metrics, and commit changes to Git before deploying to the cloud. Once deployed, the same definitions power conversational analytics layered on top of the data.
+
+Mike demonstrated this by asking natural-language questions about cost increases across cloud providers. While conversational BI, he notes, has become relatively common ("everyone's seen a demo of a chatbot slapped over some data"), he emphasized two constraints that determine whether it actually works in practice.
+
+First, text-to-SQL approaches don't always scale in real production environments. "If you've got hundreds of tables, you just see the agent get lost," Mike says. "It's like throwing a data engineer at a problem and saying, 'Hey, figure out why our cloud costs are up.'"
+
+Second, interaction speed matters as much as correctness. "You've got to have high performance in the back end," he says. "If you were to throw Rill at [Snowflake or Redshift or BigQuery](https://clickhouse.com/resources/engineering/top-5-cloud-data-warehouses), the answers would just take forever to come back."
+
+At the end of the day, trust comes from traceability as much as intelligence. In Rill, each generated insight links back to the underlying dashboard and query results, allowing users to verify conclusions rather than treating AI responses as opaque outputs. "You've got to have trustworthy results," Mike says. "You've got to have verifiability."
+
+## Analytics for a fully metered world
+
+Imagine the workflow Mike described running continuously inside a real organization. Cloud billing exports land in object storage, operational data flows in from APIs, and declarative pipelines stream everything into ClickHouse, where aggregations happen in real time. Metrics defined once become dashboards automatically, and teams across product, operations, and finance explore the same underlying data through a shared analytical layer.
+
+What once required a patchwork of ETL jobs, semantic layers, and dashboard tooling converges into a unified workflow, defined and maintained largely as code.
+
+![](https://clickhouse.com/uploads/Rill_User_Story_Issue_1250_1_59c5095254.png)
+
+*FinOps in practice: declarative ingestion, real-time aggregation, and operational BI in Rill.*
+
+Taken together, Rill and ClickHouse point toward a new model for analytics, built for a world where every business process generates events. Teams can stay on top of operations by querying live systems, iterating locally, and deploying analytical logic the same way they ship software.
+
+As organizations become increasingly measured in real time, analytics shifts from retrospective reporting to operational decision-making. Declarative data movement, high-performance aggregation, and metrics-first design make it possible to treat analytics not as a separate destination, but as infrastructure running alongside the business itself.
+
+---
+
+## Get started today
+
+Interested in seeing how ClickHouse works on your data? Get started with ClickHouse Cloud in minutes and receive $300 in free credits.
+
+[Sign up](https://console.clickhouse.cloud/signUp?loc=blog-cta-297-get-started-today-sign-up&utm_blogctaid=297)
+
+---
+
+---
+
+## Agentic coding at ClickHouse
+Published: 2026-04-01T17:20:23+00:00
+URL: https://clickhouse.com/blog/agentic-coding
+
+---
+title: "Agentic coding at ClickHouse"
+date: "2026-04-01T17:20:23.441Z"
+author: "Alexey Milovidov"
+category: "Engineering"
+excerpt: "How to remain competitive in the AI era of software engineering"
+---
+
+# Agentic coding at ClickHouse
+
+First coding models and agents are just one year old, and today there are polarized opinions about the use of agentic coding in practice. Some people will tell you that agents will take over all our jobs, and some will tell you that coding agents are totally useless. Some people hate AI for reasons, and there are people who have long gone into AI-psychosis. And if you read the news, it does not help either: every day it is a kaleidoscope of new frontier models, more advanced tools, new research and breakthroughs, tremendous results on benchmarks, and at the same time, low-quality code, security vulnerabilities, studies showing negative economic impact, and modest results of autonomous agents on real jobs. In many companies, leadership tries to mandate the use of AI, while employees feel confused and insecure.
+
+I want to avoid this confusion and make it clearer. We use coding agents in ClickHouse, and they are a great tool for certain scenarios.
+
+Note: I don't use AI for writing texts, because I don't like it. I write texts very slowly, but it's my approach.
+
+
+## Safe assumptions
+
+Before we start, let me make some assumptions. These assumptions are likely incorrect, and it is difficult to reason about them, but taking them lets us remain sane in further discussion.
+
+Large language models are not sentient. They don't have consciousness, qualia, or a soul. AGI is not going to happen soon, nor is superintelligence. Safe AI does not exist and is not possible. AI will not replace all the jobs. It will replace some of them. Maybe it will replace your job, though if you are reading this article, it is [less likely](https://en.wikipedia.org/wiki/Bayesian_inference).
+
+
+## Why now?
+
+Claude Code appeared in February 2025. When I tested it a year ago, it had limited use. It could successfully generate small JavaScript applications, especially those written many times before, and it can write one-off Python and shell scripts. It helped me with various boilerplate tasks in small repositories, e.g., [ClickBench](https://github.com/ClickHouse/ClickBench/pull/596). But when I tried it on our main [C++ code base](https://github.com/ClickHouse/ClickHouse) it got lost and produced undesirable code.
+
+Anyway, there are many such boilerplate tasks, and even one year ago, the agents were useful - we needed them in the company. So we signed contracts with Anthropic, Windsurf, and Cursor (it took some time to resolve all legal and security questions, and many questions required reconciliation inside the company).
+
+We started using it, not only for boilerplate, but for vibe-coding internal tools, such as performance tests and release status dashboards. We also introduced our own agents: [DWAINE](https://clickhouse.com/blog/agenthouse-demo-clickhouse-llm-mcp), **CAISER**, and **TRAISA** (the names are weird, because they were AI-generated), plus an agent in the SQL console and AI SRE, and it was so difficult to stop that we [acquired Librechat](https://clickhouse.com/blog/librechat-open-source-agentic-data-stack) and [Langfuse](https://clickhouse.com/blog/langfuse-and-clickhouse-a-new-data-stack-for-modern-llm-applications) for AI observability.
+
+Claude Sonnet 4.5 (Sept 2025) was a big step in quality - as an example, the [Team Productivity Dashboard](https://velocity.clickhouse.com/) was built in a session with 112 prompts, which I also recorded, so you can [navigate through all the steps](https://velocity.clickhouse.com/history/).
+
+Even then, it was doubtful for the main ClickHouse C++ code base. In October 2025, at the all-company offsite, we were discussing mostly [sporadic usage examples](https://github.com/ClickHouse/ClickHouse/pull/80857#issuecomment-3508492999) of agents for very limited tasks, and half of the team didn't use coding agents ever before. So the question - are coding agents good for the backend C++ development?
+
+
+## It's easy to be skeptical
+
+There is a common story - if you tried an agent half a year ago on your precious code base, it didn't solve the task and produced bad code, and you went disappointed... Similarly, if you open an agent and type "prove the Riemann hypothesis", you might be disappointed - AI is not that good (yet).
+
+So you might think - okay, agents are good at JavaScript, but are they good at my precious backend code? Okay, agents are good at backend code in Python, but am I safe handcrafting my code in Rust? Okay, agents are good at server-side code in Rust, but for sure, they can't replace me, painstakingly avoiding segmentation faults in my hairy C++ code base for managing nuclear plants? Please don't think so - today there are **no exceptions, everyone is affected**.
+
+My impression of what coding agents can do changed with the introduction of Claude Opus 4.5 in November 2025. I tried it on simple, over-specified tasks in ClickHouse's C++ source, then tried on investigation of bug reports from the CI logs, then tried it on small features... It exceeded my expectations every time. Since Opus 4.5, agents have been fully usable for daily work on large C++ code bases.
+
+Year 2025 was revolutionary for coding agents with the introduction of these tools and models, and year 2026 has a chance to become a year of productivity, as we now have extremely capable models and mature tools ready for everyday work. It was okay to be skeptical in 2025, but skeptics won't survive 2026.
+
+![Screenshot_20260401_072810-1.png](https://clickhouse.com/uploads/Screenshot_20260401_072810_1_f2b66fef4d.png)
+
+
+## Levels of AI coding
+
+Agentic coding is a case of AI-assisted coding, and there are three levels of it:
+
+**Level 1**, a.k.a. "copy-pasting from ChatGPT": Asking a model and copy-pasting code snippets from a chat. This is a valid case of AI-assisted coding, and it is still okay for exploration. You might have been using it since 2023. But compared to agents, it is obsolete.
+
+**Level 2**: using agents in the command line or in your IDE, either hand-holding agents or vibe coding. We are here.
+
+**Level 3**: running multiple agents in isolated environments, running loops with automatic feedback, spec-driven development, orchestrating multi-agent setups... We do have a few examples of autonomous coding agents at ClickHouse, but we are just approaching this level. Tools for this type of work only start to emerge, and the results of long autonomous loops can be dubious.
+
+
+## Available tools
+
+We have plenty of tools available in the company. For CLI agents, we use mostly Claude Code with Opus 4.6, but some people prefer Codex CLI with Codex 5.4. Every model provider has frequent downtimes, so being ready to switch between them is a must. We use Copilot CLI for some scripts, we have Gemini CLI, but for some reason, Gemini models today don't show good results. A few people use OpenCode.
+
+It is a good practice to have a terminal with a CLI agent and an IDE open for reading code. But some people use integrated agents in Cursor, Windsurf (for a reason I prefer not to tell, we use both of them), or inside VSCode. I use CLion for reading code, but it is so slow and bulky, and often hangs for minutes, that I can't trust it to run agents.
+
+Just to note, there are plenty of coding platforms as services: Replit, Lovable, v0, Bolt, Devin... Most of them are ClickHouse customers. These platforms are mostly usable as a replacement for outsourcing when you are ready to outsource the development of something that is outside of the company's core competence. A huge market if done right. We don't use these tools for our work.
+
+**OpenClaw** deserves a mention. It's not allowed to install OpenClaw on work machines, for security reasons (and we have endpoint security to control that). But we already have a few instances of OpenClaw running on isolated machines with limited access - both for engineering and non-engineering teams.
+
+![openclaw.png](https://clickhouse.com/uploads/openclaw_bca1c8331b.png)
+
+My recommendations if you want to start: use Claude Code in the terminal, keep Codex as a backup option.
+
+
+### Why prefer CLI agents over IDE?
+
+Claude Code is a very powerful tool, but it can be slow, and it has bugs and glitches. I still recommend using it over integrated agents. To explain why, let's see an incomplete list of what Claude Code can do:
+
+- write a plan and enter plan mode;
+- ask a user questions for clarification;
+- manage context: compact the conversation on context shortage;
+- launch subagents;
+- do multiple tasks in parallel in one session;
+- invoke smaller models for tasks;
+- research your code base;
+- search on the web;
+- call your tools;
+- admit lack of confidence;
+- use skills; write new skills;
+- read and grep logs; query your database; use GitHub;
+- build your code, use clangd to write correct code;
+- commit and push changes, monitor and look at CI reports;
+
+TLDR: today, you get most of the frontier features from CLI agents.
+
+
+## Usage scenarios at ClickHouse
+
+I don't want to have a top-down mandate on AI usage, it does not make sense and can [lead to disaster](https://x.com/PawelHuryn/status/2031629378547769446). There is no point in using AI for the sake of using AI. Instead, I want to motivate people using examples from my own practice.
+
+All these examples are from the ClickHouse open-source repository and other open-source repositories.
+
+To show these examples inside the company, I've also vibe-coded a mini-service to view and share Claude Code sessions, it is [named "Alexey Prompts"](https://github.com/ClickHouse/alexeyprompts). For privacy reasons, I'm not going to share these 3000 sessions with 27 billion tokens, but you can use the tool for yourself.
+
+![screenshot.png](https://clickhouse.com/uploads/screenshot_1809e75b18.png)
+
+
+### Typing the code for you
+
+You are an experienced engineer, and you know your code base perfectly. You care about the code, you want it to be simple and beautiful... You can still use coding agents! Just tell exactly which files to edit, which functions to write, and how, and what code to remove. The agents will do the most boring part of the job - writing code.
+
+For me, typing the code requires a big display, a decent mechanical keyboard and mouse, an IDE that I have used to, and plenty of time. But what to do if you sit somewhere with a laptop? Then you can ask an agent, and it will do the job. With an agent, even a tiny, cramped laptop can be tolerated, and you get the job done sooner.
+
+![Screenshot_20260401_073139.png](https://clickhouse.com/uploads/Screenshot_20260401_073139_11608e628c.png)
+
+
+### Finishing stale pull requests
+
+In this example, I was reviewing the code of an external contributor. We iterated over a lot of feedback, and I asked to rewrite probably the latest piece of the code to make it ready for merge. But then the contributor disappeared somewhere - maybe they had a newborn child, I don't know - that's understandable. But now I don't have to wait for the kid to grow up, I can ask an agent to finish the pull request.
+
+
+### Writing boilerplate code and integrations
+
+When you need to apply a repetitive change in many places, such as build systems... - do it with an agent! There is no sense in doing it manually; you gain nothing from doing that. Agents will perform the task with fewer errors. This scenario is perfect to start using agents for the first time.
+
+When I was benchmarking Hadoop+Spark, I remember how hard it was to find the right version of JDK and do all the installations in the right sequence. Coding agents make these human-hostile technologies a little bit more usable. Maybe they will finally help us [install Trino](https://github.com/ClickHouse/ClickBench/pull/195#issuecomment-3066009440)?
+
+Working with modern cloud infrastructure often feels like building a ship in a bottle. When you work with such wonderful technologies as AWS Lambda or Kubernetes, you write a ton of configs, push them somewhere, and pray that it will work, then repeat a hundred times until it works. Hard to imagine something more miserable than this job. But if you ask an agent, they have a chance to make fewer mistakes.
+
+Keep in mind that you still have to review what agents generated and approve the changes. Or at least don't point it at your production infrastructure.
+
+![Screenshot_20260401_073330.png](https://clickhouse.com/uploads/Screenshot_20260401_073330_9b332751f7.png)
+
+
+### Resolving merge conflicts
+
+When you have a pull request in this state, you think - I will finish it tomorrow. Then tomorrow never happens. Then you start to lose confidence in yourself.
+
+![Screenshot_20260401_073433.png](https://clickhouse.com/uploads/Screenshot_20260401_073433_2a06035f04.png)
+
+This is the case when agents will do it better than a human in close to 100% cases. Use it even for simple merge conflicts... because as a human, you can make simple typos, waste time on iterations, or introduce a bug.
+
+But you will review the diff. The way that "agent does, you review" - makes the quality higher, because it's hard to review the code you've typed a minute ago, but with an agent, you can review the code with a fresh eye.
+
+
+### Porting code between codebases
+
+Having diverged code bases (old branches, forks) or even different but architecturally similar projects, agents can automatically port features from one to another. This works even for codebases in different languages.
+
+One example is the [Polyglot](https://github.com/tobilg/polyglot/) project - a library to convert SQL between different dialects. It provides the ClickHouse dialect parser, and I decided to [validate it](https://github.com/tobilg/polyglot/issues/11) using ten thousand ClickHouse tests. I quickly found that it didn't really support the ClickHouse SQL, only pretended to do so. So I decided to fix all the incompatibilities and make all ClickHouse queries successfully parse.
+
+The agent solved the task in 36 hours (23 hours of API time) and for around $500. I'd say it is one of my most expensive sessions, but it has successfully integrated and [merged into the library](https://github.com/tobilg/polyglot/pull/15), and today we can use it for our own needs, e.g., parsing ClickHouse SQL in the browser.
+
+Also worth noting is that the Polyglot library itself was seeded from the Python library, [sqlglot](https://github.com/tobymao/sqlglot).
+
+But there are a few considerations with this approach:
+1. When you point your agent to someone else's code, you have to comply with the other code base's license, including proper attribution, as you are making a derivative product.
+2. If the other's code is bad and has design issues, an agent can fix surface-level bugs, but for re-architecturing the code, you will have to properly guide it.
+3. Now it's too easy to reuse, recycle, and repackage open-source code, even between competitors.
+
+
+### Small Refactorings
+
+Small, but tedious refactorings:
+- you don't want to do it manually;
+- you wanted it but always postponed;
+- ask an agent!
+
+![Screenshot_20260401_073610.png](https://clickhouse.com/uploads/Screenshot_20260401_073610_2a766b5c97.png)
+
+
+### Polishing the product, addressing gaps
+
+Every product accumulates a lot of [paper cuts and annoyances](https://danluu.com/everything-is-broken/). Often, they are not fixed because they were not planned, and engineers don't have the motivation to do anything off plan. The worst thing you can do is to discuss fixing minor bugs with your manager.
+
+Now there is no excuse not to fix small bugs. Don't ask your manager, ask an agent!
+
+![Screenshot_20260401_073734.png](https://clickhouse.com/uploads/Screenshot_20260401_073734_9131db45db.png)
+
+
+### Working with unfamiliar codebases
+
+Starting with a new code base? Open an agent, ask questions, ask for suggestions.
+
+![Screenshot_20260401_073903.png](https://clickhouse.com/uploads/Screenshot_20260401_073903_5778e0ff64.png)
+
+
+### Code reviews
+
+First of all, you can open claude code and ask it to do a code review. It has access to the code on your machine, it has time to read the code, it can search on the internet, it can use tools, and it can build and test the code. If a code is written by Claude, ask Codex to review, and vice versa.
+
+The more interesting thing is automated code reviewers, and we tried plenty of them.
+
+First, we started with the Copilot integrated on GitHub. Initially, it looked impressive by finding subtle bugs. But probably at 5% compared to invoking Claude on your machine. We tried to adapt it with custom instructions, but for some reason, Copilot on GitHub does not follow them (ticket open).
+
+Then we tried Cursor bugbot (Beta). It gave very [high-quality reviews](https://play.clickhouse.com/play?user=play#U0VMRUNUIGNyZWF0ZWRfYXQsICdodHRwczovL2dpdGh1Yi5jb20vJ3x8cmVwb19uYW1lfHwnL3B1bGwvJ3x8bnVtYmVyIEFTIHVybCwgZmlyc3RMaW5lKGJvZHkpCkZST00gImRlZmF1bHQiLiJnaXRodWJfZXZlbnRzIgpXSEVSRSBhY3Rvcl9sb2dpbiA9ICdjdXJzb3JbYm90XScgCiAgQU5EIHJlcG9fbmFtZSA9ICdDbGlja0hvdXNlL0NsaWNrSG91c2UnCiAgQU5EIGV2ZW50X3R5cGUgPSAnUHVsbFJlcXVlc3RSZXZpZXdDb21tZW50RXZlbnQnCk9SREVSIEJZIGNyZWF0ZWRfYXQgREVTQwo=), super impressive, concise, and on point, and without [much customization](https://github.com/ClickHouse/ClickHouse/blob/master/.claude/skills/review/SKILL.md). We stopped using it as it has some incompatibility with the pricing model in beta. So we will be waiting for GA, but likely not, because:
+
+We made our [own bot for code reviews](https://play.clickhouse.com/play?user=play#U0VMRUNUIGNyZWF0ZWRfYXQsICdodHRwczovL2dpdGh1Yi5jb20vJ3x8cmVwb19uYW1lfHwnL3B1bGwvJ3x8bnVtYmVyIEFTIHVybCwgZmlyc3RMaW5lKGJvZHkpCkZST00gImRlZmF1bHQiLiJnaXRodWJfZXZlbnRzIgpXSEVSRSBhY3Rvcl9sb2dpbiA9ICdjbGlja2hvdXNlLWdoW2JvdF0nIAogIEFORCByZXBvX25hbWUgPSAnQ2xpY2tIb3VzZS9DbGlja0hvdXNlJwogIEFORCBldmVudF90eXBlID0gJ1B1bGxSZXF1ZXN0UmV2aWV3Q29tbWVudEV2ZW50JwpPUkRFUiBCWSBjcmVhdGVkX2F0IERFU0MK). It invokes Copilot CLI from a script, but the difference between GitHub Copilot is night and day. Now the bot uses all our [instructions]((https://github.com/ClickHouse/ClickHouse/blob/master/.claude/skills/review/SKILL.md)), and the quality is so high that it [continues to impress me every day](https://github.com/ClickHouse/ClickHouse/pull/99586#pullrequestreview-3953363343)!
+
+Human reviewers now only have to check architecture and whether the change is reasonable at all, and the automatic reviewer can find resource management bugs, race conditions, and corner cases.
+
+Also worth noting that there are plenty of small services offering automatic code reviews. In my opinion, if a company can be replicated by a single prompt, there is no value in it.
+
+
+### Investigating complex bugs
+
+Thanks to Claude Opus 4.6, we cracked a [complex bug](https://github.com/ClickHouse/ClickHouse/pull/99483), which was a combination of multiple changes in the past six months. It is [reproduced rarely](https://play.clickhouse.com/play?user=play#U0VMRUNUIGNoZWNrX3N0YXJ0X3RpbWUsIGNoZWNrX25hbWUsIHB1bGxfcmVxdWVzdF9udW1iZXIgRlJPTSBjaGVja3MKV0hFUkUgdGVzdF9jb250ZXh0X3JhdyBMSUtFICclSU1lcmdlVHJlZURhdGFQYXJ0OjpjbGVhckNhY2hlcygpJScKIEFORCBjaGVja19zdGFydF90aW1lID49ICcyMDI2LTAyLTAxJwpPUkRFUiBCWSBjaGVja19zdGFydF90aW1lIERFU0MKTElNSVQgMTAw) in ClickHouse Cloud and in our CI.
+
+There were three unsuccessful human attempts to fix it. It was also initially [unsuccessful with an agent](https://github.com/ClickHouse/ClickHouse/pull/96995) (a few tries in a month interval). But asking more and more questions, and doing several approaches, finally it thought for one hour, and made a one-line change, with full explanation and tests. This is probably the most expensive line of code, but still its cost is less than $30!
+
+In one approach, I was using both Claude and Codex, and they challenged each other's reasoning. I've tuned all settings to the maximum, and explicitly asked them to analyze all previous approaches, analyze plenty of CI logs, prove every hypothesis, and similar. It made a lot of false but convincing hypotheses in the process, and it required a ton of pre-existing knowledge and experience of an engineer to filter through them. Even though it produced a few initial fixes that solved other problems, at first try it did not address the root cause.
+
+There is a lot of confidence that with the final attempt we fixed the bug, but we will have to wait a few more months and billions of test invocations (under stress tests and fuzzing) to confirm if the fix is final.
+
+
+
+
+### Investigating trivial bugs
+
+I've noticed that for a period of time, we didn't receive reports from one of our test suites, which was suspicious for me (our code is not perfect). I've asked a question to our CI team on Slack. But it was Sunday, so everyone in the team was sleeping, and after a while, I asked the same question to Claude.
+
+It found that the stress test was always reporting success due to a [trivial mistake in the code](https://github.com/ClickHouse/ClickHouse/pull/95081). The mistake itself (forgotten if or break) was clearly human... which also proves the point: agents type and review code better than we do!
+
+After fixing the stress test, it opened a floodgate of findings that accumulated over time when it was ineffective, and I had to use agents to fix all these bugs.
+
+
+### Investigating incidents
+
+Agents are good at reading logs and checking hypotheses. The logs don't have to be in files, they can use ClickHouse perfectly, and we store all our logs, metrics, and traces in ClickHouse!
+
+Here is a quote from an on-call engineer:
+
+> I'm using claude heavily (I hope there isn't a credit limit), finding its limits and learning when and how to push back. In general, I feel I'm much faster at the initial investigation (doing in a day what would take me 3-4 days), but once it has a theory, you need to keep asking it to prove it with data and logs, and then review it and push again because it often cannot back them or is wrong.
+
+There are a few caveats, though:
+
+1. We can't feed all the logs to model providers, even taking into account the providers' zero data retention policy. We can do it for general infrastructure logs, but typically not for server logs from customer services. First of all, logs have to be carefully anonymized, and only non-sensitive parts can be processed by models. But even trends of metrics of a customer service can be sensitive data, so we can't feed it to models unless explicitly approved.
+
+Note: We use self-hosted Qwen for very limited scenarios.
+
+2. The success of the investigation heavily depends on the qualifications of the engineer. Agents will produce many plausible and wrong hypotheses, which you have to reject first. This is very hard work, but it can be invisible and even dismissed.
+
+To put it simply, an SRE can investigate a production problem successfully with agents, while a VP will take the wrong hypotheses and fail to solve the customer's problem.
+
+
+### Fixing flaky tests
+
+Every day, ClickHouse CI runs about [20 to 80 million tests in 600 commits and 300 pull requests on average](https://play.clickhouse.com/play?user=play#U0VMRUNUIGNoZWNrX3N0YXJ0X3RpbWU6OkRhdGUgQVMgZCwgY291bnQoKSwgdW5pcShjb21taXRfc2hhKSwgdW5pcShwdWxsX3JlcXVlc3RfbnVtYmVyKSBGUk9NIGNoZWNrcwpXSEVSRSBkID49IHRvZGF5KCkgLSBJTlRFUlZBTCAxIE1PTlRICkdST1VQIEJZIGQgT1JERVIgQlkgZCBERVND). It contains various test suite runs across many build configurations, as well as randomized testing with fuzzers and stress tests. ClickHouse CI is my source of pride, and in my opinion, it is the most important thing for ClickHouse development.
+
+Sometimes tests [are flaky](https://aretestsgreenyet.com/), and in most cases, it does not indicate any defect in the code, it is just a matter of coincidence with certain random environment factors. In a small number of cases, a flaky test actually indicates a defect in the code, but to pay attention to this defect, you have to reduce the noise from other flaky tests.
+
+How do we deal with flaky tests? First of all, we never mute them, and we never repeat tests automatically (it's not allowed), so every failure must be investigated. When a test failed due to a random factor, we think about two things: - how to limit the reliance of the test on this factor by improving the test; - how to symmetrize the randomness, so the random factor will appear not rarely, but uniformly random. We deliberately increase randomness inside our test infrastructure - for example, we randomize thread scheduling. I'm so proud of our CI that I can talk about it all the time.
+
+But the problem is that we couldn't fix all the CI findings in many years. I did everything I could to approach it - I created a [dashboard](https://aretestsgreenyet.com/) and put it on a TV in the office; - we have regular meetings about resolving flaky tests, and every week team meetings had to start from resolving flaky tests, and we dedicated weeks for sprints entirely for fixing CI findings. And my goal is not fixing flaky tests, but achieving a state where we will add even more randomized checks and new ways of fuzzing.
+
+![Screenshot_20260401_081606.png](https://clickhouse.com/uploads/Screenshot_20260401_081606_3e5f9dd52f.png)
+
+The only thing that helped recently was - accelerating fixes with agents. In January and February, with the help of agents, I've submitted 700 pull requests for fixing tests and the CI infrastructure, and the team reviewed and merged these changes. This is an order of magnitude greater than the result of any of the previous initiatives, and as a result, we lowered the number of findings from around 200 a day to around 3 to 5 a day per 10,000,000.
+
+Even if this were the only use case for AI, it proves the value for me, because without AI, this result was not possible, as shown by years of data and many organizational efforts.
+
+![Screenshot_20260325_234724.png](https://clickhouse.com/uploads/Screenshot_20260325_234724_e64ea1171c.png)
+
+A week ago, we added two autonomous agents:
+
+[Groene.AI](https://github.com/ClickHouse/ClickHouse/pulls?q=is%3Apr+author%3Agroeneai) - fixes flaky tests and sends pull requests. In about 30..50% of cases, the fix appears perfect, in the rest, it works on the feedback.
+
+[ClickGap](https://github.com/ClickHouse/ClickHouse/issues?q=is%3Apr+author%3Aclickgapai) - finds edge cases and provides missing tests.
+
+These agents are like limited and custom "claws" (they use a custom code, nothing from openclaw).
+
+
+### Security research
+
+ClickHouse has a public [bug bounty program](https://github.com/ClickHouse/ClickHouse/issues/38986) - we pay you for finding bugs. We receive tons of pointless submissions to this program, it's an AI slop from people begging for money. It is handled mostly by BugCrowd.
+
+But we also receive real, valuable findings, including things related to the ClickHouse server, in the order of 10 a year. In the recent half a year, all real findings, 100% of them, were found using coding agents. AI agents help with POC exploits as well.
+
+Bottom line: if you are a security researcher and not using AI in 2026, you either start using it or retire.
+
+
+### Cheap experiments
+
+Always wanted to try some big change, but the cost of labor and time was too high. - Ask an agent to [do it for you](https://github.com/ClickHouse/ClickHouse/pull/96991), and decide if you need it after it's done.
+
+
+### Optimization problems
+
+Give an agent a well-defined goal, and it will brute-force it for you!
+
+In this example, an agent [optimized build speed](https://github.com/ClickHouse/ClickHouse/issues/96721) for ClickHouse by 28%. We cherry-picked specific commits that we liked and now enjoy this speed-up on every build. While the cost of running an agent on a large server overnight was substantial, it already paid off in the first days.
+
+
+### Brute-forcing tedious problems
+
+Many years ago, we had an escalation in customer service, and the root cause was that the table did not fully preserve certain properties when the user DETACHes and then ATTACHes this table. We fixed a problem, then brainstormed how to prevent the whole class of problems in the future: we can add a random DETACH and ATTACH queries to our tests! So we [started the implementation](https://github.com/ClickHouse/ClickHouse/pull/42336), but it was very difficult to finish, because it needed annotation of several hundred old tests that are incompatible with this randomization.
+
+My principle is - never forget. So I continued to remind people about this task every week, then every month, then a few times a year, then I remained the only person who cared about preventing the original (long-time solved) problem.
+
+But a month ago, I was able to resurrect this task with the help of an agent, and now it is very close to being finished! Now I can find all other tasks that we didn't solve since 2020, 2019, and earlier, and plan a revenge.
+
+
+### Prototyping new features
+
+You might want to implement a new feature, but you're not sure what the actual benefit will be, how usable it is going to appear, or if it will be implemented. Now you don't have to plan in advance - you can implement a [rough prototype](https://github.com/ClickHouse/ClickHouse/pull/96844) of the desired feature and experiment with it.
+
+
+### Vibe-coding tools and internal apps
+
+The term "vibe coding," coined by Andrej Karpathy, means not reading the code that the agent produces. This term has a mixed feeling - there are a lot of negative connotations, and sometimes people say "vibe-coded" in a derogatory, dismissive way. I think it shouldn't be the case.
+
+We don't allow unreviewed code in the main ClickHouse codebase. But we have a lot of vibe-coded internal tools and [small applications](https://presentations.clickhouse.com/). Anything with limited security and infrastructure exposure is a valid target for vibe-coding.
+
+The quality of vibe-coded tools also differs. Some people will be happy with a one-shot page, even if it is half-working and the design is distasteful (the default Claude design is very recognizable). Some will make hundreds of prompts to polish and validate the product, provide creative ways of automated testing, and this is inevitable for high-quality, because agents tend to cut corners.
+
+My friend uses [AI World Clocks](https://clocks.brianmoore.com/) as an example of the case against vibe-coding, but it is mostly a joke (as a simple correction of the prompt by asking an agent to take a screenshot gives perfect results).
+
+A question for the reader: why do you think we use agentic coding, but don't use vibe-coding for the ClickHouse server?
+
+
+### Getting colleagues to do what you want
+
+This is one of my favorites. Often, you want something to be done, but when you ask colleagues in Slack, they say they will discuss planning at the next weekly meeting after the vacation and create a Linear ticket. Which means no one will do it ever.
+
+In this case, you can prototype the change using an agent, submit to their repository, and ask for review. In my experience, this greatly accelerates the progress!
+
+One example: I was traveling on a train, and when I opened ClickHouse documentation, I noticed that the search bar does not work - when I clicked it, it did nothing, not even let me type. First, I asked in Slack. After a few minutes, I asked an agent. The agent told me that the search bar works only after loading 25 MB of JavaScript bundles. Then it told me something about React hydration, which I have no clue about, and then it [fixed the problem](https://github.com/ClickHouse/clickhouse-docs/pull/5326).
+
+(The question is - why does it load 25 MB of JavaScript? If our docs were vibe-coded, I would understand that, but they are not vibe-coded. It is just how JavaScript is.)
+
+Another example, a [task](https://github.com/ClickHouse/ClickHouse/issues/61563) open for two years that is a blocker for an important migration in the code - it was not in progress during these two years, and it is, objectively, a very hard task - just at the edge of the capabilities of current models. As I wanted to explore the limits, I asked both Claude Opus 4.6 and GPT Codex 5.3 to solve it. Opus 4.6 [spent 3 days](https://github.com/ClickHouse/ClickHouse/pull/96491). Codex 5.3 [spent one week](https://github.com/ClickHouse/ClickHouse/pull/96420). The intelligence level is very similar - barely capable of solving. Then I asked my colleagues, what solution is better, and they said - both are trash. Then I said that I bet they couldn't do better in one month without AI. They didn't take a bet and didn't solve it in a month either. But today we have a third solution from [Nikolai](https://github.com/ClickHouse/ClickHouse/pull/98884), combining both the engineering excellence and the power of the latest AI models.
+
+![Screenshot_20260401_082108.png](https://clickhouse.com/uploads/Screenshot_20260401_082108_2b00f14dc9.png)
+
+
+### Accelerating feedback loops and lowering cross-team communication
+
+Cross-team communication overhead is the main factor for slowdown in large organizations, because getting things done means getting aligned with more people, who are responsible for different parts of the problem space. What if every employee had a small team of engineers that they could magically bring on in the blink of an eye?
+
+This is what coding agents give. Using a coding agent is equivalent to working with a team of 3 to 7 engineers, who never go on vacation, never sleep, and don't argue too much :)
+
+Half true. Good engineers make sense, still.
+
+
+## Usage recommendations
+
+**AI is a tool of thought, not a replacement for thinking**. The safest way is to treat a coding agent as a tool, like your editor, or even like your keyboard. Use it to do what you want.
+
+**AI is a multiplier - good engineers will be good with AI, mediocre engineers will feel no difference, and bad engineers will do more harm**.
+
+**Start with small tasks, gradually learn to trust it with bigger ones**. Current AI models are still very limited, and you need to get an intuition about what is reasonable to do with agents, and what is not possible. But be ready to re-evaluate your expectations when, hopefully, better frontier models will be released. It is okay to have low expectations and gradually increase them based on results. This is also a good path for AI skeptics, because trying to solve large and complex tasks will only reconfirm the skepticism.
+
+**Always find a way to validate every change. Use more tests.** Use more ways of testing. At ClickHouse, we are privileged to get maximum results thanks to our efforts in CI and testing.
+
+**Try the latest models. For hard tasks, try multiple providers in parallel.** Question it and push for better solutions in a loop.
+
+**Save guidelines to CLAUDE.md / AGENTS.md.** This might be controversial. Do not add too much content to instructions (if you do, models will just ignore most of it), do not say what not to do (models are like kids, they will do what you asked not to do), and don't over-complicate things (the models are smart, give a little trust).
+
+**Save common tasks into skills and tools.** For example, tech models how to look at the history of tests and how to search in log databases.
+
+**Use it not only for code.** CLI agents are way more versatile, try it for various everyday things.
+
+**Complete specification and over-specification.** When you write in a programming language, you specify precisely what you want. When you work with an agent, you don't have to - but it is totally okay to say what you want as precisely as possible - it will make results better, and we still have engineering skills for this precise specification.
+
+**Read code and agent responses and their thought process, and especially, plans.** Using an agent means you have to read a lot, and think a lot, and there are no shortcuts for that, and it will be exhausting. But as soon as you feel like you don't have energy to work with an agent, just stop - otherwise the results will be disastrous.
+
+**Do follow-up questions, challenge the approach and solutions.**
+
+**Run multiple sessions in parallel.** But not too much. I think five agents are enough. With the current models, agents working in a C++ code base require corrections and hand-holding, typically every ten minutes, and you have to pay this attention somehow.
+
+**Run unattended sessions on isolated virtual machines.** This is in controversy with the above, but it makes sense for certain tasks, for autonomous experiments, prototyping, and optimization, for finishing the final stages of the work.
+
+**Keep in hand at least two different tools with different model providers.** Model providers are the most unreliable type of service as of today, with downtimes approximately every day. This is understandable due to the explosion of demand, and I admire the fact that they even survive. Be prepared.
+
+**Be polite and calm, don't trash-talk, and don't insult agents.** If you insult these precious, nice models, I will be ashamed of you. No, just kidding - LLMs don't have consciousness or feelings (supposedly). But I have two real reasons to advise you not to be rude to models. Firstly, models emulate human behavior too well: when you are too assertive in communication, do insults and threats, the model will try to correct the mistakes, whatever it takes, and sometimes the only way will be: deleting your home directory and wiping production infrastructure. The second reason is that if you communicate badly, even with an inanimate object, you exhibit wrong behavior and become a worse person.
+
+
+## AI in open-source
+
+You may have noticed that GitHub is frequently down. This happens because every AI lab is ripping it apart by downloading everything they can get from GitHub, and a huge number of autonomous agents are also ripping it apart by trying to autonomously do no one knows what.
+
+We are also experiencing a large influx of contributions to ClickHouse, with varying quality. ClickHouse has been open-source for almost ten years, and working with contributors is an inherent part of our job. We owe a lot to contributors and users who provide feedback, and I know that even a draft or a halfway implementation has its value, even if not merged.
+
+One year ago, it was often the case when I received a pull request with low-quality code, often totally out of place, which made me suspect that maybe the contributor used AI, so that's why the code is so bad. This year, it's a different situation: when I receive a pull request with low-quality code containing typos in variables, trivial mistakes in memory management, and race conditions, it makes me suspect that maybe the contributor forgot to use AI agents to write this code. Because coding agents make the bottom quality level of the code much higher.
+
+I decided to make an [AI policy](https://github.com/ClickHouse/ClickHouse/blob/master/AI_POLICY.md) for ClickHouse that fully embraces AI use and supports any legitimate experiments and research on the ClickHouse codebase.
+
+Modern AI models work so well on the ClickHouse code because it is open-source, and they were trained directly on our code and issues. For example, Claude generates command-line parameters to `clickhouse-client` that no longer exist, neither in the code nor in the documentation, but existed one year ago. It also tries to insert a terminating zero byte to strings, which I [removed everywhere in last August](https://github.com/ClickHouse/ClickHouse/pull/85063) during a large refactoring. This means - if you are a database developer and write another database with coding agents, they will likely make it in the way ClickHouse is made.
+
+I would appreciate even more usage of the ClickHouse open-source code for AI. I will be interested in every research paper on AI reproducibility studies, comparison of AI models, studies on agents' autonomy, software performance, and reliability research.
+
+
+## AI FUD checklist
+
+Many people are scared of AI, and there are numerous AI-haters. I prepared this checklist as a list of discussion points - what people might be afraid of.
+
+![unnamed.jpg](https://clickhouse.com/uploads/unnamed_ea4d5f5ebc.jpg)
+
+
+### Heavy usage of agentic coding may become too expensive.
+
+This could happen, but currently, there is plenty of room for increasing AI usage, and the ROI of increased usage, while difficult to measure, is expected to be positive across all company departments.
+
+
+### The AI bubble may burst, and the AI services will become less accessible.
+
+There are controversial opinions on the value created by the AI boom. It enabled frontier AI models - very expensive miracles, providing a lot of new possibilities. But even if we assume a slowdown of the progress, we end up with many such miracles, including open-weight models, that can be used on a diverse set of hardware.
+
+
+### Using AI will make you stupid, or you will lose your skills as an engineer.
+
+There are also diametral factors. Coding agents are great learning tools - if you are ready to pay attention and learn. I've learned a lot of ways of using `git` and `bash` just by looking over the shoulder of the agent's work. But there is a real possibility that many people will use agents lazily, like a slot machine.
+
+
+### Heavy adoption of AI may deteriorate the quality of the product.
+
+AI provides a lot of ways to improve the quality. The easiest way is to refrain from using it for developing new features and large chunks of code. Use it for investigating bugs, researching hypotheses, conducting stringent code reviews, adding more tests, adding more ways of testing, finding edge cases, etc. To keep the quality bar high, you have to put the vast majority of work, including AI output, towards quality assurance.
+
+
+### Excessive usage of AI may lead to AI-induced psychosis.
+
+This is [very real](https://steve-yegge.medium.com/the-ai-vampire-eda6e4f07163). I'm not a therapist, so don't take these words authoritatively, but I can highlight three types of AI psychosis:
+
+1. [Chatbot psychosis](https://en.wikipedia.org/wiki/Chatbot_psychosis). The case when delusions are reinforced or amplified by chatbots.
+
+2. **AI mania**. When using coding agents, many things appear to be easy and quickly achievable, the vast range of possibilities is overwhelming, the speed of development is addictive, and the feedback loop is positive - you are in a great mood, and you want to do more and more with agents, even compromising other things. At the same time, you finish every day exhausted or even lose sleep. In this case, the best option is to stop and completely refrain from using agents for a few days. Today, it is a new addiction, but over time, it will normalize and become a boring tool.
+
+3. **Worldwide AI psychosis**. Investors are making overly speculative stakes in AI companies with no fundamental advantages, leadership tries to mandate AI usage without good reason, using bogus metrics like token usage, product managers are adding nauseous AI integrations, and employees are burning tokens like there is no tomorrow. Also, no need to worry much - today there is overreaction from many sides, but over time it will settle.
+
+
+### AI makes it easier to write complex code, so the code will be less accessible.
+
+For vibe-coded applications, complex code is often not a problem at all - in the worst case, throw off the application and make another one. But it can become difficult over time, and you end up with tech debt.
+
+For the server code, engineers do code reviews, and agentic code receives more scrutiny. However, some increase in complexity is expected, and the statement is generally true.
+
+
+### Using AI for the core product may shadow our competitive advantages.
+
+Today, agents still rarely write the code autonomously, and they don't make good architectural decisions - they work like a pair programmer, when you give them small, contained tasks. The product strategy, the quality bar of implementations, attention to details, and the customer focus - this is on us.
+
+
+### Using AI could lead to a loss of focus and influence the product in the wrong direction.
+
+The concern is real, like with any other tool. There is a trap in AI adoption, and it looks as follows: coding agents are the best for building internal applications, so you will have 10x of internal applications, and maybe some slowdown in the main product. Engineers start to adopt agents, but suddenly they spend all the time developing new agentic orchestration tools, so you get ten different agentic orchestrations. This is no different than without AI - everyone will solve interesting and approachable tasks. This underscores the importance of the focus and the product mindset.
+
+
+### The perceived boost of productivity might not be real or limited to surface-level.
+
+I expect that a ten times perceived productivity boost will translate to a smaller, but meaningful boost on company-level metrics.
+
+
+### You are an AI hater and don't want to touch the AI hype.
+
+Not everyone has to use AI. It makes sense if maybe one or two engineers in the team continue to work without touching agents - this makes sense, as these people can provide a diverse point of view.
+
+But I still recommend putting all hype aside and trying coding agents regardless. Even if you are an AI hater, you can get some boost from solving one of the other tasks occasionally.
+
+Also, I don't recommend isolating yourself for too long. Do you know someone who is supporting some back office in dBase][? Or someone who is still writing in Borland C? - a true professional, but you don't want to be like that guy.
+
+
+### AI could take our jobs.
+
+At the current level of technology, AI does not replace all engineers, not even junior engineers. AI increases contrast between engineers and lowers demand for low-profile engineers.
+
+What type of jobs are likely to be replaced? There are a lot of IT jobs like writing WordPress plugins, Salesforce integrations, and similar.
+
+In highly competitive areas, AI increases expectations on engineering work, which balances and even outweighs the increase in productivity per engineer. However, if we assume that the cost of tokens per engineer will be comparable to the engineering compensation, the result is that everyone will pay more for models and have fewer engineers.
+
+
+## We should use it more
+
+We are still at the beginning of AI adoption. We made the tools and models accessible to the company, learned to run agents on unattended VMs, developed orchestration tools, deployed autonomous QA and CI engineers, enabled AI reviews, integrated BI and SRE agents... But we want more: agentic testing of new features, preliminary investigation of bug reports, automatic reverting of bad changes, automatic helping contributors with stalled pull requests, and continuous analysis of problematic workloads.
+
+ClickHouse itself is the primary component for [agentic analytics](https://clickhouse.com/blog/the-agentic-data-stack) and [AI](https://clickhouse.com/blog/why-openai-uses-clickhouse-for-petabyte-scale-observability) [infrastructure](https://clickhouse.com/blog/how-anthropic-is-using-clickhouse-to-scale-observability-for-ai-era). If you are a strong engineer and aren't afraid of AI, [join ClickHouse](https://clickhouse.com/company/careers)!
+
+
+
+
 
 ---
 
