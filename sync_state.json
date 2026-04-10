@@ -1,5 +1,5 @@
 {
-  "last_sync": "2026-04-09T06:37:57.807861Z",
+  "last_sync": "2026-04-10T06:42:28.795518Z",
   "processed_blogs": {
     "https://clickhouse.com/blog/clickhouse-raises-400-million-series-d-acquires-langfuse-launches-postgres": {
       "title": "ClickHouse raises $400M Series D led by Dragoneer to accelerate expansion across analytics and AI infrastructure",
@@ -4464,9 +4464,21 @@
       "pub_date": "2026-04-01T17:20:23+00:00",
       "file_path": "blogs/2026-04-01-agentic-coding-at-clickhouse.md",
       "processed_at": "2026-04-08T06:37:56.812510Z"
+    },
+    "https://clickhouse.com/blog/clickhouse-at-fosdem-2026": {
+      "title": "ClickHouse at FOSDEM 2026",
+      "pub_date": "2026-04-08T18:00:47+00:00",
+      "file_path": "blogs/2026-04-08-clickhouse-at-fosdem-2026.md",
+      "processed_at": "2026-04-10T06:42:28.381739Z"
+    },
+    "https://clickhouse.com/blog/three-villains-agentic-observability": {
+      "title": "The three villains to agentic observability: retention, sampling and rollups",
+      "pub_date": "2026-04-08T14:12:02+00:00",
+      "file_path": "blogs/2026-04-08-the-three-villains-to-agentic-observability.md",
+      "processed_at": "2026-04-10T06:42:28.712249Z"
     }
   },
-  "total_blogs": 744,
+  "total_blogs": 746,
   "failed_blogs": [
     {
       "url": "https://clickhouse.com/jp/blog/clickhouse-gcp-japan-availability",

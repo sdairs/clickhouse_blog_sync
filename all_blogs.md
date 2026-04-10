@@ -1,6 +1,367 @@
 # ClickHouse Blogs
-Last updated: 2026-04-09 06:37:57 UTC
-Total blogs: 744
+Last updated: 2026-04-10 06:42:28 UTC
+Total blogs: 746
+
+---
+
+## ClickHouse at FOSDEM 2026
+Published: 2026-04-08T18:00:47+00:00
+URL: https://clickhouse.com/blog/clickhouse-at-fosdem-2026
+
+---
+title: "ClickHouse at FOSDEM 2026"
+date: "2026-04-08T18:00:47.189Z"
+author: "Tyler Hannan"
+category: "Company and culture"
+excerpt: "FOSDEM 2026 took place on 31 January and 1 February in Brussels, and it was a great weekend for the ClickHouse community, both inside the conference rooms and out."
+---
+
+# ClickHouse at FOSDEM 2026
+
+FOSDEM 2026 took place on 31 January and 1 February in Brussels, and it was a great weekend for the ClickHouse community, both inside the conference rooms and out.
+
+## Community Dinner
+
+The weekend kicked off with the ClickHouse community dinner at L'Ultime Atome in Ixelles, Brussels. 106 people joined us for dinner, drinks, and some of the best conversations of the conference. ClickHouse founder Alexey was there to chat and answer questions. Thanks to everyone who came out; it was a fantastic evening (some pictures are at the end of this post).
+
+But it wasn’t just a chance to eat and drink; we had multiple presentations at the event itself.
+
+## Our Talks
+
+### Planes, Ships, Birds – Building Real-Time Visualizations with ClickHouse
+
+**Track:** Geospatial · **Day:** Saturday
+**Speaker:** Alexey Milovidov · [Slides](https://presentations.clickhouse.com/2026-fosdem-geospatial/)
+
+This session walked through creating an analytical application from the ground up, covering the entire workflow: data collection, processing, and visualization. The stack uses Leaflet, ClickHouse, and a collection of shell scripts. The finished result is published at [adsb.exposed](https://adsb.exposed/), and the talk uncovered how it was built.
+
+<iframe width="560" height="315" src="https://www.youtube.com/embed/YOlEcBLDVvk?si=5EVmFmI2v--q6DKX" title="YouTube video player" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" referrerpolicy="strict-origin-when-cross-origin" allowfullscreen></iframe>
+
+---
+
+### Hotpatching ClickHouse in Production with XRay
+
+**Track:** LLVM · **Day:** Saturday
+**Speaker:** Pablo Marcos · [Slides](https://fosdem.org/2026/events/attachments/N7MVZT-hotpatching-clickhouse-with-llvm-xray/slides/266966/hotpatchi_f1nbs5s.pdf)
+
+Ever been debugging a production issue and wished you'd added just one more log statement — only to face a rebuild, a wait for CI, and a full redeploy? The ClickHouse team integrated LLVM's XRay to solve exactly this. It lets you hot-patch a running production system to inject logging, profiling, and even deliberate delays into any function, with no rebuild required.
+
+XRay reserves space at function entry and exit points that can be atomically patched with custom handlers at runtime. The team built three handler types: LOG to add the trace points you forgot, SLEEP to reproduce or prevent timing-sensitive bugs, and PROFILE for deterministic profiling to complement the existing sampling profiler. The performance overhead when inactive is negligible.
+
+Control is via a SQL query — `SYSTEM INSTRUMENT ADD LOG 'QueryMetricLog::startQuery' 'message'` — which patches the function instantly, with results appearing in `system.trace_log`. The talk also covered the integration challenges (ELF parsing, thread-safety, atomic patching), performance numbers (4–7% binary size increase, near-zero runtime cost), and real production war stories.
+
+<iframe width="560" height="315" src="https://www.youtube.com/embed/DZeVcRD0rWM?si=X47mRrsF1LXTIjLp" title="YouTube video player" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" referrerpolicy="strict-origin-when-cross-origin" allowfullscreen></iframe>
+
+---
+
+### Inverted database indexes: The why, the what, and the how.
+
+**Track:** Databbases · **Day:** Saturday 
+**Speaker:** Elmi Ahmadov · [Slides](https://presentations.clickhouse.com/2026-fosdem-inverted-index/Inverted_indexes_the_what_the_why_the_how.pdf)
+
+Database usage in practice often involves heavy text processing. For example, in "observability" use cases, databases must extract, store, and search billions of log messages daily. Most databases, including many column-oriented OLAP databases, struggle with such massive amounts of text data. The only way to process text data at scale is by using specialized inverted indexes in databases.
+
+This presentation explains how inverted indexes work and which (text) search patterns they support. Where appropriate, we describe our experience and the gotchas we encountered when adding an inverted index to ClickHouse, one of the most popular open-source databases for analytics.
+
+<iframe width="560" height="315" src="https://www.youtube.com/embed/6eM1rCZy7XI?si=MwfUq1E_fFmQC6K8" title="YouTube video player" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" referrerpolicy="strict-origin-when-cross-origin" allowfullscreen></iframe>
+
+---
+
+### ClickHouse's C++ and Rust Journey
+
+**Track:** Rust · **Day:** Sunday
+**Speaker:** Alexey Milovidov · [Slides](https://presentations.clickhouse.com/2025-p99/)
+
+For a large C++ codebase, a full rewrite to Rust is not an option — only gradual integration with Rust libraries is realistic, and even then there are many complications and rough edges. This talk described the experience of integrating Rust and C++ code in ClickHouse, and some of the weird and unusual problems the team had to overcome along the way.
+
+<iframe width="560" height="315" src="https://www.youtube.com/embed/433zALc6u3Y?si=Ux9Htf42tdWYQas-" title="YouTube video player" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" referrerpolicy="strict-origin-when-cross-origin" allowfullscreen></iframe>
+
+---
+
+### How to Move Bytes Around
+
+**Track:** Software Performance · **Day:** Sunday
+**Speaker:** Alexey Milovidov · [Slides](https://presentations.clickhouse.com/2026-fosdem-memcpy/)
+
+If you take a random program and start profiling it, you'll usually find `memcpy` near the top — though that doesn't necessarily mean memcpy is slow. As the abstract puts it: the most hopeless thing a C++/Rust developer can do (while no one is watching) is optimize memcpy to move bytes faster. That's exactly what this talk did.
+
+<iframe width="560" height="315" src="https://www.youtube.com/embed/rPX-3UrFiF4?si=OP7_nRl8v16xccCf" title="YouTube video player" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" referrerpolicy="strict-origin-when-cross-origin" allowfullscreen></iframe>
+
+---
+
+### Contributing to MariaDB & Postgres
+
+**Track:** Databases · **Day:** Saturday
+**Speakers:** Georgi Kodinov, Kevin Biju
+
+A two-part talk on contributing to major open-source database projects.
+
+Georgi Kodinov walked through what it actually takes to get a contribution into the MariaDB server codebase, following a real bug fix — two lines of code — through its entire review process, and explaining why the bar is higher than it might seem on a project of this scale.
+
+Kevin Biju traced his own path from setting up a local Postgres build to contributing bug-fix patches and documentation updates. The talk outlines how the Postgres development process and community operate, with the aim of demystifying the process so more engineers feel confident making their first (or next) patch.
+
+<iframe width="560" height="315" src="https://www.youtube.com/embed/BgODDRqp6yA?si=j2NchIseWMoIWAvW" title="YouTube video player" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" referrerpolicy="strict-origin-when-cross-origin" allowfullscreen></iframe>
+
+---
+
+## From the Community
+
+We weren't the only ones talking about ClickHouse at FOSDEM. Here are some talks from the community that are worth checking out:
+
+### Dynamic Bot Blocking with Web-Server Access-Log Analytics
+
+Alexander Krizhanovsky - [Video](https://fosdem.org/2026/schedule/event/3BMPMU-dynamic_bot_blocking_with_web-server_access-log_analytics/)
+
+Bots generate roughly half of all Internet traffic. Some are clearly malicious (password crackers, vulnerability scanners, application-level/L7 DDoS), and others are merely unwanted (web scrapers, carting, appointment etc) bots. Traditional challenges (CAPTCHAs, JavaScript checks) degrade user experience, and some vendors are deprecating them. An alternative is traffic and behavior analytics, which is much more sophisticated, but can be far more effective.
+
+Complicating matters, there are cloud services not only helping to bypass challenges, but also mimic browsers and human behavior. It's tough to build a solid protection system withstand such proxy services.
+
+In this talk, we present WebShield, a small open-source Python daemon that analyzes Tempesta FW, an open-source web accelerator, access logs and dynamically classifies and blocks bad bots.
+
+You'll learn: * Which bots are easy to detect (e.g., L7 DDoS, password crackers) and which are harder (e.g., scrapers, carting/checkout abuse). * Why your secret weapon is your users’ access patterns and traffic statistics—and how to use them. * How to efficiently deliver web-server access logs to an analytics database (e.g., ClickHouse). * Traffic fingerprints (JA3, JA4, p0f): how they’re computed and their applicability for machine learning * Tempesta Fingerprints: lightweight fingerprints designed for automatic web clients clustering. * How to correlate multiple traffic characteristics and catch lazy bot developers. * Baseline models for access-log analytics and how to validate them. * How to block large botnets without blocking half the Internet. * Scoring, behavioral analysis, and other advanced techniques are not yet implemented
+
+## Photos
+
+We wish you could have been there. Here are some images that capture a sense of the experience. Do you want to join the next one? Let us know and we can help with your presentation.
+
+![](https://clickhouse.com/uploads/IMG_2418_278b810aed.jpg)
+
+![](https://clickhouse.com/uploads/PXL_20260201_105432126_93a240840f.jpg)
+
+![](https://clickhouse.com/uploads/1000137544_91dc7234e1.jpg)
+
+![](https://clickhouse.com/uploads/PXL_20260131_194611228_13bf9b1778.jpg)
+
+![](https://clickhouse.com/uploads/PXL_20260201_141128012_622724b026.jpg)
+
+![](https://clickhouse.com/uploads/PXL_20260131_194552756_a8aeaf6c81.jpg)
+
+---
+
+## The three villains to agentic observability: retention, sampling and rollups
+Published: 2026-04-08T14:12:02+00:00
+URL: https://clickhouse.com/blog/three-villains-agentic-observability
+
+---
+title: "The three villains to agentic observability: retention, sampling and rollups"
+date: "2026-04-08T14:12:02.986Z"
+author: "Mike Shi"
+category: "Engineering"
+excerpt: "Retention limits, sampling, and metric roll-ups aren't observability best practices - they're workarounds for storage systems that can't handle full-fidelity data, and they're becoming a hard blocker for AI-driven workflows."
+---
+
+# The three villains to agentic observability: retention, sampling and rollups
+
+![banner_3_villians.jpg](https://clickhouse.com/uploads/banner_3_villians_70f00b1ef3.jpg)
+
+*Are you sampling your trace just to keep costs under control?*
+
+*Are you rolling up high-cardinality metrics to make them queryable?*
+
+*Are you limiting retention of your logs because storing everything simply isn't affordable?*
+
+These patterns have become so common in observability that they are often treated as best practices with vendors marketing these as capabilities just to mask shortcomings. At ClickHouse we believe they are workarounds and reflect the constraints of the systems behind them, not the needs of the engineers using them.
+
+How did we arrive at a world where SREs must police what data to keep, discard, or aggregate? And more importantly, does it need to stay this way?
+
+In this post, we examine retention, sampling, and roll-ups as the three constraints shaping modern observability. These are not neutral design choices, but limitations imposed by storage engines that struggle with scale, cost, and high-cardinality data, and by SaaS platforms that pass those constraints on to users.
+
+These trade-offs were once tolerable. Human operators could compensate for missing data with experience and intuition. But that assumption is breaking down. While at least [90% of practitioners see value in using AI to surface anomalies and assisting with root cause analysis](https://grafana.com/observability-survey/#ai-in-observability-transparency-is-key-autonomy-is-the-next), these systems are not designed to support it. As AI and agent-driven workflows become central to observability, sampling, aggregation, and short retention become far more damaging. Not only do they remove the context required for automated reasoning, but make it harder for agents to justify their conclusion - something over [95% of practitioners demand](https://grafana.com/observability-survey/#observability-practitioners-overwhelmingly-want-ai-to-show-i). 
+
+What were once acceptable compromises are now active limitations. If we are to build systems that can support automated diagnosis and reasoning, we need to remove these constraints.
+
+If we can, the result is not just fewer trade-offs, but a fundamentally better model for observability: no blind spots, faster resolution times, and the complete context required for the next generation of agent-driven workflows.
+
+
+---
+
+## Get started today
+
+Interested in seeing how Managed ClickStack works for your observability data? Get started in minutes and receive $300 in free credits.
+
+[Sign up](https://console.clickhouse.cloud/signUp?intent=o11y&loc=blog-cta-343-get-started-today-sign-up&utm_blogctaid=343)
+
+---
+
+## Retention: The memory tax
+
+Retention is one of the first constraints every observability user is asked to think about. It becomes an almost automatic consideration. How long should logs be kept? How far back should traces go? What is affordable?
+
+To some degree, this is reasonable. Not all data needs to be stored indefinitely, and there are valid reasons to expire data over time. But the problem is not whether retention exists, it is that it has become a primary concern - often forcing teams into extremely short windows. Logs are often only retained for seven to fourteen days, with traces treated even more aggressively due to their volume and/or cardinality.
+
+This is not driven by user needs but by system limitations. Many systems rely on SSD-backed storage to deliver query performance, and when combined with poor compression, this makes long-term retention costly. As a result, these costs are either absorbed or passed on, forcing end users to treat retention as a budgeting problem.
+
+![](https://clickhouse.com/uploads/three_villains_apr2026_image12_413776037f.png)
+
+*To extend retention, teams introduce tiers, pushing data into progressively cheaper and poorer performing storage. While allowing longer retention, this adds complexity and means querying historical data requires rehydration or slower queries.*
+
+But this should not be the case. With high compression and object storage, the economics change completely. If we can store on object storage at roughly $0.025 per GB, and combine this with 50x compression, raw data can be retained for a fraction of typical costs. Retention at 30 days, 60 days, or even a year should be a default. **Data expiry should be driven by compliance or policy, not cost pressure.** 
+
+> Object storage should not mean managing storage tiers. Users should not have to decide what data is hot, warm, or archived to object storage. All data should be ingested and treated equally, with frequently accessed data accelerated automatically based on query patterns. Introducing tiers only adds complexity and operational burden, with users constantly needing to think what to store where, without addressing the underlying problem.
+
+Removing this constraint does more than reduce operational burden. It unlocks entirely new ways of working. Long-term retention enables analysis of seasonal patterns, historical regressions, and previously unseen issues. A single log pattern can be traced back across months of data to understand when a bug first appeared and which users were affected.
+
+![](https://clickhouse.com/uploads/three_villains_apr2026_image6_8bd07c984a.png)
+
+*Cyclic patterns are challenging for an agent to identify if the data is not present.*
+
+As agents become part of the observability workflow, access to historical context becomes critical. Human operators carry implicit knowledge of past incidents and patterns, but agents do not. Without long-term data, they cannot distinguish anomalies from expected behavior or reason about trends. Limiting retention does not just reduce visibility, it constrains their ability to function.
+
+For these reasons, retention is our first villain. Not because data should never expire, but because the burden of deciding what to keep has been pushed onto the user due to costs imposed by underlying storage systems.
+
+## Sampling: Observability with holes
+
+Sampling is where we begin to drop data by design. Unlike retention, which limits how far back we can look, sampling determines what we see at all.
+
+Most commonly applied to traces, sampling works by selectively keeping only a subset of events. This is typically done using either **head sampling** or **tail sampling**. Head sampling makes a decision at the start of a trace, keeping or discarding it before it is fully observed. Tail sampling defers that decision until the trace completes, allowing systems to retain traces that meet certain criteria, such as those with explicitly labelled errors or high latency. While tail sampling is more informed, both approaches ultimately discard data e.g. potentially missing data which illustrates logical issues but is not explicitly labelled as an error. The same pattern appears in logging, where error logs may be retained while higher-volume info logs are selectively reduced per service.
+
+![](https://clickhouse.com/uploads/three_villains_apr2026_image1_824477d094.png)
+
+*Head-based sampling  selects traces upfront (deterministically or randomly), which can drop traces containing critical errors, while tail-based sampling waits for all spans and prioritizes keeping those with issues. Although tail sampling is more informed, both approaches still discard data and risk losing important signals.*
+
+The goal is straightforward. Sampling reduces the volume of data written, lowers storage requirements, and minimizes the amount of data scanned at query time. In doing so, it controls cost. But like retention, this is not a user-driven optimization but rather a constraint imposed by the system -  with the **burden again shifted to the user to decide what is worth keeping.**
+
+In many ways, sampling is even more limiting than retention. With short retention windows, at least the available data is complete within that period. Sampling, by contrast, removes fidelity at the point of ingestion.
+
+This loss of fidelity has broader implications. Modern observability increasingly relies on rich, high-cardinality events, often combining logs, metrics, and traces into unified "wide events". These enable deeper analysis, trend detection, and more accurate reasoning over time. Sampling breaks this model. By removing events, it distorts aggregates, weakens statistical accuracy, and limits the ability to perform meaningful analysis.
+
+> Sampled metrics can be extrapolated to deliver approximate results. While this works for many simple aggregation types, it's challenging for others and invariably means the user is relying on estimates.
+
+Like retention it again constrains the effectiveness of agents. Without full data, agents cannot reliably detect patterns, correlate signals, or reason about anomalies. Also like retention, what may have once been an acceptable trade-off becomes a hard limitation.
+
+In an ideal system, every event would be retained with full fidelity, made possible through efficient compression and low-cost storage. This ensures that when an issue arises, the complete context is available. The result is not just faster resolution for engineers, but a system that can support deeper, more accurate analysis, both by humans and by the next generation of agent-driven workflows.
+
+## Roll-ups: The aggregation trap
+
+Roll-ups emerged as a practical response to one of the problems of metrics systems such as Prometheus: high cardinality. 
+
+![](https://clickhouse.com/uploads/three_villains_apr2026_image5_e02e95ff29.png)
+
+*High cardinality causes series explosion.
+Credit: Observability Engineering: Achieving Production Excellence, Chapter 16. Efficient Data Storage*
+
+> It is worth briefly defining that term "high cardinality". In time series databases, cardinality refers to the number of unique time series created by combinations of labels such as `host`. A metric like a count of HTTP GET requests, might have labels like `host`, `service`, `endpoint` or `status_code`. Each unique combination becomes its own series. As those dimensions multiply, the number of series can grow extremely quickly. High cardinality labels such as user ids, as shown above, can single handedly cause series explosions.
+
+This is where the time series model begins to show its limits. Systems like Prometheus work well with a moderate number of long-lived series, but incur overhead for every unique series in memory, on disk, and at query time. Short-lived, high-dimensional labels such as `container_id` or `pod_id` amplify this by constantly creating new series and churn.
+
+That pressure leads directly to roll-ups. Users either reduce the number of dimensions they collect, which creates blind spots, or they pre-aggregate metrics into coarser forms that are easier to store and query. Vendors reinforce this dynamic by pricing on active series counts, passing the architectural cost of the datastore directly on to the customer. So **teams are again pushed to think less about what they want to observe** and more about what their metrics backend can tolerate.
+
+![](https://clickhouse.com/uploads/three_villains_apr2026_image14_991d95dda4.png)
+
+*Roll-ups reduce high-cardinality data by aggregating many detailed series into fewer, coarser metrics, improving efficiency at the cost of losing granular context.*
+
+Roll-ups are attractive because they help with both storage and query performance, making higher-level aggregates easier to answer. But they come with a serious cost: they require you to decide in advance what questions you will want to ask later, based on expected day-to-day usage, even though the most important questions during incidents are often unknown and ad hoc.. Once data has been rolled up, the original fidelity is gone. If the aggregation was too coarse, or the wrong dimensions were omitted, there is no way to recover them. The result is another observability blind spot, created not by a lack of instrumentation, but by the need to compensate for the limitations of the storage layer.
+
+This problem is compounded further as agents become part of the workflow. When critical dimensions are missing, such as the ability to break down a metric by customer id, the agent simply reaches a dead end. The signal needed to isolate the issue no longer exists. Unlike a human, there is no intuition or fallback. 
+
+And this is what makes roll-ups a villain. They are often presented as a smart optimization, but in many cases they are a workaround for a backend that cannot cope with full-fidelity data at scale. Ideally, users would **not need to think so hard about cardinality in the first place**. They would store rich, high-dimensional telemetry as-is, and use roll-ups only where they genuinely help accelerate known queries, not as a prerequisite for making the system usable.
+
+A better model is possible. If the storage engine can handle high-cardinality data efficiently, then roll-ups become an optional tool used selectively to accelerate some workflows rather than foundational. That means fewer compromises, fewer blind spots, and a system that preserves the full context needed for debugging, analysis, and increasingly, agent-driven reasoning.
+
+## When the Villains combine
+
+Individually, retention, sampling, and roll-ups each remove part of the picture. Together, they compound the loss as data is sampled, aggregated, and eventually discarded, leaving not the original signal, but a heavily filtered version of it. The system has not just lost data, it has lost context.
+
+This layered loss creates a fragile model of observability. Questions that were not anticipated in advance often cannot be answered. Root cause analysis becomes guesswork, constrained by what data happened to survive each stage. For human operators, this results in longer investigations and reliance on intuition and system understanding - delaying the time to resolution, but manageable. 
+
+For agents, it is far more severe. With no residual knowledge to fall back on, missing context becomes a hard stop. The combined effect of these three constraints is not just reduced visibility, but a fundamental limit on how well systems can be understood and operated.
+
+## What Observability should look like
+
+So should retention, sampling, and roll-ups disappear entirely? Not necessarily. But their role should fundamentally change. They should not be primary constraints shaping system design or data collection, but optional optimizations applied deliberately, not defaults imposed by cost or architectural limits.
+
+Rollups are valuable when used to accelerate specific queries or provide fast access to common aggregates, but should exist alongside raw data, not instead of it. It should never be a choice between performance and fidelity. Full-resolution data should always be retained, with roll-ups acting as an optimization layer rather than the foundation of the system.
+
+The same applies to sampling. There may be cases where certain events or logs are known to add little value and can be reduced. But this should be an informed decision based on the data itself, not a necessity driven by storage or processing constraints. By default, systems should capture complete traces and events, preserving full fidelity so that nothing is lost when it matters most.
+
+Retention follows the same principle. Long-term storage should be the default, with costs low enough that it does not dominate decision-making. Retention policies should be driven by compliance or actual business requirements, not by the need to aggressively limit storage. 
+
+## Defeating the Villains with columns
+
+To defeat the villains, we need a storage model that can handle full-fidelity high-cardinality data economically in the first place.
+
+This is where column-oriented storage changes the equation. Observability workloads are fundamentally analytical, requiring the ability to ingest large streams of structured or semi-structured events, then filter, aggregate, and correlate them across time, services, users, containers, and regions. 
+
+![](https://clickhouse.com/uploads/three_villains_apr2026_image7_1e81079a62.png)
+
+*Observability is at its heart an analytical data problem requiring aggregations for charts*
+
+Column stores are built for exactly this pattern. Because each column is stored separately, queries only read the fields they need. This reduces I/O significantly and makes aggregations over large datasets much faster than row-oriented or search-first systems.
+
+
+
+<video autoplay="1" muted="1" loop="1" controls="0">
+  <source src="https://clickhouse.com/uploads/otel_compression_90762792c2.mp4" type="video/mp4" />
+</video>
+
+*Columnar databases store each column separately, sorting them for high compression*
+
+Columnar storage compresses observability data extremely well. Repeated values and ordered patterns enable far higher compression than traditional approaches. Combined with object storage, this makes long-term retention economically viable. Instead of treating retention as a constant budgeting exercise, teams can afford to keep raw data for much longer and use expiry policies for compliance or governance, not because the system forces them to delete context.
+
+<video autoplay="1" muted="1" loop="1" controls="0">
+  <source src="https://clickhouse.com/uploads/otel_high_cardinality_compression_4acd426544.mp4" type="video/mp4" />
+</video>
+
+*By treating each column independently, high cardinality properties are isolated in their impact*
+
+The same architecture helps with high cardinality. Unlike time series systems that create and maintain heavy per-series structures for every unique label combination, column stores isolate each field independently. High-cardinality columns such as `userId` may compress less effectively, but that cost is contained within the column itself and does not impact the rest of the dataset. This allows efficient filtering and aggregation across highly dimensional data, where fields like user IDs, request paths, or model versions become just additional dimensions to query rather than constraints to avoid.
+
+<blockquote style="font-size: 15px;">
+<p>Columnar systems do not eliminate cardinality, they shift some cost to query time. Aggregating over a high-cardinality dimension such as <code class="undefined mb-9 border border-solid border-neutral-750" style="word-break: break-word;">container_id</code> can require creating millions of groups and is computationally expensive, even with techniques like disk spilling. However, this is not a common observability access pattern. In practice, users rarely need to visualize or aggregate across millions of distinct series. Most workflows focus on filtered subsets, top-N results, or aggregated views, making these worst-case queries the exception rather than the norm.</p>
+</blockquote>
+
+This also changes the role of roll-ups and sampling. Roll-ups still have value when they accelerate known access patterns, and sampling can still make sense for genuinely low-value data. But neither needs to be the foundation of the system. Raw, full-fidelity data can remain available, with roll-ups and sampling [used only as targeted optimizations](https://clickhouse.com/blog/whats-new-in-clickstack-december-2025#materialized-views-arrive-in-clickstack). That is a fundamentally different model from today's observability stacks, where these techniques are often required just to make the system affordable or usable.
+
+![](https://clickhouse.com/uploads/three_villains_apr2026_image11_ab27782576.png)
+
+## Why ClickHouse makes the most sense
+
+ClickHouse is not the only columnar database capable of addressing these challenges. Systems like Apache Pinot and Apache Druid share many of the same architectural advantages, and all have found success powering large analytical workloads. But when it comes to observability, ClickHouse stands out due to its real-time focus.
+
+Sparse primary indices make filtering efficient, aligning with observability access patterns, while the parallel execution engine scales queries across large datasets. [Skip indices](https://clickhouse.com/docs/optimize/skipping-indexes) and [support for full-text search](https://clickhouse.com/docs/engines/table-engines/mergetree-family/invertedindexes) extend these capabilities, enabling exploratory workflows.
+
+<video autoplay="1" muted="1" loop="1" controls="0">
+  <source src="https://clickhouse.com/uploads/primary_key_otel_5aa5b5cba6.mp4" type="video/mp4" />
+</video>
+
+*ClickHouse's sparse primary indices exploit the ordered structure of columns to skip large ranges of data, significantly reducing the amount that needs to be scanned.*
+
+ClickHouse's storage architecture natively supports object storage and separation of compute from storage. Combined with columnar compression, this makes it possible to retain large volumes of data at low cost while scaling compute independently based on demand. Crucially, this model removes the need for storage tiers entirely. All data is treated uniformly, with frequently accessed data automatically accelerated through caching based on query patterns. This ensures that hot data is served efficiently without requiring users to decide what belongs in hot, warm, or archive layers. As a result, users benefit from consistent performance and feature parity across all data, without the operational overhead of managing tiers or moving data between them.
+
+![](https://clickhouse.com/uploads/three_villains_apr2026_image2_75cfc83c74.png)
+
+*Intelligent distributed and node level caching in ClickHouse Cloud automatically accelerates frequently accessed data, ensuring common queries and critical investigation paths are served quickly without requiring manual data tiering based on criteria such as time.*
+
+Users can also provision dedicated compute pools for specific workloads such as ingestion, querying, investigations, or alerting, each sized and optimized independently. This reduces overall cost while ensuring resources are aligned with actual usage rather than peak provisioning. Any unused pools can be idle'd, incurring no cost, and activated only when needed.
+
+![Dedicated compute pools](https://clickhouse.com/uploads/three_villains_apr2026_image8_3a1b38141f.png)
+
+These features have already been validated in large-scale observability deployments. Companies such as [Tesla](https://clickhouse.com/blog/how-tesla-built-quadrillion-scale-observability-platform-on-clickhouse), [Anthropic](https://clickhouse.com/blog/how-anthropic-is-using-clickhouse-to-scale-observability-for-ai-era), [OpenAI](https://clickhouse.com/blog/why-openai-uses-clickhouse-for-petabyte-scale-observability), and [Character.AI](https://clickhouse.com/blog/scaling-observabilty-for-thousands-of-gpus-at-character-ai) rely on ClickHouse to analyze observability data at petabyte scale, demonstrating its ability to meet the demands of modern workloads.
+
+<div class="lg:gap-6 lg:grid lg:grid-cols-2 lg:space-y-0 space-y-6"><div class=flex-1 style="will-change:transform;transition:.4s cubic-bezier(.03,.98,.52,.99);transform:perspective(1000px) rotateX(0) rotateY(0) scale3d(1,1,1)"><a href=/blog/how-anthropic-is-using-clickhouse-to-scale-observability-for-ai-era><div class="!bg-neutral-750 animate-fade-in bg-neutral-900/50 border border-neutral-725 flex flex-col h-full hover:bg-neutral-725/90 hover:border-neutral-700 hover:shadow-lg p-4 relative rounded-lg shadow-card text-center transition w-full"><div class="mb-4 mt-2"style=width:37px;height:28px;background-image:url(/images/Quote.svg);background-size:contain;background-repeat:no-repeat></div><div class="font-normal mb-8 text-base text-left text-neutral-200"><div class=rich_content><p>ClickHouse played an instrumental role in helping us develop and ship Claude 4. With ClickHouse, the database is green, queries are lightning-fast, and money is not on fire. ClickHouse has already delivered significant value in helping us create state-of-the-art language models.</div></div><div class="h-auto inline-block max-w-[200px] mb-1 mt-auto"style=width:157.3px;height:17.6px;background-image:url(/_next/static/media/logo-anthropic.a3a696eb.svg);background-size:contain;background-repeat:no-repeat></div></div></a></div><div class=flex-1 style="will-change:transform;transition:.4s cubic-bezier(.03,.98,.52,.99);transform:perspective(1000px) rotateX(0) rotateY(0) scale3d(1,1,1)"><a href=/blog/scaling-observabilty-for-thousands-of-gpus-at-character-ai><div class="!bg-neutral-750 animate-fade-in bg-neutral-900/50 border border-neutral-725 flex flex-col h-full hover:bg-neutral-725/90 hover:border-neutral-700 hover:shadow-lg p-4 relative rounded-lg shadow-card text-center transition w-full"><div class="mb-4 mt-2"style=width:37px;height:28px;background-image:url(/images/Quote.svg);background-size:contain;background-repeat:no-repeat></div><div class="font-normal mb-8 text-base text-left text-neutral-200"><div class=rich_content><p>Previously, querying the last 10 minutes would take 1-2 minutes. With ClickStack, it was just a case of how fast I could blink. The performance is real. When you're digging into logs during an incident, every second matters.</div></div><div class="h-auto inline-block max-w-[200px] mb-1 mt-auto"style=width:157.3px;height:17.6px;background-image:url(/_next/static/media/logo-characterai.3857859e.svg);background-size:contain;background-repeat:no-repeat></div></div></a></div></div>
+
+## The future - agents with full columnar powered context
+
+So what does a world look like when retention is long-term, roll-ups are selective, and sampling is optional?
+
+Instead of managing what data we can afford to keep, we begin optimizing how we access and use it. High concurrency becomes critical, especially as agents become active participants in observability workflows. These systems issue far more queries than humans, and they expect fast, consistent responses. Crucially, we do not want agents to be bottlenecked by the underlying datastore. Instead, we need systems capable of serving queries at the required concurrency without becoming a bottleneck.
+
+![classic_vs_ai_observability.png](https://clickhouse.com/uploads/Untitled_presentation_5_3be67bb8eb.png)
+
+Latency also takes on a new importance. The agentic loop is only as fast as its slowest step. If queries take seconds to return, the entire reasoning process slows down, making interactions less responsive and less effective. Observability becomes less of an interactive workflow and more of a batch process, which is fundamentally at odds with how both humans and agents want to operate.
+
+At the same time, raw data alone is not enough. Agents cannot simply ingest unbounded logs or traces and reason effectively. They need fast, structured summarization. This makes powerful, low-latency aggregations essential, along with techniques that push summarization into the database itself. Capabilities like log clustering, pattern detection, and high-speed grouping become first-class requirements, allowing systems to distill large volumes of data into meaningful signals quickly.
+
+Equally important is openness. In this context, openness means exposing the full capabilities of the datastore through a standard, expressive interface such as SQL. Rather than relying on proprietary query languages or constrained APIs, users and agents can interact directly with the underlying data model. This matters because LLMs are already highly effective at generating SQL, reducing the need for custom training or additional context to learn domain-specific grammars.
+
+At the same time, well-defined endpoints and tools remain important for common workflows, providing stable, efficient access patterns for frequent queries. But these should not be the only interface. The ability for agents to fall back to raw SQL acts as a critical escape hatch, enabling deeper introspection and truly ad hoc investigation.
+
+This is where systems designed for real-time analytics have an advantage, naturally providing these properties as part of their design. ClickHouse, for example, was built from the outset to serve low-latency SQL aggregations at high concurrency. Once the constraints of retention, sampling, and roll-ups are removed, these characteristics form the foundation of the next generation of observability, optimizing for speed, scale, and reasoning over complete data.
+
+## Conclusion
+
+Observability has been shaped by constraints that force users to trade fidelity for cost and performance. As we move into an agent-driven future, those trade-offs are no longer acceptable. By removing these limitations and embracing architectures built for full-fidelity data, we can shift from managing compromises to enabling true understanding. This is what ultimately unlocks agentic observability, where systems can reason, investigate, and act with complete context.
+
 
 ---
 
