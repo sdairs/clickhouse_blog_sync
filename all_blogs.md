@@ -1,6 +1,1311 @@
 # ClickHouse Blogs
-Last updated: 2026-04-15 06:43:13 UTC
-Total blogs: 748
+Last updated: 2026-04-16 06:44:04 UTC
+Total blogs: 752
+
+---
+
+## Index-based pruning in ClickHouse
+Published: 2026-04-15T08:35:04+00:00
+URL: https://clickhouse.com/blog/index-based-pruning
+
+---
+title: "Index-based pruning in ClickHouse"
+date: "2026-04-15T08:35:04.546Z"
+author: "Mark Needham"
+category: "Engineering"
+excerpt: "Learn how ClickHouse uses primary indexes, lightweight projections, and skip indexes to prune data before reading it. Demonstrated  on a 243 million row UK property sales dataset."
+---
+
+# Index-based pruning in ClickHouse
+
+The fastest analytical queries are the ones that read the least data. We know we say that a lot, but that’s only because it’s true!
+
+ClickHouse has several ways to make this happen. In this blog post, we'll use a dataset of UK property sales to walk through three index-based pruning techniques - so you know exactly what to reach for and when.
+
+## Pruning technique #1: Primary index {#pruning_technique_1_primary_index}
+
+The first pruning technique, the primary key, is one of the first things that you learn when creating a table. A table’s primary key determines the sort order of the data within a data part. 
+
+Table parts are comprised of granules, each containing 8,192 rows by default. ClickHouse’s primary index stores the [primary key column values for the first row in every granule](https://clickhouse.com/docs/guides/best-practices/sparse-primary-indexes#the-primary-index-has-one-entry-per-granule).
+
+In the diagram below, data is sorted by the primary key, `C1`, and rows are organized into granules (`g1` to `g4`). We use 3 rows per granule in this diagram for clarity. The primary index stores the first value for each granule, i.e., 10 for `g1`, 20 for `g2`, and so on.
+
+![](https://clickhouse.com/uploads/pruning_001_767cab4175.png)
+
+The primary index allows entire granules to be skipped before reading them, based on the filter condition on the primary key. For example, for a query that contains `WHERE C1 > 60`, granules `g1` and `g2` are pruned using the index, so only the remaining data is read.
+
+## Pruning technique #2: Lightweight projections {#pruning_technique_2_lightweight_projections}
+
+Our next pruning technique is [lightweight projections](https://clickhouse.com/blog/projections-secondary-indices), which was first introduced in [ClickHouse 25.6](https://clickhouse.com/blog/clickhouse-release-25-06#filtering-by-multiple-projections) and received a more user-friendly syntax in [ClickHouse 26.1](https://clickhouse.com/blog/clickhouse-release-26-01#new-syntax-for-indexing-projections).
+
+Projections in ClickHouse are automatically maintained, hidden table copies stored in a different sort order, and therefore with a different primary index. These alternative layouts can speed up queries that benefit from those orderings. The downside is that projections duplicated the base table’s data on disk.
+
+Lightweight projections behave like a secondary index without duplicating full rows. Instead of storing complete data copies, they store only their sorting key plus a `_part_offset` pointer back into the base table. This greatly reduces storage overhead but means that any other returned columns must be read from the base table.
+
+We can see how this works by updating our diagram to add a lightweight projection on `C2`:
+
+![](https://clickhouse.com/uploads/pruning_002_5dd07dd9ad.png)
+
+For filters on a column that is not part of the primary key, such as `WHERE C2 > 900`, ClickHouse can use a lightweight projection, which stores the sorted projection key (`C2`) values plus `_part_offset` values and provides its own primary index (②) that allows granules to be pruned for filters on the projection key.
+
+## Pruning technique #3: Skip indexes {#pruning_technique_3_skip_indexes}
+
+Our final technique is [skip indexes](https://clickhouse.com/docs/optimize/skipping-indexes). One such skip index is the minmax index, which records the minimum and maximum values for a column for each granule.
+
+Minmax indexes have been supported in ClickHouse for more than five years, but we’ve recently added support for automatically creating these indexes for every column of a specific type in a table.
+
+The advantage of a minmax index over a lightweight index is that it doesn’t duplicate the column values on disk. However, something to keep in mind is that the column on which we apply a minmax index needs to be somewhat correlated with the primary-key, otherwise the index won’t effectively prune data.
+
+In the diagram below, the minmax index (③) records the minimum and maximum values of `C3` for each granule.
+
+![](https://clickhouse.com/uploads/pruning_003_9950c00fa2.png)
+
+For a filter like `WHERE C3 > 600`, granules `g1` to `g3` can be skipped because their maximum value is below 600, so only g4 needs to be read.
+
+## Pruning in action: UK property dataset {#pruning_in_action}
+
+Now that we’ve got a high-level understanding of each of the pruning techniques, let’s learn how to put them into action on a real-life dataset. We’ll be using the [UK property prices dataset](https://clickhouse.com/docs/getting-started/example-datasets/uk-price-paid), which contains details of property sales in the UK.
+
+We’ll run all queries on an Apple Mac M2 Max with 64GB of RAM.
+
+### Ingesting the UK property dataset
+
+Let’s start by creating the table:
+
+<pre><code type='click-ui' language='sql'>
+CREATE OR REPLACE TABLE uk_price_paid
+(
+    price UInt32,
+    date Date,
+    postcode1 LowCardinality(String),
+    postcode2 LowCardinality(String),
+    type Enum8('terraced' = 1, 'semi-detached' = 2, 'detached' = 3, 'flat' = 4, 'other' = 0),
+    is_new UInt8,
+    duration Enum8('freehold' = 1, 'leasehold' = 2, 'unknown' = 0),
+    addr1 String,
+    addr2 String,
+    street LowCardinality(String),
+    locality LowCardinality(String),
+    town LowCardinality(String),
+    district LowCardinality(String),
+    county LowCardinality(String)
+)
+ENGINE = MergeTree
+ORDER BY (postcode1, postcode2, addr1, addr2);
+</code></pre>
+
+The primary key (which is the same as the order by statement unless otherwise specified) is `(postcode1, postcode2, addr1, addr2)`.
+
+Once the table’s created, we’ll ingest the data:
+
+<pre><code type='click-ui' language='sql'>
+INSERT INTO uk_price_paid
+SELECT *
+FROM file('uk_all.parquet');
+</code></pre>
+
+I created `uk_all.parquet` by first importing the data from `pp-complete.csv` ([as documented](https://clickhouse.com/docs/getting-started/example-datasets/uk-price-paid#preprocess-import-data)) and then exporting it to Parquet.
+
+The output of running the insert query is shown below:
+
+<pre><code type='click-ui' language='bash'>
+30452463 rows in set. Elapsed: 5.366 sec. Processed 30.45 million rows, 170.44 MB (5.68 million rows/s., 31.76 MB/s.)
+Peak memory usage: 774.00 MiB.
+</code></pre>
+
+This dataset contains 30 million rows, which is relatively small by ClickHouse’s standards. We could increase the amount of data by ingesting the Parquet multiple times, but there’s a faster way, using [`ATTACH PARTITION`](https://clickhouse.com/docs/sql-reference/statements/alter/partition#attach-partitionpart).
+
+The following command duplicates all the parts in the table, doubling the amount of data:
+
+<pre><code type='click-ui' language='sql'>
+ALTER TABLE uk_price_paid 
+ATTACH PARTITION ID 'all' 
+FROM uk_price_paid;
+</code></pre>
+
+I ran it several times so that we have a decent amount of data to work with. For reference, the following is the output from running the query three times:
+
+```shell
+0 rows in set. Elapsed: 0.167 sec.
+
+0 rows in set. Elapsed: 0.458 sec.
+
+0 rows in set. Elapsed: 0.412 sec.
+```
+
+We can write the following query to return the count of records in our table:
+
+<pre><code type='click-ui' language='sql'>
+SELECT count()
+FROM uk_price_paid;
+</code></pre>
+
+```shell
+┌───count()─┐
+│ 243619704 │ -- 243.62 million
+└───────────┘
+
+1 row in set. Elapsed: 0.001 sec.
+```
+
+### Filtering by primary index
+
+Let’s start by writing a query that filters on the primary key. The following query returns the number of properties sold in Croydon (a suburb of London) as well as the average sale price:
+
+<pre><code type='click-ui' language='sql'>
+SELECT postcode1, count(), avg(price)
+FROM uk_price_paid
+WHERE postcode1 LIKE 'CR%'
+GROUP BY ALL
+ORDER BY count() DESC
+SETTINGS 
+  output_format_pretty_single_large_number_tip_threshold=0,
+  use_query_condition_cache=0;
+</code></pre>
+
+The output of running the query is shown below:
+
+```shell
+┌─postcode1─┬─count()─┬─────────avg(price)─┐
+│ CR0       │  573952 │  264860.4016363738 │
+│ CR2       │  219464 │ 287568.45715014765 │
+│ CR4       │  192912 │ 218234.12212822426 │
+│ CR3       │  155304 │  306863.8307319837 │
+│ CR8       │  147880 │  373809.7425480119 │
+│ CR7       │  141152 │  211355.8734413965 │
+│ CR5       │  123112 │ 355812.51777243486 │
+│ CR6       │   47920 │  384279.0923205342 │
+│ CR9       │     352 │ 12324871.113636363 │
+│ CR24      │      16 │              25000 │
+└───────────┴─────────┴────────────────────┘
+```
+
+```shell
+10 rows in set. Elapsed: 0.030 sec.
+
+10 rows in set. Elapsed: 0.015 sec.
+
+10 rows in set. Elapsed: 0.021 sec.
+```
+
+The best query time was 15 milliseconds, which is not bad for a query on a table containing more than 200 million records.
+
+If we prefix this query with `EXPLAIN indexes=1, pretty=1, compact=1`, we can see the query plan:
+
+```shell
+    ┌─explain─────────────────────────────────────────────┐
+ 1. │ Output: postcode1, count(), avg(price)              │
+ 2. │                                                     │
+ 3. │ Sorting (Sorting for ORDER BY)                      │
+ 4. │ └──Aggregating                                      │
+ 5. │    └──ReadFromMergeTree (default.uk_price_paid)     │
+ 6. │          Indexes:                                   │
+ 7. │            PrimaryKey                               │
+ 8. │              Keys:                                  │
+ 9. │                postcode1                            │
+10. │              Condition: (postcode1 in ['CR', 'CS')) │
+11. │              Parts: 36/36                           │
+12. │              Granules: 235/29751                    │
+13. │              Search Algorithm: binary search        │
+14. │            Ranges: 36                               │
+    └─────────────────────────────────────────────────────┘
+```
+
+On line 12, we can see that the query engine only needed to process 235 of the 29,751 granules (less than 1%) to run this query. 
+
+We can see how many rows were processed by querying the `system.query_log` table:
+
+<pre><code type='click-ui' language='sql'>
+SELECT event_time, query, read_rows
+FROM system.query_log
+WHERE type = 'QueryFinish' AND query NOT LIKE '%query_log%'
+ORDER BY event_time DESC 
+LIMIT 1
+FORMAT Vertical;
+</code></pre>
+
+```shell
+Row 1:
+──────
+event_time: 2026-04-09 10:37:22
+query:      SELECT postcode1, count(), avg(price)...
+read_rows:  1687552 -- 1.69 million
+```
+
+Our query reads 1.6 million rows from a potential 243 million, so it’s fair to say the primary index has done a good job of reducing the data we need to read.
+
+The primary index will be effective when filtering multiple columns that are part of the primary key, provided they form a prefix of the entire key.
+
+Our primary key is `(postcode1, postcode2, addr1, addr2)`, so filtering on, for example, `postcode1` and `postcode2` will be efficient. 
+
+<pre><code type='click-ui' language='sql'>
+SELECT postcode1, postcode2, count(), avg(price)
+FROM uk_price_paid
+WHERE postcode1 LIKE 'CR%' AND postcode2 LIKE '4%'
+GROUP BY ALL
+ORDER BY count() DESC 
+LIMIT 10
+SETTINGS
+  output_format_pretty_single_large_number_tip_threshold=0,
+  use_query_condition_cache=0;
+</code></pre>
+
+```shell
+┌─postcode1─┬─postcode2─┬─count()─┬─────────avg(price)─┐
+│ CR4       │ 4FD       │    2496 │ 136439.84935897434 │
+│ CR4       │ 4FF       │    2056 │ 111415.15953307394 │
+│ CR4       │ 4FE       │    1376 │  98730.37790697675 │
+│ CR4       │ 4LT       │    1320 │ 104595.98787878788 │
+│ CR0       │ 4UX       │    1240 │ 118912.51612903226 │
+│ CR8       │ 4DZ       │    1200 │             103860 │
+│ CR0       │ 4TX       │    1184 │ 110415.50675675676 │
+│ CR0       │ 4HB       │    1152 │ 162919.75694444444 │
+│ CR0       │ 4FG       │    1144 │  230394.2097902098 │
+│ CR0       │ 4GA       │    1032 │ 211535.29457364342 │
+└───────────┴───────────┴─────────┴────────────────────┘
+
+10 rows in set. Elapsed: 0.015 sec. Processed 638.98 thousand rows, 3.30 MB (42.27 million rows/s., 218.59 MB/s.)
+Peak memory usage: 3.92 MiB.
+```
+
+This query processes just over 630,000 rows out of 243 million. 
+
+Filtering only on `postcode2`, which is part of the primary key, but isn’t the first key column, won’t be as efficient:
+
+<pre><code type='click-ui' language='sql'>
+SELECT postcode1, postcode2, count(), avg(price)
+FROM uk_price_paid
+WHERE postcode2 LIKE '4%'
+GROUP BY ALL
+ORDER BY count() DESC 
+LIMIT 10
+SETTINGS
+  output_format_pretty_single_large_number_tip_threshold=0,
+  use_query_condition_cache=0;
+</code></pre>
+
+```shell
+┌─postcode1─┬─postcode2─┬─count()─┬─────────avg(price)─┐
+│ TR8       │ 4LX       │    3328 │  67047.70913461539 │
+│ CR4       │ 4FD       │    2496 │ 136439.84935897434 │
+│ SS16      │ 4TY       │    2328 │  85003.52233676976 │
+│ NR29      │ 4NW       │    2328 │ 36411.996563573884 │
+│ SS16      │ 4TQ       │    2184 │  88534.72161172162 │
+│ SS16      │ 4TD       │    2160 │  67603.75925925926 │
+│ BS4       │ 4EY       │    2104 │ 100474.69201520912 │
+│ RG22      │ 4UR       │    2096 │  143119.3893129771 │
+│ BB11      │ 4JZ       │    2096 │  29956.74427480916 │
+│ LS1       │ 4ES       │    2088 │  256009.9655172414 │
+└───────────┴───────────┴─────────┴────────────────────┘
+
+10 rows in set. Elapsed: 0.787 sec. Processed 138.82 million rows, 572.89 MB (176.47 million rows/s., 728.26 MB/s.)
+Peak memory usage: 146.53 MiB.
+```
+
+It now scans 138 million rows and takes 50 times longer to return a result. If we explain this query, we’ll see the following output:
+
+```shell
+    ┌─explain───────────────────────────────────────────────────────────┐
+ 1. │ Expression (Project names)                                        │
+ 2. │   Limit (preliminary LIMIT)                                       │
+ 3. │     Sorting (Sorting for ORDER BY)                                │
+ 4. │       Expression ((Before ORDER BY + Projection))                 │
+ 5. │         Aggregating                                               │
+ 6. │           Expression (Before GROUP BY)                            │
+ 7. │             Expression ((WHERE + Change column names to column id⋯│
+ 8. │               ReadFromMergeTree (default.uk_price_paid)           │
+ 9. │               Indexes:                                            │
+10. │                 PrimaryKey                                        │
+11. │                   Keys:                                           │
+12. │                     postcode2                                     │
+13. │                   Condition: (postcode2 in ['4', '5'))            │
+14. │                   Parts: 11/11                                    │
+15. │                   Granules: 16950/29744                           │
+16. │                   Search Algorithm: generic exclusion search      │
+17. │                 Ranges: 7066                                      │
+    └───────────────────────────────────────────────────────────────────┘
+
+```
+
+The query engine can use the primary key to exclude almost half of the granules (line 15), but on line 16, we see it’s using the [generic exclusion search algorithm](https://clickhouse.com/docs/guides/best-practices/sparse-primary-indexes#generic-exclusion-search-algorithm). 
+
+The efficiency of this algorithm depends on the cardinality difference between the `postcode2` column and its predecessor key column, `postcode1`. You can see a step-by-step example in the documentation, but the takeaway is that the algorithm is efficient when the predecessor column has low(er) cardinality, but not so efficient when it has high(er) cardinality.
+
+In the next section, we’re going to see how to filter more efficiently by columns that aren’t part of the primary key at all.
+
+### Filtering by lightweight projection
+
+Filtering by primary index is the best technique, and making sure that you sort the data by the columns that you’re most likely to filter against is a good thing to keep in mind when designing your tables.
+
+But often, we want to query by other columns as well. For example, let’s say we want to find the number of properties sold by town when the `district = ‘BURNLEY’`:
+
+<pre><code type='click-ui' language='sql'>
+SELECT town, count(), round(avg(price)) AS avgPrice, argAndMax(date, price)
+FROM uk_price_paid
+WHERE district = 'BURNLEY'
+GROUP BY ALL
+ORDER BY count() DESC LIMIT 10
+SETTINGS
+    use_query_condition_cache = 0;
+</code></pre>
+
+```shell
+┌─town─────────┬─count()─┬─avgPrice─┬─argAndMax(date, price)──┐
+│ BURNLEY      │  485808 │    84552 │ ('2020-03-01',68945000) │
+│ NELSON       │     200 │    67794 │ ('2004-12-10',170000)   │
+│ ACCRINGTON   │     120 │    61303 │ ('2022-11-30',223995)   │
+│ COLNE        │      88 │    68455 │ ('2000-12-21',185000)   │
+│ ROSSENDALE   │      40 │   124490 │ ('2007-09-10',237000)   │
+│ BARNOLDSWICK │      32 │    26488 │ ('1999-06-04',38000)    │
+│ BLACKBURN    │      32 │    56500 │ ('2004-09-24',78000)    │
+│ BLACKPOOL    │      24 │    40833 │ ('1999-07-23',44000)    │
+│ PRESTON      │       8 │   221995 │ ('2022-12-09',221995)   │
+│ CLITHEROE    │       8 │   250000 │ ('2020-07-16',250000)   │
+└──────────────┴─────────┴──────────┴─────────────────────────┘
+```
+
+The output from running this query several times is shown below:
+
+```shell
+10 rows in set. Elapsed: 0.428 sec. Processed 240.96 million rows, 480.72 MB (562.98 million rows/s., 1.12 GB/s.)
+Peak memory usage: 841.37 KiB.
+
+10 rows in set. Elapsed: 0.466 sec. Processed 219.79 million rows, 438.38 MB (471.16 million rows/s., 939.77 MB/s.)
+Peak memory usage: 852.86 KiB.
+
+10 rows in set. Elapsed: 0.481 sec. Processed 207.87 million rows, 414.50 MB (432.32 million rows/s., 862.05 MB/s.)
+Peak memory usage: 844.83 KiB.
+```
+
+The query engine has to process almost all the rows in the dataset in order to answer this query.
+
+Let’s see if we can improve the performance by adding a lightweight projection on the `district` column:
+
+<pre><code type='click-ui' language='sql'>
+ALTER TABLE uk_price_paid
+ADD PROJECTION by_district INDEX district TYPE basic;
+</code></pre>
+
+We’ll materialize that projection so that we can use it straight away:
+
+<pre><code type='click-ui' language='sql'>
+ALTER TABLE uk_price_paid
+MATERIALIZE PROJECTION by_district
+SETTINGS mutations_sync=1;
+</code></pre>
+
+```shell
+0 rows in set. Elapsed: 14.480 sec.
+```
+
+Now, let’s run the query with the projection:
+
+<pre><code type='click-ui' language='sql'>
+SELECT town, count(), round(avg(price)) AS avgPrice, argAndMax(date, price)
+FROM uk_price_paid
+WHERE district = 'BURNLEY'
+GROUP BY ALL
+ORDER BY count() DESC LIMIT 10
+SETTINGS
+    use_query_condition_cache = 0,
+    optimize_use_projections = 1;
+</code></pre>
+
+`optimize_use_projections` is enabled by default, but we included it here for completeness. If you turn it off, projections won’t be used. It’s useful for sanity checking that your projection is actually working!
+
+The timings of running the above query are shown below:
+
+```shell
+10 rows in set. Elapsed: 0.023 sec.
+
+10 rows in set. Elapsed: 0.056 sec.
+
+10 rows in set. Elapsed: 0.046 sec.
+```
+
+For the `BURNLEY` query, using a lightweight projection on the `district` column reduces the query time from 428 milliseconds to 23 milliseconds, a 94% improvement.
+
+Let’s now have a look at what’s going on under the hood. I initially prefixed the query with the same explain clause that we used earlier:
+
+<pre><code type='click-ui' language='sql'>
+EXPLAIN indexes=1, pretty=1, compact= 1 
+SELECT town, count(), round(avg(price)) AS avgPrice, argAndMax(date, price)
+FROM uk_price_paid
+WHERE district = 'BURNLEY'
+GROUP BY ALL
+ORDER BY count() DESC LIMIT 10
+SETTINGS
+    use_query_condition_cache = 0,
+    optimize_use_projections = 1;
+</code></pre>
+
+```shell
+┌─explain─────────────────────────────────────────────────┐
+│ Output: town, count(), avgPrice, argAndMax(date, price) │
+│                                                         │
+│ Limit (preliminary LIMIT)                               │
+│ └──Sorting (Sorting for ORDER BY)                       │
+│    └──Aggregating                                       │
+│       └──ReadFromMergeTree (default.uk_price_paid)      │
+│             Indexes:                                    │
+│               PrimaryKey                                │
+│                 Condition: true                         │
+│                 Parts: 6/6                              │
+│                 Granules: 29741/29741                   │
+│               Ranges: 6                                 │
+└─────────────────────────────────────────────────────────┘
+```
+
+This output doesn’t help us as it only includes the base query plan with the primary key index information. We need to also add `projections=1` so that projection analysis is included in the output:
+
+
+<pre><code type='click-ui' language='sql'>
+EXPLAIN indexes=1, projections=1, pretty=1, compact= 1 
+SELECT town, count(), round(avg(price)) AS avgPrice, argAndMax(date, price)
+FROM uk_price_paid
+WHERE district = 'BURNLEY'
+GROUP BY ALL
+ORDER BY count() DESC LIMIT 10
+SETTINGS
+    use_query_condition_cache = 0,
+    optimize_use_projections = 1,
+    output_format_pretty_max_value_width=65,
+    output_format_pretty_row_numbers=1;
+</code></pre>
+
+```shell
+   ┌─explain───────────────────────────────────────────────────────────┐
+ 1. │ Output: town, count(), avgPrice, argAndMax(date, price)           │
+ 2. │                                                                   │
+ 3. │ Limit (preliminary LIMIT)                                         │
+ 4. │ └──Sorting (Sorting for ORDER BY)                                 │
+ 5. │    └──Aggregating                                                 │
+ 6. │       └──ReadFromMergeTree (default.uk_price_paid)                │
+ 7. │             Indexes:                                              │
+ 8. │               PrimaryKey                                          │
+ 9. │                 Condition: true                                   │
+10. │                 Parts: 11/11                                      │
+11. │                 Granules: 29744/29744                             │
+12. │               Ranges: 11                                          │
+13. │             Projections:                                          │
+14. │               Name: by_district                                   │
+15. │                 Description: Projection has been analyzed and wil⋯│
+16. │                 Condition: (district in ['BURNLEY', 'BURNLEY'])   │
+17. │                 Search Algorithm: binary search                   │
+18. │                 Parts: 11                                         │
+19. │                 Marks: 72                                         │
+20. │                 Ranges: 11                                        │
+21. │                 Rows: 589824                                      │
+22. │                 Filtered Parts: 0                                 │
+    └───────────────────────────────────────────────────────────────────┘
+```
+
+Let’s go through what’s happening here, starting with the **Indexes** section:
+
+The primary key index couldn't help with this query - `Condition: true` on Row 9 means it applied no filtering, so all 11 parts (Row 10\) and 29,744 granules (Row 11\) have to be considered.
+
+Moving on to the **Projections** section
+
+* `Filtered Parts: 0` on Row 22 indicates that no parts could be eliminated entirely, which means `BURNLEY` appears in all 11 parts.  
+* Row 19 narrows the search to 72 granules (or marks)  
+* Each granule contains 8,192 rows by default, which gives us the count on line 21 (72 * 8,192=589,824)  
+* Those 72 granules are spread across 11 parts (Row 18), and since `BURNLEY` rows are stored contiguously within each part, that gives us one continuous range per part - 11 ranges in total (Row 20).
+
+The table below shows the times without projection and with projection for districts with both more and fewer properties sold than Burnley:
+
+| District | Matching rows | No projection (ms) | Projection (ms) | Improvement |
+| :---: | :---: | :---: | :---: | :---: |
+| BIRMINGHAM | 3,543,672 | 341 | 82 | 76% |
+| SHEFFIELD | 1,975,368 | 368 | 44 | 88% |
+| CROYDON | 1,448,472 | 364 | 48 | 86% |
+| WAKEFIELD | 1,322,216 | 382 | 50 | 87% |
+| WIRRAL | 1,301,168 | 358 | 39 | 89% |
+| SOUTHWARK | 999,432 | 367 | 30 | 92% |
+| SUTTON | 875,872 | 361 | 45 | 87% |
+
+> I ran the query three times with the projection and three times without it, and took the lowest times.
+
+We see at least a 75% improvement in query time for all these districts when using the projection.
+
+One cool feature of lightweight projections is that we can combine them to get row-level filtering across multiple independent sort orders. 
+For example, we could add another lightweight projection on the `date` column:
+
+<pre><code type='click-ui' language='sql'>
+ALTER TABLE uk_price_paid
+ADD PROJECTION by_date INDEX date TYPE basic;
+
+ALTER TABLE uk_price_paid
+MATERIALIZE PROJECTION by_date
+SETTINGS mutations_sync=1;
+</code></pre>
+
+A query that filters by both `district` and `date` (e.g. finding properties sold in Manchester in January 2023\) would use both of these lightweight projections:
+
+<pre><code type='click-ui' language='sql'>
+SELECT town, 
+       count(),
+       round(avg(price)) AS avgPrice,
+       argAndMax(date, price)
+FROM uk_price_paid
+WHERE (district = 'MANCHESTER') AND (date BETWEEN '2023-01-01' AND '2023-01-31')
+GROUP BY ALL
+ORDER BY count() DESC
+LIMIT 10
+SETTINGS
+    use_query_condition_cache = 0,
+    optimize_use_projections = 1;
+</code></pre>
+
+```shell
+┌─town───────┬─count()─┬─avgPrice─┬─argAndMax(date, price)─┐
+│ MANCHESTER │    3656 │   266818 │ ('2023-01-13',3000000) │
+│ SALFORD    │      24 │   341667 │ ('2023-01-31',670000)  │
+└────────────┴─────────┴──────────┴────────────────────────┘
+```
+
+The explain output for this query is shown below:
+
+```shell
+    ┌─explain───────────────────────────────────────────────────────────┐
+ 1. │ Output: town, count(), avgPrice, argAndMax(date, price)           │
+ 2. │                                                                   │
+ 3. │ Limit (preliminary LIMIT)                                         │
+ 4. │ └──Sorting (Sorting for ORDER BY)                                 │
+ 5. │    └──Aggregating                                                 │
+ 6. │       └──ReadFromMergeTree (default.uk_price_paid)                │
+ 7. │             Indexes:                                              │
+ 8. │               PrimaryKey                                          │
+ 9. │                 Condition: true                                   │
+10. │                 Parts: 11/11                                      │
+11. │                 Granules: 29744/29744                             │
+12. │               Ranges: 11                                          │
+13. │             Projections:                                          │
+14. │               Name: by_district                                   │
+15. │                 Description: Projection has been analyzed and wil⋯│
+16. │                 Condition: (district in ['MANCHESTER', 'MANCHESTE⋯│
+17. │                 Search Algorithm: binary search                   │
+18. │                 Parts: 11                                         │
+19. │                 Marks: 247                                        │
+20. │                 Ranges: 11                                        │
+21. │                 Rows: 2023424                                     │
+22. │                 Filtered Parts: 0                                 │
+23. │               Name: by_date                                       │
+24. │                 Description: Projection has been analyzed and wil⋯│
+25. │                 Condition: and((date in (-Inf, 19388]), (date in ⋯│
+26. │                 Search Algorithm: binary search                   │
+27. │                 Parts: 11                                         │
+28. │                 Marks: 71                                         │
+29. │                 Ranges: 11                                        │
+30. │                 Rows: 581632                                      │
+31. │                 Filtered Parts: 0                                 │
+    └───────────────────────────────────────────────────────────────────┘
+```
+
+Each projection independently works out which parts and granules match for their filter condition and the set of rows to read from the base table is the intersection of both. 
+
+To see the impact of the lightweight projections individually and together, we’re going to create a couple of extra tables, each containing one of the lightweight projections.
+
+First up, `uk_price_paid_by_date` will only have the `by_date` lightweight projection:
+
+<pre><code type='click-ui' language='bash'>
+CREATE TABLE uk_price_paid_by_date
+CLONE AS uk_price_paid;
+
+ALTER TABLE uk_price_paid_by_date 
+DROP PROJECTION by_district;
+</code></pre>
+
+And `uk_price_paid_by_district` will only have the `by_district` lightweight projection:
+
+<pre><code type='click-ui' language='bash'>
+CREATE TABLE uk_price_paid_by_district 
+CLONE AS uk_price_paid;
+
+ALTER TABLE uk_price_paid_by_district 
+DROP PROJECTION by_date;
+</code></pre>
+
+We’ll now run our previous query that finds properties sold in Manchester in January 2023 against each table. We’ll run it against each table three times, recording the lowest time and the rows processed:
+
+| Table | Query time (ms) | Rows processed |
+| ----- | :---: | :---: |
+| `uk_price_paid` | 52 | 2.24 million |
+| `uk_price_paid_by_district` | 67 | 8.03 million |
+| `uk_price_paid_by_date` | 347 | 243.46 million |
+
+We don't really see much improvement with just the `by_date` lightweight projection. Even though the projection has narrowed down the matching rows to around 500,000 (properties sold in January 2023), those rows are scattered across all 243 million rows in the base table, so the query engine still has to visit most of the data to retrieve them and then filter the district to Manchester.
+
+We can confirm what we’re seeing above by writing the following query to work out how many granules need to be scanned to find all the matching rows for properties sold in January 2023:
+
+<pre><code type='click-ui' language='bash'>
+SELECT
+    uniqExact((_part, intDiv(_part_offset, 8192))) AS granulesWithMatchingRows,
+    (
+        SELECT sum(marks)
+        FROM system.parts
+        WHERE (`table` = 'uk_price_paid_by_date') AND active
+    ) AS totalGranules,
+    round((granulesWithMatchingRows / totalGranules) * 100, 2) AS pct
+FROM uk_price_paid_by_date
+WHERE (date >= '2023-01-01') AND (date <= '2023-01-31');
+</code></pre>
+
+```shell
+┌─granulesWithMatchingRows─┬─totalGranules─┬──pct─┐
+│                    29724 │         29755 │ 99.9 │
+└──────────────────────────┴───────────────┴──────┘
+```
+
+We’re scanning 29,724 granules, or around 243,499,008 rows (29,724*8,192), to find the matching rows.
+
+Let’s have a look at another example where we’re filtering more specifically by date and more liberally by district. The following query finds property sales on 1st February 2023 in Manchester, Birmingham, Sutton, and Wirral:
+
+<pre><code type='click-ui' language='bash'>
+SELECT town,
+       count(),
+       round(avg(price)) AS avgPrice,
+       argAndMax(date, price)
+FROM uk_price_paid
+WHERE (district IN ('MANCHESTER', 'BIRMINGHAM', 'SUTTON', 'WIRRAL'))
+AND (date = '2023-02-01')
+GROUP BY ALL
+ORDER BY count() DESC
+LIMIT 10
+SETTINGS
+    use_query_condition_cache = 0,
+    optimize_use_projections = 1;
+</code></pre>
+
+And again, we’ll run it against each table three times, recording the lowest time and the rows processed:
+
+| Table | Query time (ms) | Rows processed |
+| ----- | :---: | :---: |
+| `uk_price_paid` | 85 | 58.92 million |
+| `uk_price_paid_by_district` | 352 | 207.67 million |
+| `uk_price_paid_by_date` | 99 | 75.85 million |
+
+This time, `by_date` does a better job of filtering the data than `by_district`, but we get the best performance when both lightweight projections work together.
+
+### Filtering by minmax index
+
+Our final pruning technique is the minmax index, a type of skip index. As a quick reminder, any column we add a skip index to must be correlated with the primary key; otherwise, the index won’t be effective.
+
+We’re going to add a minmax index to the `price` column to filter prices more efficiently. Prices are loosely correlated with postcode because properties in the same geographic area tend to sell in similar price ranges: expensive London postcodes (SW1, W1) cluster toward the high end, while rural postcodes cluster toward the lower end. This means that the query engine should be able to skip granules when searching by price. 
+
+We can add the minmax index with the following query:
+
+<pre><code type='click-ui' language='bash'>
+ALTER TABLE uk_price_paid
+ADD INDEX price_minmax price TYPE minmax GRANULARITY 1;
+</code></pre>
+
+We’ll materialize that index so that we can use it straight away:
+
+<pre><code type='click-ui' language='sql'>
+ALTER TABLE uk_price_paid
+MATERIALIZE INDEX price_minmax
+SETTINGS mutations_sync=1;
+</code></pre>
+
+Next, we’re going to write a query to find the district that has the most properties sold for more than £10,000,000:
+
+<pre><code type='click-ui' language='sql'>
+SELECT
+    district,
+    count(),
+    formatReadableQuantity(avg(price)) AS avgPrice
+FROM uk_price_paid
+WHERE price > 10000000
+GROUP BY ALL
+ORDER BY count() DESC
+LIMIT 10
+SETTINGS use_query_condition_cache = 0,
+         use_skip_indexes = 1;
+</code></pre>
+
+> The `use_skip_indexes` setting is true by default, but we can turn it off to see the impact of skip indexes.
+
+The result of running the query is shown below:
+
+```shell
+┌─district───────────────┬─count()─┬─avgPrice──────┐
+│ CITY OF WESTMINSTER    │   13880 │ 32.61 million │
+│ KENSINGTON AND CHELSEA │    7120 │ 19.22 million │
+│ CAMDEN                 │    3616 │ 34.78 million │
+│ CITY OF LONDON         │    2448 │ 50.09 million │
+│ TOWER HAMLETS          │    2392 │ 43.70 million │
+│ MANCHESTER             │    1752 │ 24.71 million │
+│ SOUTHWARK              │    1712 │ 37.31 million │
+│ BIRMINGHAM             │    1520 │ 27.66 million │
+│ ISLINGTON              │    1504 │ 35.81 million │
+│ LEEDS                  │    1328 │ 24.94 million │
+└────────────────────────┴─────────┴───────────────┘
+```
+
+I ran this query three times without the skip index (`use_skip_indexes=0`):
+
+```shell
+10 rows in set. Elapsed: 0.347 sec. Processed 243.62 million rows, 1.09 GB (701.77 million rows/s., 3.13 GB/s.)
+Peak memory usage: 6.21 MiB.
+
+10 rows in set. Elapsed: 0.506 sec. Processed 243.62 million rows, 1.09 GB (481.02 million rows/s., 2.15 GB/s.)
+Peak memory usage: 6.21 MiB.
+
+10 rows in set. Elapsed: 0.390 sec. Processed 243.62 million rows, 1.09 GB (624.22 million rows/s., 2.78 GB/s.)
+Peak memory usage: 6.21 MiB.
+```
+
+And then three times with the skip index (`use_skip_indexes=1`):
+
+```shell
+10 rows in set. Elapsed: 0.312 sec. Processed 116.41 million rows, 578.67 MB (373.50 million rows/s., 1.86 GB/s.)
+Peak memory usage: 5.46 MiB.
+
+10 rows in set. Elapsed: 0.306 sec. Processed 116.41 million rows, 578.67 MB (380.51 million rows/s., 1.89 GB/s.)
+Peak memory usage: 5.46 MiB.
+
+10 rows in set. Elapsed: 0.304 sec. Processed 116.41 million rows, 578.67 MB (382.48 million rows/s., 1.90 GB/s.)
+Peak memory usage: 5.49 MiB.
+```
+
+The best time without the skip index was 234 milliseconds, compared to 304 milliseconds with the skip index, a roughly 23% improvement. 
+
+The query with the skip index was processing about 1/2 as many rows. We can see what data was being ignored by explaining the query:
+
+<pre><code type='click-ui' language='sql'>
+EXPLAIN indexes=1, projections=1, pretty=1, compact=1
+</code></pre>
+
+The output is shown below:
+
+```shell
+   ┌─explain────────────────────────────────────────────────┐
+ 1. │ Output: district, count(), avgPrice                    │
+ 2. │                                                        │
+ 3. │ Limit (preliminary LIMIT)                              │
+ 4. │ └──Sorting (Sorting for ORDER BY)                      │
+ 5. │    └──Aggregating                                      │
+ 6. │       └──ReadFromMergeTree (default.uk_price_paid)     │
+ 7. │             Indexes:                                   │
+ 8. │               PrimaryKey                               │
+ 9. │                 Condition: true                        │
+10. │                 Parts: 11/11                           │
+11. │                 Granules: 29744/29744                  │
+12. │               Skip                                     │
+13. │                 Name: price_minmax                     │
+14. │                 Description: minmax GRANULARITY 1      │
+15. │                 Condition: (price in [10000001, +Inf)) │
+16. │                 Parts: 11/11                           │
+17. │                 Granules: 14214/29744                  │
+18. │               Ranges: 6034                             │
+    └────────────────────────────────────────────────────────┘
+```
+
+From line 17, we can see that the skip index excluded just over 15,000 granules. 
+
+## Conclusion {#conclusion}
+
+This blog post has taken us through three index-based pruning techniques offered by ClickHouse: primary index, lightweight projections, and skip indexes.
+
+The primary index is the most powerful. You should design your `ORDER BY` around your most common filter columns.
+
+Lightweight projections are a good option for filtering on non-primary key columns. Combining multiple projections lets ClickHouse intersect its results for even better pruning.
+
+And finally, skip indexes like minmax work best when the target column is correlated with the primary key; without that correlation, they won't help much.
+
+---
+
+## Get started today
+
+Interested in seeing how ClickHouse works on your data? Get started with ClickHouse Cloud in minutes and receive $300 in free credits.
+
+[Sign up](https://console.clickhouse.cloud/signUp?loc=blog-cta-369-get-started-today-sign-up&utm_blogctaid=369)
+
+---
+
+---
+
+## What's new in ClickStack - March 2026
+Published: 2026-04-14T16:36:29+00:00
+URL: https://clickhouse.com/blog/whats-new-in-clickstack-march-2026
+
+---
+title: "What's new in ClickStack - March 2026"
+date: "2026-04-14T16:36:29.020Z"
+author: "The ClickStack Team"
+category: "Engineering"
+excerpt: "ClickStack’s March release introduces smarter Event Deltas, AI-powered notebooks, and full SQL chart flexibility, making investigation faster and dashboards more powerful."
+---
+
+# What's new in ClickStack - March 2026
+
+Welcome to the March edition of What's New in ClickStack.
+
+Each month, we share the latest updates across ClickStack, from platform enhancements to new features designed to make observability faster, simpler, and more powerful. March brings a broad set of improvements: deeper event analysis with always-on Event Deltas and smarter attribute scoring, a complete expansion of SQL chart types with support for Grafana-style template macros as well as import/export support, correct aggregations over sampled trace data, persistent dashboards for those of you running in local mode, and a collection of dashboard organisation improvements.
+
+A big thank you to our open source contributors, as well as to our users whose feedback helps shape these features and make ClickStack better for everyone.
+
+## New contributors
+
+As always, a huge thank you to our open source contributors, including those who jumped in for the first time this month to help improve ClickStack for everyone.
+
+[ZeynelKoca](https://github.com/ZeynelKoca) [sanjams2](https://github.com/sanjams2) [vinzee](https://github.com/vinzee) [vinzee](https://github.com/vinzee)[sanjams2](https://github.com/sanjams2) [ZeynelKoca](https://github.com/ZeynelKoca) [matsilva](https://github.com/matsilva)
+
+If code contributions are not your thing, we welcome documentation improvements, ideas, feature suggestions, bug reports, and general feedback via the [repository](https://github.com/hyperdxio/hyperdx). Every contribution, big or small, helps make the stack better for the entire community.
+
+## AI notebooks
+
+Earlier in the month, we announced AI Notebooks, a new way to investigate logs, metrics, and traces with AI embedded directly into a structured, notebook-style workspace. This represents our first step toward a native, agentic experience inside ClickStack, where AI acts as a collaborator within the SRE workflow rather than a separate interface. Investigations unfold step by step, combining natural language, generated queries, and manual analysis, while keeping engineers firmly in control.
+
+
+
+<video autoplay="1" muted="1" loop="1" controls="0">
+  <source src="https://clickhouse.com/uploads/notebooks_short_hd_4854441329.mp4" type="video/mp4" />
+</video>
+
+---
+
+## Get started today
+
+Interested in seeing how ClickHouse works on your data? Get started with ClickHouse Cloud in minutes and receive $300 in free credits.
+
+[Sign up](https://console.clickhouse.cloud/signUp?intent=o11y&loc=blog-cta-366-get-started-today-sign-up&utm_blogctaid=366)
+
+---
+
+AI Notebooks are currently available in private preview for Managed ClickStack, and we’re working closely with early users to refine the experience. We’d welcome feedback as we continue to evolve this direction. You can learn more in the[ announcement post](https://clickhouse.com/blog/clickstack-ai-notebooks) or request [access via the waitlist](https://clickhouse.com/cloud/ai-notebooks-in-clickstack-waitlist).
+
+## Improvements for Event Deltas
+
+Event Deltas is one of the most powerful tools in ClickStack for root cause analysis. Given a heatmap of slow or erroring spans, it surfaces which attribute values appear disproportionately in a selected region compared to the background. This is critical for SREs and developers investigating production issues, allowing them to quickly identify the attributes and correlated span characteristics driving performance degradation or errors. Instead of manually slicing data or forming complex queries, Event Deltas highlights the signals that matter, accelerating the path from symptom to root cause. For a deeper dive into how the feature works, see our [dedicated blog post](/blog/faster-root-cause-for-slow-traces-with-clickstack-event-deltas).
+
+This month, we made four significant improvements across how the feature behaves.
+
+> To play with these changes, we recommend heading over to our [demo environment ](https://play-clickstack.clickhouse.com/search?source=3b743139&where=&select=&whereLanguage=lucene&filters=%255B%255D&orderBy=&mode=delta&isLive=false&from=1775654690000&to=1775741090000&xMin=1775666834.0190363&xMax=1775719838.3538175&yMin=1.7378845061203285&yMax=913.6388954631163)where you can experiment with Event Deltas on the [OpenTelemetry demo dataset](https://clickhouse.com/docs/use-cases/observability/clickstack/getting-started/remote-demo-data) yourself.
+
+### Always-on attribute distribution
+
+Previously, the attribute distribution charts were only populated after you selected an area on the heatmap to compare that selection against the background spans. Now, the view immediately shows the attribute and value distribution for all spans in the current time window (represented by blue "All spans" bars). This allows you to immediately spot dominant behaviors across the dataset without needing to make a selection first - even when the heatmap is stable and shows no obvious changes. 
+
+When a user selects a region, the chart switches to comparison mode, showing red and green bars contrasting the selected group against the overall distribution. This feature is valuable for general data exploration and when you are investigating a specific hypothesis (e.g., focusing on spans with a certain status code or looking only at client calls to SQL).
+
+> Although a small change on the surface, this feature has the potential to unlock entirely new workflows. We’ll follow up with a dedicated blog post exploring our vision for it and how we think can simplify investigative workflows in ClickStack.
+
+![event_deltas_no_selection.png](https://clickhouse.com/uploads/event_deltas_no_selection_fb3d54050a.png)
+
+When you click and drag to select a region, the chart transitions to comparison mode and shows red and green bars contrasting the selected group against the background. 
+
+![event_deltas_selection.png](https://clickhouse.com/uploads/event_deltas_selection_36818f5a3f.png)
+
+### Smarter attribute sorting
+
+Ranking attributes by diagnostic usefulness is harder than it looks. The previous implementation sorted by maximum raw delta, which produced misleading rankings when the outlier and inlier groups had different sample sizes. An attribute with identical distribution in both groups could still rank highly if the raw counts differed.
+
+For example, imagine `service.name = checkout` appears 1,000 times in the background and 100 times in the selected region, while `service.name = payments` appears 10 times in the background and 8 times in the selected region. Despite both having very similar proportional distributions, the raw delta for checkout is much larger, causing it to rank higher even though it is not more indicative of the issue. In practice, this meant attributes with high absolute counts were often prioritised over those that were actually more strongly correlated with the anomaly.
+
+Instead, we now use proportional comparison scoring, which normalises each group's percentages to sum to 100% before computing the delta. Attributes with identical proportional distributions score zero regardless of how the raw counts differ, making the ranking far more reliable when groups are unequal in size.
+
+### Filter, exclude, and copy from attribute bars
+
+The real value of Event Deltas is not just identifying outliers, but explaining why they differ from normal behavior. By comparing a selected subset of spans, the foreground or outliers, against the baseline distribution, the background or inliers, it surfaces which attribute values are disproportionately associated with degraded performance. This removes the need for the manual, iterative workflow of filtering, grouping, and visually comparing distributions across columns. 
+
+However, historically, once users identified a suspicious attribute, the next step was still a little cumbersome. Translating that insight into a concrete query, validating it, and continuing the investigation required multiple manual steps.
+
+To address this, clicking any bar in the attribute comparison chart now opens an action popover with three options: include the value, exclude it, or copy it to the clipboard.
+
+![event_deltas_filtering.png](https://clickhouse.com/uploads/event_deltas_filtering_18ad04cea0.png)
+
+This allows users to immediately act on what Event Deltas reveals. For example, above a subset of slow spans shows that 93 percent of outliers involve `card_type = Visa`, while the background is dominated by other card types, this strongly suggests a Visa-specific issue. Including the value lets users isolate and inspect only those problematic spans to confirm the hypothesis. Excluding it helps verify whether performance returns to normal without that factor, or reveals secondary outliers that were previously masked.  
+
+### Deterministic sampling
+
+Event Deltas samples spans when building the heatmap. Previously this used `ORDER BY rand()`, which meant hovering over the same region across two renders could highlight different cells, making the interface feel unstable. Sampling now uses `ORDER BY cityHash64(SpanId)`, so the same query always selects the same subset of spans and the heatmap behaves consistently across interactions - important to ensure analysis is repeatable.
+
+## SQL charts with Grafana-style macros
+
+Query builders are great for getting started and covering the common path, but they are inherently opinionated. As queries become more complex, joining across datasets, applying custom aggregations, or expressing nuanced logic, users often need direct access to SQL to fully exploit the underlying power of ClickHouse. Supporting this balance between simplicity and flexibility has been a key focus for ClickStack.
+
+Over the past several months, we have been steadily expanding support for raw SQL charts across all visualisation types. This month, we completed the last two chart types and significantly deepened the feature set for users writing SQL directly.
+
+Raw SQL is now available for number tiles, pie charts, line charts, table charts, and stacked bar charts - expanding on support for tables last month. Users writing their own queries can now use the full expressiveness of ClickHouse to drive any visualisation, not just the ones the query builder supports.
+
+![sql-charts.png](https://clickhouse.com/uploads/sql_charts_0dc33889ab.png)
+
+SQL charts bring a high degree of flexibility, allowing users to express complex queries beyond the constraints of the query builder. At the same time, they still need to integrate seamlessly with the rest of the dashboard experience, particularly respecting global filters and time ranges. Without this, SQL charts quickly become disconnected from the surrounding context.
+
+To address this, we have introduced a set of template macros that expand at query time, following conventions familiar to Grafana users. These allow users to write expressive SQL while automatically inheriting the dashboard’s current time window and active filters, ensuring consistency across all visualisations.
+
+`$__timeFilter(column)` expands to a seconds-precision range predicate on the named column. `$__timeFilter_ms(column)` does the same at millisecond precision. `$__timeInterval(column)` produces a `toStartOfInterval` expression for use in a `GROUP BY`, automatically aligned to the selected time window granularity.
+
+`$__filters` is replaced at query time with the active dashboard filter predicates. When no filters are active, it expands to `1=1` so the query remains valid without any conditional logic. A source must be selected on the chart for filter introspection to work.
+
+A typical raw SQL chart using these macros might look like this:
+
+
+```sql
+SELECT
+  toStartOfInterval(Timestamp, INTERVAL {intervalSeconds:Int64} second) AS ts, -- (Timestamp column)
+  ServiceName,                                                                   
+  avg(Duration)                                                                        
+FROM $__sourceTable
+WHERE Timestamp >= fromUnixTimestamp64Milli ({startDateMilliseconds:Int64})
+  AND Timestamp < fromUnixTimestamp64Milli ({endDateMilliseconds:Int64})
+  AND $__filters
+GROUP BY ServiceName, ts
+```
+
+[Run code block](null)
+
+The macro `$__sourceTable` resolves to the fully qualified table name of the selected source at query time. This is particularly useful for import and export workflows. When a dashboard containing raw SQL charts is exported and imported into a different environment, the source mapping applied during import is automatically substituted into the macro. There is no need to manually update table references after importing.
+
+> The macro also accepts a metric-type argument: `$__sourceTable(sum)` resolves to the appropriate metric table for sum-type aggregations, which is necessary when querying OpenTelemetry metric tables which are partitioned by aggregation type.
+
+Raw SQL charts are also now fully supported in the external API across all five display types: line, number, pie, table, and stacked bar. Teams managing dashboards programmatically through the API can now create and update SQL-backed tiles using the same endpoints used for builder-based charts.
+
+## Aggregations for sampled trace data
+
+As observability datasets grow, many high-throughput systems turn to sampling to control storage and ingestion costs. Both head-based and tail-based sampling follow the same principle: retain only a subset of spans while discarding the rest. Head sampling makes decisions early, often probabilistically or via simple rules, while tail sampling evaluates full traces before deciding what to keep. Although these approaches differ in execution, they share a common outcome: the stored dataset is no longer complete.
+
+In ClickHouse, sampling is often unnecessary for many workloads due to high compression and strong query performance at scale. However, at very large volumes, some users still choose to sample. The challenge is that once data is sampled, standard aggregations become incorrect. Counts underestimate true volume, averages become biased toward retained spans, and percentiles no longer reflect the full distribution. In short, you lose statistical accuracy unless the sampling is accounted for during query execution.
+
+To address this, ClickStack introduces sample-aware aggregations at the source level. Since sampling is a property of the dataset, we allow users to define how to interpret it directly in the trace source configuration. This is done via a sampleRateExpression, which evaluates to the per-span sampling rate, typically stored alongside each span, for example `SpanAttributes['SampleRate']`. This allows sampling rates to vary across spans while still being handled consistently.
+
+![sampling_config.png](https://clickhouse.com/uploads/sampling_config_dd92ff26b3.png)
+
+Once configured, ClickStack automatically rewrites aggregations to account for sampling. A count() becomes `sum(weight)`, where the weight represents the inverse sampling rate. Averages are computed as weighted averages with null-safe division, sums are scaled accordingly, and percentile calculations use quantileTDigestWeighted to preserve distribution accuracy. The weight itself is computed as `greatest(toUInt64OrZero(toString(expr)), 1)`, ensuring that missing or invalid sampling rates default safely.
+
+This correction is applied transparently across dashboards, alerts, the external API, and AI-powered summarisation. By defining sampling once at the source level, users can continue to build charts and queries as usual, with ClickStack ensuring the results remain statistically correct.
+
+![sampled_chart.png](https://clickhouse.com/uploads/sampled_chart_b48837ebf0.png)
+
+_A simple count on a sampled dataset maps to a sum on the sample rate - `sum(greatest(toUInt64OrZero(toString(SpanAttributes['SampleRate'])), 1))`_
+
+## Dashboard template gallery and listing pages
+
+As ClickStack usage grows, so does the number of dashboards teams create. Previously, dashboards were surfaced primarily through the sidebar, which worked well for smaller setups but became harder to navigate at scale. Users often struggled to discover what already existed, organise dashboards effectively, or get started without building everything from scratch.
+
+To address this, we introduced dedicated listing pages for dashboards and saved searches. These provide a clear, searchable view of all resources, replacing the previous flat sidebar model. From these pages, users can filter by name. 
+
+![dashboard_listing.png](https://clickhouse.com/uploads/dashboard_listing_2336565a0a.png)
+
+The interaction pattern is consistent across dashboards and saved searches, and the sidebar now links directly to these views, giving users a more scalable way to manage and navigate their observability assets.
+
+![saved_search.png](https://clickhouse.com/uploads/saved_search_5e446f1a57.png)
+
+Building on this, we introduced a template gallery to help users get started faster. The gallery provides a curated set of pre-built, importable dashboards for common runtime environments. The initial set covers OpenTelemetry runtime metrics for JVM, .NET, Go, and Node.js. These templates offer an immediate starting point, allowing users to visualise key metrics without needing to construct dashboards from scratch. Each template is ready to use with any service instrumented via the OpenTelemetry SDK, requiring only a source selection during import. Templates are grouped by tag, making them easy to browse and discover.
+
+![dashboard_template.png](https://clickhouse.com/uploads/dashboard_template_d9122f0eea.png)
+
+## Favorites for dashboards and saved searches
+
+Building on the new listing pages, we have also made it easier to prioritise and quickly access the dashboards and saved searches that matter most.
+
+Dashboards and saved searches can now be marked as favorites. Favorited items float to the top of their respective listing pages and are pinned in the sidebar for immediate access. Favorites are stored per user, so each team member maintains their own independently.
+
+## Dashboard filter improvements
+
+Last year, we introduced [dashboard filters](https://clickhouse.com/blog/whats-new-in-clickstack-october-2025#dashboard-filtering) to provide a simple way to apply global filtering across all charts in a dashboard. This removed the need to duplicate filter logic across individual queries and made dashboards significantly easier to configure and reuse.
+
+This month, we’ve made two targeted improvements to make filters more flexible and performant.
+
+Filters can now include an optional `WHERE` condition that restricts which rows are scanned when populating available filter values. This is particularly useful for high-cardinality fields or columns that exist across large datasets. By limiting the scope of the lookup query to a relevant subset, filter drop downs remain fast and responsive even at scale. This applies to both user-defined and preset filters.
+
+
+
+
+
+<video autoplay="1" muted="1" loop="1" controls="0">
+  <source src="https://clickhouse.com/uploads/dashboard_filters_466c501fca.mp4" type="video/mp4" />
+</video>
+
+Filters now also support selecting multiple values. These are applied as an `IN` clause, for example `toString(environment) IN ('production', 'staging')`. Previously, filters were limited to a single value, making it cumbersome to compare environments, regions, or services within the same dashboard. This change makes dashboards far more flexible for side-by-side analysis.
+
+## localStorage for dashboards and saved searches in local mode 
+
+ClickStack can run in local mode, where the UI connects directly to ClickHouse from the browser without a backend API. This mode powers the embedded deployment inside the ClickHouse binary, announced [last month](https://clickhouse.com/blog/clickstack-embedded-clickhouse), and is also used by developers who want the simplest possible self-hosted setup.
+
+Until this month, local mode had no way to persist dashboards or saved searches across page reloads. We have added a `createEntityStore` abstraction that backs all dashboard and saved search operations with browser localStorage when local mode is active. Users can now create, edit, and save dashboards and searches that persist across sessions, with no server or database required. The new favorites feature, describe above, use the same mechanism.
+
+## More chart display units
+
+Charts now support a much broader range of display units, making it easier to present metrics clearly without relying on titles or aliases for context.
+
+This release significantly expands unit coverage across data sizes, data rates, and throughput. It includes full support for both IEC and SI standards for bytes and bits, with scales ranging from kilobytes through petabytes, along with their per-second equivalents. Throughput units have also been extended to cover common operational metrics such as requests, operations, reads, writes, and IOPS, with both per-second and per-minute variants.
+
+![new_metrics.png](https://clickhouse.com/uploads/new_metrics_c4e0e4f0ef.png)
+
+Existing formats like number, currency, percentage, and time remain available under a unified “Basic” group, with time continuing to support granular units down to microseconds and nanoseconds.
+
+
+
+---
+
+## How Eisan made POS analytics faster, cheaper, and more reliable with ClickHouse Cloud
+Published: 2026-04-14T13:56:08+00:00
+URL: https://clickhouse.com/blog/eisan
+
+---
+title: "How Eisan made POS analytics faster, cheaper, and more reliable with ClickHouse Cloud"
+date: "2026-04-14T13:56:08.480Z"
+author: "ClickHouse"
+category: "User stories"
+excerpt: "Rill uses ClickHouse to power real-time operational BI for 100B+ daily events, enabling instant exploration and conversational analytics directly against live datasets through a declarative, BI-as-code workflow."
+---
+
+# How Eisan made POS analytics faster, cheaper, and more reliable with ClickHouse Cloud
+
+## Summary
+
+Eisan built a real-time ID-POS analytics platform for multiple retail clients, supporting basket analysis, cross analysis, and personalized recommendations at scale They replaced a QlikView-based BI stack with ClickHouse Cloud to improve reliability and performance while reducing licensing and infrastructure costs. The system now supports hundreds of millions of records per client today, with a clear path toward tens of billions through ongoing optimization.
+
+
+For nearly four decades, [Eisan System Development](https://eisansystem.jp/) has built highly specialized software in domains where precision matters, from medical and healthcare systems to large-scale data matching, and more recently, IoT-enabled platforms. Much of that work runs quietly behind the scenes, supporting mission-critical workflows for organizations that can't afford mistakes.
+
+That mindset carried into a recent challenge Mamoru Ubukata, Eisan's Representative Director, shared at a [July 2025 ClickHouse meetup in Tokyo](https://www.youtube.com/watch?v=fKP-6-_PiZQ). It started simply, with a client asking for help. Their existing analytics system, built on a traditional BI tool, was starting to strain under growing data volumes and rising expectations for real-time insight.
+
+"They reached out to see if we could find a better solution," Mamoru explains. What followed was a pragmatic, engineering-led search for a platform that could scale without sacrificing reliability—one that ultimately led Eisan to [ClickHouse Cloud](https://clickhouse.com/cloud).
+
+<iframe width="768" height="432" src="https://www.youtube.com/embed/fKP-6-_PiZQ" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe>
+
+## The old system: costly and unreliable
+
+At the heart of the challenge was ID-POS data: point-of-sale records tied to individual customer IDs, collected from supermarkets and drugstores. For retail clients, this data powers basket analysis and cross analysis, as well as real-time personalization, where products are recommended as customers identify themselves in-store. Over time, that data adds up, with some clients accumulating close to 200 million records per year.
+
+The analytics platform Eisan had been using for this workload was built on QlikView and designed for speed—in theory, at least. Because everything was processed in memory, simple aggregations often came back in just a few seconds. "However," Mamoru says, "as the data increased, some processes could take minutes to process." Worse, the system began failing in ways that were hard to anticipate or control. "Recently, we've been seeing more and more cases where we don't even get analysis results back anymore. This is a very serious issue."
+
+As more clients came onto the platform, cost pressures intensified. QlikView's licensing model meant expenses rose with every new deployment—something Mamoru describes as a "real burden and major concern for our users." The system's memory-heavy design only amplified the problem. "Since QlikView processes everything in memory, it inevitably consumes a huge amount of memory," he says. "As a result, our server costs keep rising as well."
+
+## ClickHouse to the rescue
+
+The team's first instinct was to look for an open-source alternative. The goal was to cut costs while regaining control over performance and scalability. They evaluated familiar options like PostgreSQL and distributed systems such as YugabyteDB. "None of them delivered the results we were looking for," Mamoru says. Discouraged, the team began to wonder if a better solution really existed. "You could call it a defeatist mindset, but we were just about ready to give up."
+
+Then, almost by chance, they discovered ClickHouse. "Its speed was absolutely incredible," Mamoru says. "We thought, 'maybe this could actually work.'" That initial impression was enough to justify a deeper evaluation, and eventually, a move toward production.
+
+At the Tokyo meetup, Mamoru shared a side-by-side comparison of the old QlikView-based system and the new ClickHouse setup. While ClickHouse was clearly faster, the results didn't look dramatic on paper. But context, he says, matters. "QlikView is processing everything in memory. That's not the case with ClickHouse, which is really impressive."
+
+Even compared to so-called general configurations, ClickHouse produced stable results with fewer resources. "The ClickHouse server actually has slightly lower specs compared to typical setups, and we are running it under high-load settings. Even so, the performance does not deteriorate and the results are very stable. With conventional products, if you want to do the same thing, you tend to decide to increase the hardware, but with ClickHouse I feel like you can solve the problem before that happens," says Ubukata.
+
+Perhaps most importantly, ClickHouse behaves predictably under pressure. "With QlikView, it's pretty common for results to not come back at all," Mamoru says. "So far, we've never had a case where ClickHouse failed to return a result."
+
+## The subtle art of server balance
+
+Once ClickHouse proved itself, a new question emerged: how to run it efficiently. Mamoru and the team began testing different configurations in [ClickHouse Cloud](https://clickhouse.com/cloud), focusing on the balance between CPU cores and memory. One setup used 30 cores and 120 GB of RAM, following a [1:4 core-to-memory ratio](https://clickhouse.com/docs/guides/sizing-and-hardware-recommendations#how-many-cpu-cores-should-i-use) commonly used as a starting point for ClickHouse workloads.
+
+At first glance, the metrics raised questions. CPU utilization looked healthy, but memory usage appeared surprisingly low. "That led to a discussion about whether this balance is actually optimal," Mamoru says. After speaking with the ClickHouse Japan team, the picture became clearer. "That's when I learned that a fair amount of memory is being used for caching."
+
+Once they accounted for that behavior, effective usage was closer to 100 GB, making the setup feel more balanced than it first appeared. The takeaway wasn't a fixed answer, but more of a process. "Of course, there are still a lot of different scenarios to consider," Mamoru says. The team continues to run load tests, adjusting server specs and observing how ClickHouse behaves under different conditions, refining the setup step by step.
+
+## What's next for Eisan and ClickHouse
+
+Eisan's plans for ClickHouse extend well beyond the current system. "Ultimately, we're expecting the number of users to grow," Mamoru says. "Our goal is to be able to handle data on the scale of 100 billion records." Achieving that scale will take smart architectural decisions, along with continued testing and iteration as workloads evolve.
+
+The team is also taking a closer look at how the system is used day to day. Right now, most analytics jobs run during business hours. "As a result," Mamoru explains, "the system is hardly used at night." To make better use of available capacity, they're exploring ways to shift weekly or monthly processing to off-hours, smoothing resource usage over time.
+
+[Autoscaling](https://clickhouse.com/docs/manage/scaling) is part of that conversation as well. So is the idea of more intentional, scheduled scaling. "I'm not sure if 'scheduled scaling' is the right term," Mamoru says, "but I think it could be possible to, say, completely shut down operations on Sundays. That could be useful."
+
+For Eisan, ClickHouse is less a finished project than a foundation for what's ahead. Processing times are already improving, and new capabilities continue to expand what's possible. The real challenge is now operational: how to keep large-scale, real-time analytics systems running smoothly as both data volumes and expectations continue to grow.
+
+
+---
+
+## Get started today
+
+Interested in seeing how ClickHouse works on your data? Get started with ClickHouse Cloud in minutes and receive $300 in free credits.
+
+[Sign up](https://console.clickhouse.cloud/signUp?loc=blog-cta-360-get-started-today-sign-up&utm_blogctaid=360)
+
+---
+
+---
+
+## Agentic coding with ClickHouse. One person, one data stack, one full-stack application
+Published: 2026-04-14T13:38:14+00:00
+URL: https://clickhouse.com/blog/agentic-coding-app
+
+---
+title: "Agentic coding with ClickHouse. One person, one data stack, one full-stack application"
+date: "2026-04-14T13:38:14.756Z"
+author: "Oussama Chakri"
+category: "Engineering"
+excerpt: "A Solutions Architect’s experience building a retail analytics platform with AI agents, real-time dashboards, and full observability on the ClickHouse data platform"
+---
+
+# Agentic coding with ClickHouse. One person, one data stack, one full-stack application
+
+## Summary
+
+I built a full AI App with Agentic Coding in a couple of days. 
+
+The key lesson: agentic coding works when your data platform handles the hard parts natively. Open source components, a consistent SQL interface, and AI-friendly tooling made the difference between fighting the stack and building on top of it.
+
+As a Solutions Architect at ClickHouse, I wanted to build a demo that goes beyond slides and screenshots. Something that retail customers could immediately see themselves in: a full-stack retail analytics platform called **ClickShop**. The application combines real-time analytics (dashboards querying billions of rows in sub-second) with transactional workflows (order management, contract ingestion, customer updates), 18 specialized AI agents tailored to different business personas (CEO, Sales, Data Analyst), and a full observability stack covering both LLM tracing (prompt management, cost tracking, evaluation via Langfuse) and infrastructure monitoring (metrics, logs, distributed traces via ClickStack). The goal was to build something realistic enough to put in front of a client and say: this is what your production environment could look like. The catch? I'm not a frontend or backend developer, and I had a couple of days. This blog is a walkthrough of how I built it, what architecture decisions I made, and why the ClickHouse data stack made the whole thing possible.
+
+Here is what the application looks like in practice: a CEO workspace with real-time KPIs, geographic revenue breakdown, and an AI agent that queries live ClickHouse data to answer business questions.
+
+![clickshop.png](https://clickhouse.com/uploads/clickshop_affb6a4523.png)
+<p style="text-align: center;"><em>ClickShop Intelligence UI : Executive Dashboard and AI Agent Interface</em></p>
+
+##  The problem to solve
+
+As a Solutions Architect, I spend most of my time helping customers design data architectures. I draw diagrams, review schemas, and explain query optimization. But when it comes to showing what ClickHouse can actually do in a real application context, slides only go so far. I wanted to build something that a retail customer could look at and immediately understand how the platform fits their stack. Not a toy demo, but a realistic application with the kind of complexity they deal with every day: analytics, transactions, AI, and monitoring.
+
+The challenge is that building this kind of application normally involves a full team and several months. I had neither. So the question became: can one person, armed with an AI-powered IDE and the right platform, build something credible?
+
+Here is what the architecture looks like:
+
+![clickshop-1.jpg](https://clickhouse.com/uploads/clickshop_1_a4410e27d9.jpg)
+
+The application is built on three layers:
+
+* The **frontend** (Next.js) provides a dedicated workspace per business persona. A CEO, a Sales manager, a Data Analyst, each get their own dashboards, their own data scope, and their own AI agent.  
+* The **data layer** combines [ClickHouse](https://clickhouse.com/) and [PostgreSQL](https://clickhouse.com/cloud/postgres). ClickHouse handles the analytical workload: querying billions of rows in sub-second for dashboards and reports. PostgreSQL handles the transactional side: order management, customer updates, contract ingestion. [ClickPipes](https://clickhouse.com/cloud/clickpipes) CDC syncs changes from PostgreSQL into ClickHouse in real time, so analytics always reflect the latest state. And for data scientists who prefer working in Python, [chDB](https://clickhouse.com/docs/chdb) (an in-process ClickHouse engine) lets them run familiar Pandas workflows while the execution pushes down to ClickHouse under the hood.  
+* The **agentic layer** ([LibreChat](https://www.librechat.ai/) \+ LLMs) powers 18 specialized AI agents. LibreChat manages the conversations and routing, each agent gets its own system prompt, context, and data scope.The CEO agent explains why revenue dropped last week, the Sales agent identifies which products are trending, and the Data agent helps write and optimize SQL queries.
+
+On top of this, the application has two distinct observability layers. This is an important distinction, because monitoring an AI application means watching two very different things:
+
+![clickshop-3.jpg](https://clickhouse.com/uploads/clickshop_3_1ee25e0091.jpg)
+
+* **Infrastructure observability** ([ClickStack](https://clickhouse.com/cloud/clickstack)): this is the classic application monitoring. Metrics (CPU, memory, request latency), logs, and distributed traces collected via OpenTelemetry. It answers the question: is the application healthy? Are API calls slow? Where is the bottleneck?  
+* **LLM observability** ([Langfuse](https://langfuse.com/)): this is specific to AI agents. It tracks every prompt sent to the LLM, every response received, the cost per call, the latency, and allows quality evaluation (automated scoring and human review). It answers a different question: are the agents giving good answers? Which prompts need tuning? How much does each conversation cost?
+
+Both Langfuse and ClickStack run on ClickHouse. Combined with ClickHouse Cloud for analytics, PostgreSQL managed by ClickHouse for transactions, and ClickPipes for data movement, the entire stack runs on one platform.
+
+## Why agentic coding, and why now
+
+AI-assisted coding has gone from a curiosity to a standard part of the workflow. As a Solutions Architect, I noticed that the tools had matured enough to do something I had been thinking about for a while: build a full demo application on my own, without depending on an engineering team.
+
+The motivation was practical. When I meet retail customers, the conversation often goes the same way: they want to see how ClickHouse handles their use case, not just in a benchmark, but in something that looks like their actual environment. Dashboards with real data, agents that answer business questions, observability that shows what happens under the hood. Slides don't do that. A working application does.
+
+So I decided to try. I picked up Cursor, an AI-powered IDE that generates code from natural language, and set myself a simple goal: build a retail analytics platform that I could use in customer meetings, with the full stack running on the ClickHouse data stack.
+
+## Cursor as an AI-powered IDE
+
+The tool I used for this project is [**Cursor**](https://cursor.com), an IDE that generates code from natural language prompts. In practice, the workflow looks like this: you describe what you need, Cursor writes the code, you review it, adjust if necessary, and move on to the next feature.
+
+For this project, the loop was straightforward:
+
+1. I describe a feature in plain English (for example: "create a dashboard that shows revenue by country for the last 30 days, querying ClickHouse")  
+2. Cursor generates the frontend component, the API route, and the SQL query  
+3. I review the output, test it locally, and iterate if needed  
+4. Once it works, I push to [GitHub](https://github.com) and [Vercel](https://vercel.com) deploys it automatically
+
+One thing that helped considerably is that ClickHouse is open source and widely documented. The LLMs already know ClickHouse SQL, the MergeTree engine family, and so on. The same applies to the other open source components in the stack: PostgreSQL, LibreChat, Langfuse. Because these projects have large public codebases and documentation, the AI generates relevant code from the start, with less back and forth. This is a real advantage of building on open source: with proprietary, closed-source databases, the LLMs simply don't have access to the codebase or the internals, so they guess more and get it wrong more often.
+
+### Cursor marketplace and Skills
+
+On top of that, Cursor has a **marketplace** where you can install skills built by the community. Skills are small knowledge packs that teach the AI the best practices of a specific tool. For this project, I installed the **ClickHouse Best Practices** [skill](https://github.com/ClickHouse/agent-skills) and the **Langfuse** [skill](https://github.com/langfuse/skills), both available directly in the marketplace. They guide the AI toward correct engine choices, proper schema design, and integration conventions, without me having to explain them in every prompt.
+
+And here is a practical tip: at the end of any project, once you have spent hours iterating with Cursor and your architecture is solid, ask Cursor to turn the entire conversation into a skill. It captures all the decisions, patterns, and conventions you established, so the next time you start a similar project, you skip the learning curve entirely.
+
+
+
+
+---
+
+## Get started today
+
+Interested in seeing how ClickHouse works on your data? Get started with ClickHouse Cloud in minutes and receive $300 in free credits.
+
+[Sign up](https://console.clickhouse.cloud/signUp?loc=blog-cta-359-get-started-today-sign-up&utm_blogctaid=359)
+
+---
+
+
+
+## Building ClickShop, step by step
+
+In this section, I want to walk through how the application came together, layer by layer. I am deliberately keeping this at a high level to make the overall approach easy to follow. Here, the goal is to give you the big picture.
+
+### Starting with the data layer
+
+The first thing I built was the data foundation. The application needed two types of workloads: transactional (creating orders, updating customers, ingesting contracts) and analytical (dashboards querying billions of rows in sub-second). Instead of picking two separate vendors, I used the ClickHouse data stack: **PostgreSQL managed by ClickHouse** for the transactional side, and **ClickHouse Cloud** for the analytical side.
+
+To keep everything in sync, I set up **ClickPipes CDC**, which mirrors the transactional data from PostgreSQL into ClickHouse in real time, with zero external pipelines to manage. On the ClickHouse side, the data follows a **Medallion architecture**: the mirrored transactional data lands in **Bronze** tables alongside raw event streams, **Silver** tables clean and deduplicate it using materialized views, and **Gold** tables pre-aggregate the results so they are ready to serve the dashboards in sub-second.
+
+### Building the frontend workspaces
+
+Once the data was in place, I built the frontend in Next.js 14, deployed on Vercel. Each business persona gets their own workspace with dashboards and tools tailored to their role:
+
+* The **CEO workspace** shows executive KPIs, a world map of revenue distribution, and trend analysis  
+* The **Sales workspace** focuses on pipeline management, transaction exploration, and contract ingestion from PDFs  
+* The **Data workspace** provides an interactive SQL notebook where you can query both ClickHouse and PostgreSQL side by side, plus **chDB**, an in-process ClickHouse engine that lets data scientists write familiar Pandas code while the execution pushes down to ClickHouse under the hood  
+* A **Diagnostics** page validates that all services are healthy and lets you generate test data
+
+Each workspace also embeds its own AI agent, which brings us to the agentic layer.
+
+### Adding the AI agents
+
+The AI agents are powered by **[LibreChat](https://www.librechat.ai/)**, an open source agentic platform included in the ClickHouse data stack. Each persona has specialized agents with their own system prompt, data scope, and context. The CEO agent focuses on high-level business metrics. The Sales agent understands pipeline and revenue. The Data agent helps write and optimize SQL queries.
+
+On top of the conversations, **Langfuse** handles the LLM observability side: every prompt is versioned, every agent response is traced, costs are tracked per session, and quality can be evaluated through automated scoring or human review.
+
+### Closing the loop with observability
+
+The last layer I added was infrastructure observability via **ClickStack**. The application exports metrics, logs, and distributed traces through an OpenTelemetry collector into ClickHouse. ClickStack provides the dashboards, alerting, and session replay on top. This means I can see exactly what happens when a user loads a dashboard or asks a question to an agent: which API was called, how long the ClickHouse query took, whether the response was cached.
+
+Combined with the LLM observability from Langfuse, this gives the application two complementary monitoring layers: one for the infrastructure, one for the AI. Both run on ClickHouse.
+
+## The prompts that built ClickShop
+
+Now that you have the big picture, here are some of the prompts I used to build each layer. I have simplified them here to keep this blog focused on the approach and the architecture. A follow-up post will go deeper with the full prompts, code samples, and implementation details.
+
+The key insight is that good prompts read like instructions to a colleague, not like code. The more domain knowledge you put in, the better the output.
+
+![clickshop-2.jpg](https://clickhouse.com/uploads/clickshop_2_0bcfd80649.jpg)
+
+### The data layer
+
+*"I need PostgreSQL for my operational data (customers, products, orders, payments) and ClickHouse for analytics (page views, cart events, checkout events, payment events, order events). Design the schemas to reflect a real e-commerce platform."*
+
+This is where domain knowledge matters. I specified the dual-database strategy upfront, and Cursor generated the right DDL for each engine. For ClickHouse, it applied proper `ORDER BY` keys, `LowCardinality`, and TTL policies. For PostgreSQL, it created the relational schema with foreign keys and indexes.
+
+I also installed two MCP connectors from the Cursor marketplace: one for **ClickHouse**, one for **PostgreSQL**. MCP lets Cursor connect directly to each database instance, discover the schemas, and execute queries without me ever opening a database console. No `clickhouse-client`, no `psql`.
+
+### The frontend workspaces
+
+*"Build me a web application with a dark/light theme. I need separate workspaces for a CEO, a Sales Manager, and a Data Analyst. Add a landing page and a navigation bar."*
+
+This single prompt generated the project structure, the styling, the layout, and the navigation. From there, each workspace was built incrementally with its own dashboards, data scope, and embedded AI agent.
+
+### The AI agents
+
+*"Add LibreChat to the project. I want it embedded in each workspace for free conversation, and as an API to power specialized agents that each answer a specific question about my data."*
+
+LibreChat serves two roles: the iframe gives users a free-form chat experience, and the API powers dedicated agents for specific tasks (fraud detection, pipeline health, revenue analysis, query optimization). Each agent has its own system prompt and data scope.
+
+### Closing the loop with observability
+
+*"Instrument Langfuse for the LibreChat agents, it has native integration. For ClickStack, I want full observability on every component: traces, logs, metrics, and session replays for each service name across the entire stack, sent via OpenTelemetry."*
+
+On the LLM side, Langfuse has native integration with LibreChat: a few environment variables, no custom code. Every agent interaction is automatically traced with session context, prompt versions, cost tracking, and evaluation scores. On the infrastructure side, ClickStack collects distributed traces, metrics, structured logs, and session replays, all stored in ClickHouse, all queryable with SQL.
+
+### Deployment
+
+*"Push this project to GitHub and deploy it on Vercel. Make sure the environment variables are configured."*
+
+Cursor created the repository, pushed the code, and configured the Vercel deployment. Every subsequent `git push` triggers an automatic redeploy.
+
+## What the prompts don't show
+
+Reading this blog, you might think agentic coding is a straight line from prompt to result. It is not. For every clean prompt I showed above, there were iterations where the AI misunderstood the intent, refactored things I did not ask it to touch, or generated code that worked locally but broke in production. You spend more time reviewing and correcting than you might expect. Agentic coding is fast, but it is not linear. The simplified prompts in this blog reflect what worked, not the full journey to get there. And every iteration has a cost. Each agent call, each prompt retry, each conversation consumes tokens. This is exactly where Langfuse becomes essential: it tracks the cost per agent, per session, per user, so you know where your budget goes and which prompts need optimizing.
+
+## Why the platform matters
+
+If you take one thing away from this project, it is this: the platform you build on determines how simple or how complicated your architecture becomes.
+
+Most data platforms were not designed to serve applications directly. They hit performance limits under concurrent access, struggle to handle mixed workloads (analytical and transactional at the same time), and force you to add caching layers or middleware just to keep response times acceptable. The more users and agents you add, the more the architecture bends under pressure. You end up building around the limitations of your database instead of building on top of it.
+
+With the ClickHouse data stack, I did not have to deal with any of that. ClickHouse Cloud handles the analytical workload. PostgreSQL managed by ClickHouse handles transactions. ClickPipes syncs data between them natively, no external pipeline to set up. LibreChat provides the agentic layer. Langfuse provides LLM observability. ClickStack provides infrastructure monitoring. All of these components are open source, they all store their data in ClickHouse, and they all speak SQL. The architecture stays simple because the stack is consistent, and as I mentioned earlier, the fact that every component is open source means the AI already knows how to work with them. ClickHouse also invests heavily in making the [stack agent-friendly](https://clickhouse.com/ai): MCP connectors, IDE skills, and a full agentic data stack built on LibreChat and Langfuse.
+
+This is what makes agentic coding realistic for building data-intensive applications. When your data platform handles the hard parts natively, and the AI understands that platform deeply, you spend your time on the product, not on plumbing. You iterate faster because there are fewer moving parts. And the result is an application that can actually go to production, because the foundation was designed for it.
+
+## Build on data, not on plumbing
+
+ClickShop started as a demo for customer meetings. It turned into something more: a proof that one person, with the right data stack and an AI-powered IDE, can build a full-stack application that covers analytics, transactions, AI agents, and observability in a matter of days.
+
+If you are a developer or a builder looking for a data platform to power your next project, I hope this gives you a concrete picture of what is possible. ClickHouse is not just a fast analytics engine. It is a complete data stack where you can run your transactions, move your data, monitor your infrastructure, trace your LLM calls, and query everything with SQL. That simplicity is what makes the difference.
+
+Now it is your turn. Pick a use case, open your favorite AI coding tool (Cursor, Claude Code, Codex, or whichever you prefer), and start building your application on top of the ClickHouse data stack.
 
 ---
 

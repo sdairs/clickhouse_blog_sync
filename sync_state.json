@@ -1,5 +1,5 @@
 {
-  "last_sync": "2026-04-15T06:43:13.080946Z",
+  "last_sync": "2026-04-16T06:44:04.440908Z",
   "processed_blogs": {
     "https://clickhouse.com/blog/clickhouse-raises-400-million-series-d-acquires-langfuse-launches-postgres": {
       "title": "ClickHouse raises $400M Series D led by Dragoneer to accelerate expansion across analytics and AI infrastructure",
@@ -4488,9 +4488,33 @@
       "pub_date": "2026-04-14T12:05:27+00:00",
       "file_path": "blogs/2026-04-14-mintlify-boosts-nps-30-and-saves-60-with-real.md",
       "processed_at": "2026-04-15T06:43:12.997440Z"
+    },
+    "https://clickhouse.com/blog/index-based-pruning": {
+      "title": "Index-based pruning in ClickHouse",
+      "pub_date": "2026-04-15T08:35:04+00:00",
+      "file_path": "blogs/2026-04-15-index-based-pruning-in-clickhouse.md",
+      "processed_at": "2026-04-16T06:44:03.625639Z"
+    },
+    "https://clickhouse.com/blog/whats-new-in-clickstack-march-2026": {
+      "title": "What's new in ClickStack - March 2026",
+      "pub_date": "2026-04-14T16:36:29+00:00",
+      "file_path": "blogs/2026-04-14-what-s-new-in-clickstack-march-2026.md",
+      "processed_at": "2026-04-16T06:44:03.734759Z"
+    },
+    "https://clickhouse.com/blog/agentic-coding-app": {
+      "title": "Agentic coding with ClickHouse. One person, one data stack, one full-stack application",
+      "pub_date": "2026-04-14T13:38:14+00:00",
+      "file_path": "blogs/2026-04-14-agentic-coding-with-clickhouse-one-person-one.md",
+      "processed_at": "2026-04-16T06:44:04.080446Z"
+    },
+    "https://clickhouse.com/blog/eisan": {
+      "title": "How Eisan made POS analytics faster, cheaper, and more reliable with ClickHouse Cloud",
+      "pub_date": "2026-04-14T13:56:08+00:00",
+      "file_path": "blogs/2026-04-14-how-eisan-made-pos-analytics-faster-cheaper-and.md",
+      "processed_at": "2026-04-16T06:44:04.355927Z"
     }
   },
-  "total_blogs": 748,
+  "total_blogs": 752,
   "failed_blogs": [
     {
       "url": "https://clickhouse.com/jp/blog/clickhouse-gcp-japan-availability",
