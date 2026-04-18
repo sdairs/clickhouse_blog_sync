@@ -1,6 +1,910 @@
 # ClickHouse Blogs
-Last updated: 2026-04-17 06:43:48 UTC
-Total blogs: 752
+Last updated: 2026-04-18 06:31:27 UTC
+Total blogs: 757
+
+---
+
+## otel.fyi - OTel Collector docs made simple
+Published: 2026-04-17T11:03:20+00:00
+URL: https://clickhouse.com/blog/otel-fyi
+
+---
+title: "otel.fyi - OTel Collector docs made simple"
+date: "2026-04-17T11:03:20.463Z"
+author: "The ClickStack Team"
+category: "Engineering"
+excerpt: " otel.fyi is a search-first site for OpenTelemetry Collector docs, making it easy to quickly find and understand configuration for receivers, processors, exporters, and extensions without digging through scattered documentation."
+---
+
+# otel.fyi - OTel Collector docs made simple
+
+## Summary
+
+Frustrated with how hard it is to navigate the OpenTelemetry Collector docs, we ended up building our own search-first interface just to get work done. It proved useful enough that we’ve decided to make it public.
+
+[otel.fyi](https://otel.fyi) is a search-first site for OpenTelemetry Collector docs, making it easy to quickly find and understand configuration for receivers, processors, exporters, and extensions without digging through scattered documentation.
+
+OpenTelemetry has become the standard for collecting and routing observability data. At the center of this ecosystem is the OpenTelemetry Collector, a vendor-neutral service that can be deployed in multiple roles across your architecture.
+
+It can run as an agent, sitting close to your workloads to collect logs, traces, and metrics from applications, containers, and infrastructure. It can also operate as a gateway, receiving telemetry from many agents, processing and enriching that data, and routing it to one or more backends. This flexibility is what enables vendor interoperability and gives teams control over how data flows through their systems.
+
+Unfortunately, the collector documentation can be hard to navigate in practice. 
+
+Much of the Collector’s functionality lives in contrib packages. These are maintained separately from the core project, and their documentation typically exists in individual repositories as README.md files rather than in a single, unified site. The result is a fragmented experience where users are often forced to jump between folders, search with GitHub code search, and piece together configuration details manually.
+
+## From internal frustration to a simple tool {#from_internal_frustration_to_a_simple_tool}
+
+This challenge became hard to ignore. Mike, our Product lead for Observability, decided we needed something better. Not a replacement for the official docs, but a faster way to work with them.
+
+Armed with his best friend Claude, he set about implementing what was, at its core, a fairly simple idea.
+
+Take the existing documentation across the OpenTelemetry Collector ecosystem, extract the useful parts, and present them in a consistent, searchable format. Something optimized for how people actually configure the Collector day to day.
+
+In practice, that meant parsing contrib repositories, pulling out configuration examples, and normalizing how receivers, processors, exporters, and extensions are presented. The goal was not completeness for its own sake, but usability. Reduce the time spent digging through README files and make the important details immediately accessible.
+
+*> While the Collector docs aren’t ideal for human navigation, they’re highly structured under the hood, with consistent organization that makes extracting key metadata and configuration blocks straightforward.*
+
+## A Search-First Experience for the Collector {#a_search_first_experience_for_the_collector}
+
+The result is [**otel.fyi**](https://otel.fyi).
+
+![otelfy_apr2026_image2.png](https://clickhouse.com/uploads/otelfy_apr2026_image2_83b73fab1a.png)
+
+It’s a simple site designed around one core workflow: finding the component you need, fast.
+
+You can search across receivers, processors, exporters, and extensions, and immediately get a structured view of each. Instead of digging through long README files, you see the key information upfront, along with configuration examples pulled directly from the source.
+
+Everything is normalized into a consistent format. No more guessing where a config block might be buried or how one component differs from another. The goal is to reduce the time from “I need to configure this” to “I have a working config.”
+
+## Built for how people actually use OpenTelemetry {#built_for_how_people_actually_use_opentelemetry}
+
+We built otel.fyi primarily for ourselves, because we needed something lightweight and fast, focused on the practical task of assembling Collector configurations without constantly jumping between repositories and README files, and as we started relying on it day to day, it became clear it could be useful beyond our own workflows.
+
+Rather than keeping it internal, it made sense to make it available more broadly and see if it helps others working with OpenTelemetry in the same way.
+
+## What’s next {#whats_next}
+
+Search is just the starting point, and we’re already thinking about how to make this more useful in practice, including adding an AI assistant to help guide configuration, answer questions, and reduce the amount of context switching required when working with the Collector.
+
+For now, the focus is simply on making the OpenTelemetry Collector easier to work with, based on the workflows we deal with every day.
+
+We’ve found it genuinely useful in our own work, and if you’re spending time configuring OpenTelemetry, there’s a good chance you will too. Explore it at [otel.fyi](https://otel.fyi).
+
+
+---
+
+## Get started today
+
+Interested in seeing how ClickHouse works on your data? Get started with ClickHouse Cloud in minutes and receive $300 in free credits.
+
+[Sign up](https://console.clickhouse.cloud/signUp?loc=blog-cta-413-get-started-today-sign-up&utm_blogctaid=413)
+
+---
+
+---
+
+## “A generational leap”: How Trio unified payment analytics and cut storage by 88% with ClickHouse Cloud
+Published: 2026-04-17T08:23:49+00:00
+URL: https://clickhouse.com/blog/trio
+
+---
+title: "“A generational leap”: How Trio unified payment analytics and cut storage by 88% with ClickHouse Cloud"
+date: "2026-04-17T08:23:49.239Z"
+author: "ClickHouse"
+category: "User stories"
+excerpt: "Brazilian fintech Trio cut storage by 88% and achieved a \"generational leap\" in speed by building a unified payment analytics platform on ClickHouse Cloud, handling 243M+ payments and 1B+ daily events with a sliding window approach for late and duplicate "
+---
+
+# “A generational leap”: How Trio unified payment analytics and cut storage by 88% with ClickHouse Cloud
+
+## Summary
+
+Trio uses ClickHouse as a single source of truth for payment analytics, supporting reconciliation, compliance reporting, and operational and customer dashboards. At 243M+ payments in H1 2025 and 1B+ events daily, ClickHouse delivered "generational" speed with minimal tuning and cut storage by 88%. They use a sliding window approach with refreshable materialized views and ReplacingMergeTree to handle late, duplicate, and out-of-order events.
+
+
+[Trio](https://www.trio.com.br/en) is a Brazilian fintech that processes high-volume electronic payments. As the business scaled and expanded its portfolio with the 2025 acquisition of PayBrokers, a leading payment processor in the gaming and lottery sector, it had to turn a fast-moving stream of payment activity into data teams could rely on across operations and finance.
+
+In the first half of 2025 alone, Trio processed over 243 million payments, with each payment generating hundreds of downstream signals, including logs and system events. At that volume, analytics becomes part of the payment machine itself—how teams monitor performance, reconcile transactions, and produce financial views they can stand behind.
+
+At a [November 2025 ClickHouse meetup in São Paulo](https://clickhouse.com/videos/trio-meetup-brazil), Trio team members Fabricio Epaminondas (Head of Engineering), Eurico Nicacio (Head of CloudOps and IT), and Filipe Coelho (Data Specialist) walked through how they’re scaling analytics on [ClickHouse Cloud](https://clickhouse.com/cloud), why they made specific ingestion choices, and what they’ve learned along the way.
+
+<iframe width="768" height="432" src="https://www.youtube.com/embed/WMvFPH8gtv8" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe>
+
+## The need for a single source of truth
+
+In payments, “analytics” means something different than it does in most other businesses. In SaaS, being a few events off on traffic or error rates is tolerable—you still get value from the chart. Finance doesn’t work that way. “You can’t tell the client he has R$101.95 if he has R$101.94,” Fabricio says.
+
+That’s because the outputs aren’t just internal dashboards. “How we use the data, reconcile it, how we prepare the financial and accounting summaries—all of that has legal implications,” Fabricio says. “There’s compliance involved, federal laws, anti-money laundering policies, a series of regulatory mechanisms that need to be well-organized.”
+
+In other words, the numbers have to be fast, but they also have to be explainable—traceable back to their source, consistent across teams and systems.
+
+As Trio grew, meeting that standard became harder. Filipe explains that the company wasn’t working from a single database or a single source of truth. “We had a situation where we needed to bring disparate systems—both deactivated legacy systems and legacy systems that were still active—into a single point of view,” he says. “At the same time, we had to generate analytical data and historical series from a huge volume of financial transactions, and the systems where those transactions lived weren’t designed for that kind of workload.”
+
+Trio needed an analytical foundation that could unify those sources, keep up with the firehose of events, and still produce outputs the business could stake its reporting on. “We found a solution in [ClickHouse](https://clickhouse.com/cloud) to solve this problem,” Filipe says.
+
+## Trio’s ClickHouse-based architecture
+
+Trio uses ClickHouse across a range of functions, from internal operations and reporting to financial reconciliation, compliance, and customer-facing analytics.
+
+On the operations side, the team pipes telemetry into ClickHouse and uses Grafana to monitor platform activity in real time. Eurico notes that when Trio first started, newer ClickHouse observability features like [ClickStack](https://clickhouse.com/clickstack) didn’t exist yet, so they built their own pattern around tools they already trusted. “Grafana is a great friend of ours,” he says.
+
+Cloud applications—mainly Elixir, with additional services in TypeScript—run on AWS and interact with several transactional and operational data sources, including Tiger Data, Postgres, MongoDB, and Amazon S3. From there, data moves along two main paths: streaming through Redpanda for messaging-driven events, and batch through Airflow for scheduled loads. ClickHouse sits in the middle as the analytical layer, feeding Grafana, Hex, and Trio’s own applications, with views consumed by FinOps and DevOps teams, as well as customers.
+
+
+![Trio’s ClickHouse-based architecture for streaming, batch ingestion, and analytics tools](https://clickhouse.com/uploads/Trio_User_Story_Issue_1256_0_24fc643f0a.jpg)
+
+When it came to ingestion, the team had to decide between [ClickPipes](https://clickhouse.com/cloud/clickpipes), ClickHouse’s native ingestion service, and a custom ETL approach. While Fabricio notes that “ClickPipes makes things much easier,” especially when you want to stand up ingestion quickly and let ClickHouse handle more of the shaping downstream, Trio opted for a custom solution, with Redpanda topics feeding a dedicated ETL service that pre-processes events, structures the payloads, and then inserts clean, typed records into ClickHouse.
+
+The reason came down to operability under change. With schema drift, evolving event formats, and dependencies between events, Trio wanted more control over how data gets shaped before it lands, without needing to pause and recover a pipeline mid-stream. “There’s no better or worse here,” Fabricio says. “ClickHouse is very good in either case.”
+
+## The sliding window solution
+
+Financial systems have a way of making clean diagrams complicated. Payment events arrive late. Some arrive twice. Others show up out of order because a downstream system retried delivery, or because an upstream incident left gaps that get filled in afterward.
+
+Trio ran into this when building [real-time metrics](https://clickhouse.com/resources/engineering/what-is-real-time-analytics) on top of their messaging flows. A Pix payment might “complete” after its first event was recorded, or a confirmation could arrive seconds or even minutes after an earlier record had been counted. Treat the first event as final and your totals swing retroactively—annoying-but-tolerable in software, a non-starter in finance.
+
+The team’s first instinct was to use [refreshable materialized views](https://clickhouse.com/docs/materialized-view/refreshable-materialized-view) to re-run aggregations as new events arrived. The problem was, if you recompute the entire view every time late data shows up, you’re doing a lot of expensive work for small corrections. “Raw refreshable views will rematerialize everything,” Fabricio says. “That’s very heavy.”
+
+So Trio kept the idea but narrowed the scope. Instead of keeping the full dataset perfectly current on every refresh, they focused on correcting the recent past. The pattern is what’s known as a sliding window: every few minutes, they recalculate a recent time range (e.g. “last four hours, every five minutes”) so late events and duplicates get folded into the right totals without forcing a rebuild of history.
+
+
+![A sliding window keeps recent metrics correct while older time buckets become immutable](https://clickhouse.com/uploads/Trio_User_Story_Issue_1256_1_928ec0cb80.jpg)
+
+Refreshable materialized views drive those periodic recomputations, and [ReplacingMergeTree](https://clickhouse.com/docs/engines/table-engines/mergetree-family/replacingmergetree) handles deduplication when replays cause the same logical record to be inserted more than once. They also paid close attention to [partitioning](https://clickhouse.com/docs/partitions) to avoid expensive global merges.
+
+The result is a system that behaves the way finance needs it to. Recent data stays correct even when the stream arrives late or repeats itself. Older buckets become effectively immutable once they’ve stabilized. Reporting stays free of gaps or inconsistencies, and performance holds up as the dataset grows. “With this, we can work with over 1 billion data points smoothly within the day, from ledgers, and keep them renewed without major problems,” Fabricio says.
+
+## “A generational leap”
+
+For Trio, the benefits of ClickHouse showed up in a few ways at once.
+
+One was simply consolidation. Rather than maintaining separate analytical islands tied to individual systems, they centralized the analytical layer. “All the sources are brought into one place,” Filipe explains. “You manage everything within the cloud itself. It becomes the single source of truth for all analytical issues of the company.”
+
+Storage also dropped dramatically—around 88% compared to their previous setup, thanks to ClickHouse’s [columnar storage](https://clickhouse.com/docs/faq/general/columnar-database) and [compression](https://clickhouse.com/docs/data-compression/compression-in-clickhouse).
+
+Then there was speed, which Filipe describes less as an optimization than a true step-change. “In terms of speed, ClickHouse is truly undisputed,” he says. “It’s a generational leap compared to what we had, even with minimal tuning.”
+
+That speed changed how teams work day to day. Instead of waiting for answers or rationing which queries are “worth” running, analytics became something they could use in tighter feedback loops. “We stopped banging our heads against the wall,” Filipe says, “and started spending more time actually analyzing the data.”
+
+It also made migrations less painful. “Something that would normally take eight hours of head-scratching to organize a schema, the ClickHouse ingestion process solves in minutes,” Filipe says. Even when Trio migrated roughly 5 billion rows—some tables with more than 70 columns—ClickHouse didn’t flinch. “It received the data and basically didn’t even complain,” he says. “This was a big problem for us every time we had to work with those older databases. It was and is a life-changing experience.”
+
+## What’s next for Trio and ClickHouse
+
+What the team described in São Paulo is phase one: get high-stakes financial analytics onto an architecture that can unify disparate sources, ingest at streaming scale, and stay correct even when events arrive late or out of order. 
+
+Now the focus shifts from making it work to making it cleaner—filling in missing layers, tightening orchestration, and taking advantage of features and improvements ClickHouse has added since Trio first started. That includes revisiting [ClickPipes](https://clickhouse.com/cloud/clickpipes) and newer telemetry-focused capabilities. The team is also experimenting with local-mode workflows to rehearse ingestion and operational procedures outside production before applying them in the cloud.
+
+The goal, as volume grows and the platform expands, is an analytical foundation that’s easier to run, easier to change, and easier to trust.
+
+---
+
+## Get started today
+
+Interested in seeing how ClickHouse works on your data? Get started with ClickHouse Cloud in minutes and receive $300 in free credits.
+
+[Sign up](https://console.clickhouse.cloud/signUp?loc=blog-cta-397-get-started-today-sign-up&utm_blogctaid=397)
+
+---
+
+---
+
+## Getting started with clickhousectl: the ClickHouse CLI for local and cloud
+Published: 2026-04-16T16:58:58+00:00
+URL: https://clickhouse.com/blog/getting-started-clickhousectl
+
+---
+title: "Getting started with clickhousectl: the ClickHouse CLI for local and cloud"
+date: "2026-04-16T16:58:58.042Z"
+author: "Al Brown"
+category: "Product"
+excerpt: "A hands-on guide to clickhousectl, the ClickHouse CLI. Install it, scaffold a project, manage local servers, connect to ClickHouse Cloud, and set up CI/CD — all from your terminal."
+---
+
+# Getting started with clickhousectl: the ClickHouse CLI for local and cloud
+
+If you work with ClickHouse regularly, you usually need two things: a clean local setup and a way to manage Cloud services from the terminal. clickhousectl gives you both in one place. It handles local version management, isolated servers, project scaffolding, and ClickHouse Cloud operations without sending you off to a pile of shell scripts.
+
+Install it:
+
+```shell
+curl https://clickhouse.com/cli | sh
+```
+
+The installer detects your OS and architecture, drops the binary at `~/.local/bin/clickhousectl`, and creates a `chctl` alias. Check it's on your path:
+
+```shell
+chctl --version
+```
+
+## Bootstrap a project
+
+Install a ClickHouse version and mark it active:
+
+```shell
+chctl local use stable
+```
+
+This grabs the latest stable release if you don't already have it and sets it as the active version. Binaries live in `~/.clickhouse/versions/` and are shared across every project on the machine, so you're not re-downloading ClickHouse each time. Check what you're on:
+
+```shell
+chctl local which
+
+26.2.8.7 (stable)
+```
+
+To list what's installed locally, or see everything available upstream:
+
+```shell
+chctl local list
+chctl local list --remote
+```
+
+Pin a specific release when you need to:
+
+```shell
+chctl local use 26.3
+```
+
+Now make a directory for the project and drop into it. The scaffolded layout, the named server's data directory, and the SQL files are all scoped to whichever directory you run `chctl` from, so pick a home for it up front:
+
+```shell
+mkdir events-pipeline && cd events-pipeline
+```
+
+Scaffold the layout:
+
+```shell
+chctl local init
+
+clickhouse/
+├── tables/              # CREATE TABLE statements
+├── materialized_views/  # Materialized view definitions
+├── queries/             # Saved analytical queries
+└── seed/                # Test data (CSVs or INSERT scripts)
+```
+
+A sensible standard layout helps humans and agents alike keep track of what's going on. Keep `tables/` and `materialized_views/` as your schema source of truth, drop day-to-day queries into `queries/`, and use `seed/` for anything you need to load during development.
+
+Write a table to `clickhouse/tables/events.sql`:
+
+```sql
+CREATE TABLE IF NOT EXISTS events
+(
+    timestamp DateTime,
+    user_id   UInt64,
+    event     LowCardinality(String),
+    properties String
+)
+ENGINE = MergeTree()
+ORDER BY (event, timestamp)
+```
+
+Start a named server and apply it:
+
+```shell
+chctl local server start --name dev
+chctl local client --name dev --queries-file clickhouse/tables/events.sql
+```
+
+This gives you an isolated instance with its own data directory at `.clickhouse/servers/dev/data/`. Run as many named servers as you want; they don't share state.
+
+Seed some rows. Write to `clickhouse/seed/events.sql`:
+
+```sql
+INSERT INTO events VALUES
+    (now(), 1, 'page_view', '{"page": "/pricing"}'),
+    (now(), 2, 'signup', '{"plan": "cloud"}'),
+    (now(), 1, 'page_view', '{"page": "/docs"}');
+```
+
+Apply it and query:
+
+```shell
+chctl local client --name dev --queries-file clickhouse/seed/events.sql
+chctl local client --name dev --query "SELECT event, count() FROM events GROUP BY event"
+
+┌─event─────┬─count()─┐
+│ page_view │       2 │
+│ signup    │       1 │
+└───────────┴─────────┘
+```
+
+## Manage local dev servers
+
+Named servers get more useful once you run multiple versions side by side. Spin up a second server alongside `dev`, but on a different release:
+
+```shell
+chctl local server start --name staging --version latest
+```
+
+`--version` overrides your pinned version for this server only. `dev` keeps running on whatever `chctl local use stable` resolved to; `staging` runs on whatever `latest` resolves to right now. If that version isn't installed, `chctl` fetches it first.
+
+List them:
+
+```shell
+chctl local server list
++---------+---------+-------+------------+-----------+----------+
+| Name    | Status  | PID   | Version    | HTTP Port | TCP Port |
++---------+---------+-------+------------+-----------+----------+
+| dev     | running | 99493 | 26.2.8.7   | 8126      | 9003     |
+| staging | running | 98060 | 26.4.1.997 | 8128      | 9007     |
++---------+---------+-------+------------+-----------+----------+
+
+2 servers, 2 running
+```
+
+This is the pattern for upgrade testing: keep `dev` on the version you run in production, point `staging` at the one you're evaluating, and apply the same schema files to both. If something breaks, you find out before the upgrade.
+
+Ports auto-assign when the defaults are taken, so you don't have to manage them yourself.
+
+Apply the same schema files to the new server:
+
+```shell
+chctl local client --name staging --queries-file clickhouse/tables/events.sql
+```
+
+And run any saved query against whichever server you pick:
+
+```shell
+chctl local client --name staging --queries-file clickhouse/queries/daily_events.sql
+```
+
+Stop a server when you're done:
+
+```shell
+chctl local server stop staging
+```
+
+Or delete it and its data directory entirely:
+
+```shell
+chctl local server remove staging
+```
+
+## Connect to ClickHouse Cloud
+
+Every command you've seen so far has a Cloud equivalent.
+
+Cloud auth is split in two by design. Browser-based OAuth gets you read-only access. Anything that mutates state (creating services, scaling them, applying schema changes) requires explicit API key authentication.
+
+The split exists because `chctl` is a tool an agent can drive. Getting an API key requires a deliberate step in the Cloud console, which forces the question: do I actually want to give this CLI (and by extension, whatever's running it) write access to my Cloud account?
+
+Authenticate for read-only access:
+
+```shell
+chctl cloud auth login
+```
+
+OAuth opens in your browser; the token is cached locally after. If you belong to more than one Cloud organisation, list them and pick one:
+
+```shell
+chctl cloud org list
++-------------------+--------------+
+| Name              | ID           |
++-------------------+--------------+
+| CLICKHOUSECTL_CLI | 5fae43a3-... |
++-------------------+--------------+
+```
+
+With a single org, `chctl` auto-selects it and you can skip this step. With multiple, pass `--org-id` to scope commands:
+
+```shell
+chctl cloud service list --org-id 5fae43a3-xxxx-xxxx-xxxx-6e139718b9a3
+
++------+----------+---------+----------+-----------+--------------+
+| Name | ID       | State   | Provider | Region    | Endpoint     |
++------+----------+---------+----------+-----------+--------------+
+| blog | c04e...  | running | aws      | us-east-1 | xyz...cloud  |
++------+----------+---------+----------+-----------+--------------+
+```
+
+For anything that writes, generate an API key in the [Cloud console](https://clickhouse.cloud) and authenticate with it:
+
+```shell
+chctl cloud auth login --api-key <key> --api-secret <secret>
+```
+
+Or set `CLICKHOUSE_API_KEY` and `CLICKHOUSE_API_SECRET` as environment variables and `chctl` will pick them up automatically. API keys are scoped to a single org at creation time, so `--org-id` isn't needed once you're authenticated this way. Stay tuned for improvements to the auth flow.
+
+With write access, create a service:
+
+```shell
+chctl cloud service create --provider aws --region us-east-1 --name getting_started
+
+Service created successfully!
+
+Service: getting_started
+  ID: c04e0b96-xxxx-xxxx-xxxx-a91717ae4906
+  State: provisioning
+  Provider: aws
+  Region: us-east-1
+  Replicas: 3
+  Min Memory/Replica: 16 GB
+  Max Memory/Replica: 120 GB
+  Host: xyz.us-east-1.aws.clickhouse.cloud
+  Port: 9440
+
+Credentials (save these, password shown only once):
+  Username: default
+  Password: xyz
+```
+
+Save the password somewhere you can retrieve it. It's not shown again.
+
+Scaling works the same way. Pass only what you want to change. No need to restate every parameter:
+
+```shell
+chctl cloud service scale c04e0b96-xxxx-xxxx-xxxx-a91717ae4906 --num-replicas 4
+
+Service getting_started scaling updated
+  Replicas: 4
+```
+
+Apply the schema files you developed locally:
+
+```shell
+chctl cloud service client --name getting_started --queries-file clickhouse/tables/events.sql --user default --password xyz
+```
+
+## Develop with an AI agent
+
+`chctl` ships agent skills for coding assistants. To install the Claude Code set:
+
+```shell
+chctl skills --agent claude
+```
+
+Three skills land in `.claude/skills/`:
+
+- [`clickhouse-best-practices`](https://github.com/ClickHouse/agent-skills/tree/main/skills/clickhouse-best-practices): 28 rules covering schema design, query optimisation, and inserts. Keeps the agent honest about primary keys, data types, JOINs, and partitioning.
+- [`clickhousectl-local-dev`](https://github.com/ClickHouse/agent-skills/tree/main/skills/clickhousectl-local-dev): how to manage versions, scaffold projects, start servers, write schemas, and seed data with `chctl`.
+- [`clickhousectl-cloud-deploy`](https://github.com/ClickHouse/agent-skills/tree/main/skills/clickhousectl-cloud-deploy): Cloud authentication, service creation, schema migration from local, and application connection config.
+
+With these loaded, a prompt like:
+
+> Set up a ClickHouse project for tracking web analytics events. I want to store page views, sessions, and conversions.
+
+gets the agent to pick up `clickhousectl-local-dev`, where it will do something like:
+- install a ClickHouse version
+- scaffold the project
+- start a dev server
+- write out files like `clickhouse/tables/page_views.sql`, `sessions.sql`, and `conversions.sql`
+- seed data
+- run verification
+
+Follow up with:
+
+> Push this to ClickHouse Cloud. Create a service in AWS us-east-1.
+
+and it switches to `clickhousectl-cloud-deploy`: `cloud auth login`, `cloud service create`, then `cloud service client --queries-file` against the same SQL files it just wrote locally. The local project is the source of truth. Cloud is just another target.
+
+## Use clickhousectl in CI/CD
+
+`chctl` is a static binary with JSON output and env-var auth, so it drops into pipelines without a lot of wrapper scripting.
+
+Here's a GitHub Actions workflow that spins up ClickHouse, applies your schema, and runs test queries on every push:
+
+```yaml
+name: Schema validation
+on: [push]
+
+env:
+  CLICKHOUSE_VERSION: "26.3"
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install clickhousectl
+        run: curl https://clickhouse.com/cli | sh
+
+      - name: Install ClickHouse
+        run: chctl local install ${{ env.CLICKHOUSE_VERSION }}
+
+      - name: Start server
+        run: chctl local server start --name ci
+
+      - name: Apply schema
+        run: |
+          for f in clickhouse/tables/*.sql; do
+            chctl local client --name ci --queries-file "$f"
+          done
+
+      - name: Run test queries
+        run: |
+          for f in clickhouse/queries/test_*.sql; do
+            chctl local client --name ci --queries-file "$f"
+          done
+
+      - name: Stop server
+        run: chctl local server stop ci
+```
+
+Pin `CLICKHOUSE_VERSION` to match production. Upgrade it in one place and CI validates your whole schema against the new release on the next push, which is most of the confidence you need before an upgrade.
+
+For Cloud writes from CI, set `CLICKHOUSE_API_KEY` and `CLICKHOUSE_API_SECRET` as secrets in your workflow and `chctl` picks them up automatically. Or pass them explicitly:
+
+```shell
+chctl cloud auth login --api-key $CLICKHOUSE_API_KEY --api-secret $CLICKHOUSE_API_SECRET
+```
+
+`--json` gives you machine-readable output for anything scripted downstream:
+
+```shell
+chctl cloud service list --json | jq '.[0].id'
+```
+
+## What's next
+
+clickhousectl is open source at [github.com/ClickHouse/clickhousectl](https://github.com/ClickHouse/clickhousectl). For the design thinking behind it, see [Introducing clickhousectl](/blog/introducing-clickhousectl).
+
+If you don't have a ClickHouse Cloud account yet, [sign up](https://clickhouse.cloud) and run the last two sections against a real service.
+
+---
+
+## April 2026 newsletter
+Published: 2026-04-16T15:05:56+00:00
+URL: https://clickhouse.com/blog/202604-newsletter
+
+---
+title: "April 2026 newsletter"
+date: "2026-04-16T15:05:56.977Z"
+author: "Mark Needham"
+category: "Community"
+excerpt: "Welcome to the April 2026 ClickHouse newsletter, which will round up what’s happened in real-time data warehouses over the last month."
+---
+
+# April 2026 newsletter
+
+Hello, and welcome to the April 2026 ClickHouse newsletter!
+
+This month, we have a new CLI for ClickHouse local and cloud, agentic coding at ClickHouse, materialized CTEs in our latest release, building a SIEM, and more!
+
+## Featured community member: Nazarii Piontko {#featured-community-member}
+
+This month's featured community member is Nazarii Piontko, Solutions Architect at Future Processing.  
+
+![](https://clickhouse.com/uploads/newsletter_apr2026_image2_c4a00ae7d0.png)
+
+He leads technical presales and architecture, translating complex requirements into solutions for clients across trading, mobility, and logistics. He stays hands-on through open-source contributions to distributed data systems, mentors engineers, and has taught at universities.
+
+Nazarii contributed two features to ClickHouse 26.3 LTS: the [`naturalSortKey`](https://github.com/ClickHouse/ClickHouse/pull/90322) function, which enables intuitive sorting of strings containing numbers (so "file10" sorts after "file9", not "file1"), and support for the [ALP compression codec](https://github.com/ClickHouse/ClickHouse/pull/91362), which brings efficient lossless compression for floating-point data.
+
+➡️ [Connect with Nazarii on LinkedIn](https://www.linkedin.com/in/piontko/)
+
+## Open House 2026 {#open-house}
+
+It's just over a month until the second edition of [Open House](https://clickhouse.com/openhouse/san-francisco), a free three-day ClickHouse user conference running May 26–28 in San Francisco.
+
+Kick things off on May 26 with hands-on workshops covering real-time analytics, observability, database administration, and data warehousing, then head into two days of keynotes, technical sessions, and networking.
+
+Hear from ClickHouse CEO Aaron Katz and CTO Alexey Milovidov, plus industry guests including Bret Taylor (Sierra) and Guillermo Rauch (Vercel). Admission is free!
+
+➡️ [Register now](https://clickhouse.com/openhouse/san-francisco)
+
+## 26.3 release {#26-3-release}
+
+![](https://clickhouse.com/uploads/newsletter_apr2026_image1_ce952c56f3.png)
+
+26.3 sees the experimental introduction of materialized Common Table Expressions (CTEs) and WebAssembly User-defined functions (UDFs).
+
+This release also makes asynchronous inserts the default, enables JOIN reordering for ANTI, SEMI, and FULL, and improves the internal storage of the ClickHouse Map data type.
+
+➡️ [Read the release post](https://clickhouse.com/blog/clickhouse-release-26-03)
+
+## Introducing clickhousectl: the CLI for ClickHouse local and cloud (beta) {#introducing-clickhousectl}
+
+![april_2026_clickhouse-ctl.png](https://clickhouse.com/uploads/april_2026_clickhouse_ctl_e3d28f3583.png)
+
+Alasdair Brown announced clickhousectl, a CLI for managing both local ClickHouse installations and cloud deployments, built with AI agents in mind alongside human developers.
+
+Designed for agentic development, it handles local version management, project scaffolding, and server lifecycle, while also supporting cloud infrastructure commands with authentication safeguards like read-only OAuth and permissioned API keys.
+
+➡️ [Read the blog post](https://clickhouse.com/blog/introducing-clickhousectl-official-cli-for-clickhouse-local-and-cloud)
+
+## How Goldsky made historical blockchain data backfills 12x faster {#how-goldsky-made-historical-blockchain-data-backfills-12x-faster}
+
+![](https://clickhouse.com/uploads/newsletter_apr2026_image6_7949daf91e.png)
+
+Goldsky sped up historical blockchain backfills by 12x by replacing their Kafka/Avro pipeline with direct ClickHouse reads using the Apache Arrow format.
+
+Eliminating deserialization overhead by reading data in the format closest to its physical storage proved extremely efficient, boosting throughput from ~50K to ~600K rows/second.
+
+➡️ [Read the blog post](https://goldsky.com/blog/making-historical-blockchain-backfills-faster)
+
+## Agentic coding at ClickHouse {#agentic-coding-at-clickhouse}
+
+![](https://clickhouse.com/uploads/newsletter_apr2026_image7_ffb09aaaf1.png)
+
+Our CTO, Alexey Milovidov, argues that agentic coding has crossed the threshold into genuine usefulness for professional software development, driven by recent model improvements such as Claude Opus 4.5.
+
+He walks through how we've achieved productivity gains by using AI agents across a wide range of tasks - fixing flaky tests, investigating bugs, code reviews, security research, and more.
+
+The key takeaway: As of today, agents work best as pair programmers under an engineer's direction, not as autonomous replacements.
+
+➡️ [Read the blog post](https://clickhouse.com/blog/agentic-coding)
+
+## Building a SIEM with ClickHouse and Clickdetect {#building-a-siem-with-clickhouse-and-clickdetect}
+
+![](https://clickhouse.com/uploads/newsletter_apr2026_image3_f7c3e467cd.png)
+
+Vinicius Morais walks through building a SIEM architecture using ClickHouse and Clickdetect, an open-source detection engine that runs SQL-based security rules against your log data.
+
+He uses Wazuh (an open-source security platform) solely as a log collector and decoder, forwarding parsed alerts to a ClickHouse table with compression codecs, TTLs, bloom filter indexes, and S3 storage support.
+
+From there, Clickdetect schedules detections and fires alerts to a webhook — giving you a lightweight, cost-effective SIEM that scales from a single node to a distributed ClickHouse cluster.
+
+➡️ [Read the blog post](https://medium.com/@souzo/building-a-powerful-siem-with-clickhouse-and-clickdetect-ae68a4495a76)
+
+## Building high-performance full-text search for object storage {#building-high-performance-full-text-search-for-object-storage}
+
+![](https://clickhouse.com/uploads/newsletter_apr2026_image8_39f30f112c.png)
+
+Last month, we announced that Full-text search was generally available. We now have a blog post written by the engineering team explaining how they redesigned the FTS index to work efficiently with object storage, where random reads are expensive.
+
+The new index uses front-coding compression, a sparse lookup index, and adaptive posting lists, allowing many queries to be answered from the index alone without touching the underlying text columns.
+
+➡️ [Read the blog post](https://hookdeck.com/blog/how-we-made-payload-search-60x-faster-in-clickhouse)
+
+## Quick reads {#quick-reads}
+
+* Marcin Kulakowski explains [why ClickHouse is becoming the data control plane](https://mkulakowski2-73849.medium.com/the-rise-of-real-time-data-why-clickhouse-is-becoming-the-control-plane-77b59bf85399).  
+* Divyanshu shares what he [learned about observability (and ClickHouse) in 10 days](https://medium.com/@shekdivyanshu/what-i-learned-about-observability-in-10-days-a370c143d2ee).  
+* Alexandra Petra Berger [draws parallels](https://medium.com/towards-data-engineering/poyekhali-what-1961-soviet-space-tech-teaches-us-about-modern-data-engineering-1549445a054f) between Sergei Korolev's space engineering principles - precision, redundancy, and military-grade quality checks - and modern data engineering practices, using ClickHouse compression codecs like Gorilla and DoubleDelta to illustrate how the same rigor applies to building reliable data systems.
+
+## Upcoming events {#upcoming-events}
+
+### Global virtual events
+
+* [Combining Postgres & ClickHouse to Build a Unified Data Stack](https://clickhouse.com/company/events/202604-APJ-Webinar-Unified-Data-Stack-ClickHouse-Postgres) - Apr 22, 2026  
+* [CDC ClickPipes Webinar](https://clickhouse.com/company/events/202604-EMEA-Webinar-CDC-ClickPipes) - Apr 23, 2026  
+* [Analisando bilhões de registros em tempo real](https://clickhouse.com/company/events/202604-LATAM-Real-Time-Analytics) - Apr 16, 2026  
+* [Analizando miles de millones de registros en tiempo real](https://clickhouse.com/company/events/202605-LATAM-Real-Time-Analytics-ES) - May 14, 2026
+
+### Virtual training
+
+* [ClickHouse Fundamentals](https://clickhouse.com/company/events/202605-AMER-ClickHouse-Fundamentals) - May 5, 2026  
+* [Data Warehousing with ClickHouse: Level 1](https://clickhouse.com/company/events/202605-AMER-EMEA-data-warehousing-Level1) - May 13, 2026  
+* [Data Warehousing with ClickHouse: Level 2](https://clickhouse.com/company/events/202605-AMER-EMEA-data-warehousing-Level2) - May 14, 2026  
+* [Observability with ClickStack: Level 1](https://clickhouse.com/company/events/202605-AMER-EMEA-Observability-with-ClickStack-Level1) - May 19, 2026  
+* [Data Warehousing with ClickHouse: Level 3](https://clickhouse.com/company/events/202605-AMER-EMEA-data-warehousing-Level3) - May 20, 2026  
+* [ClickHouse Fundamentals](https://clickhouse.com/company/events/202605-EMEA-ClickHouse-Fundamentals) - May 21, 2026
+
+### Events in AMER
+
+* [Meetup in Sunnyvale](https://clickhouse.com/company/events/202504164) - Sunnyvale - Apr 16, 2026  
+* [Google Cloud Next 2026](https://clickhouse.com/company/events/google-cloud-next-2026) - Las Vegas - Apr 22, 2026  
+* [House Party, Google Cloud Next](https://clickhouse.com/company/events/2026-houseparty-google-next) - Las Vegas - Apr 22, 2026  
+* [Sao Paulo 2-day In-Person Training: Real-time Analytics with ClickHouse](https://clickhouse.com/company/events/202605-LATAM-SaoPaulo-Real-time-Analytics-w-ClickHouse) - Sao Paulo - May 12, 2026  
+* [Open House](https://clickhouse.com/company/events/202605-global-open-house) - San Francisco - May 26, 2026
+
+### Events in EMEA
+
+* [Paris In-Person Training: Real-time Analytics with ClickHouse](https://clickhouse.com/company/events/202604-EMEA-Paris-Real-time-Analytics-w-ClickHouse) - Paris - Apr 15, 2026  
+* [GrafanaCON](https://grafana.com/events/grafanacon/) - Barcelona - Apr 20-22, 2026  
+* [Barcelona In-Person Training: Real-time Analytics with ClickHouse](https://clickhouse.com/company/events/202604-EMEA-Barcelona-Real-time-Analytics-w-ClickHouse) - Barcelona - Apr 20, 2026  
+* [AWS Summit London](https://aws.amazon.com/events/summits/london/) - London - Apr 22 - Booth G18  
+* [Rise of AI Berlin](https://riseof.ai/conference-2026/) - Berlin - May 5-6, 2026  
+* [AWS Summit Tel Aviv](https://aws.amazon.com/events/summits/tel-aviv/) - Tel Aviv - May 6, 2026  
+* [Data Innovation Summit](https://datainnovationsummit.com/) - Stockholm - May 6-8, 2026  
+* [Gartner Data & Analytics](http://gartner.com/en/data-analytics) - London - May 11-13, 2026  
+* [Revolution Banking](https://www.revolutionbanking.es/) - Madrid - May 12, 2026  
+* [London 2-day In-Person Training: Real-time Analytics with ClickHouse](https://clickhouse.com/company/events/202605-EMEA-London-Real-time-Analytics-w-ClickHouse) - London - May 19, 2026  
+* [ClickHouse Meetup London](https://www.meetup.com/clickhouse-london-user-group/events/313759007/) - London - May 19, 2026  
+* [Platforma 2026](https://www.platfor-ma.com/) - Tel Aviv - May 20, 2026  
+* [AWS Summit Hamburg](https://aws.amazon.com/events/summits/hamburg/) - Hamburg - May 20, 2026  
+* [Google Summit Madrid](https://cloudonair.withgoogle.com/events/cloud-ai-live-madrid-2026) - Madrid - May 28, 2026
+
+### Events in APAC
+
+* [Data Streaming World Tour - Mumbai](https://clickhouse.com/company/events/202604-APJ-3P-Mumbai-ConfluentStreamingTour) - Apr 13, 2026  
+* [Taiwan In-Person Training: Real-time Analytics with ClickHouse](https://clickhouse.com/company/events/202604-APJ-Taiwan-Real-time-Analytics-with-ClickHouse) - Taiwan - Apr 16, 2026  
+* [Taipei Open Source Meetup](https://clickhouse.com/company/events/taipei-open-source-meetup) - Taipei - Apr 16, 2026  
+* [Data Streaming World Tour - Bangalore](https://clickhouse.com/company/events/202604-APJ-3P-Bangalore-ConfluentStreamingTour) - Apr 16, 2026  
+* [PagerDuty on Tour Tokyo](https://clickhouse.com/company/events/202604-APJ-3P-Tokyo-PagerDutyTour) - Tokyo - Apr 16, 2026  
+* [Bangalore Meetup with Alexey Milovidov](https://www.meetup.com/clickhouse-bangalore-user-group/events/313739871/) - Apr 18, 2026  
+* [Data Streaming World Tour - Jakarta](https://clickhouse.com/company/events/202604-APJ-3P-Jakarta-ConfluentStreamingTour) - Apr 21, 2026  
+* [Ho Chi Minh In-Person Training: Real-time Analytics with ClickHouse](https://clickhouse.com/company/events/202604-APJ-HoChiMinh-Real-time-Analytics-with-ClickHouse) - Ho Chi Minh - Apr 22, 2026  
+* [AWS Summit Bengaluru](https://aws.amazon.com/events/summits/bengaluru/) - Apr 22-23, 2026  
+* [Microsoft AI Tour - Sydney](https://clickhouse.com/company/events/202604-APJ-3P-Sydney-MicrosoftAITour) - Apr 23, 2026  
+* [AWS Summit Singapore](https://clickhouse.com/company/events/202605-APJ-3P-Singapore-AWSSummit) - Singapore - May 6, 2026  
+* [AWS Summit Sydney](https://clickhouse.com/company/events/202605-APJ-AWSSummit-Sydney) - Sydney - May 13, 2026  
+* [Data Engineering Summit](https://clickhouse.com/company/events/202605-APJ-3P-Bangalore-DataEngineeringSummit) - Bangalore - May 14, 2026  
+* [AWS Summit Seoul](https://clickhouse.com/company/events/202605-APJ-3P-Seoul-AWSSummit) - Seoul - May 20, 2026  
+* [Findy VPoE Summit](https://clickhouse.com/company/events/202605-APJ-3P-Tokyo-FindyVPoESummit) - Tokyo - May 22, 2026
+
+
+---
+
+## Get started today
+
+Interested in seeing how ClickHouse works on your data? Get started with ClickHouse Cloud in minutes and receive $300 in free credits.
+
+[Sign up](https://console.clickhouse.cloud/signUp?loc=blog-cta-395-get-started-today-sign-up&utm_blogctaid=395)
+
+---
+
+---
+
+## Our vision for the ClickHouse Grafana plugin
+Published: 2026-04-15T15:02:01+00:00
+URL: https://clickhouse.com/blog/grafana-plugin-vision
+
+---
+title: "Our vision for the ClickHouse Grafana plugin"
+date: "2026-04-15T15:02:01.931Z"
+author: "Alex Fedotyev"
+category: "Engineering"
+excerpt: "We see ClickHouse and Grafana as a key part of the observability experience. Here's our vision for making the plugin more powerful and easier to use."
+---
+
+# Our vision for the ClickHouse Grafana plugin
+
+## TL;DR;
+
+We see the ClickHouse and Grafana pairing as a key part of the ClickHouse observability experience. In this post we explore how we’re investing in the plugin and our vision for making it more powerful and easy to use.
+
+
+
+
+ClickHouse has become the engine behind a growing number of observability and real-time analytics deployments. Teams choose it because it handles the volume of billions of log lines, millions of traces, time series at scale, without breaking the bank or the query performance.
+
+We give users the freedom to consume their observability data however they choose, with Grafana and ClickStack as two powerful options. ClickStack focuses on a rich, exploratory experience and is ideal for teams that want a native ClickHouse interface. Grafana, on the other hand, fits naturally into existing ecosystems. Engineers already know it, organizations already run it, and it excels at bringing data from multiple sources together in a single view. Whether driven by familiarity, standardization, or the need to unify multiple signals, it’s a pairing we see widely across both observability and analytics use cases.
+
+Adoption has been strong and continues to grow as more teams use ClickHouse with Grafana for observability and analytics.
+
+At the same time, we recognize that the current experience can be challenging, particularly where the plugin requires users to write SQL. In ClickStack, much of this complexity is abstracted away, making it easier to explore data without deep knowledge of the schema. We’ve learned a lot from that experience, and our goal now is to bring those lessons back into the [Grafana plugin](https://grafana.com/grafana/plugins/grafana-clickhouse-datasource/), making it easier than ever to get started and ensuring every user can be productive from day one.
+
+With a vision in place that focuses on making the plugin easier than ever to use, here’s what that might look like in practice.
+
+*> These ideas reflect what we’ve been exploring and prototyping, not a defined or committed roadmap. While much of this work has been tested, we’re still in an experimental phase and actively looking for feedback. Think of this as a forward-looking view of where we believe the plugin can go, rather than a final plan.*
+
+
+---
+
+## Get started today
+
+Interested in seeing how ClickHouse works on your data? Get started with ClickHouse Cloud in minutes and receive $300 in free credits.
+
+[Sign up](https://console.clickhouse.cloud/signUp?intent=o11y&loc=blog-cta-379-get-started-today-sign-up&utm_blogctaid=379)
+
+---
+
+
+## A truly native Grafana experience {#a_truly_native_grafana_experience}
+
+Grafana exposes a rich set of built-in capabilities for its plugins - click-to-filter, attribute collections, log volume histograms, dashboards with smart variables and annotations. 
+
+But these features are only activated and available to the end user when a plugin declares support for them. 
+
+Currently the ClickStack plugin doesn't expose all of the available capabilities. Our priority is therefore to start cataloguing and implementing every relevant interface so the ClickHouse plugin can deliver a truly first-class, well-integrated Grafana experience.
+
+So what does this mean in practice?
+
+### Instant filtering from log details
+
+You're looking at a log line during an incident. You see `ServiceName: payment-gateway`. Instead of navigating to the query builder to manually add a filter - you click the "+" icon next to the field. Done, the query updates instantly and the data is filtered to the service. Likewise, clicking "-" excludes the services dataset. Select text inside the log body, hit "line contains filter" and it adds a full-text search. 
+
+The result is an experience where, rather than fighting the UI, the user can slice and filter data seamlessly, accelerating incident investigation.
+
+![](https://clickhouse.com/uploads/grafana_plugin_apr2026_image8_1306f956d5.png)
+
+### Structured attribute display
+
+Both OpenTelemetry logs and traces can carry 40+ fields across resource, log, span and scope attributes, but today they appear as a single flat list. We’re exploring ways to introduce clearer visual separation, grouping attributes by category to better reflect how OTel data is structured. The goal is to make fields easier to locate, so instead of scanning endlessly, you can quickly find what you need.
+
+![](https://clickhouse.com/uploads/grafana_plugin_apr2026_image6_39fe9afb73.png)
+
+### Automatic log volume histogram in SQL mode
+
+The log volume histogram, already available in query builder mode today, should also work for raw SQL queries. When OTel columns are configured, the plugin can generate the volume breakdown by severity automatically, even when it can't parse your custom SQL. No need to write a separate aggregation query alongside your log search.
+
+![](https://clickhouse.com/uploads/grafana_plugin_apr2026_image2_15f31221a3.png)
+
+### Smarter dashboard variables
+
+Today the [variable editor](https://grafana.com/docs/grafana/latest/visualizations/dashboards/variables/) requires writing raw SQL to populate dashboard dropdowns - you need to know the exact database, table, and column names upfront. We aim to improve that with a guided editor that generates the SQL for you.
+
+Select a variable type to dynamically generate a query. Choose from listing databases, tables, columns, or retrieving distinct values for a column. Alternatively, use predefined OTel presets such as service names or log levels. Cascading dropdowns let you navigate from database to specific columns without memorizing the schema. Selecting a specific column retrieves its distinct values as variable options, completing the database -> table -> column -> values workflow without a need to work with any SQL.  
+
+![](https://clickhouse.com/uploads/grafana_plugin_apr2026_image10_d5110f5f7a.png)
+
+### Annotations - deployments and K8s events from your OTel data
+
+Grafana annotations show as vertical markers on time series panels - useful for correlating changes with charts showing trending KPIs. Today, most teams set these up via CI/CD webhooks or manual API calls and populate individual events from a supplementary database.
+
+OTel data makes this unnecessary. Your traces and logs already carry `ResourceAttributes['service.version']` and `ResourceAttributes['container.image.tag']`. A SQL annotation query can detect when these values change - surfacing deployments and rollbacks as markers on your dashboards, automatically derived from data your services already emit. No external integration needed.
+
+Similarly, Kubernetes events ingested by the OTel collector (pod restarts, OOM kills, scaling events) are naturally discrete events with timestamps. They map directly to annotations with a simple `WHERE` filter.  
+
+![](https://clickhouse.com/uploads/grafana_plugin_apr2026_image3_870815399b.png)
+
+We're looking into options to bring annotation presets into the editor - simply select "Change detection" or "K8s lifecycle events" and get a working query without writing SQL. For attribute change detection, the plugin could handle the diffing automatically: write a simple SELECT of service versions over time, and only actual transitions become annotation markers. Custom SQL annotations would continue to work as before.
+
+![](https://clickhouse.com/uploads/grafana_plugin_apr2026_image5_f9636d56b0.png)
+
+### Filter preservation across datasources
+
+Switching between data sources in Explore today often means losing your working context. Filters, conditions, and refinements that took time to build have to be recreated from scratch, slowing down investigation and breaking your flow.
+
+Ideally we’d like to preserve that context when switching, so filters carry over automatically - allowing you to continue your analysis without rebuilding queries and making cross-datasource exploration faster and far less disruptive.
+
+None of these are groundbreaking on their own - they're standard behaviors users expect. And that's exactly the point. The experience should feel familiar, not require a learning curve.
+
+## Search first, SQL when you need it {#search_first_sql_when_you_need_it}
+
+The current query builder is designed for maximum flexibility - any database, any table, any columns, any query type. That’s the right default for a general-purpose SQL datasource, but it comes at a cost. It forces users to know, or repeatedly rediscover, the schema every time they open Explore, even for simple tasks like searching logs.
+
+To make this simpler, we’re experimenting with a compact query mode that starts from the search bar. Similar to ClickStack, this allows users to search logs naturally without needing to write SQL, making the initial experience more intuitive and removing the need to understand the underlying schema upfront.
+
+![](https://clickhouse.com/uploads/grafana_plugin_apr2026_image1_a8dc37d276.gif)
+
+*Our current prototype for the new search behavior.*
+
+Picking up datasource will present a new editor collapsed to essentials, with a search bar and filter pills. Just type a search term and hit Enter. Under the hood it would use ClickHouse's `hasToken()` function, which is optimized for full-text search on indexed columns to search across billions of log lines in seconds. Facets will appear as a compact listing with autocomplete-enabled search for column names, operators, and values.
+
+Need custom ordering or limits? One click on the gear icon. 
+
+Need to see the generated SQL? Expand the preview. 
+
+Need full control? "Edit as SQL" will drop you into the raw editor with your current query pre-filled. 
+
+The theme is simple: the common path is simple and intuitive, while more advanced workflows remain close at hand. Nothing is hidden, just kept out of the way until you need it.
+
+Building on this theme, even selecting and working with data sources in Explore today introduces unnecessary friction. Users are required to specify whether they’re working with logs or traces at query time, with a data source capable of supporting either. In most cases, however, users are searching the same type of data.This adds an extra, repetitive step that slows down exploration.
+
+To simplify this, we’re planning a single-table datasource mode. Configure a datasource for a table with logs, and opening Explore drops you straight into the log search experience with no mode selector or table picker required. Just open Explore, select your datasource, and start searching and analyzing.
+
+## Out of the box dashboards {#out_of_the_box_dashboards}
+
+Today, if you deploy the [OpenTelemetry Collector with the ClickHouse exporter](https://clickhouse.com/docs/use-cases/observability/clickstack/ingesting-data/opentelemetry) your data lands in ClickHouse, but you still have to build dashboards from scratch in Grafana. To make the getting started experience simpler, we plan to ship out-of-the-box dashboards for OpenTelemetry and Kubernetes observability use cases that should work immediately with standard schemas.
+
+![](https://clickhouse.com/uploads/grafana_plugin_apr2026_image7_d1806d97b0.png)
+
+The initial set should cover the core observability workflows: a logs dashboard showing volume by severity with a per-service breakdown; and a trace dashboard with duration distribution and service dependency mapping, per-service RED metrics (request rate, error rate, duration) and visibility into top spans. Dashboard would also showcase usage of variables and annotations.
+
+![](https://clickhouse.com/uploads/grafana_plugin_apr2026_image4_67b76c885a.png)
+
+The goal is that a team deploying ClickHouse for observability should be able to go from data ingestion to usable dashboards in minutes, not hours, with users able to simply import the dashboards of interest when configuring the datasource.
+
+## Metrics exploration without raw SQL {#metrics_exploration_without_raw_sql}
+
+The ClickHouse OpenTelemetry exporter already supports ingesting metrics such as CPU usage, memory, network I/O, and other infrastructure signals from OTel agents and Kubernetes.
+
+The challenge is that exploring this data visually in Grafana often requires writing SQL aggregation queries by hand, which isn’t the experience users expect from metrics-native data sources.
+
+Similar to how ClickStack provides a native query builder so users don’t have to write complex SQL queries, we want to bring that same experience into Grafana. This compact metrics builder would allow the user to pick a table type, select a metric, choose an aggregation, and add group-by dimensions. For OTel Map columns like `ResourceAttributes`, selecting one might open a key picker to allow drill-down into fields like `k8s.namespace.name` or `host.name` without  requiring the user to write bracket notation. 
+
+The result is intended to be that your infrastructure and runtime metrics become explorable the same way they would be in any metrics-first tool, without maintaining a separate system to query them.
+
+## Looking further ahead {#looking_further_ahead}
+
+The above represent changes we’re aiming to deliver in the near term. Looking a bit further ahead, a few areas we’re exploring:
+
+### Bidirectional SQL parsing
+
+Today, the query builder generates SQL for you, but the flow is one-way. If you edit that SQL, you can’t switch back to the builder with those changes preserved. This points to a deeper limitation: the system doesn’t truly understand the query itself.
+
+By introducing a proper SQL parser and building a full AST, we can move beyond that constraint. You could paste in a query from a runbook, have it automatically translated into filter pills and volume histograms, and switch freely between builder and editor without losing work, because the query is fully understood in both directions.
+
+### Per-user query identity
+
+Today, every Grafana query runs as the datasource’s configured ClickHouse user. This makes it difficult to enforce fine-grained access control, often forcing teams to rely on separate data sources per team and manage access at that level, which quickly becomes hard to scale and govern.
+
+With JWT forwarding, each query would carry the identity of the Grafana user. This enables proper audit trails, per-user query cost tracking, and row-level access control based on who is actually running the query, aligning access and visibility with real user context rather than shared credentials.
+
+### AI-assisted query building
+
+LLMs have gotten good at writing ClickHouse SQL, and ClickHouse has tooling to help them understand your schema. We're exploring a conversational mode where you'd describe what you want to see and get a working query - with full context of your tables, columns, and data model.
+
+## **We want to hear from you** {#we_want_to_hear_from_you}
+
+Whether you’re using ClickHouse with Grafana for observability, real-time analytics, or both, we’d love your feedback on this direction. What resonates? What’s missing? Where does it fall short for your use case? and what would make the experience better for your team?
+
+[Share your ClickHouse + Grafana feedback](https://clickhouse.com/clickhouse/graphana-plugin-interest)
+
 
 ---
 
