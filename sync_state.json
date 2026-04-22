@@ -1,5 +1,5 @@
 {
-  "last_sync": "2026-04-21T06:44:04.882399Z",
+  "last_sync": "2026-04-22T06:44:05.711578Z",
   "processed_blogs": {
     "https://clickhouse.com/blog/clickhouse-raises-400-million-series-d-acquires-langfuse-launches-postgres": {
       "title": "ClickHouse raises $400M Series D led by Dragoneer to accelerate expansion across analytics and AI infrastructure",
@@ -4548,9 +4548,21 @@
       "pub_date": "2026-04-20T12:14:39+00:00",
       "file_path": "blogs/2026-04-20-how-nava-helped-elo-cut-infrastructure-costs-by.md",
       "processed_at": "2026-04-21T06:44:04.800733Z"
+    },
+    "https://clickhouse.com/blog/index-sharding-clickhouse-cloud-petabyte-scale-indexing": {
+      "title": "Index sharding in ClickHouse Cloud: Petabyte-scale data needs petabyte-scale indexing",
+      "pub_date": "2026-04-21T13:31:26+00:00",
+      "file_path": "blogs/2026-04-21-index-sharding-in-clickhouse-cloud-petabyte-scale.md",
+      "processed_at": "2026-04-22T06:44:05.349842Z"
+    },
+    "https://clickhouse.com/blog/terraform-ga": {
+      "title": "Terraform & OpenAPI for ClickPipes is now Generally Available",
+      "pub_date": "2026-04-20T16:04:06+00:00",
+      "file_path": "blogs/2026-04-20-terraform-openapi-for-clickpipes-is-now-generally.md",
+      "processed_at": "2026-04-22T06:44:05.624650Z"
     }
   },
-  "total_blogs": 758,
+  "total_blogs": 760,
   "failed_blogs": [
     {
       "url": "https://clickhouse.com/jp/blog/clickhouse-gcp-japan-availability",
