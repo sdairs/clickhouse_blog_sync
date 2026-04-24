@@ -1,5 +1,5 @@
 {
-  "last_sync": "2026-04-23T06:44:31.060207Z",
+  "last_sync": "2026-04-24T06:45:34.206554Z",
   "processed_blogs": {
     "https://clickhouse.com/blog/clickhouse-raises-400-million-series-d-acquires-langfuse-launches-postgres": {
       "title": "ClickHouse raises $400M Series D led by Dragoneer to accelerate expansion across analytics and AI infrastructure",
@@ -4560,9 +4560,45 @@
       "pub_date": "2026-04-20T16:04:06+00:00",
       "file_path": "blogs/2026-04-20-terraform-openapi-for-clickpipes-is-now-generally.md",
       "processed_at": "2026-04-22T06:44:05.624650Z"
+    },
+    "https://clickhouse.com/blog/elasticsearch-log-analytics-clickhouse": {
+      "title": "Do you still need Elasticsearch for log analytics? ClickHouse says no.",
+      "pub_date": "2026-04-23T06:38:20+00:00",
+      "file_path": "blogs/2026-04-23-do-you-still-need-elasticsearch-for-log-analytics.md",
+      "processed_at": "2026-04-24T06:45:33.002583Z"
+    },
+    "https://clickhouse.com/blog/google-antigravity": {
+      "title": "Using the ClickHouse MCP server with Google Antigravity",
+      "pub_date": "2026-04-23T04:47:49+00:00",
+      "file_path": "blogs/2026-04-23-using-the-clickhouse-mcp-server-with-google.md",
+      "processed_at": "2026-04-24T06:45:33.224801Z"
+    },
+    "https://clickhouse.com/blog/google-lakehouse-runtime": {
+      "title": "ClickHouse integrates with Lakehouse Runtime Catalog",
+      "pub_date": "2026-04-22T13:27:18+00:00",
+      "file_path": "blogs/2026-04-22-clickhouse-integrates-with-lakehouse-runtime.md",
+      "processed_at": "2026-04-24T06:45:33.453033Z"
+    },
+    "https://clickhouse.com/blog/google-axion": {
+      "title": "ClickHouse Cloud on Google Cloud Now Powered by Google Axion Processors: 30–55% Faster Queries, ~15% Fewer Compute Credits",
+      "pub_date": "2026-04-22T13:00:28+00:00",
+      "file_path": "blogs/2026-04-22-clickhouse-cloud-on-google-cloud-now-powered-by.md",
+      "processed_at": "2026-04-24T06:45:33.690371Z"
+    },
+    "https://clickhouse.com/blog/clickhouse-expands-strategic-collaboration-with-google-cloud": {
+      "title": "ClickHouse expands strategic collaboration with Google Cloud, bringing deeper integration, cloud flexibility, and next-generation performance",
+      "pub_date": "2026-04-22T13:29:08+00:00",
+      "file_path": "blogs/2026-04-22-clickhouse-expands-strategic-collaboration-with.md",
+      "processed_at": "2026-04-24T06:45:33.912936Z"
+    },
+    "https://clickhouse.com/blog/eisan-jp": {
+      "title": "永産システム開発がいかにClickHouse Cloudを活用し、POS分析を高速、低コストかつ信頼性の高いものにしたか",
+      "pub_date": "2026-04-23T01:52:33+00:00",
+      "file_path": "blogs/2026-04-23-clickhouse-cloud-pos.md",
+      "processed_at": "2026-04-24T06:45:34.122801Z"
     }
   },
-  "total_blogs": 760,
+  "total_blogs": 766,
   "failed_blogs": [
     {
       "url": "https://clickhouse.com/jp/blog/clickhouse-gcp-japan-availability",
