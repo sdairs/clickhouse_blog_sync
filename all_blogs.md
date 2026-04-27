@@ -1,6 +1,734 @@
 # ClickHouse Blogs
-Last updated: 2026-04-26 06:43:29 UTC
-Total blogs: 766
+Last updated: 2026-04-27 07:00:14 UTC
+Total blogs: 769
+
+---
+
+## AI時代のリアルタイムデータプラットフォームClickHouse、新パートナープログラム「House Mates」を日本国内で提供開始
+Published: 2026-04-27T01:01:02+00:00
+URL: https://clickhouse.com/blog/clickhouse-partner-program-jp
+
+---
+title: "AI時代のリアルタイムデータプラットフォームClickHouse、新パートナープログラム「House Mates」を日本国内で提供開始"
+date: "2026-04-27T01:01:02.801Z"
+author: "ClickHouse"
+category: "Company and culture"
+excerpt: "～国内企業のリアルタイムデータ活用を加速させる、パートナーエコシステムを構築～"
+---
+
+# AI時代のリアルタイムデータプラットフォームClickHouse、新パートナープログラム「House Mates」を日本国内で提供開始
+
+## ～国内企業のリアルタイムデータ活用を加速させる、パートナーエコシステムを構築～
+
+AI時代のリアルタイムデータプラットフォームのリーディングカンパニーであるClickHouse株式会社（本社：東京都港区、代表取締役社長：金古 毅、以下ClickHouse）は、パートナー企業との連携を強化し、顧客への最適なソリューション提供を目的とした新しいグローバルパートナープログラム「House Mates」を発表いたしました。本プログラムは、本日より日本国内のパートナー企業に対しても正式に適用を開始いたします。
+
+![Japan Press Release_Partner Program_27Apr26.png](https://clickhouse.com/uploads/Japan_Press_Release_Partner_Program_27_Apr26_04c24a1447.png)
+
+## ■ パートナープログラム「House Mates」提供の背景
+
+AIおよび機械学習の導入が加速する中、リアルタイムなデータインフラストラクチャへの需要はかつてないほど高まっています。ClickHouseは、その業界をリードする処理速度と効率性により、AIアプリケーションを支えるデータプラットフォームとして世界中で採用されています。
+
+この度提供を開始したパートナープログラム「House Mates」は、ClickHouseを活用してAIソリューションやデータ分析基盤を構築・提供する、国内パートナー企業の卓越した技術力を評価し、そのさらなる成長を強力に支援するために設計されました。
+
+## ■ ClickHouse株式会社 代表取締役社長 金古 毅からのコメント
+
+「日本市場においてClickHouseのビジョンを実現し、真にお客様のビジネス価値に貢献するためには、強力なパートナーエコシステムの構築が不可欠であると確信しています。各領域で深い専門性と知見をお持ちのパートナー様は、ClickHouseにとって単なる協力者ではなく、共に市場を切り拓く『House Mates（同じ家で過ごす仲間）』です。
+
+日本企業のAI実装が加速する今、データの処理速度と効率性は競争力の源泉となります。本プログラムを通じて、パートナーの皆様と共に、AI時代のリアルタイム分析データ基盤であるClickHouseの圧倒的なパフォーマンスを日本中へ届け、次世代のデータ活用を牽引していくことを心から楽しみにしています。」
+
+![Japan Press Release_Partner Program image 2_27Apr26.png](https://clickhouse.com/uploads/Japan_Press_Release_Partner_Program_image_2_27_Apr26_1092a09906.png)
+
+## ■ パートナータイプ
+
+本プログラムでは、パートナー企業のビジネスモデルに合わせた複数のタイプを用意しています。
+
+- サービスパートナー： ClickHouseの導入支援、コンサルティング、および移行サービスを提供するパートナー。
+- チャネルパートナー： ClickHouse製品の再販（リセール）を行うパートナー。
+- テクノロジーパートナー（近日適用予定）： AIプラットフォームやETLツールなどを展開し、ClickHouseとの統合、またはClickHouseを基盤とした製品開発を行う独立系ソフトウェアベンダー（ISV）。
+
+## ■ ClickHouseが提供するパートナー向け支援
+
+パートナー企業が迅速にビジネスを展開できるよう、以下の包括的な支援を提供します。
+
+- ClickHouse Academy: AIコンテクストでのデータ活用を含む、最新のトレーニングと認定資格を提供します。
+- 共同マーケティング: 日本国内のAI・データ活用市場に向けた共同キャンペーンや販促資産を提供します。
+- 技術・ビジネス支援: ClickHouse Cloudのクレジット提供や、AIアプリケーション構築に最適化された技術支援を実施します。
+
+## ■ パートナーシップを支える3つの認定ティア
+
+パートナー企業の習熟度や実績に応じて、「Prime（プライム）」「Accelerate（アクセラレート）」「Ignite（イグナイト）」の3段階のティア（階層）を設定しています。上位ティアでは、日本市場向けの共同マーケティング支援や、AIソリューション開発に特化した技術サポート等の特典を受けることが可能です。
+
+## ■ ClickHouseについて
+
+ClickHouseは、リアルタイムデータ処理および分析のために設計された、高速なオープンソースのカラム型データベース管理システムです。高いパフォーマンスを実現するよう設計されたClickHouse Cloudは、卓越したクエリ速度と高い同時実行性能を提供し、膨大なデータ量から即座に洞察を得ることが求められるアプリケーションに最適です。
+
+AIエージェントがソフトウェアにますます組み込まれ、これまでよりもはるかに頻繁かつ複雑なクエリを生成するようになる中で、ClickHouseは、こうした課題に対応するために特別に設計された、高スループットかつ低レイテンシのエンジンを提供します。Sony、Tesla、Lyft、Instacartといった業界を代表する企業から信頼されているClickHouseは、スケーラブルで効率的、かつモダンなデータプラットフォームを通じて、チームが洞察を引き出し、より賢明な意思決定を行うことを支援します。
+
+詳細はこちら： https://clickhouse.com/jp<br>
+SNS公式アカウント： [LinkedIn](https://www.linkedin.com/company/clickhouse-jp/) / [X](https://x.com/ClickHouseJapan) / [Facebook](https://www.facebook.com/ClickHouseJP)
+
+---
+
+## ClickHouse、国内でAIオブザーバビリティプラットフォーム「Langfuse」を正式提供開始
+Published: 2026-04-26T23:51:09+00:00
+URL: https://clickhouse.com/blog/clickhouse-langfuse-jp
+
+---
+title: "ClickHouse、国内でAIオブザーバビリティプラットフォーム「Langfuse」を正式提供開始"
+date: "2026-04-26T23:51:09.920Z"
+author: "ClickHouse"
+category: "Company and culture"
+excerpt: "世界最高速レベルのデータプラットフォームとAIエージェント運用監視を統合、次世代のAIデータスタックを構築"
+---
+
+# ClickHouse、国内でAIオブザーバビリティプラットフォーム「Langfuse」を正式提供開始
+
+## 世界最高速レベルのデータプラットフォームとAIエージェント運用監視を統合、次世代のAIデータスタックを構築
+
+AI時代のリアルタイムデータプラットフォームのリーディングカンパニーであるClickHouse株式会社（本社：東京都港区、代表取締役社長：金古 毅）は、AIアプリケーションの開発と改善に特化し、リアルタイムでアプリケーションの品質管理やコスト評価するプラットフォーム「Langfuse（ラングフューズ）」の日本国内（AWS 東京リージョン）における正式提供およびサポートを開始することをお知らせいたします。
+
+![ClickHouse + Langfuse.png](https://clickhouse.com/uploads/Click_House_Langfuse_7bc64d1a12.png)
+
+## ■ 背景：AIエージェントの「思考プロセス」を可視化する
+AIエージェントやLLM（大規模言語モデル）を活用したシステムが急速に普及する中、企業には「AIがなぜその回答やアクションを生成したのか」というプロセスを把握し、信頼性を担保することが求められています。
+AIエージェントは、人間が気づかないうちに裏側で膨大なステップ（推論）を繰り返します。ミリ秒単位で複雑なデータの記録・分析が可能な ClickHouse の高速データベースと、Langfuse の深いオブザーバビリティ（可観測性）および評価機能を統合することで、日本の企業が品質やコスト効率を犠牲にすることなくAIプロダクトをスケールさせるための堅牢な環境を提供します。
+
+## ■ Langfuseとは：AIの「運用監視」と「品質改善」を実現
+Langfuseは、AIの実行時における内部メカニズムを記録・評価するために設計されたツールです。
+
+- AIアプリケーションの実行を可視化: AIが回答にたどり着くまでのすべてのステップを記録します。開発者はボトルネックやエラーを即座に特定でき、デバッグ作業を大幅に効率化できます。
+- リアルタイム評価: AIの回答をスコアリングし、品質基準を満たしているか確認します。プロンプトの最適化などを通じて、データに基づいた継続的な改善が可能になります。
+- コストの最適化: トークン使用量をリアルタイムで追跡します。最高のパフォーマンスを維持しながら、運用コストを最小限に抑えるための管理を支援します。
+
+## ■ ClickHouseの役割：Langfuseを支える世界最速のデータプラットフォーム
+Langfuseは、1秒間に数億行ものデータを処理できる世界最速のリアルタイムデータプラットフォーム、ClickHouse 上で動作します。これにより、以下の機能が支えられています。
+
+- AIログの即時分析: AIエージェントが生成する膨大な実行記録（トレースデータ）を難なく取り込み、即座に実用的なインサイト（洞察）へと変換します。
+- 統合されたベクトル検索: RAG（検索拡張生成）に必要なデータ検索をサポートしています。これにより、企業は「AIの記憶（ベクトル）」と「モニタリング（評価）」を単一のシステムに統合することが可能です。
+- 世界トップクラスの実績: Sony、Tesla、Lyftといった業界のリーダーたちから、モダンなデータプラットフォームとして信頼されています。
+
+## AIアプリケーション開発を支える「3つの柱」
+Langfuseの正式提供により、ClickHouseはAI開発におけるモダンなエコシステムを完成させました。
+
+- データプラットフォーム（ClickHouse）: AIの実行ログやベクトルデータをミリ秒単位の低遅延で処理する、超高速な基盤を提供します。
+- UI/UX（LibreChat）: ユーザーとAIが対話するための、洗練された柔軟なインターフェースを担います。
+- AIオブザーバビリティ（Langfuse）: AIの推論プロセスの詳細な記録と、リアルタイムな評価を実現します。
+
+これらを組み合わせることで、フロントエンドのインターフェースからバックエンドのデータ分析まで、一気通貫した「AI特化型の包括的なデータスタック」を構築することが可能になりました。
+
+## ■ ClickHouse株式会社 代表取締役社長 金古 毅のコメント
+「AIエージェントをビジネスで実用化するには、AIの動きを透明化し、常に改善できる仕組みが不可欠です。世界最高速の分析エンジンClickHouseと、AIオブザーバビリティの標準であるLangfuseを日本で提供することで、企業が安心してAIをビジネスの核に据えられるよう、強力に支援してまいります。」
+
+## ■ ClickHouseについて
+ClickHouseは、リアルタイムデータ処理および分析のために設計された、高速なオープンソースのカラム型データベース管理システムです。高いパフォーマンスを実現するよう設計されたClickHouse Cloudは、卓越したクエリ速度と高い同時実行性能を提供し、膨大なデータ量から即座に洞察を得ることが求められるアプリケーションに最適です。
+
+AIエージェントがソフトウェアにますます組み込まれ、これまでよりもはるかに頻繁かつ複雑なクエリを生成するようになる中で、ClickHouseは、こうした課題に対応するために特別に設計された、高スループットかつ低レイテンシのエンジンを提供します。Sony、Tesla、Lyft、Instacartといった業界を代表する企業から信頼されているClickHouseは、スケーラブルで効率的、かつモダンなデータプラットフォームを通じて、チームが洞察を引き出し、より賢明な意思決定を行うことを支援します。
+
+- 詳細はこちら： https://clickhouse.com/jp
+- SNS公式アカウント： [LinkedIn](https://www.linkedin.com/company/clickhouse-jp/) / [X](https://x.com/ClickHouseJapan) / [Facebook](https://www.facebook.com/ClickHouseJP/) (ClickHouse Japan)
+
+【本件に関するお問い合わせ先】 
+ClickHouse株式会社<br>
+広報担当：橋本<br>
+Email: tomoko.hashimoto@japan.clickhouse.com
+
+---
+
+## What's New in pg_clickhouse - JSONB Support, SQL value functions, Streaming, and more
+Published: 2026-04-24T17:05:36+00:00
+URL: https://clickhouse.com/blog/pg_clickhouse-whats-new-april-2026
+
+---
+title: " What's New in pg_clickhouse - JSONB Support, SQL value functions, Streaming, and more"
+date: "2026-04-24T17:05:36.970Z"
+author: "David Wheeler"
+category: "Engineering"
+excerpt: "The latest pg_clickhouse releases bring JSONB, date/time, and array function pushdown, plus HTTP result set streaming for lower memory usage."
+---
+
+#  What's New in pg_clickhouse - JSONB Support, SQL value functions, Streaming, and more
+
+We've been gratified by the community reception of [pg_clickhouse], the extension to query ClickHouse databases from Postgres. Recent uptake generated a ton of feedback, which we've been diligently addressing in the last few releases. These changes follow our constant mantra for pg_clickhouse: pushdown, pushdown, pushdown! Let's take a quick tour.
+
+## Setup {#setup}
+
+If you'd like to follow along, the following examples use this ClickHouse table:
+
+<pre><code type='click-ui' language='sql'>
+CREATE TABLE events (
+    id    UInt32,
+    event String,
+    tags  Array(String),
+    at    DateTime64,
+    props JSON
+) ENGINE = MergeTree ORDER BY (event, id);
+
+INSERT INTO events VALUES
+    (
+        1, 'order', ['a', 'b', 'c'], '2025-12-28 10:42:35.342',
+        '{"cid": "C100", "address": {"city": "Paris, France", "code": "75001"}}'
+    ),
+    (
+        2, 'order', ['d', 'e', 'f'], '2026-02-22 05:26:26.982',
+        '{"cid": "C200", "address": {"city": "London, UK", "code": "SW1A"}}'
+    ),
+    (
+        3, 'return', ['😀', '⚽️'], now64() - 86400 * 2,
+        '{"cid": "C200", "address": {"city": "Manchester, UK", "code": "M2 1AB"}}'
+    ),
+    (
+        4, 'order', ['x', 'y', 'z'], now64() - 86400,
+        '{"cid": "C300", "address": {"city": "New York, USA", "code": "10030"}}'
+    ),
+    (
+        5, 'deliver', [], now64(),
+        '{"cid": "C500", "address": {"city": "Portland, USA", "code": "97212"}}'
+    )
+;
+</code></pre>
+
+And this pg_clickhouse foreign table configuration in Postgres:
+
+<pre><code type='click-ui' language='sql'>
+CREATE SERVER ch FOREIGN DATA WRAPPER clickhouse_fdw OPTIONS(driver 'http');
+CREATE USER MAPPING FOR CURRENT_USER SERVER ch;
+CREATE EXTENSION pg_clickhouse;
+CREATE SCHEMA customer;
+IMPORT FOREIGN SCHEMA "default" FROM SERVER ch INTO customer;
+</code></pre>
+
+## JSONB accessors {#jsonb-accessors}
+
+For Postgres [JSONB] columns mapped to the ClickHouse [JSON type],[^http]
+pg_clickhouse [v0.1.10] added [JSONB accessor operator and function][JSONB
+functions] pushdown outside `SELECT` clauses (generally in `WHERE`, `ORDER
+BY`, and `HAVING` clauses). It does so by converting JSON property accessors
+to the ClickHouse [sub-column syntax].
+
+See, example, the `Remote SQL` output from this verbose `EXPLAIN` using `->>`
+to compare a JSON object value to a string:
+
+<pre><code type='click-ui' language='sql'>
+EXPLAIN (VERBOSE, COSTS OFF)
+SELECT id, event, props 
+FROM customer.events 
+WHERE props ->> 'cid' = 'C200';
+</code></pre>
+
+<pre style="overflow-x:auto;white-space:pre"><code class="hljs language-shell mb-9 border border-solid border-neutral-750" style="word-break:normal;white-space:pre">                                        QUERY PLAN
+------------------------------------------------------------------------------------------
+ Foreign Scan on customer.events
+   Output: id, event, props
+   Remote SQL: SELECT id, event, props FROM "default".events WHERE ((props.cid = 'C200'))
+(3 rows)
+</code></pre>
+
+This allows ClickHouse to filter "C100" directly. The output is just what
+you'd expect:
+
+<pre><code type='click-ui' language='sql'>
+SELECT id, event, props
+FROM customer.events 
+WHERE props ->> 'cid' = 'C200';
+</code></pre>
+
+<pre style="overflow-x:auto;white-space:pre"><code class="hljs language-shell mb-9 border border-solid border-neutral-750" style="word-break:normal;white-space:pre"> id | event  |                                  props
+----+--------+--------------------------------------------------------------------------
+  2 | order  | {"cid": "C200", "address": {"city": "London, UK", "code": "SW1A"}}
+  3 | return | {"cid": "C200", "address": {"city": "Manchester, UK", "code": "M2 1AB"}}
+(2 rows)
+</code></pre>
+
+For the `->` operator, which returns a JSONB value, pg_clickhouse has
+ClickHouse convert the value returned by the [sub-column syntax] to JSON in
+order to compare values as Postgres does:
+
+<pre><code type='click-ui' language='sql'>
+EXPLAIN (VERBOSE, COSTS OFF)
+SELECT id, event, props 
+FROM customer.events 
+WHERE props -> 'cid' = '"C300"'::jsonb;
+</code></pre>
+
+<pre style="overflow-x:auto;white-space:pre"><code class="hljs language-shell mb-9 border border-solid border-neutral-750" style="word-break:normal;white-space:pre">                                                QUERY PLAN
+----------------------------------------------------------------------------------------------------------
+ Foreign Scan on customer.events
+   Output: id, event, props
+   Remote SQL: SELECT id, event, props FROM "default".events WHERE ((toJSONString(props.cid) = '"C300"'))
+(3 rows)
+</code></pre>
+
+Executing the query returns the expected result:
+
+<pre><code type='click-ui' language='sql'>
+SELECT id, event, props
+FROM customer.events 
+WHERE props -> 'cid' = '"C300"'::jsonb;
+</code></pre>
+
+<pre style="overflow-x:auto;white-space:pre"><code class="hljs language-shell mb-9 border border-solid border-neutral-750" style="word-break:normal;white-space:pre"> id | event |                                 props
+----+-------+------------------------------------------------------------------------
+  4 | order | {"cid": "C300", "address": {"city": "New York, USA", "code": "10030"}}
+(1 row)
+</code></pre>
+
+The same pattern applies to the [JSONB functions] `jsonb_extract_path()` and
+`jsonb_extract_path_text()` functions, which also allowing multiple paths to
+get to nested values, as visible in the `Remote SQL` for this plan:
+
+<pre><code type='click-ui' language='sql'>
+EXPLAIN (VERBOSE, COSTS OFF)
+SELECT id, event, props FROM customer.events
+WHERE jsonb_extract_path_text(props, 'address', 'city') = 'Paris, France';
+</code></pre>
+
+<pre style="overflow-x:auto;white-space:pre"><code class="hljs language-shell mb-9 border border-solid border-neutral-750" style="word-break:normal;white-space:pre">                                                 QUERY PLAN
+------------------------------------------------------------------------------------------------------------
+ Foreign Scan on customer.events
+   Output: id, event, props
+   Remote SQL: SELECT id, event, props FROM "default".events WHERE ((props.address.city = 'Paris, France'))
+(3 rows)
+</code></pre>
+
+Of course execution returns the expected results:
+
+<pre><code type='click-ui' language='sql'>
+SELECT id, event, props 
+FROM customer.events
+WHERE jsonb_extract_path_text(props, 'address', 'city') = 'Paris, France';
+</code></pre>
+
+<pre style="overflow-x:auto;white-space:pre"><code class="hljs language-shell mb-9 border border-solid border-neutral-750" style="word-break:normal;white-space:pre"> id | event |                                 props
+----+-------+------------------------------------------------------------------------
+  1 | order | {"cid": "C100", "address": {"city": "Paris, France", "code": "75001"}}
+(1 row)
+</code></pre>
+
+And the same goes for pushing down comparisons to JSON values using
+`jsonb_extract_path()`:
+
+<pre><code type='click-ui' language='sql'>
+EXPLAIN (VERBOSE, COSTS OFF)
+SELECT id, event, props 
+FROM customer.events
+WHERE jsonb_extract_path(props, 'address', 'city') = '"New York, USA"';
+</code></pre>
+
+<pre style="overflow-x:auto;white-space:pre"><code class="hljs language-shell mb-9 border border-solid border-neutral-750" style="word-break:normal;white-space:pre">                                                         QUERY PLAN
+----------------------------------------------------------------------------------------------------------------------------
+ Foreign Scan on customer.events
+   Output: id, event, props
+   Remote SQL: SELECT id, event, props FROM "default".events WHERE ((toJSONString(props.address.city) = '"New York, USA"'))
+(3 rows)
+</code></pre>
+
+<pre><code type='click-ui' language='sql'>
+SELECT id, event, props 
+FROM customer.events
+WHERE jsonb_extract_path(props, 'address', 'city') = '"New York, USA"';
+</code></pre>
+
+<pre style="overflow-x:auto;white-space:pre"><code class="hljs language-shell mb-9 border border-solid border-neutral-750" style="word-break:normal;white-space:pre"> id | event |                                 props
+----+-------+------------------------------------------------------------------------
+  4 | order | {"cid": "C300", "address": {"city": "New York, USA", "code": "10030"}}
+(1 row)
+</code></pre>
+
+## SQL value functions {#sql-value-functions}
+
+One of our customers switched queries from Postgres to pg_clickhouse tables
+and ran into failures using certain [date and time functions], like
+`CURRENT_DATE` and `CURRENT_TIMESTAMP`. pg_clickhouse did not push down those
+functions, which caused issues used in combination with functions like
+`date_part()` and `date_trunc()`, which do.
+
+pg_clickhouse [v0.2.0] improved the pushdown of all of the "current"-type date
+and time functions, such that they all push down and produce values more
+correctly relative to the local Postgres configuration than before.
+
+For example, to look at records from before `CURRENT_DATE`, pg_clickhouse
+produces this plan:
+
+<pre><code type='click-ui' language='sql'>
+EXPLAIN (VERBOSE, COSTS OFF)
+SELECT id FROM customer.events WHERE AT < CURRENT_DATE;
+</code></pre>
+
+<pre style="overflow-x:auto;white-space:pre"><code class="hljs language-shell mb-9 border border-solid border-neutral-750" style="word-break:normal;white-space:pre">                                          QUERY PLAN
+----------------------------------------------------------------------------------------------
+ Foreign Scan on customer.events
+   Output: id
+   Remote SQL: SELECT id FROM "default".events WHERE ((at < toDate(now('America/New_York'))))
+(3 rows)
+</code></pre>
+
+It uses the time zone currently set in the Postgres session to ensure the date
+is relative to the expected time zone. It does the same for
+`CURRENT_TIMESTAMP`, also specifying precision `6`, the default precision for
+Postgres timestamps:
+
+<pre><code type='click-ui' language='sql'>
+EXPLAIN (VERBOSE, COSTS OFF)
+SELECT id 
+FROM customer.events 
+WHERE AT < CURRENT_TIMESTAMP;
+</code></pre>
+
+<pre style="overflow-x:auto;white-space:pre"><code class="hljs language-shell mb-9 border border-solid border-neutral-750" style="word-break:normal;white-space:pre">                                        QUERY PLAN
+-------------------------------------------------------------------------------------------
+ Foreign Scan on customer.events
+   Output: id
+   Remote SQL: SELECT id FROM "default".events WHERE ((at < now64(6, 'America/New_York')))
+(3 rows)
+</code></pre>
+
+Naturally passes an explicit precision:
+
+<pre><code type='click-ui' language='sql'>
+EXPLAIN (VERBOSE, COSTS OFF)
+SELECT id 
+FROM customer.events 
+WHERE AT < CURRENT_TIMESTAMP(3);
+</code></pre>
+
+<pre style="overflow-x:auto;white-space:pre"><code class="hljs language-shell mb-9 border border-solid border-neutral-750" style="word-break:normal;white-space:pre">                                        QUERY PLAN
+-------------------------------------------------------------------------------------------
+ Foreign Scan on customer.events
+   Output: id
+   Remote SQL: SELECT id FROM "default".events WHERE ((at < now64(3, 'America/New_York')))
+(3 rows)
+</code></pre>
+
+In addition to these SQL-standard current date and time keywords, we've added
+pushdown for the Postgres-specific timestamps functions `clock_timestamp()`,
+`statement_timestamp()`, and `transaction_timestamp()`, which all push down to
+the closest ClickHouse equivalent, [nowInBlock64]:
+
+<pre><code type='click-ui' language='sql'>
+EXPLAIN (VERBOSE, COSTS OFF)
+SELECT id 
+FROM customer.events 
+WHERE AT < clock_timestamp();
+</code></pre>
+
+<pre style="overflow-x:auto;white-space:pre"><code class="hljs language-shell mb-9 border border-solid border-neutral-750" style="word-break:normal;white-space:pre">                                            QUERY PLAN
+--------------------------------------------------------------------------------------------------
+ Foreign Scan on customer.events
+   Output: id
+   Remote SQL: SELECT id FROM "default".events WHERE ((at < nowInBlock64(6, 'America/New_York')))
+(3 rows)
+</code></pre>
+
+These functions work properly with other pushdown functions like `date_part`:
+
+<pre><code type='click-ui' language='sql'>
+EXPLAIN (VERBOSE, COSTS OFF)
+SELECT id, at FROM customer.events
+WHERE date_part('year', at) < date_part('year', CURRENT_DATE);
+</code></pre>
+
+<pre style="overflow-x:auto;white-space:pre"><code class="hljs language-shell mb-9 border border-solid border-neutral-750" style="word-break:normal;white-space:pre">                                                                  QUERY PLAN
+----------------------------------------------------------------------------------------------------------------------------------------------
+ Foreign Scan on customer.events
+   Output: id, at
+   Remote SQL: SELECT id, at FROM "default".events WHERE ((toYear(at) < toYear(cast(toDate(now('America/New_York')), 'Nullable(DateTime)'))))
+(3 rows)
+</code></pre>
+
+<pre><code type='click-ui' language='sql'>
+SELECT id, at 
+FROM customer.events
+WHERE date_part('year', at) < date_part('year', CURRENT_DATE);
+</code></pre>
+
+<pre style="overflow-x:auto;white-space:pre"><code class="hljs language-shell mb-9 border border-solid border-neutral-750" style="word-break:normal;white-space:pre"> id |             at
+----+----------------------------
+  1 | 2025-12-28 05:42:35.342-05
+(1 row)
+</code></pre>
+
+As well as `date_trunc` — even with some interval date math thrown in:
+
+<pre><code type='click-ui' language='sql'>
+EXPLAIN (VERBOSE, COSTS OFF)
+SELECT id, at
+FROM customer.events
+WHERE date_trunc('day', at) >= date_trunc('day', CURRENT_DATE) - INTERVAL '1 day';
+</code></pre>
+
+<pre style="overflow-x:auto;white-space:pre"><code class="hljs language-shell mb-9 border border-solid border-neutral-750" style="word-break:normal;white-space:pre">                                                               QUERY PLAN
+-----------------------------------------------------------------------------------------------------------------------------------------
+ Foreign Scan on customer.events
+   Output: id, at
+   Remote SQL: SELECT id, at FROM "default".events WHERE ((toStartOfDay(at) >= (toStartOfDay(toDate(now('America/New_York'))) - 86400)))
+(3 rows)
+</code></pre>
+
+<pre><code type='click-ui' language='sql'>
+SELECT id, at
+FROM customer.events
+WHERE date_trunc('day', at) >= date_trunc('day', CURRENT_DATE) - INTERVAL '1 day';
+</code></pre>
+
+<pre style="overflow-x:auto;white-space:pre"><code class="hljs language-shell mb-9 border border-solid border-neutral-750" style="word-break:normal;white-space:pre"> id |             at
+----+----------------------------
+  5 | 2026-04-17 17:29:47.046-04
+  4 | 2026-04-16 17:29:47.046-04
+(2 rows)
+</code></pre>
+
+## Array functions {#array-functions}
+
+Following the http driver array parsing improvements in [v0.1.4],
+pg_clickhouse [v0.2.0] added pushdown support for a slew of [array functions].
+For example, `array_cat` maps to [arrayConcat]:
+
+<pre><code type='click-ui' language='sql'>
+EXPLAIN (VERBOSE, COSTS OFF)
+SELECT id, tags FROM customer.events WHERE array_cat(tags, ARRAY['🥏']) = ARRAY['😀','⚽️','🥏'];
+</code></pre>
+
+<pre style="overflow-x:auto;white-space:pre"><code class="hljs language-shell mb-9 border border-solid border-neutral-750" style="word-break:normal;white-space:pre">                                                 QUERY PLAN
+------------------------------------------------------------------------------------------------------------
+ Foreign Scan on customer.events
+   Output: id, tags
+   Remote SQL: SELECT id, tags FROM "default".events WHERE ((arrayConcat(tags, ['🥏']) = ['😀','⚽️','🥏']))
+(3 rows)
+</code></pre>
+
+<pre><code type='click-ui' language='sql'>
+SELECT id, tags
+FROM customer.events
+WHERE array_cat(tags, ARRAY['🥏']) = ARRAY['😀','⚽️','🥏'];
+</code></pre>
+
+<pre style="overflow-x:auto;white-space:pre"><code class="hljs language-shell mb-9 border border-solid border-neutral-750" style="word-break:normal;white-space:pre"> id |  tags
+----+---------
+  3 | {😀,⚽️}
+(1 row)
+</code></pre>
+
+`array_to_string` maps to [arrayStringConcat]:
+
+<pre><code type='click-ui' language='sql'>
+EXPLAIN (VERBOSE, COSTS OFF)
+SELECT id, tags
+FROM customer.events
+WHERE array_to_string(tags, '|') = 'a|b|c';
+</code></pre>
+
+<pre style="overflow-x:auto;white-space:pre"><code class="hljs language-shell mb-9 border border-solid border-neutral-750" style="word-break:normal;white-space:pre">                                              QUERY PLAN
+------------------------------------------------------------------------------------------------------
+ Foreign Scan on customer.events
+   Output: id, tags
+   Remote SQL: SELECT id, tags FROM "default".events WHERE ((arrayStringConcat(tags, '|') = 'a|b|c'))
+(3 rows)
+</code></pre>
+
+<pre><code type='click-ui' language='sql'>
+SELECT id, tags
+FROM customer.events
+WHERE array_to_string(tags, '|') = 'a|b|c';
+</code></pre>
+
+<pre style="overflow-x:auto;white-space:pre"><code class="hljs language-shell mb-9 border border-solid border-neutral-750" style="word-break:normal;white-space:pre"> id |  tags
+----+---------
+  1 | {a,b,c}
+(1 row)
+</code></pre>
+
+And `string_to_array` maps to [splitByString], here used in combination with
+the [aforementioned JSONB accessors](#jsonb-accessors):
+
+<pre><code type='click-ui' language='sql'>
+EXPLAIN (VERBOSE, COSTS OFF)
+SELECT id, event, jsonb_extract_path_text(props, 'address', 'code')
+FROM customer.events
+WHERE string_to_array(jsonb_extract_path_text(props, 'address', 'city'), ', ') = ARRAY['Portland', 'USA'];
+</code></pre>
+
+<pre style="overflow-x:auto;white-space:pre"><code class="hljs language-shell mb-9 border border-solid border-neutral-750" style="word-break:normal;white-space:pre">                                                                  QUERY PLAN
+----------------------------------------------------------------------------------------------------------------------------------------------
+ Foreign Scan on customer.events
+   Output: id, event, tags, at, props
+   Remote SQL: SELECT id, event, tags, at, props FROM "default".events WHERE ((splitByString(', ', props.address.city) = ['Portland','USA']))
+(3 rows)
+</code></pre>
+
+<pre><code type='click-ui' language='sql'>
+SELECT id, event, jsonb_extract_path_text(props, 'address', 'code')
+FROM customer.events
+WHERE string_to_array(jsonb_extract_path_text(props, 'address', 'city'), ', ') = ARRAY['Portland', 'USA'];
+</code></pre>
+
+<pre style="overflow-x:auto;white-space:pre"><code class="hljs language-shell mb-9 border border-solid border-neutral-750" style="word-break:normal;white-space:pre"> id |  event  | jsonb_extract_path_text
+----+---------+-------------------------
+  5 | deliver | 97212
+(1 row)
+</code></pre>
+
+We mapped so many more! See [the full list] for the range of possibilities.
+
+## HTTP result set streaming {#http-result-set-streaming}
+
+Of course, we don't solely focus on pushdown; sometimes we need to address
+push *back*, as it were.
+
+By default, when a Postgres foreign data wrapper executes a foreign query, it
+collects all of the results in memory before returning them to the caller.
+This works great for small result sets such as those returned by typical
+ClickHouse aggregate queries. But sometimes an app needs to process a
+substantial amount of the data itself, which can lead to memory pressure
+issues as Postgres pulls an entire data set into memory. Beware the [OOM
+Killer]!
+
+In pg_clickhouse [v0.1.10], we added query result streaming to the http
+driver, which buffers a limited batch of results in memory (ca. 50MB by
+default) and returns them before reusing the memory for the next batch. To see
+it in action, we loaded the [NYC taxi data set] into ClickHouse, then spun up
+a pre-streaming [pg_clickhouse v0.6.1 OCI image] and imported the
+`trips_small` table into the `nyc_taxi` schema using the `http` driver:
+
+<pre><code type='click-ui' language='bash'>
+docker run --name pg_clickhouse -p 6432:5432 -e POSTGRES_HOST_AUTH_METHOD=trust -d ghcr.io/clickhouse/pg_clickhouse:18
+</code></pre>
+
+<pre><code type='click-ui' language='bash'>
+docker exec -it pg_clickhouse bash -c 'apt-get update && apt-get install ca-certificates'
+</code></pre>
+
+<pre><code type='click-ui' language='sql'>
+psql -U postgres -h localhost -p 6432 &lt;&lt;EOF
+CREATE EXTENSION pg_clickhouse;
+CREATE SERVER my_ch FOREIGN DATA WRAPPER clickhouse_fdw OPTIONS(
+    driver 'http', host 'abcdefghij.us-east-1.aws.clickhouse.cloud', port '8443'
+);
+CREATE USER MAPPING FOR CURRENT_USER SERVER my_ch OPTIONS(user 'default', password 'xxxxxxxxxxxxx');
+CREATE SCHEMA nyc_taxi;
+IMPORT FOREIGN SCHEMA nyc_taxi FROM SERVER my_ch INTO nyc_taxi;
+EOF
+</code></pre>
+
+We started a process to continually measure the memory consumption of the OCI
+container:[^pg-mem]
+
+<pre><code type='click-ui' language='bash'>
+while true; do
+    docker stats --no-stream --format "{{.MemUsage}}" pg_clickhouse | \
+        cut -d '/' -f 1 | xargs printf "%s %s\n" "$(date +%T)" | sed -e 's/MiB//g'
+done
+</code></pre>
+
+Finally, we ran the query:
+
+<pre><code type='click-ui' language='bash'>
+psql -U postgres -h localhost -p 6432 -c 'SELECT * FROM nyc_taxi.trips_small' &gt; /dev/null
+</code></pre>
+
+Then we repeated the steps with the streaming-enabled [pg_clickhouse v0.2.0
+OCI image] and compared the results. This graph nicely summarizes the
+difference:
+
+![HTTP Memory Graph.png](https://clickhouse.com/uploads/HTTP_Memory_Graph_e91a81ea9e.png)
+
+The data, massaged for the timings to line up, makes the case as well:
+
+| Seconds | v0.1.10 | v0.2.0 |
+| ------: | ------: | -----: |
+|       0 |   26.65 |   49.7 |
+|       2 |   26.63 |   49.6 |
+|       4 |    50.8 |   60.5 |
+|       6 |    95.6 |  101.4 |
+|       8 |   118.7 |  101.4 |
+|      10 |   155.0 |  101.4 |
+|      12 |   205.2 |   79.9 |
+|      14 |   257.2 |   79.9 |
+|      16 |   292.1 |   79.9 |
+|      18 |   333.6 |   79.9 |
+|      20 |   381.6 |   79.9 |
+|      22 |   420.4 |   79.9 |
+|      24 |   459.1 |   85.5 |
+|      26 |   499.6 |   85.5 |
+|      28 |   538.6 |   85.5 |
+|      30 |   573.8 |   85.5 |
+|      32 |   601.8 |   85.5 |
+|      34 |   601.8 |   37.7 |
+|      36 |   601.8 |   37.7 |
+|      38 |   601.8 |   37.7 |
+|      40 |   35.78 |   37.7 |
+|      42 |   35.78 |   37.7 |
+
+While v0.6.0 spikes up to over 600MiB of memory consumption, v0.2.0, with
+streaming enabled, never exceeds 86 MiB. It's a little faster, too! Of course
+the bigger the result set the greater the memory savings. We plan to introduce
+streaming in the binary driver in a future release, as well.
+
+## What's next {#whats-next}
+
+We've got more in the works. Watch this space for more news about window
+function pushdown and regular expression compatibility. Until then, join us at
+[PGConf.dev] to hear about what we learned [Building a Foreign Data Wrapper].
+
+[^http]: Supported by the http driver only for now.
+
+[^pg-mem]: As Postgres core hacker [Andres Freund explains], this type of brute
+  force memory measurement produces inaccurate results, generally showing
+  Postgres using far more memory that it does, in absolute terms. We deem it
+  acceptable here, however, for a relative comparison.
+
+  [pg_clickhouse]: https://github.com/ClickHouse/pg_clickhouse "pg_clickhouse on GitHub"
+  [v0.1.10]: https://github.com/ClickHouse/pg_clickhouse/releases/tag/v0.1.10
+    "pg_clickhouse v0.10.0 on GitHub"
+  [JSONB]: https://www.postgresql.org/docs/18/datatype-json.html
+    "Postgres Docs: JSON Types"
+  [JSON type]: https://clickhouse.com/docs/sql-reference/data-types/newjson
+    "ClickHouse Docs: JSON Data Type"
+  [sub-column syntax]: https://clickhouse.com/docs/sql-reference/data-types/newjson#reading-json-paths-as-sub-columns
+    "ClickHouse Docs: Reading JSON paths as sub-columns"
+  [JSONB functions]: https://www.postgresql.org/docs/18/functions-json.html
+    "Postgres Docs: JSON Functions and Operators"
+  [date and time functions]: https://www.postgresql.org/docs/18/functions-datetime.html
+    "Postgres Docs: Date/Time Functions and Operators"
+  [nowInBlock64]: https://clickhouse.com/docs/sql-reference/functions/date-time-functions#nowInBlock64
+    "ClickHouse Docs: nowInBlock64"
+  [v0.2.0]: https://github.com/ClickHouse/pg_clickhouse/releases/tag/v0.2.0
+    "pg_clickhouse v0.2.0 on GitHub"
+  [array functions]: https://www.postgresql.org/docs/18/functions-array.html
+    "Postgres Docs: Array Functions and Operators"
+  [v0.1.4]: https://github.com/ClickHouse/pg_clickhouse/releases/tag/v0.1.4
+    "pg_clickhouse v0.1.4 on GitHub"
+  [arrayConcat]: https://clickhouse.com/docs/sql-reference/functions/array-functions#arrayConcat
+    "ClickHouse Docs: arrayConcat"
+  [arrayStringConcat]: https://clickhouse.com/docs/sql-reference/functions/splitting-merging-functions#arrayStringConcat
+    "ClickHouse Docs: arrayStringConcat"
+  [splitByString]: https://clickhouse.com/docs/sql-reference/functions/splitting-merging-functions#splitByString
+    "ClickHouse Docs: splitByString"
+  [the full list]: https://pgxn.org/dist/pg_clickhouse/doc/pg_clickhouse.html#Pushdown.Functions
+    "pg_clickhouse Docs: Pushdown Functions"
+  [OOM Killer]: https://linuxhandbook.com/oom-killer/
+    "Linux Handbook: Understanding Out of Memory Killer (OOM Killer) in Linux"
+  [NYC taxi data set]: https://clickhouse.com/docs/getting-started/example-datasets/nyc-taxi
+    "ClickHouse Docs: New York taxi data"
+  [pg_clickhouse v0.6.1 OCI image]: https://github.com/ClickHouse/pg_clickhouse/pkgs/container/pg_clickhouse/773843442?tag=18-0.1.6
+    "Postgres 18 + pg_clickhouse v0.6.1 OCI image on GitHub"
+  [pg_clickhouse v0.2.0 OCI image]: https://github.com/ClickHouse/pg_clickhouse/pkgs/container/pg_clickhouse/795048501?tag=18-0.2.0
+    "Postgres 18 + pg_clickhouse v0.2.0 OCI image on GitHub"
+  [PGConf.dev]: https://2026.pgconf.dev/ "PGConf.dev 2026"
+  [Building a Foreign Data Wrapper]: https://2026.pgconf.dev/session/510
+    "PGConf.dev 2026: Building a Foreign Data Wrapper"
+  [Andres Freund explains]: https://blog.anarazel.de/2020/10/07/measuring-the-memory-overhead-of-a-postgres-connection/
+    "Postgres From Below: Measuring the Memory Overhead of a Postgres Connection"
+
+
+---
+
+## Try Postgres managed by ClickHouse
+
+ClickHouse + Postgres has become the unified data stack for applications that scale. With Managed Postgres now available in ClickHouse Cloud, this stack is a day-1 decision.
+
+[Get access](https://clickhouse.com/cloud/postgres?loc=blog-cta-511-try-postgres-managed-by-clickhouse-get-access&utm_blogctaid=511)
+
+---
 
 ---
 

@@ -1,5 +1,5 @@
 {
-  "last_sync": "2026-04-26T06:43:29.586952Z",
+  "last_sync": "2026-04-27T07:00:14.172273Z",
   "processed_blogs": {
     "https://clickhouse.com/blog/clickhouse-raises-400-million-series-d-acquires-langfuse-launches-postgres": {
       "title": "ClickHouse raises $400M Series D led by Dragoneer to accelerate expansion across analytics and AI infrastructure",
@@ -4596,9 +4596,27 @@
       "pub_date": "2026-04-23T01:52:33+00:00",
       "file_path": "blogs/2026-04-23-clickhouse-cloud-pos.md",
       "processed_at": "2026-04-24T06:45:34.122801Z"
+    },
+    "https://clickhouse.com/blog/clickhouse-partner-program-jp": {
+      "title": "AI時代のリアルタイムデータプラットフォームClickHouse、新パートナープログラム「House Mates」を日本国内で提供開始",
+      "pub_date": "2026-04-27T01:01:02+00:00",
+      "file_path": "blogs/2026-04-27-ai-clickhouse-house-mates.md",
+      "processed_at": "2026-04-27T07:00:10.067847Z"
+    },
+    "https://clickhouse.com/blog/clickhouse-langfuse-jp": {
+      "title": "ClickHouse、国内でAIオブザーバビリティプラットフォーム「Langfuse」を正式提供開始",
+      "pub_date": "2026-04-26T23:51:09+00:00",
+      "file_path": "blogs/2026-04-26-clickhouse-ai-langfuse.md",
+      "processed_at": "2026-04-27T07:00:10.309024Z"
+    },
+    "https://clickhouse.com/blog/pg_clickhouse-whats-new-april-2026": {
+      "title": "What's New in pg_clickhouse - JSONB Support, SQL value functions, Streaming, and more",
+      "pub_date": "2026-04-24T17:05:36+00:00",
+      "file_path": "blogs/2026-04-24-what-s-new-in-pg-clickhouse-jsonb-support-sql.md",
+      "processed_at": "2026-04-27T07:00:14.086794Z"
     }
   },
-  "total_blogs": 766,
+  "total_blogs": 769,
   "failed_blogs": [
     {
       "url": "https://clickhouse.com/jp/blog/clickhouse-gcp-japan-availability",
