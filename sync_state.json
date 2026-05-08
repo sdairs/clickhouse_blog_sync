@@ -1,5 +1,5 @@
 {
-  "last_sync": "2026-05-07T07:06:46.735875Z",
+  "last_sync": "2026-05-08T06:41:55.121772Z",
   "processed_blogs": {
     "https://clickhouse.com/blog/clickhouse-raises-400-million-series-d-acquires-langfuse-launches-postgres": {
       "title": "ClickHouse raises $400M Series D led by Dragoneer to accelerate expansion across analytics and AI infrastructure",
@@ -4620,9 +4620,45 @@
       "pub_date": "2026-04-27T11:34:34+00:00",
       "file_path": "blogs/2026-04-27-clickhouse-at-google-cloud-next-26.md",
       "processed_at": "2026-04-28T07:00:51.471414Z"
+    },
+    "https://clickhouse.com/blog/postgres-query-insights-clickhouse-cloud": {
+      "title": "Introducing Postgres Query Insights in ClickHouse Cloud",
+      "pub_date": "2026-05-07T16:00:13+00:00",
+      "file_path": "blogs/2026-05-07-introducing-postgres-query-insights-in-clickhouse.md",
+      "processed_at": "2026-05-08T06:41:53.453205Z"
+    },
+    "https://clickhouse.com/blog/write-side-cost-performance-snowflake-clickhouse": {
+      "title": "Agentic analytics starts with query-ready data: the write-side cost of Snowflake vs. ClickHouse",
+      "pub_date": "2026-05-06T06:46:34+00:00",
+      "file_path": "blogs/2026-05-06-agentic-analytics-starts-with-query-ready-data.md",
+      "processed_at": "2026-05-08T06:41:53.820611Z"
+    },
+    "https://clickhouse.com/blog/odigos-full-fidelity-tracing": {
+      "title": "Stop guessing in production: Full fidelity tracing at scale with ClickHouse and Odigos",
+      "pub_date": "2026-05-06T15:09:11+00:00",
+      "file_path": "blogs/2026-05-06-stop-guessing-in-production-full-fidelity-tracing.md",
+      "processed_at": "2026-05-08T06:41:54.119913Z"
+    },
+    "https://clickhouse.com/blog/gala": {
+      "title": "Gala supercharges analytics performance with ClickHouse on AWS",
+      "pub_date": "2026-05-04T13:18:58+00:00",
+      "file_path": "blogs/2026-05-04-gala-supercharges-analytics-performance-with.md",
+      "processed_at": "2026-05-08T06:41:54.428151Z"
+    },
+    "https://clickhouse.com/blog/qonto": {
+      "title": "Goodbye limitations, hello data: How Qonto is rethinking observability with ClickHouse Cloud",
+      "pub_date": "2026-05-04T12:35:21+00:00",
+      "file_path": "blogs/2026-05-04-goodbye-limitations-hello-data-how-qonto-is.md",
+      "processed_at": "2026-05-08T06:41:54.725401Z"
+    },
+    "https://clickhouse.com/blog/clickhousectl-compare-versions": {
+      "title": "Comparing ClickHouse versions with clickhousectl",
+      "pub_date": "2026-05-05T10:29:49+00:00",
+      "file_path": "blogs/2026-05-05-comparing-clickhouse-versions-with-clickhousectl.md",
+      "processed_at": "2026-05-08T06:41:55.038134Z"
     }
   },
-  "total_blogs": 770,
+  "total_blogs": 776,
   "failed_blogs": [
     {
       "url": "https://clickhouse.com/jp/blog/clickhouse-gcp-japan-availability",

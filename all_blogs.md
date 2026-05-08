@@ -1,6 +1,1843 @@
 # ClickHouse Blogs
-Last updated: 2026-05-07 07:06:46 UTC
-Total blogs: 770
+Last updated: 2026-05-08 06:41:55 UTC
+Total blogs: 776
+
+---
+
+## Introducing Postgres Query Insights in ClickHouse Cloud
+Published: 2026-05-07T16:00:13+00:00
+URL: https://clickhouse.com/blog/postgres-query-insights-clickhouse-cloud
+
+---
+title: "Introducing Postgres Query Insights in ClickHouse Cloud"
+date: "2026-05-07T16:00:13.532Z"
+author: "Amog Iska"
+category: "Engineering"
+excerpt: "Query Insights is now in preview for ClickHouse Cloud Managed Postgres: every query pattern your database runs, ranked by impact, with    the diagnostic picture of why each one is slow."
+---
+
+# Introducing Postgres Query Insights in ClickHouse Cloud
+
+A query that's slow is slow for a reason. Postgres exposes many of the signals; **pg_stat_ch** captures them per statement, and **Postgres Query Insights** puts them together.
+
+**Query Insights** is now in preview for [ClickHouse Cloud Managed Postgres](https://clickhouse.com/cloud/postgres): every query pattern your database runs, ranked by impact, with the full diagnostic picture of why each one is slow. [pg_stat_ch](https://github.com/clickhouse/pg_stat_ch) is the open-source extension we built to stream per-statement telemetry into ClickHouse, and make Insights possible.
+
+## What you get {#what-you-get}
+
+Three surfaces, in the order you'd actually use them.
+
+### Overview {#overview}
+
+![](https://clickhouse.com/uploads/pg_query_insights_may2026_image1_532736ce50.png)
+
+You open the **Query insights** tab and land on a database health check that fits on one screen:
+
+- query volume
+- error rate
+- cache hit ratio
+- the mix of operations your workload is actually made of
+- latency over the time window you pick
+
+One screen tells you whether your database is healthy. No drilling down, no cross-referencing, no holding multiple tabs in your head at once.
+
+### Slow patterns {#slow-patterns}
+
+![](https://clickhouse.com/uploads/pg_query_insights_may2026_image2_b916e3ce03.png)
+
+When the overview points at trouble, the patterns table is where the investigation starts. One row per query pattern your database has run, sorted by whatever you suspect:
+
+- total runtime
+- total CPU
+- error count
+- max latency
+- P95
+
+When you sort by **total duration**, the top pattern is usually the answer to "what is costing me the most?" It may not be the slowest pattern individually. A query that runs eight million times a day at twelve milliseconds can matter more than one that ran once at three seconds.
+
+Each sort gives you a different lens. **Total CPU** shows compute-heavy patterns. **Error count** surfaces repeated failures. **P95** catches the worst outliers. Together, they turn a broad sign of trouble into a specific place to start.
+
+Narrow the table to whichever slice of your workload you're investigating, by:
+
+- database
+- application name
+- operation type
+- user
+
+_"Show me only what the orders service is doing on the sales db."_
+
+### Detail {#detail}
+
+![2026-05-07_11-52-56.png](https://clickhouse.com/uploads/2026_05_07_11_52_56_f30d449327.png)
+
+Click into a pattern's row and the flyout opens. This is where investigations _land_.
+
+The flyout takes every execution of the pattern over your time range and aggregates the counters that explain why it's slow:
+
+- percentile latencies (p95/p99)
+- where the time went, by CPU
+- what got read from cache versus disk
+- what spilled to temp (blocks read)
+- where parallel workers should have launched and didn't
+- where the WAL volume came from
+
+Everything you need to diagnose a slow pattern is in one place, in one glance.
+
+## A latency regression, end to end {#a-latency-regression-end-to-end}
+
+Here's a concrete walkthrough. You run a managed Postgres instance backing a sales orders dashboard. Over the past week, p99 latency on the dashboard's main endpoint has been creeping up. p50 is fine. Users are occasionally reporting slow queries and query timeouts. You open Query Insights to find out which query is responsible.
+
+**1. Open the tab.**
+
+You land on the instance, click **Query insights**. The stats grid: query volume flat, error rate flat, cache hit ratio at 99.4%. Nothing alarming at first glance.
+
+**2. Switch the chart metric.**
+
+The default chart is `query_count`. You switch it to `p99_duration`. The line slopes up over the week. p50 stays flat. The regression is real and it's on the tail.
+
+**3. Find the slow pattern.**
+
+You sort the patterns table by **Total Duration** or **P99** or **Avg Duration** descending. The top row:
+
+<pre><code type='click-ui' language='sql'>
+SELECT * 
+FROM orders 
+JOIN customers ON orders.customer_id = customers.id
+WHERE orders.status = $1 
+ORDER BY orders.created_at DESC 
+LIMIT $2;
+</code></pre>
+
+**4. Open the pattern flyout.**
+
+- Average latency is healthy, in the single-digit milliseconds
+- p99 is in the hundreds of milliseconds (the tail is the actual problem)
+- cache hit ratio is near 100%, so the bottleneck isn't shared buffer I/O
+- WAL bytes are zero, as expected for a read-only query
+
+Drilling into recent executions in the flyout:
+
+- `Temp block ops` is non-zero (the sort is spilling to disk)
+- `Parallel workers launched` is well below `parallel workers planned`
+
+That combination matters. It is not a write problem. It is not a buffer-pool problem. The query is spilling while sorting, and the spill is what's pushing the tail.
+
+**5. Fix.**
+
+Once the spill is identified, the next step is to confirm it with `EXPLAIN (ANALYZE, BUFFERS)`. The plan will show the Sort node marked as spilling to disk, along with how much memory the sort actually consumed during execution. You'll see `Sort Method: external merge  Disk: NkB` where a healthy plan would have shown `Sort Method: quicksort  Memory: NkB`. The Disk figure tells you how much temp file the sort wrote. Compare it to your configured `work_mem`: a small overshoot is a tuning problem, a large multiple is a plan-shape problem.
+
+From there the fix is clear: add an index that supports the filter and ordering so Postgres can avoid the sort entirely, increase `work_mem` for the right role or session so the sort has enough room to run in memory, or both. Query Insights points you at the pattern; EXPLAIN ANALYZE tells you what to do about it.
+
+## Healthy instance {#healthy-instance}
+
+After applying the fix, the difference shows up immediately in Query Insights. The spill disappears from the pattern's detail, parallel workers launch as planned, and the p99 comes back down to match the p50. The overview confirms it: cache hit ratio steady, no new errors, latency flat across the board. The instance is healthy again.
+
+A healthy instance has a familiar shape. Cache hit ratio sits in the high nineties. Query volume moves with your application traffic, not against it. Error rate stays flat or zero. The patterns table has no single dominant offender: total duration is spread across many patterns, none of them pulling far ahead of the rest. Latency percentiles track each other closely, with p99 staying within a reasonable multiple of p50. When everything looks like this, Query Insights is quiet in the best possible way.
+
+## How it's built {#how-its-built}
+
+A few design choices behind the product:
+
+**We use the same engine our customers do.** The Insights backend is ClickHouse Cloud — the fastest way we know to store and query data at this shape and volume. Per-query telemetry from a busy Postgres instance is millions of rows a day. ClickHouse ingests from many producers, columnar compression that keeps months of per-execution detail cheap to retain, and sub-second aggregations over billions of rows. The UI stays interactive when you're slicing across a week or a month of every executed statement on a busy database: percentile recomputes, ranking resorts, filter changes are very fast.
+
+**Normalized in Postgres, before the wire.** We hook the parse-analyze phase, the moment after Postgres parses a statement and identifies the location of every literal in the query text. We swap each literal for a placeholder (`$1`, `$2`, …) and cache the resulting pattern in a per-backend LRU keyed by queryid. When the executor finishes the statement, that cached pattern is what gets attached to the event before it's enqueued. The exact statement with values never leaves the database. **PII and PHI are not in the telemetry stream by design.**
+
+**Out of the way of the database.** ~3% producer overhead per statement: enqueue path uses a non-blocking try-lock on a shared-memory ring buffer. If the lock is contended, the producer queues locally and flushes at transaction end rather than spinning or blocking. Under pressure, the extension drops events with a counter rather than back-pressuring Postgres. The first rule of telemetry: never become the bottleneck you were trying to measure.
+
+**Open source.** [pg_stat_ch](https://github.com/clickhouse/pg_stat_ch) is Apache 2.0 License. Run it against any Postgres, ship to any ClickHouse.
+
+**Raw events, not aggregates.** pg_stat_ch emits one raw event per executed statement (top-level and nested), subject to sampling. Every percentile, ranking, and breakdown in the UI is a ClickHouse query against the same event stream.
+
+## What's next {#whats-next}
+
+Some of what we're working on next: an **Open API** exposing the same data the UI runs which is purpose-built for the agentic era. Give your AI agents direct access to pattern aggregates and per-execution counters, so they can reason over your data, autonomously identify bottlenecks, and take action to fix slow or failing parts of your application.
+
+Here is a sneak peek into the open API and how it empowers agents. We tested this against a demo application called [HouseClick](https://github.com/ClickHouse/HouseClick).
+
+<iframe width="768" height="432" src="https://www.youtube.com/embed/8lwdCP8ELtY?si=WIRjNu0PBKuW4sYx" title="YouTube video player" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" referrerpolicy="strict-origin-when-cross-origin" allowfullscreen></iframe>
+
+PR from that demo: [https://github.com/ClickHouse/HouseClick/pull/55](https://github.com/ClickHouse/HouseClick/pull/55)
+
+We are also working on **wait events** for per-execution attribution of what Postgres was actually waiting on (I/O, locks, buffer pins, IPC, client), for the UI case where CPU and I/O counters are both small but the query still took hundreds of milliseconds.
+
+We also plan to expose EXPLAIN plans for slower queries to help users identify slow parts of the execution plan. The goal is to keep this configurable to manage load on the database, for example, enabling `ANALYZE` without `BUFFERS`, or setting query latency thresholds for plan collection.
+
+On top of this data, we plan to provide actionable recommendations such as index hints, `work_mem` tuning suggestions, and autovacuum guidance to reduce the cognitive load of figuring out "what to do next." We also want to add regression alerts for cases like p99 latency doubling, new top offenders emerging, or error counts crossing defined thresholds.
+
+## Try it {#try-it}
+
+Try Query Insights by signing up for ClickHouse Cloud and provisioning a Postgres service. If you already have a Postgres service and don't see Query Insights, please create a support ticket and we will enable it for you. To get started:
+
+- [Sign up for Postgres managed by ClickHouse](https://clickhouse.com/cloud/postgres)
+- [Follow the Quickstart guide](https://clickhouse.com/docs/cloud/managed-postgres/quickstart)
+- [Explore the documentation](https://clickhouse.com/docs/cloud/managed-postgres)
+
+The extension that powers Query Insights for Postgres lives at [github.com/clickhouse/pg_stat_ch](https://github.com/clickhouse/pg_stat_ch) under Apache 2.0: file issues, send PRs, run it against any Postgres.
+
+
+---
+
+## Sign up for Postgres managed by ClickHouse
+
+Want to learn more about using Postgres managed by ClickHouse?
+
+[Sign up](https://clickhouse.com/cloud/postgres?loc=blog-cta-544-sign-up-for-postgres-managed-by-clickhouse-sign-up&utm_blogctaid=544)
+
+---
+
+---
+
+## Stop guessing in production: Full fidelity tracing at scale with ClickHouse and Odigos
+Published: 2026-05-06T15:09:11+00:00
+URL: https://clickhouse.com/blog/odigos-full-fidelity-tracing
+
+---
+title: "Stop guessing in production: Full fidelity tracing at scale with ClickHouse and Odigos"
+date: "2026-05-06T15:09:11.874Z"
+author: "Will Searle"
+category: "Community"
+excerpt: "How ClickStack and Odigos eliminate observability gaps with zero-code eBPF instrumentation and full-fidelity distributed tracing at scale."
+---
+
+# Stop guessing in production: Full fidelity tracing at scale with ClickHouse and Odigos
+
+Outages rarely start where you expect them to. They begin in the observability gaps like missing spans, broken traces across async systems, and telemetry that lacks the context needed to explain what happened. Even in systems that appear fully instrumented, the most critical paths are often the least visible.
+
+Modern observability stacks generate more data than ever before, but more data does not necessarily mean better answers. Without complete coverage and meaningful context, engineers are still left guessing when something breaks.
+
+You can eliminate those gaps by combining [ClickStack](https://clickhouse.com/docs/use-cases/observability/clickstack/overview), a ClickHouse-native observability backend, with [Odigos](https://odigos.io/), a zero-code OpenTelemetry instrumentation platform. Together, they make it possible to capture high-quality telemetry across a distributed system quickly, consistently, and at scale.
+
+## The real problem: observability gaps {#the-real-problem-observability-gaps}
+
+Some teams do struggle to adopt OpenTelemetry, but even after clearing this hurdle, a second challenge emerges: collecting the right telemetry. Generating data is rarely the issue. The difficulty lies in ensuring that the telemetry accurately reflects what is happening inside the system.
+
+In practice, instrumentation is often incomplete. Some services are well covered, while others are missing entirely due to the effort required to import OTel SDKs and maintain instrumentation over time. As systems evolve, these gaps widen rather than shrink.
+
+The problem becomes more pronounced in asynchronous architectures. Messaging systems such as Kafka and background processing pipelines introduce boundaries where trace context is frequently lost. Requests that begin as a single user action fragment into disconnected spans, making it difficult to reconstruct what occurred.
+
+Even when traces are present, they often lack the fidelity required to debug effectively. Without access to request-level attributes, application-specific metadata, or database-level visibility, engineers are left interpreting incomplete signals. At the same time, operating OpenTelemetry pipelines introduces its own overhead, with collector configurations, resource allocations, and scalability risks.
+
+The result is a familiar experience: telemetry exists, dashboards look healthy, but when something fails, the system still requires guesswork to understand why.
+
+## Capturing the right data {#capturing-the-right-data}
+
+Solving this problem requires more than increasing telemetry volume. It requires capturing the right data at the right time, especially across the parts of the system where failures are hardest to observe.
+
+Odigos and ClickStack address this from two complementary directions.
+
+Odigos focuses on zero-code instrumentation using eBPF (extended Berkeley Packet Filter), allowing it to dynamically attach to user-space applications and kernel-level events without modifying application binaries or injecting language-specific agents. By leveraging eBPF probes, Odigos can intercept network calls, system calls, and runtime library interactions (like Kafka, HTTP, gRPC, database clients, etc.) directly in the execution path, constructing distributed traces with minimal overhead and without requiring prior knowledge of the application's codebase.
+
+On top of this instrumentation layer, Odigos introduces an intelligent telemetry control plane that continuously changes what data is collected. Rather than relying on static sampling or fixed attribute sets, it uses real-time signals, such as latency distributions, and error rates, to dynamically adjust trace payloads. For example, it can increase span detail, enrich traces with additional protocol-level metadata, or shift sampling strategies under degradation conditions, ensuring that high-value signals are preserved while avoiding unnecessary costs during healthy operation.
+
+ClickStack complements this by providing a scalable backend built on ClickHouse that can ingest this high-fidelity, adaptive telemetry and make it immediately available for fast, flexible querying.
+
+By separating the instrumentation from storage and query operations, the system becomes both easier to operate and more effective at producing meaningful insights, ensuring that the data captured is not only comprehensive, but also relevant when it matters most.
+
+## Deploying ClickStack on a VM {#deploying-clickstack-on-a-vm}
+
+ClickStack provides a straightforward path to running a full observability backend powered by ClickHouse. For this walkthrough, the all-in-one distribution is used to simplify deployment on an AWS VM.
+
+After launching an EC2 instance with the necessary ports open for ClickHouse and OTLP ingestion, [ClickStack can be installed and started with a single command](https://clickhouse.com/docs/use-cases/observability/clickstack/getting-started/oss). Within a few moments, ClickHouse is running, ingestion endpoints are available, and the required observability schema is already in place. There is no need to manually configure storage, pipelines, or schemas before sending data.
+
+Once the service is up, OTLP endpoints are exposed for both gRPC and HTTP, making it easy to connect external telemetry sources such as Odigos.
+
+![](https://clickhouse.com/uploads/clickstack_odigos_may2026_image2_cd1d0947ef.png)
+
+*The all-in-one distribution deploys an OpenTelemetry Collector for OTLP ingestion, a ClickHouse instance for storage, and the HyperDX UI for querying and visualization.*
+
+### Deep instrumentation without code changes {#deep-instrumentation-without-code-changes}
+
+For a simple example, we'll assume the services we want to monitor are deployed in Kubernetes.
+
+[Installing Odigos into a Kubernetes cluster is a simple helm install](https://docs.odigos.io/enterprise/setup/installation#helm-chart). Once deployed, Odigos loads eBPF programs that attach to running workloads and begin instrumenting them at the library level. This includes HTTP and gRPC frameworks, database clients, and messaging libraries, allowing it to generate comprehensive traces without requiring developers to modify their applications.
+
+After configuring ClickStack as the destination for telemetry, Odigos begins exporting data over OTLP. Within seconds, traces, metrics and logs start flowing into ClickHouse and are visible within the ClickStack UI.
+
+![](https://clickhouse.com/uploads/clickstack_odigos_may2026_image3_ce6792e35b.png)
+
+What makes this approach highly valuable is the depth of the telemetry that is captured. Instead of only producing basic spans, Odigos captures context across the parts of the system where visibility is typically lost. Spans are generated for every library-level request, every middleware request, and across encrypted traffic. Where traditional eBPF instrumentation only captures HTTP in / HTTP out, Odigos goes much deeper.
+
+This includes asynchronous messaging flows, where it preserves trace continuity across producers and consumers, allowing end-to-end request paths to remain intact even in fan-out scenarios. It can even capture messages sent by the producers and received by the consumers!
+
+![](https://clickhouse.com/uploads/clickstack_odigos_may2026_image4_3860dc0a38.png)
+
+*A trace showing the messages a Kafka producer publishes to the broker in the span attributes*
+
+It also captures application-level context, including stacktraces, code attributes, and request headers, which makes it possible to correlate technical events with business-level data. Database interactions are instrumented automatically, providing visibility into query execution and latency without additional configuration.
+
+![](https://clickhouse.com/uploads/clickstack_odigos_may2026_image5_a009b84d73.png)
+
+*Stacktrace in the span attributes for a request made to gemini, includes token usage, AI Model, and operation name*
+
+![](https://clickhouse.com/uploads/clickstack_odigos_may2026_image6_674b5dd6ad.png)
+
+*Code Attributes, HTTP Responses, HTTP Requests, and Custom HTTP Headers are collected by Odigos and can be seen in the span attributes above*
+
+For teams that need deeper control, Odigos also supports [custom instrumentation](https://docs.odigos.io/enterprise/pipeline/rules/custominstrumentation) for code paths not covered by standard OpenTelemetry libraries. While open-source auto-instrumentation targets well-known frameworks, it does not capture custom business logic, internal helper classes, or proprietary workflows.
+
+Odigos bridges this gap by allowing users to define specific classes and methods to instrument directly from the UI. Instead of modifying source code, developers can select target methods and configure Odigos to automatically generate spans around those executions.
+
+At runtime, Odigos attaches this instrumentation without requiring code changes or redeployments, emitting spans whenever those methods are invoked. It can also capture method arguments and return values, exposing rich, domain-specific context directly within traces. These spans are seamlessly merged with the auto-generated traces, providing end-to-end visibility embedded with application-specific logic.
+
+Without Odigos, achieving this level of visibility would require manual instrumentation using OpenTelemetry APIs, embedding span logic in code and redeploying services to apply changes.
+
+![](https://clickhouse.com/uploads/clickstack_odigos_may2026_image7_6aa21004bd.png)
+
+*Instrumentation rules allow specific classes and methods to be instrumented without users needing to modify the code*
+
+![](https://clickhouse.com/uploads/clickstack_odigos_may2026_image8_0117b86b4c.png)
+
+*Traces show arguments and return values for autoinstrumented methods and functions*
+
+At the same time, Odigos manages the OpenTelemetry pipeline itself, eliminating the need to manually configure and maintain collectors. This ensures that telemetry is routed consistently and reduces the operational overhead typically associated with OpenTelemetry deployments.
+
+## From traffic to insight in minutes {#from-traffic-to-insight-in-minutes}
+
+Once the system is running, interacting with the application immediately generates telemetry that flows into ClickStack. User actions propagate through multiple services, databases, and messaging systems, all of which are captured as part of a single, connected trace.
+
+Because ClickStack is built on ClickHouse, it can ingest this data at high throughput while making it available for real-time analysis. Engineers can query traces using SQL, explore service relationships, and identify performance bottlenecks without needing to move data into a separate analytics system.
+
+## Eliminating the guesswork {#eliminating-the-guesswork}
+
+The difference becomes most apparent when something goes wrong. In traditional setups, missing spans, broken traces, and lack of context force engineers to piece together partial information and rely on intuition. Even with telemetry in place, identifying the root cause often involves making assumptions and manual correlation.
+
+With Odigos and ClickStack, those gaps are removed end-to-end. Odigos ensures that traces remain complete, even across asynchronous boundaries, while enriching them with the context needed to understand what happened. ClickStack ingests that high-fidelity data at scale and makes it immediately queryable, allowing engineers to explore traces, correlate signals, and pinpoint issues in seconds.
+
+Instead of stitching together fragments from multiple tools, you get a single, consistent view of your system. One where every request, dependency, and database interaction is captured and available for analysis. The combination of rich, automatically captured telemetry and fast analytical querying turns observability from a reactive process into a precise, data-driven workflow.
+
+
+---
+
+## Get started today
+
+Interested in seeing how ClickHouse works on your data? Get started with ClickHouse Cloud in minutes and receive $300 in free credits.
+
+[Sign up](https://console.clickhouse.cloud/signUp?loc=blog-cta-536-get-started-today-sign-up&utm_blogctaid=536)
+
+---
+
+---
+
+## Agentic analytics starts with query-ready data: the write-side cost of Snowflake vs. ClickHouse
+Published: 2026-05-06T06:46:34+00:00
+URL: https://clickhouse.com/blog/write-side-cost-performance-snowflake-clickhouse
+
+---
+title: "Agentic analytics starts with query-ready data: the write-side cost of Snowflake vs. ClickHouse"
+date: "2026-05-06T06:46:34.921Z"
+author: "Tom Schreiber and Lionel Palacin"
+category: "Engineering"
+excerpt: "Agentic analytics makes query-readiness a write-side cost problem. This post compares Snowflake and ClickHouse under continuous ingest, showing how ClickHouse obtains query-ready data at 22× lower cost and delivers 31× better write-side cost-performance."
+---
+
+# Agentic analytics starts with query-ready data: the write-side cost of Snowflake vs. ClickHouse
+
+<style>
+/* Expandable metric boxes */
+details.metric-box {
+  background: #2B2B2B;
+  border-radius: 12px;
+  margin: 28px 0;
+  padding: 0;
+  color: #E2E8F0;
+  box-shadow: 0 0 0 1px rgba(255,255,255,0.05), 0 4px 12px rgba(0,0,0,0.2);
+  border-left: 5px solid rgba(255, 255, 255, 0.1);
+}
+
+/* Summary bar */
+details.metric-box summary {
+  cursor: pointer;
+  list-style: none;
+  padding: 16px 24px;
+  font-weight: 600;
+  font-size: 14px;
+  letter-spacing: 0.3px;
+  text-transform: uppercase;
+  color: #E2E8F0;
+  position: relative;
+  transition: background 0.2s;
+}
+
+details.metric-box summary:hover {
+  background: rgba(255,255,255,0.05);
+}
+
+/* Rotating arrow */
+details.metric-box summary::after {
+  content: "▶";
+  position: absolute;
+  right: 20px;
+  transition: transform 0.2s;
+  font-size: 12px;
+  color: #A0AEC0;
+}
+
+details.metric-box[open] summary::after {
+  transform: rotate(90deg);
+}
+
+/* Inner content */
+details.metric-box p {
+  padding: 0 24px 12px 24px;
+  margin: 0;
+  font-size: 15px;
+  line-height: 1.55;
+}
+
+details.metric-box .notes {
+  margin: 12px 24px 16px 24px;
+  padding: 10px 12px;
+  background: rgba(255,255,255,0.05);
+  border-radius: 6px;
+  font-size: 14px;
+}
+
+details.metric-box a { color: inherit; text-decoration: none; }
+details.metric-box code {
+  background: rgba(255,255,255,0.06);
+  padding: 2px 5px;
+  border-radius: 4px;
+  font-family: ui-monospace, SFMono-Regular, monospace;
+}
+
+/* Metrics table inside expandable boxes */
+details.metric-box.metrics .metric-row {
+  display: flex;
+  padding: 6px 0;
+  border-bottom: 1px solid rgba(255,255,255,0.05);
+  font-size: 14px;
+  margin: 0 24px;
+}
+details.metric-box.metrics .metric-row:last-child { border-bottom: none; }
+
+details.metric-box.metrics .metric-label {
+  width: 180px;
+  text-align: right;
+  padding-right: 16px;
+  color: #A0AEC0;
+  flex-shrink: 0;
+}
+details.metric-box.metrics .metric-value { flex: 1; }
+</style>
+
+
+> **TL;DR**<br/><br/>Agentic workloads put continuous pressure on analytical systems, and the ability to keep fresh data query-ready becomes a cost issue.<br/><br/>ClickHouse obtains query-ready data at 22× lower cost and delivers 28× better write-side cost-performance, using Snowflake as a measured contrast point.<br/><br/>This is the **write side of cost-performance**, and it is rarely measured directly.
+
+ 
+
+<br/><br/>
+
+## Agentic analytics starts before the query
+
+Most [cloud data warehouse benchmarks](https://clickhouse.com/blog/cloud-data-warehouses-cost-performance-comparison) start when the query begins.
+
+That makes sense for traditional analytics. A human analyst opens a dashboard, writes a SQL query, waits for a result, and maybe asks a follow-up. In that world, measuring query runtime and query cost tells most of the story.
+
+> Agentic analytics changes the shape of the workload.
+
+A single user question can turn into dozens of SQL queries: schema exploration, candidate query generation, validation queries, retries, refinements, drilldowns, and follow-up analysis.
+
+Those queries sit on the critical path of the user experience: if the database is slow, a chat with an agent feels slow. For autonomous agents, the pressure is even higher: without human input latency, each loop is limited mostly by LLM latency and data retrieval latency. That makes low-latency answers over fresh, often-changing data essential.
+
+Multiply that across users and agents, and the warehouse no longer sees occasional queries, but bursts of concurrent analytical queries, each with low-latency expectations.
+
+![Screenshot 2026-04-30 at 17.47.21.png](https://clickhouse.com/uploads/Screenshot_2026_04_30_at_17_47_21_d4616ac42b.png)
+
+This is the shift described in our earlier post on [how AI is redrawing the database market](https://clickhouse.com/blog/ai-redrawing-database-market): agent-facing analytics makes internal analytical workloads look more like customer-facing applications - high-concurrency, low-latency, and interactive.
+
+> Those queries increasingly run against fresh data.
+
+New events keep arriving. Tables keep growing. Agents keep asking. The data has to stay query-ready as it changes.
+
+> That means query cost-performance starts before the query.
+
+Before a query can be fast, newly ingested data has to be written, ordered, compressed, and prepared for pruning.
+
+If the storage layer does this efficiently, queries can skip more data and stay cheap. If it does this inefficiently, the system either spends more compute in the background, reads more data at query time, or both.
+
+**This is the write side of cost-performance, and it is rarely measured directly.**
+
+So we move the benchmark boundary from the first query to the first write.
+
+The core question is how efficiently a system can keep fresh data query-ready in real time.
+
+We use Snowflake as the contrast point because it represents the opposite end of the architectural spectrum: data is written first, then clustered later to establish locality, allowing queries to skip more data. ClickHouse takes the other path: it creates that ordered layout as part of the write path and preserves it through the storage engine as data grows.
+
+<details class="metric-box">
+<summary>What about BigQuery, Databricks, and Redshift? (click to expand)</summary>
+<p>
+A full write-side cost-performance benchmark across all major cloud data warehouses is outside the scope of this post. We focus on Snowflake and ClickHouse because they represent two ends of the architectural spectrum: Snowflake establishes ordering after the write, while ClickHouse builds it into the write path. The other major cloud warehouses fall between these poles, but none cross to ClickHouse's side.
+</p>
+<p>
+<strong>BigQuery</strong> writes data into <a href="https://cloud.google.com/blog/topics/developers-practitioners/bigquery-explained-storage-overview">sorted storage blocks</a> on arrival, but new inserts create overlapping ranges that require automatic background reclustering to restore order. That <a href="https://docs.cloud.google.com/bigquery/docs/clustered-tables">reclustering is free</a> - Google absorbs it into the platform - but data written since the last recluster is not yet fully organized for pruning.
+</p>
+<p>
+<strong>Databricks SQL Serverless</strong> sits closest to Snowflake. Data lands in Parquet files in arrival order. <a href="https://www.databricks.com/blog/announcing-general-availability-liquid-clustering">Liquid Clustering</a> reorganizes them post-ingest via an <code>OPTIMIZE</code> job, which <a href="https://docs.databricks.com/aws/en/optimizations/predictive-optimization">runs on separate serverless compute and is billed as such</a>.
+</p>
+<p>
+<strong>Redshift</strong> sorts data post-ingest using a <a href="https://aws.amazon.com/about-aws/whats-new/2019/11/amazon-redshift-introduces-automatic-table-sort-alternative-vacuum-sort/">background process</a> that runs on the provisioned cluster itself. There is no separate clustering service or charge, but new rows land unsorted and stay that way until the background sort reaches them.
+</p>
+<p>
+The pattern is similar: keeping data organized for pruning is work. Depending on the system, that work may show up as a separate charge, run on provisioned compute, or be absorbed into the platform - but it still affects the economics of keeping fresh data query-ready.
+</p>
+</details>
+
+To make that difference concrete, we measure the cost of keeping the same dataset query-ready for fast analytics while continuously ingesting roughly 1 million rows per second, and show why the write path becomes part of the cost-performance equation.
+
+That raises the first question: what does “query-ready” actually mean?
+
+
+
+
+
+
+
+## What does “query-ready” mean?
+
+> For an analytical query, query-ready data means the engine can avoid reading most of the table.
+
+The fastest analytical queries are the ones that read the least data.
+
+Analytical workloads typically filter contiguous **ranges of rows**, for example all events for a specific day in a web analytics table, and then aggregate the results, as in the query below:
+<pre>
+<code type='click-ui' language='sql' show_line_numbers='false'>
+SELECT
+    URL,
+    COUNT(*) AS pageviews,
+    COUNT(DISTINCT User) AS users
+FROM hits
+WHERE Day = 'D2'
+GROUP BY URL;
+</code>
+</pre>
+
+To execute such queries efficiently, analytical databases rely on two core ideas.
+
+First, **columnar storage** enables **pruning at the column level**: although the table may contain hundreds of columns, this query touches only `Day`, `User`, and `URL`, all other columns are skipped.
+
+Second, data is processed in **chunks**, not rows. This enables **pruning at the chunk level**: entire blocks of rows are either read or skipped.
+
+Together, these mechanisms reduce I/O and enable efficient vectorized execution.
+
+However, pruning at the chunk level is only effective when the data is stored sorted on the filtered column. If the table is unsorted, chunks will typically contain mixed values:
+
+![Blog-Costs-Snowflake-storage-architectures.001.png](https://clickhouse.com/uploads/Blog_Costs_Snowflake_storage_architectures_001_0fb55e70f9.png)
+
+In this simplified example (four rows per chunk), each chunk contains at least one `D2` value, therefore, none can be skipped for our query’s `Day = D2` predicate.
+
+When related `Day` rows are stored contiguously, value ranges within chunks no longer overlap, and non-matching chunks (for our query’s `Day = D2` predicate) can be skipped entirely:
+
+![Blog-Costs-Snowflake-storage-architectures.002.png](https://clickhouse.com/uploads/Blog_Costs_Snowflake_storage_architectures_002_52b1fcf5c3.png)
+
+> Sorting tightens value ranges within chunks and enables effective pruning.
+
+This is the structural requirement that allows analytical queries to skip large portions of the table, even before additional optimizations like pre-aggregation are applied.
+
+<details class="metric-box">
+  <summary>Why not rely on materialized views? (click to expand)</summary>
+  <p>
+    <br/> <a href="https://clickhouse.com/docs/materialized-views">Materialized views</a> are another common technique to accelerate analytics by pre-aggregating data, reducing how much raw data must be scanned.<br/><br/>
+    However, raw tables still need to support ad-hoc queries, debugging, new query patterns, joins, drill-downs, and observability queries that were not anticipated when the views were created.<br/><br/>
+    Efficient data ordering therefore remains critical for scalable analytics, even in systems that use materialized views.<br/><br/>
+    This applies to the materialized views themselves as well: at scale, ordering still determines whether queries can skip most of the materialized view’s data.<br/><br/>
+    Additional techniques, such as <a href="https://clickhouse.com/blog/projections-secondary-indices">lightweight projections</a>, can further accelerate queries whose filters do not align with the primary ordering.<br/><br/>
+    Ultimately, the same rule still holds:<br/>
+    Skipping data is the only way analytics scales.<br/>
+    Sorting is the primary mechanism that enables skipping.
+  </p>
+</details>
+
+
+
+And at first glance, **Snowflake** and **ClickHouse Cloud** look strikingly similar here: both rely on columnar storage and chunk-level pruning to avoid scanning unnecessary data, which in turn depends on how related rows are physically organized.
+
+
+### Pruning must survive continuous ingest
+
+In modern real-time analytics, data is not written once and queried many times.
+
+Tables grow continuously as new data keeps arriving.
+
+Under that regime, keeping data continuously sorted ensures that query cost depends on what matches, not on the total data stored.
+
+![Blog-Costs-Snowflake-storage-architectures.003.png](https://clickhouse.com/uploads/Blog_Costs_Snowflake_storage_architectures_003_dbd442fd7a.png)
+
+What matters, then, is when and how sorted locality - rows with similar key values stored contiguously - is created and maintained as new data keeps arriving.
+
+> In a world of continuous ingest, how a warehouse organizes data after it is written determines how efficiently it scales.
+
+We now examine how Snowflake and ClickHouse create and maintain that locality under continuous ingest.
+
+## Two ways to obtain query-ready data
+
+The key difference is when locality is created: after data is written, or while it is being written.
+
+### Snowflake: clustering after ingest
+
+Snowflake’s prunable data chunk is the [micro-partition](https://docs.snowflake.com/en/user-guide/tables-clustering-micropartitions#what-are-micro-partitions), an immutable compressed columnar unit.
+
+Each micro-partition typically stores [~50–500 MB of data](https://docs.snowflake.com/en/user-guide/tables-clustering-micropartitions#benefits-of-micro-partitioning) (before compression) and includes per-column min/max statistics used for pruning. 
+
+Each INSERT creates a new micro-partition.
+
+Data is written in **arrival order**, as illustrated below with three example inserts:
+
+
+<video autoplay="1" muted="1" loop="1" controls="1">
+  <source src="https://clickhouse.com/uploads/test01_8b3faffae4.mp4" type="video/mp4" />
+</video>
+
+*(In the animation above, for clarity, we show the min..max values only for the `Day` column, but they are created for all columns.)*
+
+Data is not automatically sorted. 
+
+Under continuous ingest, the absence of sorted locality becomes costly.
+
+Every insert produces another independently written micro-partition. Over time, value ranges overlap across partitions. When filtering on a column like `Day`, many partitions contain mixed values, and therefore cannot be skipped:
+
+
+<video autoplay="1" muted="1" loop="1" controls="1">
+  <source src="https://clickhouse.com/uploads/test02_180fec10a8.mp4" type="video/mp4" />
+</video>
+
+Because the Day ranges overlap across partitions, pruning via min/max metadata is ineffective for this predicate.
+
+<details class="metric-box">
+  <summary>A note on pre-sorting in Snowflake (click to expand)</summary>
+  <p>
+    <br/>Pre-sorting input data may reduce value-range overlap within a single insert batch.<br/>
+    However, each INSERT still creates independent micro-partitions.<br/>
+    Over time, ranges across partitions will overlap again.
+  </p>
+</details>
+
+
+To establish sorted locality, Snowflake provides **clustering**.
+
+When a [clustering key](https://docs.snowflake.com/en/user-guide/tables-clustering-keys) is defined (the `Day` column in our example), Snowflake [rewrites](https://docs.snowflake.com/en/user-guide/tables-clustering-micropartitions) existing micro-partitions in the background, replacing them with newly organized ones that group similar key values together. This tightens min/max ranges and enables effective pruning:
+
+
+<video autoplay="1" muted="1" loop="1" controls="1">
+  <source src="https://clickhouse.com/uploads/test03_72e7b0fef1.mp4" type="video/mp4" />
+</video>
+
+After clustering, micro-partitions contain narrower value ranges, and non-matching partitions can be skipped entirely:
+
+<video autoplay="1" muted="1" loop="1" controls="1">
+  <source src="https://clickhouse.com/uploads/test04_fca97002fd.mp4" type="video/mp4" />
+</video>
+
+<br/>
+
+> In Snowflake, sorted locality is not created at write time. It is established later by rewriting data after ingestion. 
+
+
+Under continuous ingest, clustering must run continuously to re-establish sorted locality.
+
+
+<details class="metric-box">
+  <summary>What about observability data, where events arrive in timestamp order? (click to expand)</summary>
+  <p>
+    A reasonable objection: if observability events arrive roughly in ingestion order, each new micro-partition 
+    gets a non-overlapping timestamp range, and min/max pruning on the timestamp column works without clustering. 
+    That is partially correct - for a pure timestamp-only workload with perfectly ordered ingest.
+  </p>
+  <p>
+    In practice, this breaks down on multiple fronts. First, real observability pipelines are not perfectly 
+    ordered: distributed collectors buffer and flush independently, Kafka consumers lag and catch up, retries 
+    produce late-arriving events, and cross-service clock skew is routine. Even occasional overlap 
+    reintroduces the partition-scanning problem and triggers the clustering service.
+  </p>
+  <p>
+    Second, and more fundamentally, observability queries are rarely single-dimensional on timestamp. 
+    The typical query is <code>WHERE service = 'checkout' AND timestamp &gt; now() - interval 1 hour</code>, 
+    or filters on <code>trace_id</code>, <code>error_level</code>, or <code>span_id</code>. 
+    Arrival-order storage leaves all of those dimensions completely unordered - pruning on them 
+    is just as ineffective as in the general case, regardless of how neatly the timestamps arrived.
+  </p>
+  <p>
+    Third, Snowflake's own documentation <a href="https://docs.snowflake.com/en/user-guide/tables-clustering-keys#strategies-for-selecting-clustering-keys">warns</a> that high-cardinality timestamp columns make poor clustering keys directly. The recommended workaround - casting to date - reduces 
+    pruning granularity to the day level, which is too coarse for the sub-hour queries common in observability.
+  </p>
+</details>
+
+Re-establishing sorted locality is one approach. Preserving it is another.
+
+
+### ClickHouse: ordering on the write path
+
+ClickHouse’s prunable data chunk is the [granule](https://clickhouse.com/docs/guides/best-practices/sparse-primary-indexes#data-is-organized-into-granules-for-parallel-data-processing).
+
+A granule typically contains [~8K rows](https://clickhouse.com/docs/operations/settings/merge-tree-settings#index_granularity) or [~10 MB of data](https://clickhouse.com/docs/operations/settings/merge-tree-settings#index_granularity_bytes) (before compression) and is a logical unit within an immutable, sorted [data part](https://clickhouse.com/docs/parts). 
+ 
+Unlike Snowflake, sorted locality is created as part of the write path.
+
+Each INSERT produces a new data part that is already sorted by the table’s [sorting key](https://clickhouse.com/docs/guides/best-practices/sparse-primary-indexes#data-is-stored-on-disk-ordered-by-primary-key-columns) (the `Day` column in our example), as illustrated below with three inserts:
+
+
+<video autoplay="1" muted="1" loop="1" controls="1">
+  <source src="https://clickhouse.com/uploads/test01b_37cdffe544.mp4" type="video/mp4" />
+</video>
+
+Because data is automatically written sorted, contiguous key ranges are established immediately. The [sparse primary index](https://clickhouse.com/docs/primary-indexes) records range boundaries at the granule level (8,192 rows per granule by default; 2 rows in our example), enabling highly granular  pruning during query execution.
+
+<details class="metric-box">
+  <summary>Isn’t write-time sorting expensive? (click to expand)</summary>
+  <p>
+    <br/>Although sorting may appear costly, in practice it is highly efficient.
+  </p>
+  <p>
+    Inserts are already processed in memory in columnar blocks, and sorting by the sorting key
+    is a parallel, cache-efficient step.
+  </p>
+  <p>
+    In our <a href="https://clickhouse.com/blog/clickhouse-input-format-matchup-which-is-fastest-most-efficient">ingestion benchmarks</a>, server-side sorting overhead was negligible
+    compared to parsing and network transfer.
+  </p>
+</details>
+
+This achieves the same outcome as Snowflake’s min/max metadata: entire chunks can be skipped based on value ranges.
+
+The difference appears in what happens next.
+
+Under continuous ingest, preserving this locality becomes critical.
+
+As new parts keep arriving, the engine continuously [merges](https://clickhouse.com/docs/merges) smaller parts into larger ones in the background:
+
+<video autoplay="1" muted="1" loop="1" controls="1">
+  <source src="https://clickhouse.com/uploads/test02b_0f2b5e2d5b.mp4" type="video/mp4" />
+</video>
+
+
+Because all parts are already sorted by the same key, the engine performs a single linear merge pass with **no re-sorting required**.
+
+<details class="metric-box">
+  <summary>Why ClickHouse merges are CPU-efficient (click to expand)</summary>
+  <p>
+    <br/>ClickHouse can merge parts efficiently because all parts are already sorted by the same key.
+  </p>
+  <p>
+    When parts are merged, the engine performs a single linear merge pass, similar to the merge step of 
+    <a href="#">merge sort</a>:
+  </p>
+  <ul>
+    <li>parts are read sequentially</li>
+    <li>rows are compared on the fly</li>
+    <li>a new merged part is written out</li>
+  </ul>
+  <p>
+    No re-sorting, random access, or large temporary buffers are required.
+  </p>
+  <p>
+    Because merges operate on already sorted streams, they are largely sequential and cache-efficient.
+  </p>
+  <p>
+    This mechanism allows ClickHouse to continuously consolidate data in the background while preserving sorted locality.
+  </p>
+</details>
+
+With each merge, similar sorting key values become increasingly co-located.
+This tightens the value ranges recorded in the sparse primary index, allowing entire granules to be skipped for predicates on the sorting key, as illustrated below.
+
+
+<video autoplay="1" muted="1" loop="1" controls="1">
+  <source src="https://clickhouse.com/uploads/test03b_9cba855a20.mp4" type="video/mp4" />
+</video>
+
+At query time, this achieves the same range-pruning effect as Snowflake’s clustering.  
+
+The difference is that in ClickHouse the mechanism is built directly into the storage engine rather than applied afterward.
+
+<details class="metric-box">
+  <summary>How this compares to Snowflake at query time (click to expand)</summary>
+  <p>
+    <br/>At query time, there is no fundamental difference in how pruning works.
+    Both Snowflake and ClickHouse use range metadata to skip large chunks of data:
+  </p>
+  <ul>
+    <li>Snowflake stores explicit min/max statistics per micro-partition (~50–500 MB before compression).</li>
+    <li>ClickHouse stores the first sorting-key value per granule (~10 MB before compression) in its sparse primary index.</li>
+  </ul>
+  <p>
+    This allows ClickHouse to prune at significantly finer granularity.
+  </p>
+  <p>
+    Because ClickHouse data is physically sorted on the sorting key:
+  </p>
+  <ul>
+    <li>Each granule implicitly defines a contiguous value range.</li>
+    <li>The first value of the next granule effectively acts as the upper bound of the previous one.</li>
+  </ul>
+  <p>
+    Conceptually, this achieves the same outcome as Snowflake’s min/max metadata: entire chunks can be eliminated based on value ranges.
+    The difference is not in <i>how pruning works</i> but in how those value ranges are created and maintained over time.
+  </p>
+</details>
+
+<br/>
+
+> In ClickHouse, ordering is built into the storage engine by design.
+
+With each merge, sorted segments grow larger, and under continuous ingest, that structural consolidation compounds.
+
+
+Under continuous ingest, ordering mechanics become economics.
+
+
+## Measuring the cost of query-ready data
+
+
+This benchmark extends our [previous read-side cost-performance study](https://clickhouse.com/blog/cloud-data-warehouses-cost-performance-comparison), which measured query runtime and compute cost of analytical queries across five cloud data warehouses on the same production-derived, anonymized [ClickBench web analytics dataset](https://github.com/ClickHouse/ClickBench/#realism). 
+
+Note that this is a controlled experiment, not an ingest speed comparison. We ingest the ClickBench dataset with a [modest](https://staging.clickhouse.com/blog/snowflake-clustering-vs-clickhouse-built-in-ordering#built-for-the-pressure-of-agentic-analytics:~:text=many%20event%20streams%2C-,higher%20ingest%20rates,-%2C%20and%20many%20tables) 1 million rows per second rate - well within the operational range of both systems - and measure the compute cost of keeping that continuously ingested data organized for fast analytical queries. The same  [pricing methodology](https://clickhouse.com/blog/how-cloud-data-warehouses-bill-you) from our previous cost-performance study is applied throughout, and the read benchmark uses the same [43 ClickBench queries](https://github.com/ClickHouse/ClickBench/blob/main/clickhouse-cloud/queries.sql). All benchmark code and raw results are [published on GitHub](https://github.com/ClickHouse/examples/tree/main/blog-examples/Bench2Cost).
+
+<details class="metric-box">
+  <summary>How we ingested 1 million rows per second (click to expand)</summary>
+  <p>
+    <strong>Snowflake</strong> was loaded via a single continuous stream into the table,
+    using a Gen1 M warehouse.
+  </p>
+  <p>
+    <strong>ClickHouse</strong> was loaded vis a <a href="https://github.com/ClickHouse/Bench2Cost/blob/main/clickhouse-cloud/INGEST_TEST/ingest_chunks.py">Python script</a>
+    using the <a href="https://clickhouse.com/docs/integrations/python">ClickHouse Connect</a>
+    client, simulating <a href="https://github.com/ClickHouse/Bench2Cost/blob/4b5e701e87bf4caaf61a25fbd3d0b43d3cd246ec/clickhouse-cloud/INGEST_TEST/_commands.txt#L6">170 parallel clients</a> each sending a
+    continuous stream of 20,000-row batches. This uses
+    <a href="https://clickhouse.com/blog/asynchronous-data-inserts-in-clickhouse">async inserts</a>
+    - <a href="https://clickhouse.com/blog/clickhouse-release-26-03#async-insert-by-default">now the default ingest mode</a>
+    in ClickHouse - which buffer rows server-side before flushing a sorted part, allowing
+    high client concurrency without causing part explosion. With a 2 GB buffer per node and
+    3 nodes, each buffer flushed roughly every 3 seconds -
+    <a href="https://pastila.nl/?016ee75a/4e8e993253a4e538eb9e72d1d8e69842#LvOW6GHGjUmqMZNRb6Tk1A==GCM">measured via <code>part_log system table</code></a> (avg: 2.91s).
+  </p>
+</details>
+
+Both systems organize the data on the identical key: Snowflake through a [clustering key](https://pastila.nl/?00884d9d/b67274bd309c1194199588b1f9198154#RIu8l4I9l9hA7OeLpgd3ww==GCM), ClickHouse through a [sorting key](https://pastila.nl/?002300f7/93d6d1682604aa7155ace83385d4df7e#H8tl22dDK+v3/moGcO6tmA==GCM).
+
+
+### Isolating the cost of ordered data
+
+Because both systems offer [compute-compute separation](https://clickhouse.com/blog/introducing-warehouses-compute-compute-separation-in-clickhouse-cloud), we can precisely measure the cost of obtaining ordered data, separate from the [cost of querying it](https://clickhouse.com/blog/cloud-data-warehouses-cost-performance-comparison).
+
+We’ll start with two high-level animations showing how we configured each system to isolate write and ordering compute from read compute, and the costs that fall out of that setup.
+
+
+#### Snowflake benchmark setup: writes, clustering, reads
+
+
+
+<video autoplay="1" muted="1" loop="1" controls="1">
+  <source src="https://clickhouse.com/uploads/Blog_Costs_Snowflake_storage_architectures_Animation_Snowflake_costs_v3_aab743d7f7.mp4" type="video/mp4" />
+</video>
+
+The Snowflake setup separates the workload into three compute surfaces: a write warehouse, a managed clustering service, and a read warehouse.
+
+**① Writes in arrival order**
+
+As explained earlier, Snowflake writes incoming rows in arrival order into micro-partitions.
+
+For our sustained ingest workload, a Gen1 M warehouse was sufficient to ingest 1 million events per second. At [Enterprise pricing](https://clickhouse.com/blog/how-cloud-data-warehouses-bill-you#snowflake), this costs $336 per 100B rows of ClickBench data.
+
+**② Background  clustering**
+
+Ordering happens later.
+
+To keep the table clustered for fast analytics, Snowflake uses [automatic clustering](https://docs.snowflake.com/en/user-guide/tables-auto-reclustering): a managed background service that rewrites micro-partitions outside the write warehouse.
+
+In our run, this added roughly [$2,500 per 100B rows](https://pastila.nl/?012d03c1/0eeec86ab8137a015b204bd4a0ffd6ba#ekr45egH6HlKvdinmLHhEA==GCM). Users do not directly control how much compute automatic clustering uses or how long reclustering takes.
+
+**③ Range pruning**
+
+The read benchmark runs separately, after the data has been clustered.
+
+A Gen2 4XL warehouse completed the 43 ClickBench queries over 100B ordered rows in [176 seconds](https://github.com/ClickHouse/Bench2Cost/blob/main/snowflake/results_100B/gen2_clustered_4xl_enriched.json), at an Enterprise-tier compute cost of [$25](https://github.com/ClickHouse/Bench2Cost/blob/main/snowflake/results_100B/gen2_clustered_4xl_enriched.json).
+
+ClickHouse uses the same benchmark split, but the write-side work is different: writes and ordering happen together.
+
+
+#### ClickHouse benchmark setup: writes and ordering, reads
+
+
+<video autoplay="1" muted="1" loop="1" controls="1">
+  <source src="https://clickhouse.com/uploads/Blog_Costs_Snowflake_storage_architectures_Animation_Click_House_costs_v3_4d3beba292.mp4" type="video/mp4" />
+</video>
+
+**① Write-time ordering**
+
+As mentioned in the previous section, in ClickHouse, incoming rows are written into sorted data parts, so contiguous key ranges are established immediately. In our setup, a 3-node write & ordering service with 8 CPU cores and 32 GiB RAM per node sustained 1 million events per second.
+
+At [Enterprise pricing](https://clickhouse.com/blog/how-cloud-data-warehouses-bill-you#clickhouse-cloud), this costs $131 per 100B rows of ClickBench data - **95% less than Snowflake’s combined write and clustering cost for the same workload**.
+
+**② Order-preserving background merges**
+
+Ordering is preserved by background merges running on the same provisioned service.
+
+As a reminder, these merges combine smaller sorted parts into larger sorted parts. As the parts grow, key ranges become more contiguous, compression improves, and the amount of data future queries need to read goes down.
+
+There is no separate clustering service and no separate clustering charge.
+
+**③ Range pruning**
+
+The read benchmark runs separately, against the ordered data.
+
+A 40-node read service completed the 43 ClickBench queries over 100B ordered rows in [126 seconds](https://github.com/ClickHouse/Bench2Cost/blob/main/clickhouse-cloud/results_100B/aws.40.236._2.parallel_replicas.json), at an Enterprise-tier compute cost of [$16](https://github.com/ClickHouse/Bench2Cost/blob/main/clickhouse-cloud/results_100B/aws.40.236._2.parallel_replicas.json) - **28% faster and 36% cheaper than Snowflake on the same ordered dataset**.
+
+The ClickHouse setup only works if the write & ordering service can keep up with ingest. The dashboard below shows that it did.
+
+
+### ClickHouse write & ordering compute keeps up with ingest
+
+The 3-node ClickHouse write & ordering service with 8 CPU cores and 32 GiB RAM per node sustained the workload while keeping the table query-ready.
+
+The charts below, from the native ClickHouse Cloud advanced dashboard, show the first 24 hours of the run and validate the setup from several angles.
+
+- ① **Rows/sec:** ingest stayed around 1 million rows per second.
+- ② **Bytes/sec:** ingest also stayed around 800 MB/sec, or roughly 33 MB/sec per CPU core. This matters because rows/sec alone can be misleading: 100 million tiny rows/sec is not necessarily more demanding than 1 million wide rows/sec. The bytes/sec chart gives a better sense of the actual write throughput the service sustained.
+- ③ **Part count:** background merges kept the maximum part count in the single default partition under control. The table was not explicitly partitioned.
+- ④–⑤ **CPU and memory:** both were well utilized without saturating.
+
+
+![Blog-Costs-Snowflake-storage-architectures.001.png](https://clickhouse.com/uploads/Blog_Costs_Snowflake_storage_architectures_001_29bf119826.png)
+
+<details class="metric-box">
+<summary>What about Snowflake CPU and memory metrics? (click to expand)</summary>
+
+<p>
+For ClickHouse, we show CPU and memory from the native ClickHouse Cloud advanced dashboard because the write &amp; ordering service exposes resource utilization directly.
+</p>
+
+<p>
+Snowflake exposes warehouse load, query history, query profiles, and credit usage, but not an equivalent native node-level CPU and memory dashboard for a virtual warehouse.
+</p>
+
+<p>
+So for Snowflake, we validate the setup by outcome and cost: the write warehouse sustained the same 1 million rows per second ingest rate, and the consumed warehouse credits capture the cost. A comparable CPU/memory saturation chart is not available through Snowflake’s native observability surface.
+</p>
+
+</details>
+
+With ingest, part counts, CPU, and memory all under control, the important question becomes when fresh data is actually ready for efficient queries.
+
+### Query-ready immediately vs. waiting for clustering
+
+Both systems aim for the same outcome: ordered data that can be pruned efficiently. The difference is when fresh data reaches that state.
+
+#### ClickHouse does not wait for a background process to make fresh data useful
+
+Write-time ordering enables immediate range pruning, while background merges incrementally improve the layout over time. In the part-count chart above, the maximum stays roughly between 100 and 150 parts per partition, showing a healthy, query-efficient layout for this workload **at each point in time** - because ingest is continuous, merges are never “finished” - and they do not need to be. Queries benefit from ordering immediately; merges simply improve that layout over time.
+
+#### Snowflake has a different dependency: clustering has to catch up
+
+After the first 100B rows, the table contained roughly [540K micro-partitions](https://pastila.nl/?00db95cf/9f9564e8c1a40280202cb42a1cc5fe3a#t333fd+A8Pbp3ETGsJij8A==GCM). Starting from an empty table, automatic clustering [began 1.3 hours after ingest started](https://pastila.nl/?0072b6ca/8482376483432dc23da61bc133f645c7#BHBfsRbJCmJ5pWByqlcpyg==GCM) and [finished 6.7 hours after the 100 billionth row was ingested](https://pastila.nl/?0072b6ca/8482376483432dc23da61bc133f645c7#BHBfsRbJCmJ5pWByqlcpyg==GCM).
+
+That lag matters for real-time analytics: fresh data may be present in the table before it is fully organized for fast pruning.
+
+
+<details class="metric-box">
+  <summary>Alternative to automatic clustering (click to expand)</summary>
+
+  <p>
+    As an alternative to automatic clustering, Snowflake users can manually rewrite tables, for example via<br/>
+    <code>CREATE TABLE sorted_table AS SELECT * FROM unsorted_table ORDER BY sorting_column</code>.
+  </p>
+
+  <p>
+    This rewrite runs on warehouse compute, processes the full dataset, and does not provide incremental
+    locality maintenance. Under continuous ingest, the rewrite must be repeated, turning it into an ongoing task.
+  </p>
+
+  <p>
+    This approach can work for periodic batch refreshes, but becomes operationally heavy for continuously growing tables.
+  </p>
+
+</details>
+
+The setup above gives us all the pieces. Now we combine the write and ordering costs across the 100B, 200B, and 300B row checkpoints.
+
+
+## The cost of obtaining query-ready data
+
+Based on the setups shown by the two animations above, the chart below shows the cumulative compute cost of obtaining ordered data for fast analytics at 100B, 200B, and 300B rows.
+
+Both systems continuously ingest the ClickBench dataset at 1 million rows per second and organize it on the same key: [Snowflake](https://pastila.nl/?00884d9d/b67274bd309c1194199588b1f9198154#RIu8l4I9l9hA7OeLpgd3ww==GCM) through clustering, [ClickHouse](https://pastila.nl/?002300f7/93d6d1682604aa7155ace83385d4df7e#H8tl22dDK+v3/moGcO6tmA==GCM) through write-time ordering and order-preserving background merges.
+
+![Blog-Costs-Snowflake-storage-architectures.001.png](https://clickhouse.com/uploads/Blog_Costs_Snowflake_storage_architectures_001_0db2d48d71.png)
+
+
+> Across all three checkpoints, ClickHouse reaches a query-ready layout at roughly 22× lower cost than Snowflake.
+
+<details class="metric-box">
+  <summary>How we measured Snowflake ingest and clustering cost (click to expand)</summary>
+
+  <p>
+    We split Snowflake’s write-side cost into two parts: the warehouse compute used for ingest
+    and the automatic clustering compute used to obtain ordered data.
+  </p>
+
+  <p>
+    For ingest, we used a Gen1 M warehouse. At <a href="https://clickhouse.com/blog/how-cloud-data-warehouses-bill-you#snowflake">Enterprise pricing</a>, this warehouse consumes
+    <code>4</code> credits per hour. At our sustained ingest rate of roughly <code>1 million rows per second</code>,
+    each 100B-row ingest window took roughly <code>28</code> hours, so the ingest cost per 100B rows is:
+  </p>
+
+  <p>
+    <code>4 credits/hour × $3.00/credit × 28 hours = $336</code>
+  </p>
+
+  <p>
+    For clustering, we measured Snowflake’s ordering cost directly from
+    <code>snowflake.account_usage.automatic_clustering_history</code>, using the
+    <code>credits_used</code> reported for automatic clustering on the clustered ClickBench table.
+    The SQL query and its results is available <a href="https://pastila.nl/?012d03c1/0eeec86ab8137a015b204bd4a0ffd6ba#ekr45egH6HlKvdinmLHhEA==GCM">here</a>.
+  </p>
+
+  <p>
+    For each 100B-row ingest window, we summed the automatic clustering credits and converted them
+    using Enterprise pricing at <code>$3</code> per credit.
+  </p>
+
+  <p>
+    The three measured clustering windows used <code>849.84</code>, <code>916.09</code>, and
+    <code>853.59</code> credits respectively, corresponding to <code>$2,549.52</code>,
+    <code>$2,748.27</code>, and <code>$2,560.78</code> of clustering compute.
+  </p>
+
+  <p>
+    The total Snowflake ingest + ordering cost shown in the chart is the ingest warehouse cost
+    plus the automatic clustering cost for each 100B-row window.
+  </p>
+
+</details>
+
+<details class="metric-box">
+  <summary>How we calculated ClickHouse write and ordering cost (click to expand)</summary>
+
+  <p>
+    For ClickHouse, writes and ordering run on the same provisioned write &amp; ordering service.
+    In our setup, this service used <code>3</code> nodes with <code>8</code> CPU cores each.
+  </p>
+
+  <p>
+    In <a href="https://clickhouse.com/blog/how-cloud-data-warehouses-bill-you#clickhouse-cloud">ClickHouse Cloud pricing</a>, each <code>8</code>-core node corresponds to <code>4</code> compute units.
+    Therefore, the 3-node service uses:
+  </p>
+
+  <p>
+    <code>3 nodes × 4 compute units/node = 12 compute units</code>
+  </p>
+
+  <p>
+    At Enterprise pricing of <code>$0.39</code> per compute unit per hour, and at our sustained ingest
+    rate of roughly <code>1 million rows per second</code>, each 100B-row ingest window took roughly
+    <code>28</code> hours. The write and ordering cost per 100B rows is therefore:
+  </p>
+
+  <p>
+    <code>12 compute units × $0.39/unit/hour × 28 hours = $131</code>
+  </p>
+
+  <p>
+    This includes both ingest and ordering maintenance, because ClickHouse writes sorted data parts
+    and preserves ordering through background merges on the same service.
+  </p>
+
+</details>
+
+And as shown earlier, querying that ordered data is also faster and cheaper in ClickHouse.
+
+## The write side’s impact on total cost-performance
+
+> Where do you get the most query-ready performance per dollar spent on the write side?
+
+To answer that, we combine the total cost to reach the query result with the runtime achieved on that data:
+`(cost to obtain query-ready data + cost to query that data) × runtime on that data`
+
+Smaller is better.
+
+This captures the intuition behind write-side cost-performance:
+
+- Systems with lower cost to obtain query-ready data score better
+- Systems with lower query cost score better
+- Systems with faster runtimes score better
+- Cost and runtime compound; inefficiencies multiply each other
+
+![Blog-Costs-Snowflake-storage-architectures.001.png](https://clickhouse.com/uploads/Blog_Costs_Snowflake_storage_architectures_001_82ebeb8206.png)
+
+> Overall, ClickHouse has a 28× better write-side cost-performance than Snowflake.
+
+
+<details class="metric-box">
+  <summary>What about Interactive Tables, Hybrid Tables, and Dynamic Tables? (click to expand)</summary>
+  <p>
+    Snowflake offers several specialized table types. None of them change the write-side cost
+    analysis for large-scale analytical workloads.
+  </p>
+  <p>
+    <a href="https://docs.snowflake.com/en/user-guide/interactive"><strong>Interactive Tables</strong></a>
+    are designed for low-latency, high-concurrency lookups.
+    The interactive warehouse enforces a <a href="https://docs.snowflake.com/en/user-guide/interactive#limitations-of-interactive-warehouses">hard five-second query timeout</a>
+    on SELECT queries that cannot be increased - by design, to protect the cache from long-running scans.
+    With 43 ClickBench queries completing in a combined 176 seconds on 100B ordered rows, a number of
+    individual queries run well past the five-second cutoff and would be cancelled before returning a result.
+    Interactive Tables are also optimized for simple, selective queries; the docs explicitly advise
+    against large joins, complex aggregations, and <a href="https://docs.snowflake.com/en/user-guide/interactive#benchmarking-best-practices">high-cardinality clustering keys such as timestamps</a>.
+  </p>
+  <p>
+    <a href="https://docs.snowflake.com/en/user-guide/tables-hybrid"><strong>Hybrid Tables</strong></a>
+    use row-based storage, optimized for transactional point lookups rather than
+    analytical range scans. They are <a href="https://docs.snowflake.com/en/user-guide/tables-hybrid-limitations#data-size">capped at 2 TB of row-store data per Snowflake database</a>.
+    In our benchmark, Snowflake stored 3.11 TB at 100B rows - already over the hybrid table quota.
+    Hybrid Tables also <a href="https://docs.snowflake.com/en/user-guide/tables-hybrid-limitations#unsupported-features">do not support clustering keys</a>,
+    Snowpipe Streaming, or materialized views, and queries do not use the result cache.
+  </p>
+  <p>
+    <a href="https://docs.snowflake.com/en/user-guide/dynamic-tables-about"><strong>Dynamic Tables</strong></a>
+    pre-materialize transformed query results on a configurable refresh lag.
+    They are useful for building incremental data pipelines and pre-aggregated views, but they do not
+    change how the underlying event data is stored or ordered. The base table still requires clustering for
+    analytical queries to prune effectively, and each refresh runs on warehouse compute and is billed accordingly.
+    Dynamic Tables address a different problem - they do not reduce the write-side cost of keeping raw data query-ready.
+  </p>
+</details>
+
+
+
+Ordering cost is only one part of write-side cost-performance.
+
+## Ordering architecture also changes the storage footprint
+
+
+The storage layout that results from that ordering also affects how much data is stored, how much has to be read later, and how much I/O future queries perform.
+
+
+### Snowflake: redistribution without consolidation
+
+Snowflake micro-partitions remain bounded in size, typically [50–500 MB before compression](https://docs.snowflake.com/en/user-guide/tables-clustering-micropartitions#benefits-of-micro-partitioning).
+
+As a result, clustering redistributes rows across partitions but does not structurally consolidate the dataset.
+
+Contiguous value runs cannot extend beyond micro-partition boundaries, and compression improvements are bounded by partition size:
+
+![Blog-Costs-Snowflake-storage-architectures.008.png](https://clickhouse.com/uploads/Blog_Costs_Snowflake_storage_architectures_008_6bd094d9f3.png)
+
+### ClickHouse: progressive consolidation over time
+
+In ClickHouse, data is progressively consolidated over time.
+
+Background merges continuously combine smaller parts into larger ones, eventually producing parts of roughly [~150 GB compressed](https://clickhouse.com/docs/operations/settings/merge-tree-settings#max_bytes_to_merge_at_max_space_in_pool), which can correspond to 1 TB or more of uncompressed data depending on compression ratio.
+
+These merges do more than reorganize rows, they consolidate the dataset.
+
+With each merge, contiguous runs of values grow longer, **allowing compression to improve across progressively larger segments of the table**:
+
+![Blog-Costs-Snowflake-storage-architectures.009.png](https://clickhouse.com/uploads/Blog_Costs_Snowflake_storage_architectures_009_98b8f17eb1.png)
+
+Importantly, **consolidation does not reduce pruning granularity**. ClickHouse still prunes at the granule level (typically row blocks with a size of [~10 MB](https://clickhouse.com/docs/operations/settings/merge-tree-settings#index_granularity_bytes) before compression), driven by the sparse primary index, even inside large merged parts.
+
+
+### How storage footprint diverges at scale
+
+Under continuous ingest into unbounded tables, this structural difference compounds over time.
+
+Using the same continuously ingested web analytics data from the previous section, [clustered](https://pastila.nl/?00884d9d/b67274bd309c1194199588b1f9198154#RIu8l4I9l9hA7OeLpgd3ww==GCM) and [sorted](https://pastila.nl/?0073f26e/f403462f38a3917798fe73c2b93268e9#2DPMZ10S5hgYEHuKibI69A==GCM) on the identical key in both systems, we now examine how the compressed footprint diverges as the table grows to 1B, 10B, and 100B rows (storage measured via [Snowflake TABLE_STORAGE_METRICS](https://pastila.nl/?035d0104/a191dd4d944b0756da92f2e52a675a16#7DVr+UI1r528F6UIFbO4zw==GCM) and [ClickHouse system.parts](https://pastila.nl/?01612958/850d974d01abadba3a2556dea12deadc#a+I6ci3aXevOLlVYP+/hmQ==GCM)):
+
+![Blog-Costs-Snowflake-storage-architectures.001.png](https://clickhouse.com/uploads/Blog_Costs_Snowflake_storage_architectures_001_9218ecc9dd.png)
+
+<details class="metric-box">
+  <summary>A note on storage vs. compute costs (click to expand)</summary>
+  <p>
+    <br/>In many analytical workloads, compute dominates raw storage spend. However, a larger
+    physical footprint means:
+  </p>
+  <ul>
+    <li>More data loaded per query</li>
+    <li>Lower cache residency</li>
+    <li>Higher I/O pressure</li>
+    <li>Increased object storage latency exposure</li>
+  </ul>
+  <p>
+    In other words, compression directly influences query execution behavior,
+    not just monthly storage spend.
+  </p>
+</details>
+
+> Even with clustering enabled and identical sorting keys, Snowflake stores 5×–15× more compressed data than ClickHouse on the ClickBench dataset, increasing both storage cost and downstream query I/O.
+
+This concludes our exploration of how the storage layers of two modern cloud data warehouses organize and maintain ingested data over time.
+
+## Built for the pressure of agentic analytics
+
+Agentic analytics raises the pressure on every layer of the database.
+
+New data pours in every second and never stops. Users and agents expect fast, complex insights over that data immediately: fraud detection, operational alerts, AI analyst workflows, real-time investigations. The system has to keep up before the query even starts.
+
+That is the write side of cost-performance.
+
+> In this benchmark, **ClickHouse reached a query-ready layout at roughly 22× lower cost than Snowflake** across the 100B, 200B, and 300B row checkpoints. Combined with the faster query runtime achieved on that ordered data, **ClickHouse delivered 28× better write-side cost-performance**.
+
+The reason is architectural. ClickHouse orders data through its storage layer as it is written, then incrementally refines that layout through background merges. There is no separate clustering service, no separate clustering charge, and no dependency on a background process finishing before queries over fresh data can benefit from pruning.
+
+This matters even more in real deployments. Our test used a single table, a single steady ingest stream, and a modest 1 million rows per second ingest rate. Multiply that by many event streams, [higher ingest rates](https://clickhouse.com/blog/how-tesla-built-quadrillion-scale-observability-platform-on-clickhouse), and many tables, and the cost of keeping data query-ready becomes part of the core economics of the platform.
+
+There is another compounding effect: storage footprint. Because ClickHouse progressively consolidates sorted data, compression improves as the table grows. In our test, **Snowflake stored 15× more data than ClickHouse** on the same ClickBench dataset, even with clustering enabled on the identical key. That means the write-path difference also shows up later as higher storage cost and more downstream query I/O.
+
+Combined with the [order-of-magnitude read-side advantage from our previous study](https://clickhouse.com/blog/cloud-data-warehouses-cost-performance-comparison), ClickHouse leads at both ends of the analytics pipeline.
+
+> ClickHouse is purpose-built for cost-efficient real-time analytics at massive scale. In the agentic era, that starts with the write path.
+
+
+
+---
+
+## Comparing ClickHouse versions with clickhousectl
+Published: 2026-05-05T10:29:49+00:00
+URL: https://clickhouse.com/blog/clickhousectl-compare-versions
+
+---
+title: "Comparing ClickHouse versions with clickhousectl"
+date: "2026-05-05T10:29:49.700Z"
+author: "Mark Needham"
+category: "Engineering"
+excerpt: "We use clickhousectl to spin up multiple ClickHouse versions side by side and benchmark two recent performance improvements."
+---
+
+# Comparing ClickHouse versions with clickhousectl
+
+Last month we [released clickhousectl](https://clickhouse.com/blog/introducing-clickhousectl-official-cli-for-clickhouse-local-and-cloud), a CLI for ClickHouse that manages local installations, runs local servers, and operates ClickHouse Cloud.
+
+This is exciting for me as every month my colleague Tom Schreiber and I write the ClickHouse release post and we often compare query performances between versions. Before clickhousectl, we'd either have to use Docker or look through GitHub releases to find old binaries in order to do this.
+
+Now we can just use clickhousectl and in this blog post we'll have a look at how to compare query performances between different versions for improvements made in recent versions. 
+
+> <small>If you just want to see the query comparisons, you can skip forward to [DISTINCT over low cardinality columns](/blog/clickhousectl-compare-versions#distinct-low-cardinality) or [Parquet metadata cache](/blog/clickhousectl-compare-versions#parquet-metadata-cache).</small>
+
+<iframe width="768" height="432" src="https://www.youtube.com/embed/chxxBswIuYw?si=OaFJWVYQLXXHh77w" title="YouTube video player" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" referrerpolicy="strict-origin-when-cross-origin" allowfullscreen></iframe>
+
+## Installing clickhousectl {#installing-clickhousectl}
+
+But first things first, we need to get clickhousectl installed on our machine.
+We can do this using the following command:
+
+<pre><code type='click-ui' language='bash'>
+curl https://clickhouse.com/cli | sh
+</code></pre>
+
+You should see something like the following output:
+
+```shell
+Detected platform: aarch64-apple-darwin
+Fetching latest release...
+Latest release: v0.1.18
+Downloading https://github.com/ClickHouse/clickhousectl/releases/download/v0.1.18/clickhousectl-aarch64-apple-darwin...
+Installed clickhousectl to /Users/markhneedham/.local/bin/clickhousectl
+Created alias: chctl -> clickhousectl
+```
+
+We should now have a `clickhousectl` and `chctl` command, and if we run that we'll see the following output (trimmed for brevity):
+
+```shell
+The official CLI for ClickHouse: local and cloud
+
+Usage: chctl <COMMAND>
+
+Commands:
+  local   Work with local ClickHouse installations
+  cloud   Work with serverless ClickHouse in ClickHouse Cloud
+  skills  Install ClickHouse agent skills into supported coding agents
+  update  Update clickhousectl to the latest version
+  help    Print this message or the help of the given subcommand(s)
+
+Options:
+  -h, --help     Print help
+  -V, --version  Print version
+```
+
+## Installing local servers {#installing-local-servers}
+
+We're going to install two ClickHouse versions on my machine - 25.12 and 26.3.
+To have operations run locally, we use the `local` sub command.
+
+We can download a version of ClickHouse by running this command:
+
+<pre><code type='click-ui' language='bash'>
+chctl local install 26.3
+</code></pre>
+
+I've actually got this version installed already, so I'll see the following output:
+
+```shell
+Resolving 26.3...
+ClickHouse 26.3 is already installed as 26.3.10.16
+Use --force to re-download the latest build
+Installed version 26.3.10.16
+```
+If we use the `--force` flag that the output suggested, it will download the latest build of 26.3:
+
+```shell
+Resolving 26.3...
+Downloading ClickHouse 26.3...
+  [00:00:16] [###################################] 143.05 MiB/143.05 MiB (0s)
+Detecting version...
+Installed ClickHouse 26.3.10.30
+Installed version 26.3.10.30
+```
+
+## Starting local servers {#starting-local-servers}
+
+Next, let's have a look at how to start local servers.
+First up, let's start a server running ClickHouse 25.12:
+
+<pre><code type='click-ui' language='bash'>
+chctl local server start --version 25.12 --name old
+</code></pre>
+
+We haven't actually installed this version yet, but that's ok - the CLI will automatically download it for us:
+
+```shell
+Resolving 25.12...
+Downloading ClickHouse 25.12...
+  [00:00:13] [#####################################] 111.51 MiB/111.51 MiB (0s)
+Detecting version...
+Installed ClickHouse 25.12.10.7
+Server 'old' started in background (PID: 58145)
+  HTTP port: 8123
+  TCP port:  9000
+  Version:   25.12.10.7
+```
+
+This server uses the default HTTP and TCP ports.
+
+We can start a server running ClickHouse 26.3 as well:
+
+<pre><code type='click-ui' language='bash'>
+chctl local server start --version 26.3 --name new
+</code></pre>
+
+```shell
+Resolving 26.3...
+Note: 1 server already running (use `clickhousectl local server list` to see them)
+Note: default ports in use, auto-assigned HTTP:8124 TCP:9001
+Server 'new' started in background (PID: 58406)
+  HTTP port: 8124
+  TCP port:  9001
+  Version:   26.3.10.30
+```
+
+This time it recognizes that there's already a server running and therefore uses different ports.
+
+We can run the following command to check which servers are running:
+
+<pre><code type='click-ui' language='bash'>
+chctl local server list
+</code></pre>
+
+```shell
+╭──────┬─────────┬───────┬────────────┬───────────┬──────────╮
+│ Name │ Status  │ PID   │ Version    │ HTTP Port │ TCP Port │
+├──────┼─────────┼───────┼────────────┼───────────┼──────────┤
+│ new  │ running │ 58406 │ 26.3.10.30 │ 8124      │ 9001     │
+│ old  │ running │ 58145 │ 25.12.10.7 │ 8123      │ 9000     │
+╰──────┴─────────┴───────┴────────────┴───────────┴──────────╯
+```
+
+This shows the servers running for a given project, which means if we run the command from a different directory, we'll see the following output:
+
+```shell
+No servers
+```
+
+We can use the `--global` flag to show all servers running across our machine:
+
+<pre><code type='click-ui' language='bash'>
+chctl local server list --global
+</code></pre>
+
+```shell
+╭──────┬─────────┬───────┬────────────┬───────────┬──────────┬──────────────╮
+│ Name │ Status  │ PID   │ Version    │ HTTP Port │ TCP Port │ Project      │
+├──────┼─────────┼───────┼────────────┼───────────┼──────────┼──────────────┤
+│ old  │ running │ 58145 │ 25.12.10.7 │ 8123      │ 9000     │ .../ch-test  │
+│ new  │ running │ 58406 │ 26.3.10.30 │ 8124      │ 9001     │ .../ch-test  │
+╰──────┴─────────┴───────┴────────────┴───────────┴──────────┴──────────────╯
+```
+
+## Loading data into ClickHouse {#loading-data}
+
+Now that we've got our servers running, it's time to load some data.
+We'll first connect to the 25.12 server:
+
+<pre><code type='click-ui' language='bash'>
+chctl local client --name old -mn
+</code></pre>
+
+And then run the following query to create the [UK price paid](https://clickhouse.com/docs/getting-started/example-datasets/uk-price-paid) table:
+
+<pre><code type='click-ui' language='sql'>
+CREATE OR REPLACE TABLE uk_price_paid
+(
+    price UInt32,
+    date Date,
+    postcode1 LowCardinality(String),
+    postcode2 LowCardinality(String),
+    type Enum8('terraced' = 1, 'semi-detached' = 2, 'detached' = 3,
+               'flat' = 4, 'other' = 0),
+    is_new UInt8,
+    duration Enum8('freehold' = 1, 'leasehold' = 2, 'unknown' = 0),
+    addr1 String,
+    addr2 String,
+    street LowCardinality(String),
+    locality LowCardinality(String),
+    town LowCardinality(String),
+    district LowCardinality(String),
+    county LowCardinality(String)
+)
+ENGINE = MergeTree
+ORDER BY (date, postcode1, postcode2, addr1, addr2)
+SETTINGS add_minmax_index_for_numeric_columns=1,
+         add_minmax_index_for_string_columns;
+</code></pre>
+
+For simplicity's sake, I've got this data in Parquet format and I'm serving it locally via a HTTP server.
+We can import it like this:
+
+<pre><code type='click-ui' language='sql'>
+INSERT INTO uk_price_paid 
+SELECT * FROM url('http://127.0.0.1:8000/uk_all.parquet');
+</code></pre>
+
+```shell
+30452463 rows in set. Elapsed: 8.990 sec. Processed 30.45 million rows, 170.44 MB (3.39 million rows/s., 18.96 MB/s.)
+Peak memory usage: 2.00 GiB.
+```
+
+30 million rows imported! Now we need to get the same data into the 26.3 server.
+
+One of the handy things about `clickhousectl` is that you can copy a table schema from one local server to another entirely from the CLI, without touching any files. First, fetch the create table statement from the old server:
+
+<pre><code type='click-ui' language='bash'>
+chctl local client --name old \
+  --query "SHOW CREATE TABLE uk_price_paid" \
+  --output-format LineAsString
+</code></pre>
+
+```shell
+CREATE TABLE default.uk_price_paid
+(
+    `price` UInt32,
+    `date` Date,
+    `postcode1` LowCardinality(String),
+    `postcode2` LowCardinality(String),
+    `type` Enum8('other' = 0, 'terraced' = 1, 'semi-detached' = 2, 'detached' = 3, 'flat' = 4),
+    `is_new` UInt8,
+    `duration` Enum8('unknown' = 0, 'freehold' = 1, 'leasehold' = 2),
+    `addr1` String,
+    `addr2` String,
+    `street` LowCardinality(String),
+    `locality` LowCardinality(String),
+    `town` LowCardinality(String),
+    `district` LowCardinality(String),
+    `county` LowCardinality(String)
+)
+ENGINE = MergeTree
+ORDER BY (date, postcode1, postcode2, addr1, addr2)
+SETTINGS index_granularity = 8192
+```
+
+By default, `SHOW CREATE TABLE` returns its output wrapped in a table with a header and borders. `LineAsString` treats each row of the result as a plain string and prints it as-is, with no decorators — just the raw SQL. We can then pipe that straight into the 26.3 server in one command:
+
+<pre><code type='click-ui' language='bash'>
+chctl local client --name old \
+  --query "SHOW CREATE TABLE uk_price_paid" \
+  --output-format LineAsString |
+chctl local client --name new
+</code></pre>
+
+The table now exists on the new server. To copy the data across, we connect to the 26.3 server and use the [`remote`](https://clickhouse.com/docs/sql-reference/table-functions/remote) table function to read directly from the 25.12 server:
+
+<pre><code type='click-ui' language='bash'>
+chctl local client --name new -mn
+</code></pre>
+
+<pre><code type='click-ui' language='sql'>
+INSERT INTO uk_price_paid
+SELECT * 
+FROM remote('localhost:9000', 'default', 'uk_price_paid');
+</code></pre>
+
+```shell
+30452463 rows in set. Elapsed: 15.169 sec. Processed 30.45 million rows, 1.33 GB (2.01 million rows/s., 87.96 MB/s.)
+Peak memory usage: 339.23 MiB.
+```
+
+This is a useful pattern any time you want to copy data from one local server to another.
+
+## DISTINCT over low cardinality columns (added in 26.1) {#distinct-low-cardinality}
+
+Now it's time to test a performance improvement made to DISTINCT over low cardinality columns in ClickHouse 26.1.
+Below is a slide from Alexey's 26.1 release call slide deck:
+
+[![slide-26.1-16.png](https://clickhouse.com/uploads/slide_26_1_16_2669b51bf6.png)](https://presentations.clickhouse.com/2026-release-26.1/?full#16)
+
+We'll first run the query 5 times against 25.12:
+
+<pre><code type='click-ui' language='bash'>
+for i in {1..5}; do 
+  chctl local client \
+    --name old \
+    --query 'SELECT distinct(county) FROM uk_price_paid' \
+    --time \
+    -- --output-format Null;
+done
+</code></pre>
+
+```shell
+0.076
+0.082
+0.075
+0.074
+0.073
+```
+
+The `--time` flag outputs times in seconds, so the best time here is 0.076 seconds (76ms).
+
+Now let's do the same against 26.3:
+
+<pre><code type='click-ui' language='bash'>
+for i in {1..5}; do 
+  chctl local client \
+    --name new \
+    --query 'SELECT distinct(county) FROM uk_price_paid' \
+    --time \
+    -- --output-format Null;
+done
+</code></pre>
+
+```shell
+0.015
+0.016
+0.014
+0.017
+0.014
+```
+
+The best time here is 0.014 seconds (14ms), which is a little more than 5 times faster than on ClickHouse 25.12.
+Success!
+
+## Parquet metadata cache (added in 26.3) {#parquet-metadata-cache}
+
+In the 26.3 release last month, we introduced a metadata cache that stores Parquet file footer metadata (structure, row group layout, column statistics), keyed by ETag for consistency.
+
+[![slide-31.png](https://clickhouse.com/uploads/slide_31_711f184015.png)](https://presentations.clickhouse.com/2026-release-26.3/?full#31)
+
+This will be especially useful when running repeat queries on Parquet files in S3.
+
+I asked Claude Code to recommend a dataset containing Parquet files and it suggested the [AWS public blockchain dataset](https://registry.opendata.aws/aws-public-blockchain/).
+
+The following query, which we'll save to `parquet.sql`, returns the number of rows and average gas price for block numbers between 19500000 and 19501000.
+
+<pre><code type='click-ui' language='sql'>
+SELECT count(), avg(gas_price)
+FROM s3(
+  's3://aws-public-blockchain/v1.0/eth/transactions/date=2024-*/*.parquet',
+  NOSIGN,
+  Parquet
+)
+WHERE block_number BETWEEN 19500000 AND 19501000
+SETTINGS use_query_condition_cache=0;
+</code></pre>
+
+We'll first run the query five times against 25.12 by passing the file name in using the `--queries-file` flag:
+
+<pre><code type='click-ui' language='bash'>
+for i in {1..5}; do
+  chctl local client --name old --queries-file parquet.sql --time;
+done
+</code></pre>
+
+```shell
+   ┌─count()─┬────avg(gas_price)─┐
+1. │  168399 │ 20033038997.74929 │
+   └─────────┴───────────────────┘
+11.480
+   ┌─count()─┬────avg(gas_price)─┐
+1. │  168399 │ 20033038997.74929 │
+   └─────────┴───────────────────┘
+9.473
+   ┌─count()─┬────avg(gas_price)─┐
+1. │  168399 │ 20033038997.74929 │
+   └─────────┴───────────────────┘
+9.102
+   ┌─count()─┬────avg(gas_price)─┐
+1. │  168399 │ 20033038997.74929 │
+   └─────────┴───────────────────┘
+9.604
+   ┌─count()─┬────avg(gas_price)─┐
+1. │  168399 │ 20033038997.74929 │
+   └─────────┴───────────────────┘
+8.957
+```
+
+And now the same query against 26.3:
+
+<pre><code type='click-ui' language='bash'>
+for i in {1..5}; do
+  chctl local client --name new --queries-file parquet.sql --time;
+done
+</code></pre>
+
+```shell
+   ┌─count()─┬────avg(gas_price)─┐
+1. │  168399 │ 20033038997.74929 │
+   └─────────┴───────────────────┘
+12.463
+   ┌─count()─┬────avg(gas_price)─┐
+1. │  168399 │ 20033038997.74929 │
+   └─────────┴───────────────────┘
+2.224
+   ┌─count()─┬────avg(gas_price)─┐
+1. │  168399 │ 20033038997.74929 │
+   └─────────┴───────────────────┘
+1.696
+   ┌─count()─┬────avg(gas_price)─┐
+1. │  168399 │ 20033038997.74929 │
+   └─────────┴───────────────────┘
+1.639
+   ┌─count()─┬────avg(gas_price)─┐
+1. │  168399 │ 20033038997.74929 │
+   └─────────┴───────────────────┘
+1.687
+```
+
+The initial run takes around 11-12 seconds on both versions. Subsequent runs take around 8-9 seconds on ClickHouse 25.12, which is possibly due to file system caching.
+
+With 26.3, we see a huge reduction in the query time of subsequent runs down to around 1-2 seconds, which is around 5 times faster than it was on the first run.
+
+## Inspecting the Parquet metadata cache {#inspecting-parquet-metadata-cache}
+
+There are a couple of system tables that we can query to learn more about the Parquet metadata cache.
+
+First up, there are some settings that we can query via `system.server_settings`:
+
+<pre><code type='click-ui' language='sql'>
+SELECT name, value
+FROM system.server_settings
+WHERE name ILIKE '%parquet_metadata_cache%';
+</code></pre>
+
+```shell
+   ┌─name───────────────────────────────┬─value─────┐
+1. │ parquet_metadata_cache_policy      │ SLRU      │
+2. │ parquet_metadata_cache_size        │ 536870912 │
+3. │ parquet_metadata_cache_max_entries │ 5000      │
+4. │ parquet_metadata_cache_size_ratio  │ 0.5       │
+   └────────────────────────────────────┴───────────┘
+```
+
+The cache size is 512MB or 5,000 entries, whichever value's reached first!
+
+We can also query `system.metrics` to see how much data we've populated in the cache:
+
+<pre><code type='click-ui' language='sql'>
+SELECT name, value
+FROM system.metrics
+WHERE name ILIKE '%parquet%metadata%';
+</code></pre>
+
+```shell
+   ┌─name──────────────────────┬────value─┐
+1. │ ParquetMetadataCacheBytes │ 46067740 │
+2. │ ParquetMetadataCacheFiles │      366 │
+   └───────────────────────────┴──────────┘
+```
+
+We have the metadata cached for 366 files and it's taking up 46MB of space.
+
+## Conclusion {#conclusion}
+
+In this post we've seen how `clickhousectl` makes it easy to spin up multiple ClickHouse versions side by side and compare query performance between them.
+
+We demonstrated two improvements that shipped in recent releases: 
+
+* A 5x speedup for DISTINCT queries over low cardinality columns (introduced in 26.1)
+* A Parquet metadata cache (introduced in 26.3) that reduces repeat S3 query times from ~9 seconds down to ~1-2 seconds.
+
+If you want to try this yourself, install `clickhousectl` with:
+
+<pre><code type='click-ui' language='bash'>
+curl https://clickhouse.com/cli | sh
+</code></pre>
+
+And check the [clickhousectl documentation](https://clickhouse.com/docs/interfaces/cli) for more on what you can do with it.
+
+
+---
+
+## Get started today
+
+Interested in seeing how ClickHouse works on your data? Get started with ClickHouse Cloud in minutes and receive $300 in free credits.
+
+[Sign up](https://console.clickhouse.cloud/signUp?loc=blog-cta-528-get-started-today-sign-up&utm_blogctaid=528)
+
+---
+
+---
+
+## Gala supercharges analytics performance with ClickHouse on AWS
+Published: 2026-05-04T13:18:58+00:00
+URL: https://clickhouse.com/blog/gala
+
+---
+title: "Gala supercharges analytics performance with ClickHouse on AWS"
+date: "2026-05-04T13:18:58.453Z"
+author: "ClickHouse"
+category: "User stories"
+excerpt: "Learn how Gala migrated to the ClickHouse Cloud data platform on AWS to improve analytics performance and cut costs"
+---
+
+# Gala supercharges analytics performance with ClickHouse on AWS
+
+## Benefits
+
+* 3x increase in data analytics capacity
+* 30% reduction in costs
+* Query times reduced from minutes to sub-second
+
+[Gala](https://games.gala.com/) runs a blockchain-powered platform where users can enjoy their favorite games and other media and access a range of decentralized finance products. The company is reliant on analytics to improve game performance, identify new development opportunities, and support marketing planning. But its existing data platform was struggling to cope with the amount of data it needed to ingest and process. After an assessment of the solutions on the market, Gala chose AWS Partner [ClickHouse](https://clickhouse.com/) to deliver the robust data infrastructure that it needed. Built on Amazon Web Services (AWS), the platform offers faster ingestion and has delivered insights that have led to improved productivity for the Gala engineering and marketing teams, better gaming experiences for players, and reduced costs.
+
+## Scaling a growing mountain of data
+
+Gala was formed in 2019 by Zynga co-founder Eric Schiermeyer and offers popular multi-player games like Spider Tanks and GRIT, along with music and video content. The company was built on a blockchain platform to give users transparent ownership of assets and purchases and to encourage greater buy-in and engagement with the gaming ecosystem. The company also created a decentralized exchange to allow users to trade with each other without an intermediary.
+
+Data is critical for product development. The company’s fast-paced games generate huge amounts of telemetry data from user interactions, which is crucial for understanding player behavior, optimizing monetization, experimenting, and improving the overall gaming experience. But as the company’s games portfolio expanded and its user base grew, its existing data infrastructure struggled with the volume of data.
+
+In addition to product development, the company’s marketing teams needed analytics data to help direct effective campaigns and strategies. Meanwhile, its engineering teams were spending an increasing amount of time managing the data infrastructure rather than focusing on more strategic initiatives. This needed to change if the business was going to continue to grow. The leadership team at Gala decided to review the data platform market for a suitable replacement for its existing Databricks system.
+
+## A quick migration to a ‘Rocket-Fast’ data platform
+
+After an investigation of leading data platforms, the company chose to migrate to [ClickHouse Cloud](https://clickhouse.com/cloud) on AWS, through the AWS Marketplace. The platform was chosen for the scalability and performance improvements it offered and for its lower costs. Because much of Gala’s infrastructure was already built on AWS, it was a natural fit for hosting the ClickHouse Cloud platform.
+
+The initial workload was ingesting its blockchain data from Kafka, but the team quickly recognized the performance and cost benefits possible by powering their analytical dashboards on AWS. Gala has since expanded data sources to include Airbyte, [Amazon S3](https://aws.amazon.com/s3), and Fivetran for continuous ingestion of data.
+
+After the team had completed the ingestion of multiple data sources into ClickHouse Cloud, the next stage was the optimization of queries, resources, and connectors, with a focus on further reducing costs and improving efficiency. “ClickHouse is well known as one of the fastest database systems out there,” says Mike Rexford, lead data analyst at Gala. “And that has proven itself out, especially when you’re using its features to their fullest. It is rocket fast.”
+
+Another early catalyst for change was to make analytics and business intelligence (BI) capabilities available to the broader company and make data products more accessible to employees without the relevant technical skills. The company wanted to use Metabase, a user-friendly, open-source BI and data visualization tool, to enable this but its previous system couldn’t serve the necessary data at the required speed. ClickHouse Cloud was able to support the rollout of Metabase and enable business teams across the company to run their own queries and analytics on the tool. This was enabled by using ClickHouse Cloud’s ability to save queries and run API endpoints directly to those saved queries. This change helped remove technical barriers to its analytics.
+
+Gala found the support from ClickHouse “super responsive” despite being in distant time zones. Technical support was particularly helpful for system-based concerns relating to early data ingestion issues. The company’s small internal technical team appreciated that, if there was a criticism or a problem, ClickHouse listened and fixed the problem or removed it in the next release.
+
+## Sub-second performance and a 30% cost reduction
+
+Performance has improved significantly. “We did have a few unoptimized tables in our previous platform we were struggling with. We had query times in the minutes,” says Keith Cook, data engineer at Gala. “Once we switched over to ClickHouse, we got the indexing correct from the get-go and ended up with sub-second query times on the same tables.”
+
+Using ClickHouse Cloud on AWS has enabled the company to increase the amount of data available for analysis, rising from 3 TB at the start of the project in February 2024 to 9 TB by the completion of the migration in December 2024, when it decommissioned its old system. The initial costs for working in ClickHouse were 30 percent lower than on its previous data platform. The next steps are to use the ClickHouse ClickPipes data-processing pipeline to build an even more efficient extract, load, transform (ELT) function.
+
+In addition to faster performance and scalability, ClickHouse has delivered greater reliability, which means that Gala’s engineers spend less time in maintenance mode. “We just don’t think about our data infrastructure as much anymore,” says Rexford. “If something is running slowly and people are wondering what is causing the bottleneck, we know for sure it’s not the database.”
+
+---
+
+## Goodbye limitations, hello data: How Qonto is rethinking observability with ClickHouse Cloud
+Published: 2026-05-04T12:35:21+00:00
+URL: https://clickhouse.com/blog/qonto
+
+---
+title: "Goodbye limitations, hello data: How Qonto is rethinking observability with ClickHouse Cloud"
+date: "2026-05-04T12:35:21.713Z"
+category: "User stories"
+excerpt: "How Qonto uses ClickHouse Cloud to power observability at scale — replacing sampling and hour-capped queries with two-week query windows, 99.84% compression on high-cardinality data, and an AI incident companion built on the ClickHouse MCP server."
+---
+
+# Goodbye limitations, hello data: How Qonto is rethinking observability with ClickHouse Cloud
+
+## Summary
+
+- Qonto uses ClickHouse Cloud to power observability across its entire banking platform, ingesting traces, logs, and events from eight European markets.
+- Migrating from Grafana Tempo for tracing to ClickHouse Cloud extended query windows from 2-3 hours to two weeks without sampling or cardinality constraints.
+- In one example, ClickHouse compressed 231 TB high-cardinality of data down to 376 GB (a 99.84% compression ratio), saving $70K in annual S3 storage costs.
+- Using the ClickHouse MCP server, Qonto built an AI companion that lets anyone investigate incidents in plain English, with no SQL required.
+
+[Qonto](https://qonto.com/en) is a digital bank serving more than 600,000 small businesses and freelancers across eight European countries. When something goes wrong—a payment fails, an invoice doesn’t go through, someone can’t access their account—the impact is felt immediately.
+
+For Javier Ortiz, Qonto’s Tech Lead for SRE Observability, these are the stakes driving how tooling decisions get made. “Every second counts,” he said at a [February 2026 ClickHouse meetup in Paris](https://www.youtube.com/watch?v=TNitDSq4upc). “We invest a lot of effort trying to get to the cause of incidents faster, and to understand exactly what happened so we can learn and stop it from happening again.”
+
+We caught up with Javier to learn more about Qonto’s journey with ClickHouse: why their old system wasn’t cutting it, what made them choose [ClickHouse Cloud](https://clickhouse.com/cloud), and how it’s enabled a philosophical shift in how the entire team thinks about observability.
+
+## The need for a better database
+
+Before adopting ClickHouse, Qonto’s observability team had solid foundations for logs and metrics. The problem, Javier says, was traces. “We saw a lot of value in traces and wanted to make them a first-class citizen,” he recalls. “But when we tried to put more stress on that and move toward wider events, we hit a limit with our previous system.”
+
+With a setup built around Grafana Tempo, aggregations and queries were so slow that they couldn’t get proper insights from the system. Generating metrics from traces on the fly was painful enough that the team basically didn’t even try. “We always had to play this game,” Javier recalls. “Only ask for two or three hours of data because if you go longer it will crash. We were always trying to protect the system. The only option we had was to sample aggressively, which would take a lot of information away from us.”
+
+The team wanted service overview dashboards. They wanted to query P95 latency across meaningful time ranges. They wanted to stop discarding data before it was even collected. None of it was possible with their existing setup. As Javier puts it, “All the dreams we had, all the use cases we wanted to add on top of traces… we weren’t able to do it.”
+
+So they went looking for something better. Honeycomb was appealing in theory but expensive in practice. SigNoz (which runs on ClickHouse) was closer to what they needed, but the team wanted to control their own schema and keep Grafana as their query interface.
+
+Then Javier became interested in a post from Charity Majors, co-founder and CTO of Honeycomb, who has written about a shift she calls [Observability 2.0](https://charity.wtf/tag/observability-2-0/): replacing the three-pillar model with a single source of truth based on wide structured events stored in a [columnar storage](https://clickhouse.com/resources/engineering/what-is-columnar-database) engine like ClickHouse. “That got our attention,” Javier says.
+
+They signed up for ClickHouse Cloud and ran a proof of concept that Javier says never really stopped running. “We set up the cloud, we didn’t have to deal with Kubernetes operators or capacity planning,” he says. “Everything just ran.”
+
+## From metrics to wide events with ClickHouse
+
+What followed was less a strategic pivot than a dawning realization. The team asked themselves: can we query a full day of trace data with ClickHouse? They could. Then they extended the window to two weeks. Then they started building the service overview dashboards they’d never been able to build before.
+
+Each new capability unlocked a use case that hadn’t even been on the original list of requirements, and each new use case made the old mental model (logs, metrics, traces) feel a little more like scaffolding that could come down. Javier describes it as a “virtuous cycle, where the more we explored ClickHouse, the more we found use cases we hadn’t been considering, and those started to become requirements.”
+
+The best example of this was cardinality. In the Prometheus world, cardinality is a constraint to be managed carefully and defensively. Labels are expensive. Teams are asked to drop dimensions they might need later because storing them isn’t worth the cost.
+
+Javier had spent real time as a team lead policing this, telling engineers not to add certain labels, despite knowing that if an incident surfaced an unexpected question, the data to answer it might not exist. “You have an incident and you need to ask a question that you didn’t even know before to ask your system,” he says. “And the data isn't there.”
+
+ClickHouse made cardinality cheap. For example, Qonto’s ResourceAttributes and SpanAttributes columns (every piece of metadata about every service, pod, cluster, library version, and deployment that produces a trace) store 231 TB of uncompressed data in 376 GB. That’s a 99.84% compression ratio on data that is high-cardinality almost by definition. The S3 storage savings alone come to an estimated $70,000 annually.
+
+“And it’s not only cost savings,” Javier adds. “As an observability guy, cardinality was a scary word for us. Now it’s something I actively root for.” Today, when engineers ask if they should add more attributes to their spans, he doesn’t hesitate: “Yes, add everything,” he tells them. “It’s not going to cost you, the system can handle it, and then we’ll really be able to ask smart questions and get real answers.”
+
+## Qonto’s ClickHouse-based architecture
+
+In the new setup, data flows from across Qonto’s stack (applications, frontend, Kubernetes infrastructure, GitHub) into OpenTelemetry collectors, which ship everything to ClickHouse Cloud over AWS PrivateLink. From the collector’s perspective, ClickHouse looks local, which eliminates the latency and transfer costs that come with moving large volumes of telemetry data across network boundaries. Grafana serves as the primary interface for dashboards and traditional observability workflows.
+
+![Qonto Customer Story.jpg](https://clickhouse.com/uploads/Qonto_Customer_Story_196df585c3.jpg)
+
+*Data from applications, frontend, Kubernetes, and GitHub flows through OpenTelemetry collectors to ClickHouse Cloud over AWS PrivateLink, with Grafana handling dashboards and visualization.*
+
+If ClickHouse was the first ingredient in Qonto’s new observability recipe (the “engine,” as Javier describes it), OpenTelemetry was the second, providing the semantics. Because OTel is a widely adopted standard, its field names and structures are familiar to LLMs. This means engineers don’t need to spend tokens explaining the schema or maintaining a data dictionary for the AI to work with. The data is already legible.
+
+## AI-powered observability with ClickHouse MCP
+
+With a database that could handle anything and a semantic layer AI understood, step three was building what Javier calls an “incident companion,” so anyone at Qonto can investigate an incident or ask a question in plain English and get a real, data-backed answer.
+
+At its core is the [ClickHouse MCP server](https://clickhouse.com/blog/integrating-clickhouse-mcp), which Qonto uses with a thin security layer on top to enforce read-only access to specific instances, roughly 30 lines of Python. The MCP is accessed through different clients as Claude clients and conversational UIs. One example using Dust.tt shows a split view: natural language conversation on the left, and on the right, full transparency into what the agent is doing, including its reasoning, the SQL queries it’s running, and the results it’s working with. Engineers can inspect any query and take over if they want to. The agent always surfaces trace IDs so findings can be verified directly in Grafana.
+
+![qonto_apr2026_image2.png](https://clickhouse.com/uploads/qonto_apr2026_image2_5768ca8de0.png)
+
+*Qonto’s AI-powered incident companion in action, with a plain-language input on the left and agent reasoning and ClickHouse MCP queries on the right.*
+
+At the Paris meetup, Javier showed a real example of the system in action. In barely a minute and a half, the agent interpreted a brief natural-language input and timestamp, planned its approach, ran queries through the ClickHouse MCP server, and returned a structured investigation summary identifying request timeouts as the root cause.
+
+Not only is incident response faster, the scoping process is far simpler. What used to require engineering effort and expertise (figuring out which customers were affected, which countries, which account types) is now a question anyone can type. Javier recalls a case where the team was able to identify exactly which customers were affected by an issue and send targeted communications to only those individuals, rather than a blanket notification to everyone. “You can see how this system enables you to build things that aren’t just about SRE,” he says.
+
+![Qonto Customer Story (1).jpg](https://clickhouse.com/uploads/Qonto_Customer_Story_1_e8557bb676.jpg)
+
+*Some of the reactive, business, and proactive use cases powered by Qonto’s AI incident companion.*
+
+That democratization goal was explicit from the beginning. No one should need to be the engineer who built a component in order to investigate an incident involving it. “Anyone should be able to resolve any incident,” Javier says. For Qonto, the reality has exceeded even the original goal. Product teams are querying the same data to understand feature adoption and user behavior. Where the barrier used to be query syntax and schema knowledge, now it’s just about having a question worth asking.
+
+## What’s next for Qonto and ClickHouse
+
+Qonto’s observability story isn’t finished, and for Javier, that’s exactly the point. “Everything’s a bit blurry now,” he says, “and that’s where we want to be.” Treating observability as a data problem has opened doors that the team is still walking through.
+
+One ongoing development is a collaboration with Qonto’s data engineering team. Previously, the observability and data teams were siloed enough that the latter’s Apache Flink expertise never crossed over. But with observability data living in ClickHouse, the conversation became possible. The teams are now exploring real-time pre-aggregation pipelines, computing P95 metrics over rolling windows in Flink and feeding results back into ClickHouse. “Since your system is no longer ‘traces, metrics, logs,’ but just data, now we can use the expertise from our Data colleagues,” Javier says.
+
+Qonto is also looking at consolidating its log storage (currently split between a lower-cost store and Elasticsearch) into ClickHouse, and experimenting with [ClickStack](https://clickhouse.com/clickstack), ClickHouse’s integrated observability stack. “ClickHouse is a very good playground, because we can just leave the doors open for everybody to test it out, whereas with our previous system, we needed to protect it, asking people not to do long or complex queries,” Javier says. “That changes the experience of learning completely.”
+
+The throughline is simple: stop protecting the infrastructure and start building on top of it. Once the database stopped being a constraint, the team stopped being its custodians and started being its users, finding use cases they never would have put on a roadmap.
+
+“The thing I’m most proud of is the decision to stop thinking about the three pillars and start thinking about wide events,” Javier says. “To do that, you need a technical foundation to support you and break the silos around observability. We were very lucky to find ClickHouse, and that AI was ready at exactly the same time.”
+
+
+---
+
+## Get started today
+
+Interested in seeing how ClickHouse works on your data? Get started with ClickHouse Cloud in minutes and receive $300 in free credits.
+
+[Sign up](https://console.clickhouse.cloud/signUp?loc=blog-cta-527-get-started-today-sign-up&utm_blogctaid=527)
+
+---
 
 ---
 
