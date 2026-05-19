@@ -1,5 +1,5 @@
 {
-  "last_sync": "2026-05-18T07:31:52.192587Z",
+  "last_sync": "2026-05-19T07:20:29.939352Z",
   "processed_blogs": {
     "https://clickhouse.com/blog/clickhouse-raises-400-million-series-d-acquires-langfuse-launches-postgres": {
       "title": "ClickHouse raises $400M Series D led by Dragoneer to accelerate expansion across analytics and AI infrastructure",
@@ -4668,9 +4668,51 @@
       "pub_date": "2026-05-08T15:27:25+00:00",
       "file_path": "blogs/2026-05-08-clickhouse-release-26-4.md",
       "processed_at": "2026-05-12T07:05:05.588845Z"
+    },
+    "https://clickhouse.com/blog/chatfeatured": {
+      "title": "How ChatFeatured migrated from PlanetScale Postgres to Postgres Managed by ClickHouse to power AI brand discovery",
+      "pub_date": "2026-05-18T09:31:37+00:00",
+      "file_path": "blogs/2026-05-18-how-chatfeatured-migrated-from-planetscale.md",
+      "processed_at": "2026-05-19T07:20:28.298755Z"
+    },
+    "https://clickhouse.com/blog/deshaw": {
+      "title": "How the D. E. Shaw group powers high-cardinality observability at scale with ClickHouse",
+      "pub_date": "2026-05-15T15:39:55+00:00",
+      "file_path": "blogs/2026-05-15-how-the-d-e-shaw-group-powers-high-cardinality.md",
+      "processed_at": "2026-05-19T07:20:28.581787Z"
+    },
+    "https://clickhouse.com/blog/postgres-fdw-pushdown-negotiation": {
+      "title": "Postgres FDW: Pushdown is a negotiation",
+      "pub_date": "2026-05-14T17:19:41+00:00",
+      "file_path": "blogs/2026-05-14-postgres-fdw-pushdown-is-a-negotiation.md",
+      "processed_at": "2026-05-19T07:20:28.814038Z"
+    },
+    "https://clickhouse.com/blog/clickhouse-vs-promethous-high-cardinality-p1-understanding-the-problem": {
+      "title": "ClickHouse vs Prometheus for High Cardinality, Part 1: Understanding the Problem",
+      "pub_date": "2026-05-14T15:13:45+00:00",
+      "file_path": "blogs/2026-05-14-clickhouse-vs-prometheus-for-high-cardinality.md",
+      "processed_at": "2026-05-19T07:20:29.036468Z"
+    },
+    "https://clickhouse.com/blog/clickstack-sql-charting-and-alerting": {
+      "title": "ClickStack SQL Charting and Alerting",
+      "pub_date": "2026-05-13T16:14:30+00:00",
+      "file_path": "blogs/2026-05-13-clickstack-sql-charting-and-alerting.md",
+      "processed_at": "2026-05-19T07:20:29.347806Z"
+    },
+    "https://clickhouse.com/blog/join-table-engine": {
+      "title": "ClickHouse Cloud: Fast, Updatable Lookups with the Join Table Engine",
+      "pub_date": "2026-05-12T15:55:17+00:00",
+      "file_path": "blogs/2026-05-12-clickhouse-cloud-fast-updatable-lookups-with-the.md",
+      "processed_at": "2026-05-19T07:20:29.615655Z"
+    },
+    "https://clickhouse.com/blog/ai-redrawing-database-market-jp": {
+      "title": "AIがデータベース市場を再定義する",
+      "pub_date": "2026-05-15T03:02:18+00:00",
+      "file_path": "blogs/2026-05-15-ai.md",
+      "processed_at": "2026-05-19T07:20:29.851836Z"
     }
   },
-  "total_blogs": 778,
+  "total_blogs": 785,
   "failed_blogs": [
     {
       "url": "https://clickhouse.com/jp/blog/clickhouse-gcp-japan-availability",

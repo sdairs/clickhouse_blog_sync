@@ -1,6 +1,1368 @@
 # ClickHouse Blogs
-Last updated: 2026-05-18 07:31:52 UTC
-Total blogs: 778
+Last updated: 2026-05-19 07:20:29 UTC
+Total blogs: 785
+
+---
+
+## How ChatFeatured migrated from PlanetScale Postgres to Postgres Managed by ClickHouse to power AI brand discovery
+Published: 2026-05-18T09:31:37+00:00
+URL: https://clickhouse.com/blog/chatfeatured
+
+---
+title: "How ChatFeatured migrated from PlanetScale Postgres to Postgres Managed by ClickHouse to power AI brand discovery"
+date: "2026-05-18T14:27:52.176Z"
+author: "ClickHouse"
+category: "User stories"
+excerpt: "How ChatFeatured cut analytics query times from 2.5 minutes to under a second by migrating from PlanetScale Postgres to Postgres managed by ClickHouse — in just 30 minutes."
+---
+
+# How ChatFeatured migrated from PlanetScale Postgres to Postgres Managed by ClickHouse to power AI brand discovery
+
+## Summary
+
+* ChatFeatured helps brands influence how they appear in AI search engines like ChatGPT, Perplexity, and Gemini, from analytics to content execution.
+* They were already running ClickHouse for agent analytics with 20x compression, but needed a way to run it alongside Postgres without managing two systems.
+* Postgres managed by ClickHouse gave them a single platform for transactional and analytical workloads, cutting analytics query times from 2.5 minutes to <1 second.
+
+
+When someone asks ChatGPT to recommend an [OLAP database](https://clickhouse.com/resources/engineering/what-is-olap), or asks Perplexity what skincare brand works best for their skin, the answer they get isn’t random. It’s shaped by what AI models have read, cited, and learned to associate with authority. For brands, that means a new kind of visibility challenge, and a new kind of platform to solve it.
+
+[ChatFeatured](https://chatfeatured.com/) is one of the fastest-growing solutions in this space. The Toronto-based startup helps brands track, optimize, and influence how AI models discover and recommend their brand. Where other tools stop at showing brands how they show up, ChatFeatured closes the loop, telling marketers what content they need and actually helping them produce it.
+
+“We talked to customers, and they told us, ‘The data’s great, everyone’s giving me data… but what do I do with it?” says co-founder and CTO Nithiiyan Skhanthan. “They said, ‘I don’t know anything about search engine optimization. You guys are the experts… you take care of it.”
+
+<video autoplay="1" muted="1" loop="1" controls="0">
+  <source src="https://clickhouse.com/uploads/Chat_Featured_Demo_Recording_compressed_a06ce6fd65.mp4" type="video/mp4" />
+</video>
+
+Nithiiyan and his co-founder Farris Nasr built what they call an “embedded AEO strategist,” effectively an AI agent that analyzes the sources AI models are citing, identifies what content would improve a brand’s visibility, and guides marketers through producing it. In just a few months, the platform has already attracted customers from all over the world, including billion-dollar companies like Cooper Consumer Health. “It goes to show how much of a problem this is, and that execution really is the most important part,” Nithiiyan says.
+
+For a fast-growing, analytics-first product like ChatFeatured to deliver on its promise, it needs to handle transactional workloads and power complex analytical queries, ideally without the overhead of managing two separate systems. We caught up with Nithiiyan to learn how [Postgres managed by ClickHouse](https://clickhouse.com/cloud/postgres) gave them the best of both worlds.
+
+## Three providers, same problem
+
+The recent emergence of tools like Cursor and Claude Code has changed how founders think about technology, prioritizing speed-to-market before long-term scalability. As Nithiiyan puts it, “Most people, especially with the rise of AI coding, aren’t asking, ‘What stack do I need to scale to 1,000 users?’ They’re asking, ‘What stack do I need to get this out as quickly as possible to validate the idea before sinking time into the architecture?’”
+
+ChatFeatured’s story was no different. Like most startups, they began with Postgres. It was quick to get up and running, flexible enough to handle both application and basic analytics needs, and well-understood. “There’s a lot of talk out there saying you can do anything you need for your first version with Postgres,” Nithiiyan says. “Me being the person who had to put this together, I started with that methodology, and I think it makes sense.”
+
+As they built the first version of the product, the team cycled through three managed Postgres providers, starting with Digital Ocean. “It was cheap and easy… for about 20 dollars, you can get a decent-sized instance,” Nithiiyan says. While it worked fine at first, once the platform was ingesting around 1,000 prompts a day across six AI models, it became too slow for real users.
+
+With the second provider they tried, performance improved. But as the customer base grew, CPU usage during nightly prompt ingestion windows climbed to 90%, leaving little headroom for growth. As Nithiiyan says, “If I want to add 100 more customers tomorrow, I’d need to scale the database up significantly just to maintain the same performance.”
+
+Having heard good things about PlanetScale, they decided to try that instead. “Once I switched over, though, I wasn’t super impressed with the performance,” Nithiiyan says. On top of that, they were IOPS-bound, meaning the storage layer was hitting a hard ceiling on read/write operations. Upgrading to PlanetScale’s Metal tier could remove that ceiling, but with how much data the team was ingesting into Postgres, the cost made it a non-starter.
+
+Even if Metal had been affordable, it was becoming clear to Nithiiyan that there was a more fundamental issue at play. Postgres may be great for transactional workloads, but analytics is at the heart of everything ChatFeatured does, and no managed Postgres service they tried was going to change that. “As you start to scale to more users, you find certain limitations where a different technology would be useful,” he says. “That’s when I started looking into specific analytics databases like ClickHouse.” They needed an architecture where Postgres and ClickHouse worked seamlessly together, with each database handling the workloads it was best suited for, making the platform faster and more cost-efficient.
+
+## The best of both worlds: Postgres for OLTP and ClickHouse for OLAP
+
+In the early days of ChatFeatured, Nithiiyan says the team was “more concerned with being right than fast.” Even so, they knew speed would be core to the customer experience, especially for a product meant to feel like a knowledgeable colleague you can just talk to.
+
+“If analytics queries are taking so long that we can’t access the data in time, it ruins and diminishes the experience,” Nithiiyan says. “People using ChatGPT are used to replies within a couple of seconds. If we have to wait 30 seconds for an analytics query, we’re going to lose the user before our agent can deliver any value.”
+
+Nithiiyan had known for a while that ClickHouse was the right tool for the job. In fact, he was already running a self-hosted version to power ChatFeatured’s agent analytics. The platform captures AI crawler traffic at the CDN/Server level, tracking when agents visit a customer’s website and using that data to inform content recommendations. Batching thousands of those requests into ClickHouse, he recalls being blown away by the [compression](https://clickhouse.com/resources/engineering/database-compression) numbers: “I remember thinking, ‘There’s no way, this has to be missing data.’ It’s so small and efficient. Even when I need to query that data, it loads instantly." Even when I need to query that data, it loads instantly.”
+
+That experience alone was enough to make him a believer. “I really wanted to use ClickHouse,” he says. “If I could choose one database for my analytics queries, it would be ClickHouse.”
+
+But knowing ClickHouse was the right answer and being able to use it as the backbone of the platform were two different things. ChatFeatured still needed Postgres for the [transactional side of the business](https://clickhouse.com/resources/engineering/oltp-vs-olap) (the application layer, user data, account management). Adopting ClickHouse would mean [running two separate databases](https://clickhouse.com/resources/engineering/unifying-oltp-and-olap), maintaining the pipelines between them, and taking on the operational overhead of both. For a bootstrapped startup also trying to build a product and close customers, that wasn’t a tradeoff he was ready to make.
+
+Then [ClickHouse announced its managed Postgres service](https://clickhouse.com/blog/postgres-managed-by-clickhouse). Unlike other managed Postgres providers, it uses NVMe storage physically colocated with compute, delivering up to 10x faster performance. Crucially for Nithiiyan and the team, it also comes with a native, built-in path to sync data directly to ClickHouse for analytics, bringing both workloads together under one unified platform.
+
+“When I saw Postgres managed by ClickHouse, I got really excited,” he says. “I thought, ‘That’s perfect. I don’t need to manage two fully separate databases. This will be the one drop-in solution that lets me take advantage of ClickHouse’s speed and Postgres’s transactional readiness.’”
+
+## A 30-minute migration from PlanetScale Postgres to Postgres managed by ClickHouse
+
+Rather than manually dumping and restoring data, Nithiiyan used the Postgres-to-Postgres [ClickPipes](https://clickhouse.com/docs/cloud/managed-postgres/migrations/clickhouse-cloud) connector, a purpose-built migration tool based on technology battle-tested across more than 1,000 customers. He simply pointed it at his PlanetScale source, and it took care of the initial load, schema transfer, and continuous sync. From there, all it took was a five-minute maintenance window to complete the migration. “I’ve migrated between three different Postgres platforms before,” he says, “and this one was by far the simplest.”
+
+What made the difference, he adds, was the ClickHouse team working alongside him: “I love hopping on a call with engineers who really know what they’re doing. Sai and everyone else are experts in doing exactly this. That inspires a lot of confidence that the data we have is not going to suddenly get lost.”
+
+That combination of a productized migration solution and deep, hands-on expertise from the ClickHouse team was the key to what Nithiiyan describes as an “incredible migration experience” that, from start to finish, took a grand total of 30 minutes.
+
+## Real-World Customer Impact: From minutes to milliseconds
+
+One of ChatFeatured’s first full-service customers was [LifestyleRx](https://lifestylerx.com/us). On PlanetScale, a single 30-day analytics query for LifestyleRx took around two and a half minutes. Denormalizing the data brought that number down to 90 seconds, but that was still far too slow for what was always designed to be a user-facing product. Nithiiyan knew that if ChatFeatured’s own team couldn’t even work with the product efficiently, they could never claim to offer a better experience than the tools they were trying to replace.
+
+With ClickHouse, he says, that same query now loads in less than a second. “I was so genuinely shocked at how good it was that I remember popping into the chat and saying, ‘Guys, this is incredible, I didn’t realize this sort of performance existed.’ It’s crazy that we exist in a world where this kind of performance is just so readily available and so well integrated.”
+
+It was a feeling he’d experienced before with ClickHouse. When he first started running ChatFeatured’s CDN log data through his self-hosted ClickHouse instance, he was similarly taken aback to see 20x compression. “Percentage-wise, it’s incredible,” he says. “As we scale to more customers, that’s going to be a huge unlock for us.”
+
+For ChatFeatured and its users, the real impact goes beyond the numbers. ClickHouse’s performance unlocks features the team previously avoided building, like showing customers their full performance history since joining the platform, queries that would have taken minutes on the old infrastructure. “On ClickHouse, it  takes milliseconds,” Nithiiyan says. “It enhances our roadmap, because I’m no longer worried about performance when it comes to analytics.
+
+In a small but telling sign of how much things have changed, he adds, “I spent so much time making the loading screen look good. Now I don’t need to worry about that anymore.”
+
+## A unified stack that’s built to scale
+
+From day one, Nithiiyan and his co-founder Farris have been clear about creating a frictionless experience that helps marketers do more, faster. “That was the number-one reason we were looking into ClickHouse to begin with,” he says. “How do we impress our customers by being faster, and offering a better experience than our competitors?”
+
+Now, with [Postgres managed by ClickHouse](https://clickhouse.com/cloud/postgres) handling the transactional layer and a path to offloading analytics queries to ClickHouse as the platform scales, Nithiiyan is looking forward to what comes next. “I’m excited for agent performance to be a much smoother experience now that we’re using ClickHouse,” he says. “I think it’s going to be a huge unlock for the experience of using our platform. And experience is our biggest differentiator.”
+
+Less than a year into their journey as a company, ChatFeatured has seen its share of managed service providers. “I’m not going to switch from this one, because I like the team and the product is the best I've used by far”” Nithiiyan says with a smile. That peace of mind is worth a lot. “With ClickHouse, I don’t need to worry about changing my stack or finding a different provider to get the performance I need. I’m in the best place I need to be. That’s just one less thing on my mind as a founder.”
+
+
+---
+
+## Try Postgres managed by ClickHouse
+
+Need transactional reliability and blazing-fast analytical queries in one unified stack? Try Postgres managed by ClickHouse.
+
+
+[Get access](https://clickhouse.com/cloud/postgres?loc=blog-cta-635-try-postgres-managed-by-clickhouse-get-access&utm_blogctaid=635)
+
+---
+
+---
+
+## How the D. E. Shaw group powers high-cardinality observability at scale with ClickHouse
+Published: 2026-05-15T15:39:55+00:00
+URL: https://clickhouse.com/blog/deshaw
+
+---
+title: "How the D. E. Shaw group powers high-cardinality observability at scale with ClickHouse"
+date: "2026-05-15T15:39:55.011Z"
+author: "ClickHouse"
+category: "User stories"
+excerpt: "How the D. E. Shaw group replaced its previous observability platform with ClickHouse to handle high-cardinality metrics at scale, achieving 7x better query performance and enabling multi-year capacity planning across millions of compute workloads."
+---
+
+# How the D. E. Shaw group powers high-cardinality observability at scale with ClickHouse
+
+## Summary
+
+
+- The D. E. Shaw group uses ClickHouse to power high-cardinality observability across millions of compute workloads running on its internal grid.
+
+- During evaluations, ClickHouse outperformed alternatives by approximately 7x, enabling reliable long-term analysis and capacity planning at scale. The production cluster operating with ClickHouse now handles ingestion of over 500k records per second, approximately the same as competitors in the evaluation, in anticipation of expanding throughput to support future projects.
+
+- This enhanced observability provides deeper insight into key business decisions, helping teams evaluate compute efficiency and perform capacity planning. Expansion into tracing workloads shows improved compression and strong query performance gains.
+
+
+Inside [the D. E. Shaw group](https://www.deshaw.com/), a global investment and technology development firm, millions of compute workloads run each month across a large high-performance computing infrastructure. Researchers, engineers, and quantitative teams submit jobs ranging from short-lived experiments to long-running services, each consuming varying amounts of compute resources.
+
+Understanding how those resources are used helps teams keep systems running smoothly while planning capacity and allocating compute efficiently across the organization. To support that visibility, the firm collects metrics for every task running on the grid, capturing both how much compute a workload requests and how much it ultimately consumes.
+
+These metrics resemble [Prometheus-style time-series data](https://clickhouse.com/resources/engineering/what-is-time-series-database): measurements collected over time and labeled with metadata that identifies each task. But there's one important difference. Rather than aggregating metrics at the service or host level, the D. E. Shaw group tracks usage at the level of individual tasks, an approach that introduces [extremely high cardinality](https://clickhouse.com/resources/engineering/high-cardinality-slow-observability-challenge), something they found their existing solution was unable to accommodate.
+
+We caught up with Mike Vasiliou, a Site Reliability Engineer at the D. E. Shaw group, to learn how the team approaches observability at this scale, and how ClickHouse became a key part of making high-cardinality metrics practical for long-term analysis and planning. In addition to being a customer, the D. E. Shaw group—through its D. E. Shaw Ventures team—recently invested in ClickHouse through one of its funds.
+
+## Scaling the metrics platform
+
+At first, the D. E. Shaw group's previous observability platform stored resource utilization metrics collected from cluster nodes. Each machine sent telemetry using InfluxDB line protocol, allowing teams to monitor usage and visualize performance through dashboards.
+
+As the firm's needs evolved, the team saw an opportunity to improve their metrics platform further, using it to enable longer-term capacity planning and strategic decision-making. Their existing setup had served them well, but as data volume and granularity grew, they needed a platform built for a different scale. By preserving a unique task ID for every workload, the system captured the telemetry needed to understand compute usage at a fine level, but over time that approach produced millions of distinct time series. To support both that richness of detail and more expansive historical analysis, the team went looking for a platform designed for the task.
+
+## Choosing ClickHouse
+
+The team kicked off an evaluation project to test competing databases capable of handling the D. E. Shaw group's growing high-cardinality observability workload.
+
+To create an even playing field, engineers benchmarked candidates using identical hardware and datasets, measuring both ingestion throughput and query performance.
+
+"When we compared ClickHouse against competitors," Mike says, "ClickHouse was better pound-for-pound in pretty much every performance metric."
+
+The difference was especially stark when it came to ingestion. A single node on a competing solution handled roughly 480,000 samples per second. ClickHouse ingested approximately 3.5 million samples per second. In production, the D. E. Shaw group's cluster is already operating with throughputs of around 500,000 per second. The team saw ClickHouse's stronger ingestion performance as giving them more room to scale for future use cases.
+
+Query performance reinforced the decision. "Some tested database solutions queries timed out after a minute, but similar ClickHouse queries completed in seconds," Mike says. "We also found that ClickHouse was the right choice for backfilling data." For a system designed to support long-term analysis and capacity planning, ClickHouse's performance and reliability made it the clear winner.
+
+As with any evaluation, there were tradeoffs. Because existing dashboards relied on Prometheus-style queries, engineers had to translate workflows into SQL. "That piece of the project was tougher, but it was worth it," Mike says.
+
+## A high-cardinality observability platform
+
+After selecting ClickHouse, the team focused on deploying it with minimal disruption to existing workflows.
+
+Rather than changing how metrics are generated across the firm, they preserved the existing ingestion path. Grid nodes still send telemetry using InfluxDB line protocol, while an internal service batches incoming messages and inserts them into ClickHouse. This part of the migration was challenging, as it required a degree of custom development because of their desire to keep the Influx protocol and minimize disruption.
+
+The D. E. Shaw group invested significant engineering effort in backfilling historical data into ClickHouse to support long term capacity planning. They initially attempted to rely on the query API in the previous time-series platform, but this quickly proved impractical. The API could not deliver data at the required throughput, and the extraction process was neither performant nor resource efficient. They ultimately built custom tooling to read data files directly from disk, transform them into a column-oriented format, and stream the results into ClickHouse. This approach provided the speed and efficiency needed to migrate large volumes of historical metrics data.
+
+Metrics are organized into resource-specific tables describing utilization of hardware components. Each record includes a unique task identifier, preserving visibility at the individual workload level. While the unique IDs introduce high entropy that limits compression efficiency for some fields (they still achieve up to 5x compression), they make querying more intuitive for users analyzing compute usage.
+
+Today, the deployment stores roughly 68 TB of compressed metrics data spanning multiple years. The cluster runs across four replicated servers backed by NVMe storage, providing plenty of headroom for growth. The team has now onboarded multiple other datasets to the internal ClickHouse cluster, supporting an average insertion rate of 530k records per second, with spikes to over 1 million records. [Materialized views](https://clickhouse.com/docs/materialized-views) pre-aggregate data for longer time horizons, powering dashboards used for historical analysis and capacity planning.
+
+## From infrastructure to business impact
+
+As longer retention and reliable aggregation became possible, observability at the D. E. Shaw group began to extend beyond infrastructure monitoring into operational decision-making.
+
+Each task running on the compute grid requests a specific allocation, which may be more or less than what it actually consumes. By storing both the requested and utilized amounts, teams can evaluate efficiency at the level of individual workloads or users. "The ability to measure efficiency is key for us," Mike explains, "because it affords a view on utilization rates that extends to allocation decisions."
+
+If workloads consistently request more resources than they use, teams can adjust capacity accordingly. On the flipside, workloads that regularly exceed limits provide clear evidence for increasing quotas or provisioning additional compute.
+
+At scale, the platform provides a shared source of truth about how much compute different models and research workloads consume over time. With this visibility, the firm can more accurately project future capacity needs and plan hardware purchases accordingly.
+
+## Expanding into tracing and beyond
+
+Recently, the D. E. Shaw group has begun expanding ClickHouse into additional observability domains, starting with distributed tracing. Using [OpenTelemetry](https://clickhouse.com/resources/engineering/opentelemetry-otel), services now send trace data through centralized collectors that batch and forward events into ClickHouse.
+
+The move to Grafana-based exploration opens up new possibilities for how the team interacts with trace data. Users can search by service or trace ID, navigate system behavior more intuitively, and analyze large volumes of trace data without sacrificing performance.
+
+ClickHouse's [compression](https://clickhouse.com/docs/data-compression/compression-in-clickhouse) played a big role in making the expansion possible. Trace datasets currently hover around a 12.5x compression ratio. "The compression is a big deal for us," Mike says. "Relative to other data sources, we can compress more and consequently utilize less hardware."
+
+At the moment, the team is dual-writing traces, with plans to consolidate workflows once adoption is complete. Along with tracing, engineers are exploring broader event-data pipelines for structured logs and analytics workloads where schemas are well understood, extending ClickHouse's role beyond metrics storage into a [unified observability platform](https://clickhouse.com/resources/engineering/what-is-observability).
+
+## Getting the most out of ClickHouse
+
+Although Mike cautioned that he doubts "a single observability tool will be the right fit for all use cases," he says that "we found ClickHouse to be a superior tool for enabling a top-level view and detailed low-level analysis of our high-cardinality time-series metrics data. I think teams seeking high-performance observability platforms should certainly consider it as a candidate solution."
+
+The key, he explains, is understanding how to take advantage of the system's design. "There are tools that are like an SUV where you'll get decent performance without thinking about it," he says. "ClickHouse is more like a racecar where you can get really, really fast performance, but you do need to put a little bit of effort into thinking about it."
+
+That effort, he adds, isn't about complexity so much as familiarity. Once the team became comfortable with concepts like [MergeTree](https://clickhouse.com/docs/engines/table-engines/mergetree-family/mergetree) and [data modeling](https://clickhouse.com/docs/migrations/postgresql/data-modeling-techniques), ClickHouse became a powerful, dependable platform for observability and large-scale analysis.
+
+For teams facing similar challenges with high-volume, high-cardinality data, the D. E. Shaw group's experience shows that with the right design choices and analytical foundation, modern observability at massive scale becomes both practical and sustainable.
+
+
+---
+
+## Looking to revamp your observability stack?
+
+Interested in seeing how ClickHouse works on your data? Get started with ClickHouse Cloud in minutes and receive $300 in free credits.
+
+[Sign up](https://console.clickhouse.cloud/signUp?loc=blog-cta-624-looking-to-revamp-your-observability-stack-sign-up&utm_blogctaid=624)
+
+---
+
+---
+
+## AIがデータベース市場を再定義する
+Published: 2026-05-15T03:02:18+00:00
+URL: https://clickhouse.com/blog/ai-redrawing-database-market-jp
+
+---
+title: "AIがデータベース市場を再定義する"
+date: "2026-05-15T03:02:18.065Z"
+author: "Tanya Bragin"
+category: "Product"
+excerpt: "AIは、リアルタイム分析、データウェアハウス、オブザーバビリティといった領域でデータベース市場の要件を再構築しており、ClickHouseはそれらの要件を満たすうえで他に類を見ない立ち位置にあります。"
+---
+
+# AIがデータベース市場を再定義する
+
+## Summary
+
+* AIの導入とは、単にユーザー体験を再考することにとどまらず、データ戦略を正しく構築することでもあります。これを誤れば、AIの取り組みは失敗に終わります。
+* AIワークロードは、高い同時実行性、リアルタイムなクエリ処理、そしてスケールしたフルフィデリティ(完全な粒度)のデータを要求します。従来のバッチ指向アーキテクチャは、これらを想定して設計されてはいません。
+* これまでサイロ化していたユースケース、例えばデータウェアハウスとオブザーバビリティが、データレイヤーにおいて収束しつつあります。
+* ClickHouseは、AIアプリ、AIアナリスト、AI SREといった体験にわたるAIワークロードを支える統一プラットフォームへと進化しています。詳細は本文をご覧ください。
+
+AIは、データプラットフォーム上にもう一つ加わっただけのワークロードではありません。既存のあらゆるユースケースにおいて、ワークロードに対する期待値そのものを根本的に変えてしまいます。
+
+今まさに起こっている3つの大きな変化は、1) アプリケーションがエージェンティックになりつつあること、2) 分析インターフェースが会話型になりつつあること、3) オブザーバビリティが静的なダッシュボードからAI駆動の調査へと移行していること、です。いずれのケースでも、根底にあるデータ要件は、高い同時実行性、リアルタイムのクエリ性能、スケールしたフルフィデリティのデータ、という同じ点に収束していきます。
+
+これらは、既存のデータプラットフォームが想定して設計された要件ではありません。今後数年間に下されるデータプラットフォームの選択が、何が可能になるか、つまりチームがどれだけ速く動けるか、どのようなプロダクトを作れるか、ビジネスにとってどのようなインサイトに到達できるか、を形作ります。今問うべきは、今のプラットフォームが今日のワークロードを処理できるかどうかだけでなく、AI駆動のアプリケーションが実際に求めるものに対して正しい土台となっているかどうか、です。
+
+[以前の投稿](https://clickhouse.com/blog/the-unbundling-of-the-cloud-data-warehouse)で、私はクラウドデータウェアハウスのアンバンドリングについて書きました。インタラクティブで顧客向けのアプリケーションへのシフトが、バッチ指向のウェアハウスとリアルタイムワークロードとのアーキテクチャ上のミスマッチを露呈させてきたという話です。本稿で説明したいのは、その次の波となる破壊的変化で、それは「リアルタイム分析」「データウェアハウス」「オブザーバビリティ」の3つの市場をまたいで起こっています。
+
+![Data-platform-AI.png](https://cms.clickhouse-dev.com:1337/uploads/Data_platform_AI_67dafd4b5a.png)
+<h2 id="real-time_analytics">リアルタイム分析: 「ベストオブブリード」データベースの夜明け</h2>
+
+**ステークホルダー: 次世代のユーザー向けおよびAI駆動アプリケーションを構築する開発者**
+
+Postgresは、行指向のトランザクションデータを扱う卓越した能力により、現代的なユーザー向けアプリケーションを構築するデフォルトのデータベースになりました。これは、アプリケーションが本格的にデータインテンシブになるまでは問題なく機能していました。リアルタイムダッシュボード、利用状況分析、顧客向けメトリクス、毎秒数百万行のイベントストリームなどがそれを牽引しています。こうしたますます分析的になるワークロードに対しては、Postgres単独ではスケールしなくなりました。クエリは遅すぎ、インデックスはコストが高すぎ、同時実行性は低すぎたのです。
+
+業界が辿り着いた解は、Postgres + ClickHouseでした。トランザクションとアプリケーションの状態はPostgresが担い、分析はClickHouseが担うという組み合わせです。このペアリングは、本格的な分析要件を持つ顧客向けアプリケーションにとって、事実上のモダンデータスタックとなりました。ClickHouseは分析ワークロードにおける明白な選択肢へと進化しました。高速な取り込み、数十億行に対するサブ秒クエリ、顧客向けアプリケーションが要求する同時実行レベルでも効率的な動作。データは[CDCパイプライン](https://clickhouse.com/blog/clickhouse-welcomes-peerdb-adding-the-fastest-postgres-cdc-to-the-fastest-olap-database)経由でPostgresからClickHouseに移動し、ClickHouseが組み込み型のプロダクト分析から顧客向けダッシュボードまで、あらゆるものを動かすようになったのです。
+
+そして今、AIが、現代的なAIアプリケーションやそれを動かすエージェントを構築するためのトランザクショナルおよび分析的基盤の必要性を加速しています。AIによって生成されるインサイト、異常検知、レコメンデーション、プロダクトデータへの自然言語インターフェースなど、LLMベースの機能は、トランザクション書き込みと分析読み取りの間でより緊密なフィードバックループを必要とします。これが、私たちが[ネイティブなPostgres + ClickHouse](https://clickhouse.com/blog/postgres-managed-by-clickhouse)データスタックの構築に本腰を入れている理由です。Postgresがトランザクションワークロードを処理し、ClickHouseが分析を処理する、エンジンレベルでネイティブな拡張機能を介して緊密に統合された単一の統一体験です。自動的なデータレプリケーションと管理、そして統一された開発者体験を実現します。
+
+顧客向け体験を構築するプラットフォームの意思決定者にとって、方向性は明確です。データストアレイヤーにおいて、トランザクションと分析の両方の機能が必要とされています。そして、「ベストオブブリード」のメリットを失わずに、トランザクションと分析の機能を緊密に統合できることは、開発者のワークフローを高速化し、AIを活用した新機能をより早く出荷可能にする、追加のアドバンテージとなります。
+
+![](https://clickhouse.com/uploads/ai_march2026_2_6b0c8065e3.jpg)
+
+<h2 id="data_warehousing">データウェアハウス: AIアナリストのワークロードがバッチ指向DWHアーキテクチャを破壊する</h2>
+
+**ステークホルダー: データウェアハウスとビジネス分析を近代化するデータエンジニアリングチーム**
+
+[アンバンドリングの投稿](https://clickhouse.com/blog/the-unbundling-of-the-cloud-data-warehouse)で、私はSnowflakeのようなクラウドデータウェアハウスがバッチ取り込み、ヘビーなETL、定期的なレポート用に設計されていたこと、そしてそれがインタラクティブな顧客向けアプリケーションには不向きであった理由を述べました。
+
+そして今、伝統的なデータウェアハウスの役割が、その「主戦場」とも言えるユースケースにおいて問い直されています。「AIアナリスト」の登場により、自然言語のプロンプトから始まり、アドホックなレポートやダッシュボードを含む下流の成果物を導出するというビジネス分析の在り方です。
+
+text-to-SQLツールや自然言語分析インターフェースに支えられた[エージェント向け分析](https://clickhouse.com/blog/agent-facing-analytics)は、実験段階から本番運用へと移りつつあります。UXへの影響は明白です。ユーザーは平易な英語で質問し、数秒以内の回答を期待します。インフラへの影響はそれほど明白ではありませんが、より重大です。各自然言語クエリは1本のSQLクエリを生成するだけにとどまらず、利用可能なデータセットを探索し、多くの並列な可能性について推論する過程で、立て続けに数十本のクエリを発行することがあります。一見ユーザーからの単一の質問に見えるものが、データベースに対する同時並行クエリのバーストとなります。その結果、内部のアナリストが生成するワークロードが、外部の顧客向けワークロード、すなわち高同時実行性、低レイテンシ、インタラクティブな応答に似てきます。同じパターンは、問題を解決する過程で意思決定の根拠となる正しいデータポイントを見つけるために、自律的にデータプラットフォームへクエリを投げるエージェントにも当てはまります。
+
+これは、レガシーデータウェアハウスアーキテクチャが前提としてきたものをひっくり返します。SnowflakeやDatabricksのようなプラットフォームは、アドホックでバッチ指向の分析向けに設計されてきました。それらの計算モデルは、クエリが頻繁ではなく、本質的に非インタラクティブであることを前提としています。多数のクエリを通じた全体スループットの高さを最適化しており、各クエリの高同時実行性や低レイテンシを最適化しているわけではありません。AIアナリストの体験はクエリを高速かつ非常に頻繁なものにし、そのワークロードをレガシーDWHアーキテクチャ上で動かすということは、許容できないレイテンシ(AIアシスタントが遅く感じられる)か、提供価値以上に急速に膨らむコストか、いずれかを意味します。
+
+ClickHouseは、こうした要件、つまりペタバイト規模のデータ、高いクエリ同時実行性、サブ秒の応答時間、で卓越するためにゼロから構築されました。バッチレポートを稀に実行するアナリストではなく、数十億行に対してインタラクティブなクエリを実行する数千の同時ユーザーにサービスを提供するように設計されています。結局のところ、これらはまさにエージェンティック時代が要求する特性なのです。
+
+長期的なプラットフォームに賭けようとしているチームにとって、計算式はシンプルです。AI駆動のビジネス分析は将来の可能性ではなく、すでに現実です。これまでのバッチレポート時代に適していたプラットフォームは、その技術的要件を満たしません。レガシーなデータウェアハウスシステムからの移行コストは実在しますが、有限です。一方、競合がインタラクティブなAI分析を実行している間に、誤ったプラットフォーム上で同時実行性に対する税を支払いながら今後5年間を過ごすコストの方が、はるかに大きいのです。
+
+![](https://clickhouse.com/uploads/ai_march2026_3_69dc9fcbf2.jpg)
+
+<h2 id="observability">オブザーバビリティ: AI SREはスケールしたきめ細かいデータを要求する</h2>
+
+**ステークホルダー: オブザーバビリティ戦略を担うプラットフォーム/インフラチーム**
+
+伝統的なオブザーバビリティスタックは、メトリクス、ログ、トレースという3つの独立した柱を中心に構築されており、それぞれが専用のシステムに格納されてきました。このアーキテクチャは、ストレージとコンピュートが高価だった時代には理にかなっていました。メトリクスは事前集計し、ログはサンプリングし、トレースの保持期間を短くしてコストを抑えていたのです。そのトレードオフは管理可能なものでした。
+
+AI SREのワークフローは、2つの新たな圧力をもたらすことでこのモデルを破壊します。それは、自然言語クエリの大量同時発行と、自動化されたインシデントトリアージ、根本原因分析、異常相関を駆動するための、きめ細かく、ハイカーディナリティで、長期保持のデータを常に必要とすることです。サンプリングされたログやダウンサンプリングされたメトリクスは、3日前のデプロイイベントとエラーパターンを相関させようとするAIエージェントにとっては役に立ちません。AIツールに高い能力を求めれば求めるほど、保持すべきデータは増え、既存プラットフォームのコスト構造はそれに反する形で効いてきます。
+
+これは、Charity Majorsが[Observability 2.0](https://charity.wtf/tag/observability-2-0/)と呼んできた核心的なシフトです。すなわち、3本柱モデルを、列指向ストレージエンジンに保存された幅広い構造化イベントに基づく単一の真実の情報源へと置き換えることです。事前に問う質問を決めて事前集計するのではなく、フルフィデリティなイベントを保存し、クエリ時にメトリクス、トレース、SLOを導出します。現代のオブザーバビリティ企業は今やこのモデルの上に作られており、その多くがメインのストレージエンジンとしてClickHouseを使用しています。
+
+Datadogのような伝統的なオブザーバビリティのプレイヤーは、ここで真の「イノベーターのジレンマ」に直面しています。彼らはデータ量に基づいて課金しており、プラットフォームには大幅なレート制限が設定されているため、顧客はコストを抑えるために、より「少ない」データを取り込むよう訓練されてきました。ログをサンプリングし、メトリクスをダウンサンプリングし、トレース保持を制限する、といった具合にです。AI SREのワークフローを実現するためにGBあたりの単価を下げることは、ビジネスの基盤となっている収益モデルを共食いすることを意味します。幅広いイベントと列指向ストレージを中心に再構築するということは、彼らが何十年にもわたってスケールさせてきた特殊なデータ構造や価格メカニズムを捨てるということでもあります。
+
+一方、ClickHouseは単純な理由でこの領域に独自に適しています。ログやイベントデータに対する高い圧縮率、ハイカーディナリティの幅広いイベントに対するサブ秒クエリ、本番インフラが生成する取り込み量での効率的な動作、そしてGBあたりのデータ取り込み料金ではなくコンピュートとストレージに基づくコストモデル、です。
+
+これが、私たちがOpenTelemetryとClickHouseに基づくオブザーバビリティ、確立されたUIとAI SREの機能を備えた、ターンキーなオブザーバビリティスタック[ClickStack](https://clickhouse.com/clickstack)に投資している理由でもあります。これは[オープンソース](https://clickhouse.com/docs/use-cases/observability/clickstack/getting-started/oss)と[マネージドサービス](https://clickhouse.com/blog/introducing-managed-clickstack-beta)の双方で利用可能です。
+
+![](https://clickhouse.com/uploads/ai_march2026_4_144b78aea2.jpg)
+
+<h2 id="observability_and_dwh">オブザーバビリティとDWHは収束する: 2つの市場、1つのアーキテクチャ</h2>
+
+データウェアハウスとオブザーバビリティは、過去10年間、別々のドメインとして扱われてきました。バイヤーも、ベンダーも、スタックも別々でした。そして歴史的には、ストレージバックエンド、ユーザーインターフェース、利用パターンといった観点で、その分離には技術的な意味がいくらかありました。データセットさえも異なっていたのです。なぜなら、当初はオンラインプレゼンスを原動力とするビジネスはほとんどなかったからです。
+
+今日、この分離は技術的な必要性というよりも、時代遅れの慣習です。ストレージ側では、ビジネス分析であれオブザーバビリティであれ、事実上すべての現代的なデータプラットフォームがオブジェクトストアに書き込みます。そしてコンピュートエンジンには、AIアナリストやAI SRE機能のサポートと併せて、高同時実行性かつインタラクティブで低レイテンシなクエリが要求されます。
+
+最後に、過去にはほとんどのチームがオブザーバビリティのデータを純粋にオペレーショナルなものとして扱っていました。しかし実際には、APIコールは購買であり、エラーは失敗したトランザクションです。同じ真実の情報源を見るのではなく、しばしば同じイベントが2つのプラットフォームに2チームによって二重に保存され、その間に脆弱な同期レイヤーが挟まる、という形になっています。
+
+これらすべてをビジネスデータとして捉え直し、オープンフォーマットで一度だけ保存し、AIアナリストとAI SREの両方のツーリングからクエリ可能にするチームは、その重複を取り除き、どちらのサイロ単独では持ち得なかった文脈を解き放ちます。
+
+![](https://clickhouse.com/uploads/ai_march2026_5_e7e91c2ca3.jpg)
+
+<h2 id="the_platform_layer">プラットフォーム層: エージェンティック分析とLLMオブザーバビリティ</h2>
+
+2026年の完全なデータプラットフォームは、単なるデータベース以上のものです。データベースに加えて、それをAIエージェントからアクセス可能にするツール群、そしてエージェントの振る舞いを理解するための計装が含まれます。
+
+2つのことが同時に起きています。第一に、AIエージェントがデータへの主要なインターフェースになりつつあります。ユーザーはますますSQLを書かなくなり、代わりに自然言語で質問し、エージェントがその質問をクエリに分解し、実行し、結果を統合します。これはつまり、データプラットフォームが自身の能力をエージェントに対してネイティブに公開する必要があるということです。既製のUI、MCP互換のAPI、すべてのユースケースで個別のインテグレーション作業を必要とせずにデータへ手を伸ばせるエージェントフレームワークが求められます。これが、私たちが主要なオープンソースAIチャットプラットフォームである[LibreChat](https://clickhouse.com/blog/librechat-open-source-agentic-data-stack)を買収し、それをエージェンティックデータスタックと呼ぶものの中核コンポーネントとした理由です。LibreChatとClickHouseを組み合わせることで、チームは自分たちのデータの上に分析エージェントを、エージェント層をゼロから構築することなく、ターンキー方式でデプロイできるようになります。
+
+第二に、AIエージェントが普及するにつれて、それらの振る舞いを理解し、ガバナンスを効かせることが第一級のエンジニアリング上の課題になります。LLMオブザーバビリティ、すなわちエージェントの実行のトレース、モデル性能のモニタリング、コストの追跡、複数ステップにわたるエージェンティックワークフローの失敗のデバッグ、はオプショナルなインフラではありません。それは、AIを自信を持って本番運用するか、POC/実験フェーズで止まってしまうか、の分かれ目です。エージェンティックなシステムにおけるオブザーバビリティの問題は、伝統的なソフトウェアよりも難しいのです。実行グラフは動的で、入出力は高次元で、失敗はしばしば二値ではなく微妙な形をしています。ClickHouse Cloud上で稼働し、スケールしたリアルタイムLLMオブザーバビリティを実現する[Langfuse](https://clickhouse.com/blog/langfuse-llm-analytics)が、この問題を解いています。
+
+![AI is Redrawing the Database Market #1409.jpg](https://clickhouse.com/uploads/AI_is_Redrawing_the_Database_Market_1409_eac7cc339d.jpg)
+
+プラットフォームの意思決定者にとって、結論は明らかです。データベースは必要ですが、十分ではありません。完全なピクチャーには、エージェント対応のインターフェースとLLMオブザーバビリティのツールが、データプラットフォーム体験にネイティブに統合された形で含まれます。
+
+<h2 id="a_unified_data_platform">インタラクティブなAI駆動アプリケーションのための統一データプラットフォーム</h2>
+
+ClickHouseは、私たちが**インタラクティブなAI駆動アプリケーションのための統一データプラットフォーム**と捉えるものへと進化しています。トランザクションと分析のワークロード、モダンなリアルタイムデータウェアハウスと会話型BI、そして進化するAI SRE駆動のオブザーバビリティワークフローを、AIネイティブなアプリケーションが要求する性能とコストのプロファイルで、すべて単一のプラットフォーム上で扱えるようにするものです。
+
+市場は急速に動いており、次の時代を勝ち抜くプラットフォームはすでに見えています。長期的なインフラの意思決定を行うすべてのチームにとって問うべき問いは、移行コストがまだ管理可能な今、正しい賭けをしているか、それとも後でより困難でより高コストな意思決定をすることになるか、です。
+
+
+---
+
+## 今日から始めましょう
+
+ClickHouseがあなたのデータでどのように動作するか興味がありますか? わずか数分でClickHouse Cloudを始めることができ、$300の無料クレジットを受け取れます。
+
+[Sign up](https://console.clickhouse.cloud/signUp?loc=blog-cta-596-sign-up&utm_blogctaid=596)
+
+---
+
+---
+
+## Postgres FDW: Pushdown is a negotiation
+Published: 2026-05-14T17:19:41+00:00
+URL: https://clickhouse.com/blog/postgres-fdw-pushdown-negotiation
+
+---
+title: "Postgres FDW: Pushdown is a negotiation"
+date: "2026-05-14T17:19:41.943Z"
+author: "Kaushik Iska, David Wheeler and Philip Dubé"
+category: "Engineering"
+excerpt: "A deep dive into how pg_clickhouse's Foreign Data Wrapper decides what SQL to push down to ClickHouse versus execute locally in Postgres ."
+---
+
+# Postgres FDW: Pushdown is a negotiation
+
+Postgres [extensions](https://www.postgresql.org/docs/current/extend-extensions.html) add functionality that Postgres itself does not include. Examples include [PostGIS](https://postgis.net/) for geospatial data, [pgvector](https://github.com/pgvector/pgvector) for embeddings, and [TimescaleDB](https://github.com/timescale/timescaledb) for time-series. Via extensions the Postgres ecosystem distributes new functionality; just `CREATE EXTENSION` to hook into Postgres internals, and thereafter the user mostly forgets about it.
+
+[Foreign Data Wrapper](https://www.postgresql.org/docs/current/ddl-foreign-data.html) extensions, also known as “FDW”s, teach Postgres how to read (and sometimes write) data outside of Postgres. Simply declare a foreign table:
+
+<pre><code type='click-ui' language='sql'>
+CREATE FOREIGN TABLE events (...)
+SERVER my_clickhouse OPTIONS (table 'events');
+</code></pre>
+
+Then `SELECT * FROM events` resembles a query against any other table. Internally, Postgres asks the FDW to fetch the data from elsewhere.
+
+[pg_clickhouse](https://github.com/ClickHouse/pg_clickhouse), the FDW we maintain, fetches data from [ClickHouse](https://clickhouse.com/). While people often rely on the [unified data stack](https://clickhouse.com/blog/postgres-clickhouse-oss) — Postgres for transactional data and ClickHouse for analytics — pg_clickhouse executes SQL queries on both systems. As we worked on it for the past 6 months, we found that a single question drives most of the engineering work: how much of a query do we send across the wire as SQL versus how many rows do we drag back as data?
+
+That question encompasses the meaning of [pushdown](https://whatisdatabase.com/optimizing-database-performance-with-pushdown-techniques): how much work can we “push down” to the remote service? The answer seems simple: “send everything!” — the `WHERE` clause, the `GROUP BY`, the `LIMIT`. But a closer examination reveals the complexity: Some clauses we can send. Some we can almost send — if we rewrite them. Some we used to send but stopped, because they returned the wrong results. And some clauses can never be sent by any FDW, regardless of the engineering one throws at them.
+
+We’ve found the process of making these determinations highly iterative.
+
+To demonstrate, let’s examine the impact of that iteration on a single query: what gets pushed down, what doesn't, and how we continuously modified the code in response to the question.
+
+The goal is to illuminate the inner workings of an FDW for people who’ve heard of FDWs but don’t know how they work in detail. Whether you're a Postgres user curious about ClickHouse, a ClickHouse user curious about Postgres, or someone thinking about writing an FDW yourself, we hope you find this exercise edifying.
+
+## The query that takes 80 ms or 4 minutes {#the-query-that-takes-80-ms-or-4-minutes}
+
+This query ranks the busiest web events in the last week for the US, UK, and DE, by country and event name. It reports volume, unique users, premium share, p95 latency, and each event’s rank by country, returning the top 100 rows overall to provide a small snapshot and avoid streaming raw events.
+
+<pre><code type='click-ui' language='sql'>
+SELECT
+  u.country,
+  e.event_name,
+  count(*) AS n,
+  count(DISTINCT e.user_id) AS unique_users,
+  count(*) FILTER (WHERE e.properties->>'tier' = 'premium') AS premium_count,
+  percentile_cont(0.95) WITHIN GROUP (ORDER BY e.duration_ms) AS p95_ms,
+  ROW_NUMBER() OVER (PARTITION BY u.country ORDER BY count(*) DESC) AS rank_in_country
+FROM events_ch e JOIN users_ch u USING (user_id)
+WHERE e.ts >= now() - interval '7 days'
+  AND u.country IN ('US', 'UK', 'DE')
+  AND e.properties->>'platform' = 'web'
+GROUP BY u.country, e.event_name
+ORDER BY n DESC
+LIMIT 100;
+</code></pre>
+
+`events_ch` and `users_ch` are foreign tables backed by ClickHouse. With every clause in this query pushed down, it returns 100 rows in roughly 80 ms.
+
+If a single clause fails to push down, the query takes minutes. We built support for pushing down the window function, the percentile, the JSON access, and the FILTER aggregate; but each was, at some earlier point, not yet pushed down. When an operation cannot be pushed down, the rest of the query can't push down either; rows that should have been aggregated remotely must stream back to Postgres so it can aggregate them locally. The wire ends up carrying tens to hundreds of millions of rows instead of 100.
+
+Pushdown looks like a feature, but it’s really an agreement between two SQL grammars, revised for every Postgres release. This explains why the pg_clickhouse release notes often look like corrections: revoking incorrect array-function pushdown, adding safer functions like `levenshtein` and `soundex`, and respecting planner invariants like [EvalPlanQual](https://github.com/postgres/postgres/blob/901ed9b/src/backend/executor/execMain.c#L2649-L2676) even when the remote could move faster.
+
+## What the FDW actually negotiates {#2-what-the-fdw-actually-negotiates}
+
+An FDW does not send the original Postgres query to the remote database; doing so causes errors where the SQL dialects differ. But ideally, It also does not pull every row back unless it has to (as simple FDWs like [file_fdw](https://www.postgresql.org/docs/current/file-fdw.html) do), because although the results would be correct, execution would be slow.
+
+![Diagram showing how a Foreign Data Wrapper sits between an application and a remote database, forwarding SQL queries and returning data rows](https://clickhouse.com/uploads/2026_05_14_12_09_23_7401c62d71.png)
+
+Postgres does not directly decide that a scan, join, aggregate, sort, or limit can be executed in ClickHouse. Instead, it asks the FDW to contribute foreign paths to the planner via the FDW planning callbacks. pg_clickhouse registers these planning callbacks:
+
+<pre><code type='click-ui' language='bash'>
+routine->GetForeignRelSize    = clickhouseGetForeignRelSize;
+routine->GetForeignPaths      = clickhouseGetForeignPaths;
+routine->GetForeignPlan       = clickhouseGetForeignPlan;
+routine->GetForeignJoinPaths  = clickhouseGetForeignJoinPaths;
+routine->GetForeignUpperPaths = clickhouseGetForeignUpperPaths;
+</code></pre>
+
+`GetForeignPaths`, `GetForeignJoinPaths`, and `GetForeignUpperPaths` tell the planner what can be pushed down. If the planner selects one of those paths, `GetForeignPlan` builds the plan and generates the ClickHouse SQL.
+
+These callbacks are just entry points; pg_clickhouse’s callback functions verify that each clause or expression can be translated without changing the result. Of course it started out quite simple: just a few clauses and expressions inherited from the original fork from [postgres_fdw](https://www.postgresql.org/docs/current/postgres-fdw.html). Thus pg_clickhouse initially pushed down `count(*)` but not `count(*) FILTER (...)`, couldn’t push down `percentile_cont` or JSON predicates like `properties->>'platform'`: because it did not know how.
+
+Thus, pushdown is not a yes/no decision for a whole query, but constitutes a series of smaller decisions: does Postgres expose the hook, can pg_clickhouse translate the expression, and can ClickHouse execute it with the same meaning?
+
+## The progression: one query, every step we've shipped {#3-the-progression-one-query-every-step-weve-shipped}
+
+To answer the question, "why doesn’t X push down?" let’s look at one realistic query and walk it through everything pg_clickhouse has shipped. Same query, seven steps. Each step pushes down more to ClickHouse; Postgres must evaluate what remains after pulling back the rows it needs to do so.
+
+Each step examines the same query. Lines marked ✓ push down at that step; lines marked ✗ remain local. Each step also marks a real date in our history, when the relevant pushdown landed in the codebase, or when we expect to ship it. Each step demonstrates what the query plan looked like as of that date.
+
+### Step 1: scan + simple WHERE {#step-1-scan-simple-where}
+
+Inherited from the original clickhouse_fdw via initial port [`e5035bc`](https://github.com/ClickHouse/pg_clickhouse/commit/e5035bc) (October 2, 2025). Available in pg_clickhouse since v0.1.0 (December 9, 2025).
+
+The starting point is deliberately small: pg_clickhouse only pushes down predicates it can translate with confidence. Comparisons like `>=`, membership checks like `IN`, and simple timestamp arithmetic are safe to push down because Postgres and ClickHouse have clear equivalents for them. In other words, those filters run in ClickHouse rather than collecting all the rows to evaluate in Postgres.
+
+<pre><code type='click-ui' language='sql' wrapLines='true'>
+SELECT
+  u.country,                                                                -- ✗
+  e.event_name,                                                             -- ✗
+  count(*) AS n,                                                            -- ✗
+  count(DISTINCT e.user_id) AS unique_users,                                -- ✗
+  count(*) FILTER (WHERE e.properties->>'tier' = 'premium') AS …,           -- ✗
+  percentile_cont(0.95) WITHIN GROUP (ORDER BY e.duration_ms) AS …,         -- ✗
+  ROW_NUMBER() OVER (PARTITION BY u.country ORDER BY count(*)) AS …         -- ✗
+FROM events_ch e                                                            -- ✓ scan only
+  JOIN users_ch u USING (user_id)                                           -- ✗
+WHERE e.ts >= now() - interval '7 days'                                     -- ✓
+  AND u.country IN ('US','UK','DE')                                         -- ✓
+  AND e.properties->>'platform' = 'web'                                     -- ✗
+GROUP BY u.country, e.event_name                                            -- ✗
+ORDER BY n DESC                                                             -- ✗
+LIMIT 100                                                                   -- ✗
+</code></pre>
+
+At this point, only the base-table filters push down. The SQL translator (internally called a “deparser”) emits one remote scan for `events` with the timestamp predicate, and one remote scan for `users` with the country predicate. It sends these two separate queries to ClickHouse and collects the results. Everything that combines rows or changes their shape, including the join, grouping, aggregates, window function, sort, and limit, runs inside Postgres against those retrieved rows. Thus the wire must carry every matching `events` row from the last seven days, plus every matching `users` row, before Postgres can reduce the result to 100 rows.
+
+The point is that even the simplest pushdown is already a translation problem: `now()` can be pushed down as `now()`, while `interval '7 days'` is translated as `7 * 86400`. Those mappings live in [src/custom_types.c](https://github.com/ClickHouse/pg_clickhouse/blob/main/src/custom_types.c), where pg_clickhouse records the expressions it knows how to translate safely for ClickHouse. The steps outlined below expand that vocabulary from base filters to joins, aggregates, windows, and limits.
+
+### Step 2: + JOIN pushdown {#step-2-join-pushdown}
+
+Inner-JOIN deparse came from the original clickhouse_fdw, but the inherited cost estimates were placeholders, and the Postgres planner often pulled rows back to join locally rather than push. Commit [`b345682`](https://github.com/ClickHouse/pg_clickhouse/commit/b345682) (December 1, 2025) replaced them with row-count-based estimates and cost-based scans higher than join paths, so the planner reliably picks the pushed plan. Plus [`6a297ec`](https://github.com/ClickHouse/pg_clickhouse/commit/6a297ec) (Nov 13, 2025) for `join_use_nulls` outer-join semantics. All shipped in v0.1.0 (December 9, 2025).
+
+At this step pg_clickhouse stops treating `events_ch` and `users_ch` as two independent remote scans. Since both tables live on the same ClickHouse server and the join condition has a ClickHouse equivalent, the FDW can ask ClickHouse to make the join before any joined rows cross the wire.
+
+<pre><code type='click-ui' language='sql'>
+SELECT ...                                                         -- ✗ (still)
+FROM events_ch e                                                   -- ✓
+  JOIN users_ch u USING (user_id)                                  -- ✓ joins push
+WHERE e.ts >= now() - interval '7 days'                            -- ✓
+  AND u.country IN ('US','UK','DE')                                -- ✓
+  AND e.properties->>'platform' = 'web'                            -- ✗ stays local
+GROUP BY u.country, e.event_name                                   -- ✗
+ORDER BY n DESC                                                    -- ✗
+LIMIT 100                                                          -- ✗
+</code></pre>
+
+The remote SQL is now roughly `SELECT * FROM events ALL INNER JOIN users USING (user_id) WHERE …`. The `ALL` keyword is deliberate: ClickHouse's default join can return only one matching row, while a Postgres inner join returns all matches. Emitting `ALL INNER JOIN` preserves Postgres semantics. The JSON predicate still cannot be translated at this point, so it is left out of the remote `WHERE` and applied locally to the returned rows.
+
+Postgres enabled this kind of join pushdown in 9.6 (commit [`e4106b25287`](https://github.com/postgres/postgres/commit/e4106b25287), 2016, Etsuro Fujita). Previously, FDWs had to hook deeper into the planner to accomplish join pushdown.
+
+For our query, this single step reduces query time from roughly 30 minutes to 30 seconds, because the join filters rows before they leave the remote.
+
+### Step 3: + GROUP BY + simple aggregates + ORDER BY + LIMIT {#step-3-group-by-simple-aggregates-order-by-limit}
+
+Also inherited via [`e5035bc`](https://github.com/ClickHouse/pg_clickhouse/commit/e5035bc). GROUP BY, basic aggregates (`count`, `sum`, `min`, `max`, `avg`), ORDER BY, and LIMIT all pushdown since v0.1.0 (December 9, 2025).
+
+This step emphasizes result-shaping work: grouping rows, computing basic aggregates, sorting the grouped result, and applying the final limit. Postgres exposes these operations as “upper” planning stages, and the FDW can offer a remote version of each stage when the whole stage can be represented in ClickHouse. Aggregate pushdown arrived in Postgres 10 (commit [`7012b132d07`](https://github.com/postgres/postgres/commit/7012b132d07)); ORDER BY and LIMIT pushdown followed in Postgres 12.
+
+Still, at this point pg_clickhouse cannot push down all of the operations: The grouping stage must encompass the entire SELECT list, and it hasn’t been wired to push down three expressions:
+
+- `count(*) FILTER (WHERE e.properties->>'tier' = 'premium')`: the FILTER body contains a JSON op without a pushdown mapping
+- `percentile_cont(...) WITHIN GROUP (ORDER BY ...)`: ClickHouse has an equivalent function, but pg_clickhouse hasn’t mapped it
+- `ROW_NUMBER() OVER (...)`: window functions have not been mapped to ClickHouse equivalents at all
+
+Note that grouped pushdown is all-or-nothing for a given grouped result. So even though `count(*)`, `count(DISTINCT)`, `GROUP BY`, `ORDER BY`, and `LIMIT` are individually fine, the grouped part of this particular query still remains local.
+
+<pre><code type='click-ui' language='sql'>
+SELECT
+  u.country, e.event_name,                                          -- ✗ grouped result blocked
+  count(*) AS n,                                                    -- ✗ blocked
+  count(DISTINCT e.user_id) AS unique_users,                        -- ✗ blocked
+  count(*) FILTER (WHERE e.properties->>'tier' = 'premium') AS …,   -- ✗ FILTER body has JSON
+  percentile_cont(...) AS p95_ms,                                   -- ✗ no mapping yet
+  ROW_NUMBER() OVER (...) AS rank_in_country                        -- ✗ window not remote yet
+FROM events_ch e                                                    -- ✓
+  JOIN users_ch u USING (user_id)                                   -- ✓
+WHERE e.ts >= ... ✓ AND u.country IN (...)                          -- ✓
+  AND e.properties->>'platform' = 'web'                             -- ✗
+GROUP BY u.country, e.event_name                                    -- ✗ blocked
+ORDER BY n DESC                                                     -- ✗ blocked
+LIMIT 100                                                           -- ✗ blocked
+</code></pre>
+
+A simpler subset of this query (drop the FILTER, percentile, and ROW_NUMBER) would push down fully at this point:
+
+<pre><code type='click-ui' language='sql'>
+-- The subset that DOES push down at Step 3:
+SELECT u.country, e.event_name, count(*) AS n, count(DISTINCT e.user_id) AS unique_users
+FROM events_ch e JOIN users_ch u USING (user_id)
+WHERE e.ts >= now() - interval '7 days' AND u.country IN ('US','UK','DE')
+GROUP BY u.country, e.event_name
+ORDER BY n DESC LIMIT 100;
+</code></pre>
+
+That subset deparses as a single ClickHouse SELECT statement, with `count(DISTINCT e.user_id)` emitted as a ClickHouse `count(DISTINCT user_id)`. The full, richer query needs three more steps to fully land.
+
+### Step 4: + ordered-set aggregates (`percentile_cont` → `quantile`) {#step-4-ordered-set-aggregates}
+
+Commit [`087cfdc`](https://github.com/ClickHouse/pg_clickhouse/commit/087cfdc) (November 10, 2025), in v0.1.0. Previously, `percentile_cont` blocked the upper rel for any query that used it.
+
+This step teaches pg_clickhouse one more aggregate translation: Postgres `percentile_cont(p) WITHIN GROUP (ORDER BY x)` can be expressed as ClickHouse `quantile(p)(x)`. This change removes the percentile from the list of blockers. The allow list remains narrow: for example, pg_clickhouse still refuses `string_agg(... ORDER BY ...)` because ClickHouse's closest equivalent does not preserve the same within-group ordering semantics.
+
+<pre><code type='click-ui' language='sql'>
+SELECT
+  ...                                             -- ✗ still blocked
+  percentile_cont(...) AS p95_ms,                 -- ✓ now shippable
+  ROW_NUMBER() OVER (...) AS rank_in_country      -- ✗ window not remote yet
+FROM ...                                          -- (everything else unchanged from Step 2-3)
+</code></pre>
+
+The `percentile_cont` function becoming individually shippable is necessary but not sufficient. The grouped result still can't be pushed down because two blockers remain: FILTER-with-JSON and the ROW_NUMBER window function.
+
+But take note of the recurring pattern over the course of these steps: a translation lifts one pushdown blocker at a time, but pushdown of the full query occurs only when all such blockers have been resolved. This explains how a stream of single-translation changes to pg_clickhouse, individually modest, compound over time to suddenly push down a full query that previously ran entirely locally.
+
+### Step 5: + JSON sub-column access (`->`, `->>`) {#step-5-json-sub-column-access}
+
+Commits [`0b4c03e`](https://github.com/ClickHouse/pg_clickhouse/commit/0b4c03e) (April 2, 2026) and [`669924a`](https://github.com/ClickHouse/pg_clickhouse/commit/669924a) (April 3), in v0.1.6 / v0.2.0. Previously, every `->`/`->>`/`jsonb_extract_path` was a local filter; even `e.properties->>'platform' = 'web'` couldn't pushdown.
+
+This step adds JSON field access to the shared vocabulary. A Postgres JSON accessor expression like `e.properties->>'platform'` now translates to the ClickHouse sub-column expression `e.properties.platform`, so JSON predicates need no longer wait for rows to be fetched back to Postgres.
+
+<pre><code type='click-ui' language='sql'>
+SELECT
+  u.country, e.event_name,                                          -- ✗ still blocked (window)
+  count(*) AS n, count(DISTINCT e.user_id) AS unique_users,         -- ✗ blocked (window)
+  count(*) FILTER (WHERE e.properties->>'tier' = 'premium') AS …,   -- ✓ FILTER body now lifts
+  percentile_cont(...) AS p95_ms,                                   -- ✓
+  ROW_NUMBER() OVER (...) AS rank_in_country                        -- ✗ window still blocks
+FROM events_ch e                                                    -- ✓
+JOIN users_ch u USING (user_id)                                     -- ✓
+WHERE ...
+  AND e.properties->>'platform' = 'web'                             -- ✓ JSON qual lifts
+GROUP BY u.country, e.event_name                                    -- ✗ still blocked
+ORDER BY n DESC                                                     -- ✗ blocked
+LIMIT 100                                                           -- ✗ blocked
+</code></pre>
+
+Two things change at once:
+
+- The `properties->>'platform' = 'web'` predicate ships as `properties.platform = 'web'`, so ClickHouse can filter those rows before sending them back.
+- The filtered aggregate `count(*) FILTER (WHERE properties->>'tier' = 'premium')` pushes down as `countIf(properties.tier = 'premium')`, using ClickHouse's conditional aggregate form.
+
+The grouped result still does not push down, but now there is only one blocker left: `ROW_NUMBER`.
+
+### Step 6: + window functions {#step-6-window-functions}
+
+Commit [`0caf913`](https://github.com/ClickHouse/pg_clickhouse/commit/0caf913) (April 2, 2026, same day as JSON sub-column access), in v0.1.6 / v0.2.0. Previously, any `OVER (...)` clause blocked the upper rel.
+
+This step lets pg_clickhouse offer a remote plan for window functions. `ROW_NUMBER`, `RANK`, `DENSE_RANK`, `LEAD`, `LAG`, `FIRST_VALUE`, `LAST_VALUE`, `NTH_VALUE`, and `MIN/MAX OVER` all run in ClickHouse when their partition keys and order keys can also be translated.
+
+Here pg_clickhouse exceeds the pushdown of its ancestor, `postgres_fdw`, which does not push down window functions. But ClickHouse executes them quickly and close to the data, a benefit that greatly outweighs the overhead of translating the functions.
+
+<pre><code type='click-ui' language='sql'>
+SELECT
+  u.country,                                                        -- ✓
+  e.event_name,                                                     -- ✓
+  count(*) AS n,                                                    -- ✓
+  count(DISTINCT e.user_id) AS unique_users,                        -- ✓
+  count(*) FILTER (WHERE e.properties->>'tier' = 'premium') AS …,   -- ✓
+  percentile_cont(0.95) WITHIN GROUP (ORDER BY e.duration_ms) AS …, -- ✓
+  ROW_NUMBER() OVER (PARTITION BY u.country ORDER BY count(*)) AS …,-- ✓
+FROM events_ch e                                                    -- ✓
+  JOIN users_ch u USING (user_id)                                   -- ✓
+WHERE e.ts >= now() - interval '7 days'                             -- ✓
+  AND u.country IN ('US','UK','DE')                                 -- ✓
+  AND e.properties->>'platform' = 'web'                             -- ✓
+GROUP BY u.country, e.event_name                                    -- ✓
+ORDER BY n DESC                                                     -- ✓
+LIMIT 100                                                           -- ✓
+</code></pre>
+
+No impediments to pushdown remain. The join, grouping, aggregates, window function, ordering, and limit all become one ClickHouse query. What used to be a Postgres plan with separate Limit / Sort / WindowAgg / Group / Join / Scan / Scan nodes collapses into a single foreign scan whose remote SQL looks roughly like:
+
+<pre><code type='click-ui' language='sql'>
+-- What lands on the ClickHouse wire:
+SELECT
+  u.country,
+  e.event_name,
+  count(*) AS n,
+  count(DISTINCT e.user_id) AS unique_users,
+  countIf(e.properties.tier = 'premium') AS premium_count,
+  quantile(0.95)(e.duration_ms) AS p95_ms,
+  ROW_NUMBER() OVER (PARTITION BY u.country ORDER BY count(*) DESC) AS rank_in_country
+FROM events e
+  ALL INNER JOIN users u USING (user_id)
+WHERE e.ts >= now64(9, 'UTC') - INTERVAL 7 DAY
+  AND u.country IN ('US','UK','DE')
+  AND e.properties.platform = 'web'
+GROUP BY u.country, e.event_name
+ORDER BY n DESC
+LIMIT 100;
+</code></pre>
+
+(Approximate; the exact `count(DISTINCT)` and `countIf` deparse have edge cases not shown here.)
+
+The wire carries 100 rows. Postgres receives them and returns them. Compared to Step 1, where the wire carried tens of millions of rows, the difference is several orders of magnitude.
+
+### Historical context {#historical-context}
+
+The reaction we sometimes see, "I'm surprised this expression wasn't pushed down from day one," is what you get when you look at the list of v0.2 changes without the context of history. Walking the query through that history surfaces a few facts that a simple list of changes does not, to whit:
+
+- Pushdown is granular. Each clause must be independently negotiated. A clause that looks "obvious" can fail to push down because of a single sub-expression: `count(*) FILTER (WHERE json_op)` waits on the JSON op even though count and FILTER are individually fine.
+- Pushdown is all-or-nothing at the upper-rel level. A grouped query can only be pushed down if the whole grouped relation can be represented safely in ClickHouse SQL. One unsupported aggregate or sub-expression can block the entire grouped plan. Put another way, adding support for a small missing translation can unlock pushdown for the full query.
+- Most "improvements" are translations, not new features. `percentile_cont`, `ROW_NUMBER`, `->>`. Postgres has them, ClickHouse has them. What was missing was the deparser code connecting the two grammars. Such improvements resemble new capabilities, but internally they're just new mappings in `custom_types.c` and the code to translate them.
+- Some pushdowns get revoked. Both pg_clickhouse and `postgres_fdw` have lists of pushdowns that were removed because they turned out to leak. In our v0.2.0 we revoked pushdown for `array_dims`, `array_lower` and friends. On the postgres_fdw side, [`8cfbac1492b`](https://github.com/postgres/postgres/commit/8cfbac1492b) (PG 17) refused `FETCH FIRST n WITH TIES`; [`5c571a34d0e`](https://github.com/postgres/postgres/commit/5c571a34d0e) (PG 18) refused LIMIT pushdown where backward cursor scans would be required. This is the system working: better to pull back when we can't get the semantics right than to ship wrong rows fast.
+
+If the deparse contract is violated, we error rather than guess
+
+## Conclusion {#4-conclusion}
+
+Pushdown looks binary from the outside: either a clause runs remotely, or it does not. Inside an FDW, it’s a contract. Postgres has to expose the right planner hook, pg_clickhouse has to translate the expression without changing its meaning, and ClickHouse has to support the same semantics. If any part of that chain is missing, the safe answer is to keep the work local or to fail loudly.
+
+Hence FDW work often looks incremental from the outside. JSON sub-columns, percentile_cont, filtered aggregates, window functions, join semantics, DML support: each represents a small agreement between two SQL systems. But once the last blocker to pushdown lifts, the effect is not small. A query that used to stream millions of rows into Postgres can collapse into a single ClickHouse SELECT that returns 100 rows.
+
+Pushdown is not a race to ship every clause remotely. Some translations are added. Some are revoked. Some wait on Postgres planner support. Some wait on ClickHouse engine behavior. And some should never be pushed at all, because the remote system cannot honestly promise the same answer Postgres would produce.
+
+The work is not to make ClickHouse pretend to be Postgres. The work is to decide, clause by clause, where the two systems can agree.
+
+Every byte kept off the wire is a byte that all three parties have agreed to omit.
+
+
+---
+
+## Try Postgres managed by ClickHouse
+
+ClickHouse + Postgres has become the unified data stack for applications that scale. With Managed Postgres now available in ClickHouse Cloud, this stack is a day-1 decision.
+
+[Get access](https://clickhouse.com/cloud/postgres?loc=blog-cta-589-try-postgres-managed-by-clickhouse-get-access&utm_blogctaid=589)
+
+---
+
+<style>
+pre code { white-space: pre !important; }
+</style>
+
+---
+
+## ClickHouse vs Prometheus for High Cardinality, Part 1: Understanding the Problem
+Published: 2026-05-14T15:13:45+00:00
+URL: https://clickhouse.com/blog/clickhouse-vs-promethous-high-cardinality-p1-understanding-the-problem
+
+---
+title: "ClickHouse vs Prometheus for High Cardinality, Part 1: Understanding the Problem"
+date: "2026-05-14T15:13:45.676Z"
+author: "Rory Crispin and Dale McDiarmid"
+category: "Engineering"
+excerpt: "Why does high cardinality break Prometheus but not ClickHouse? In Part 1, we explore the architectural tradeoffs of Prometheus and other series-based systems, showing how cardinality impacts memory, ingestion, querying, and operational stability at scale."
+---
+
+# ClickHouse vs Prometheus for High Cardinality, Part 1: Understanding the Problem
+
+You'll often hear us say that ClickHouse is not significantly affected by high cardinality when used for observability workloads. While directionally true, that statement only really makes sense once you understand why high cardinality becomes problematic in traditional time-series systems in the first place.
+This post is intended as background for a follow-on post exploring why high cardinality behaves differently in ClickHouse and other column-oriented databases. We’ll focus primarily on Prometheus, since it remains the dominant metrics store in observability and clearly illustrates the tradeoffs of a series-oriented storage model.
+We’ll show where cardinality costs appear: series creation, memory use, querying, and churn from short-lived infrastructure.
+
+If you’re already familiar with high cardinality, Prometheus internals, series churn, and the operational challenges cardinality creates in time-series systems, you can likely skip ahead to Part 2, where we explore how ClickHouse handles these workloads differently.
+
+## What is high cardinality in Observability?
+
+In observability systems, high cardinality usually means many unique label combinations.
+
+We’ll use Prometheus as the reference model because it remains the dominant metrics store in observability. Additionally, although alternatives to it exist, they are typically built on the same fundamental data model.
+
+> Not all time series databases are implemented in the same way as Prometheus, and each has its own internal architecture and storage engine. However, many systems that model data as distinct time series, as described below, will face similar challenges when cardinality grows.
+
+In time-series databases, **cardinality refers to the** **number of unique label combinations**. For this to make sense, we need to take a step back and define a metric, a label, and a time series.
+
+To define what a label is, it's helpful to define what a metric is. A **metric is effectively an observable numeric property** e.g. "number of HTTP requests” or “current temperature". A metric can have extra dimensions known as labels. These string values effectively tell us what the metric is about, with each label having a value from a set.
+
+A **time series is an instance of a metric, with a unique combination of labels.** It holds a series of timestamps and values.
+
+Suppose you have a gauge metric like `http_response_time` representing the most recent observed response time, with labels such as `host`, `application`, `request_path`, and `status`. A series might look like the following:
+
+
+```yaml
+http_response_time {
+  host="host-42",
+  application="checkout-service",
+  request_path="/api/payments",
+  status="500"
+}
+```
+
+[Run code block](null)
+
+This series can have a set of timestamps and values e.g.
+
+```sh
+(2026-02-24 10:00:00, 12)
+(2026-02-24 10:01:00, 18)
+(2026-02-24 10:02:00, 15)
+...
+```
+
+Effectively, the labels tell us what's being observed, and the timestamp and values tell us how it changed over time. These timestamp+values can then be rendered as a series on a chart. A metric can therefore have one or more time series. The exact number depends on the number of unique label values.
+
+> Prometheus typically collects data by scraping a Prometheus-compatible HTTP endpoint that exposes the current value of each time series at the moment of the scrape **(a sample)**, **without an explicit timestamp**. Prometheus assigns the scrape time as the timestamp for **every sample** it records. In effect, it periodically captures a snapshot of all exposed metrics and associates the scrape timestamp with each time series value returned during that interval.
+
+![how_promethous_scrapes_metrics.png](https://clickhouse.com/uploads/how_promethous_scrapes_metrics_bcd28fae8f.png)
+
+So, while a series looks simple individually, in totality, it introduces complexity. Cardinality is not just about one label having many unique values. It is about the total number of unique combinations across all labels i.e. the number of unique time series.
+
+For example, consider the above `http_requests_total` metric - if `host` had a cardinality of 1000, `application` 100, `endpoint` 50, and the `status code` 5 - and we captured a metric for each unique value, we potentially have the following number of time series:
+
+`1,000 × 100 × 5 × 50 = 25,000,000 unique time series`
+
+This is obviously a worst-case scenario - it assumes that every application runs on every host and that the endpoints exist for each application. But it is before additional realistic dimensions are introduced, like region, environment, version, or container ID. 
+
+**Cardinality is the number of unique time series, and high cardinality is when you have a lot of them!**
+
+![label_cardinality_explosion.png](https://clickhouse.com/uploads/label_cardinality_explosion_f6440d4c04.png)
+
+Finally, it's worth noting that adding a single label to a metric can significantly increase the number of time series (up to the product of the new label's cardinality) due to the compounding problem.
+
+## Prometheus and the time series data model
+
+Continuing with Prometheus as our example database, the fundamental unit of storage is the series itself. Every unique combination of labels for a metric creates a new series, and every series carries its own overhead. As we noted above, adding a label to a time series can significantly increase its cardinality. 
+
+But why is there such a significant overhead for each time series? 
+
+The answer lies in how the Prometheus server handles these series internally.
+
+### Data structures and memory overhead
+
+When Prometheus scrapes a sample, it first needs to check if the series has been seen before. Series can be identified by their metric name and a unique set of label values. The label set and metric name are therefore hashed to produce a unique series identifier, and the series is looked up. This lookup is fast and predictable, effectively a hash table lookup over the in-memory series index.
+
+Assuming the time series exists, the new sample needs to be appended to an existing in-memory structure - a [memSeries](https://github.com/prometheus/prometheus/blob/948b52e6a4ecf65d1b907afbed81478f17408070/tsdb/head.go#L2383). In addition to the label values, this holds all samples and their respective timestamps. This append operation is low-cost and represents the common hot path.
+
+![label_cardinality_explosion.png](https://clickhouse.com/uploads/label_cardinality_explosion_b34c1d115c.png)
+
+If the series doesn't exist, a memSeries needs to be created and registered with internal structures. This creation work happens on the write path, so it directly affects ingestion latency.  
+
+There is some important nuance in how samples in memSeries are managed as well. By default, Prometheus keeps up to two hours of recent data in memory in what is called the **Head block**. Within the Head, each active time series stores its samples in compressed chunks (rather than as individual points) that the memSeries references. These chunks are typically sized to hold 120 samples by default.
+
+If a metric is scraped once per minute, that means a single chunk will span the two hours of data for each series in the head block. If samples are collected more frequently, chunks will fill faster, and additional chunks will be allocated within the same two-hour window. As a result, higher scrape frequencies increase the number of in-memory chunks per series, thereby increasing memory consumption.
+
+The actual overhead for each series thus depends on a few factors:
+
+* The memSeries struct and the fields it needs ~ 200 bytes itself
+* The number and size of the labels
+* The number of samples for each series and the resulting chunks. Note: Each chunk also has a metadata overhead.
+
+**In summary, two factors drive the memory usage** of the head block: **the number of series and the number of samples per series.**
+
+The decision to store each series independently means each series inherently incurs metadata overhead for itself, its labels, and its chunks. 
+
+> [Prometheus stores regular float samples using an XOR-based encoding](https://www.google.com/url?q=https://fungiboletus.github.io/journey-prometheus-binary-data/) where each value is stored as the XOR against the previous value, plus a compact “delta-of-deltas” encoding for timestamps.  Both timestamp deltas and XOR values are packed using variable-width bit encodings. This compression technique is well-suited to long-lived time series data that are being scraped at set intervals and where the samples don’t change. 
+
+This is before we factor in additional system-wide structures, such as an inverted index, that enable queries to find series by label selectors. This inverted index effectively stores, for each label name and value, a list of references to all series that contain that label pair. As cardinality increases, these posting lists grow, adding further memory overhead and increasing the work required to evaluate queries that match across many label combinations.
+
+### Storing structures to disk
+
+As described above, the Head block holds roughly two hours of recent data in memory. To prevent unbounded memory growth, Prometheus periodically cuts the Head into a persistent block on disk. 
+
+In practice, this occurs at roughly two-hour block boundaries, with recently written chunks remaining in the Head until truncation. At that point, the compressed chunks for this time range are written to disk as part of a new block.
+
+Recent data lives in memory, and every couple of hours, it is sealed and persisted. Once written to disk, the in-memory chunk data for that time range can be released from the Head. The data is then retained on disk for the specified retention period.
+
+![head_block_truncation.png](https://clickhouse.com/uploads/head_block_truncation_d4c6430978.png)
+
+Prometheus also runs a background compaction process, similar in spirit to other LSM-style storage systems. Smaller blocks are merged into larger ones that span longer time ranges. This reduces the number of block indexes on disk and improves query efficiency by lowering per-block overhead. Compaction primarily focuses on optimizing disk layout and long-term storage efficiency. It does not directly reduce the memory overhead associated with active series in the Head.
+
+### Cleaning up memory
+
+After chunks have been written to disk, most memSeries will still have recent chunks in memory. The Head block holds roughly 2 hours of data, and the block-cutting process is time-based and offset from the 2-hour boundary, as noted above. So series that are still receiving samples will naturally retain in-memory chunks covering the most recent window.
+
+However, there may also be memSeries with no chunks left in memory. This can happen, for example, if a pod is restarted and the pod ID was part of the labels. In this case, the series is ephemeral; it stopped receiving data, and once its chunks were written out with a block cut, it had no in-memory samples.
+
+After a block is cut, Prometheus performs a head truncation and cleanup pass. During this process, it looks for series that no longer have any chunks in memory and have not received recent samples, and it removes those from the in-memory index. This is effectively the point at which orphaned time series are cleaned up.
+
+This generally ensures that short-lived series do not continue to consume memory indefinitely. That said, because block cutting and head truncation operate on a time-based cadence rather than the exact moment a series stops receiving data, **a series that existed only briefly can remain in memory for a few hours before it is finally cleaned up**.
+
+### Prometheus strengths
+
+The above data model is effective when used appropriately. More specifically, when you have:
+
+* a moderate number of long-lived series
+* scraped at regular intervals, where 
+* values do not change dramatically between samples for a series. 
+
+In this scenario, Prometheus’s chunk compression, XOR encoding, and delta-based timestamp storage work extremely well.
+
+Appending new values to an existing series is cheap and predictable. As long as you repeatedly scrape the same set of series and your label sets remain reasonably sized, the storage model is efficient and performs well. For these reasons, Prometheus has achieved widespread adoption and remains a successful storage engine for low-cardinality metric data.
+
+### Write-time issues with high cardinality
+
+The weaknesses of this model appear under high cardinality and high churn.
+
+First, there is a real overhead per series. Every time series has its own in-memory structure, including its labels, chunks, and entries in the inverted index. That overhead is manageable with a stable number of series, but it scales linearly as the number of unique series grows. More labels mean more possible combinations, and more combinations mean more series. Each one carries this overhead. It is not uncommon for the **Head to consume 10s or 100s of gigabytes of RAM under cardinality explosion**, leading to memory pressure or even crashes.
+
+Labels such as `container_id` are particularly useful in environments like Kubernetes because they allow operators to identify issues with specific pods or container instances and preserve full-fidelity operational context. The challenge is that these labels are both high cardinality and highly ephemeral. 
+
+As workloads scale, restart, and terminate, new series are continuously created, while old ones linger in memory until cleanup. In Prometheus, this increases memory overhead and repeatedly forces the system down the more expensive series creation path rather than the cheaper append path. As a result, many teams end up stripping these dimensions, sampling them aggressively, or avoiding them entirely to prevent cardinality explosion. For example, in [this post](https://blog.cloudflare.com/how-cloudflare-runs-prometheus-at-scale), CloudFlare detail how they use limits on new series creation to inhibit cardinality explosions
+
+All of these factors compound, making it harder for Prometheus to perform when cardinality exceeds what the model was originally optimized for.
+
+> Aside from the technical challenges of cardinality in Prometheus, there is also a commercial impact if you’re using an observability vendor. Many vendors that use a series-based time-series data model charge based on cardinality, often per active series or per data points ingested per minute. This is because high cardinality directly increases their infrastructure costs, which they are forced to pass on to their users. 
+
+### Write time compromises
+
+Users typically respond by limiting labels, scrape frequency, or ingestion volume. Teams have to think not just about what they want to monitor, but also about how to protect Prometheus from cardinality explosion.
+
+Aside from approaches like restricting the length of label names and the number of labels per metric, Prometheus also supports per-scrape limits. This allows you to cap the total number of samples accepted in a single scrape, with each sample potentially belonging to a different series. 
+
+While this can help prevent sudden spikes in cardinality, it does not eliminate the underlying risk. An endpoint could still emit fewer than the configured limit on each scrape while introducing new unique series over time, increasing overall cardinality and steadily consuming memory. There have been proposals to address[[1][2]](https://github.com/prometheus/prometheus/pull/11124) this with more central limits using a number of techniques.
+
+Systems that drop data at the cardinality limit also create a release-time hazard: a new version emitting higher-cardinality metrics can knock existing series out of ingestion, breaking dashboards and alerts that were working the day before.
+
+These measures protect Prometheus by dropping data or limiting ingestion. If a limit is reached, Prometheus simply drops samples or refuses to accept new series. Data is lost by design in order to preserve system stability. 
+
+Ultimately, the safest approach is to carefully manage cardinality from the start. Users often respond by reducing metric resolution or cardinality. This effectively means:
+
+* **Increasing the scrape interval** so metrics are collected less frequently.
+* **Dropping certain metrics at scrape time** using [relabeling rules](https://grafana.com/blog/how-relabeling-in-prometheus-works/)
+* **Reducing label dimensions** to create fewer unique series.
+* **Limiting samples per scrape** to effectively discard excess series.
+
+You’ll find plenty of blogs and guides [dedicated to managing cardinality](https://grafana.com/blog/how-to-manage-cardinality-with-out-of-the-box-dashboards-in-grafana-cloud/?pg=blog&plcmt=body-txt) in Prometheus. In practice, however, this creates both a cognitive and operational burden for SRE teams, who must constantly worry that a new deployment, metric, or label could suddenly introduce enough series churn to destabilize the system. More importantly, these compromises often reduce visibility into precisely the things teams most want to observe, such as individual containers, ephemeral workloads, or other high-fidelity operational dimensions.
+
+### Read time challenges
+
+The model also has read-time tradeoffs. When Prometheus cuts blocks to disk, those blocks are memory-mapped. This is an efficient technique. The operating system only loads pages into memory when they are accessed, so idle historical data does not immediately consume heap space. For most workloads, this works well and keeps the memory footprint predictable.
+
+If you query for a **specific series**, Prometheus is extremely efficient. The inverted index maps labels to series, allowing it to quickly resolve an exact label match, narrow the results to a small set of series, and read only the relevant chunks. For example, consider the following PromQL query:
+
+
+```yaml
+rate(http_response_time_sum{
+  host="host-42",
+  application="checkout-service",
+  request_path="/api/payments",
+  status="500"
+}[5m]) /
+rate(http_response_time_count{
+  host="host-42",
+  application="checkout-service",
+  request_path="/api/payments",
+  status="500"
+}[5m])
+
+```
+
+[Run code block](null)
+
+This calculates the average response time over the last five minutes for the specific `host`, `application`, `request path`, and `status` by dividing the rate of total response time by the rate of request count.
+
+In this case, the index lookup is precise. Very few posting lists are intersected, and only a small number of chunks are read from disk. This is a fast path. The challenge appears when queries become broader or more aggregated. Suppose you ask:
+
+
+
+```yaml
+sum(rate(http_response_time_sum{
+  application="checkout-service",
+  request_path=~".+",
+  status=~"2..|5.."
+}[5m]))
+/
+sum(rate(http_response_time_count{
+  application="checkout-service",
+  request_path=~".+",
+  status=~"2..|5.."
+}[5m]))
+
+```
+
+[Run code block](null)
+
+This matches all series for `checkout-service`, across all hosts, endpoints, and a wide range of status codes. Because the regex can expand to many possible label values, Prometheus pulls together large posting sets for `endpoint` and `status_code`, then combines them with the application constraint. 
+
+#### Lack of predicate pushdown
+
+Additionally, Prometheus cannot push arbitrary value predicates down into compressed chunk storage. Once a set of series is selected, the engine must read their chunks and scan through the samples within the requested time range. You cannot say “only return values above X” and avoid reading the rest of the series. The full chunk must be decoded, even if only part of it is relevant.
+Targeted lookups are efficient, but broad aggregations over high-cardinality labels can load many series and decode many chunks - requiring large volumes of data to be processed. 
+
+### Read time compromises
+
+Broad queries over high-cardinality dimensions are best avoided. Queries that omit key label filters, rely heavily on regex matching, or aggregate across millions of series at once can force large postings intersections and require decoding many chunks.
+
+In particular, wildcard-style queries across dimensions such as `pod_id`, `container_id`, or endpoint can quickly become expensive in high-churn environments. Targeted queries that narrow down label combinations perform well, but wide, high-level aggregations across large cardinality sets are where performance typically degrades.
+
+## Conclusion
+
+High cardinality becomes challenging in Prometheus because each unique label combination creates an independent time series with its own memory, indexing, and lifecycle overhead. As dimensionality and churn increase, this impacts ingestion, querying, and operational stability, forcing users to trade off visibility, cost, and system reliability.
+In the next post, we’ll explore why these same workloads behave very differently in ClickHouse. In particular, we’ll look at how the wide events model, column-oriented storage, dynamic attributes, and analytical query execution fundamentally change where cardinality costs appear and why they are often far more manageable in practice.
+
+
+---
+
+## ClickStack SQL Charting and Alerting
+Published: 2026-05-13T16:14:30+00:00
+URL: https://clickhouse.com/blog/clickstack-sql-charting-and-alerting
+
+---
+title: "ClickStack SQL Charting and Alerting"
+date: "2026-05-13T16:14:30.229Z"
+author: "Drew Davis and Dale McDiarmid"
+category: "Engineering"
+excerpt: "Learn how ClickStack’s new SQL-powered charting and alerting unlock anomaly detection, rolling baselines, and advanced observability workflows directly on top of ClickHouse, without relying on external tooling."
+---
+
+# ClickStack SQL Charting and Alerting
+
+## Introduction
+
+Today, we’re introducing SQL-based visualizations and SQL-based alerting in ClickStack. Users can now build charts and alerts using arbitrary ClickHouse SQL queries, unlocking far more advanced analysis directly inside the ClickStack UI.
+SQL-based visualizations enable users to move beyond predefined query builders and fully leverage ClickHouse SQL for dashboards and exploratory analysis. SQL-based alerting extends this further, allowing anything expressible in SQL to serve as an alert condition, from rolling averages and anomaly detection to grouped statistical checks and custom operational logic.
+In this post, we’ll explore why we built these capabilities, how they change the observability workflow, and walk through some examples that demonstrate where SQL-driven analysis and alerting become especially powerful.
+
+## The first step: SQL-powered charting 
+
+The journey to SQL-based charts and alerts started with a simple observation: while query builders are excellent for common workflows, advanced users almost always outgrow them.
+
+As observability use cases mature, teams want to compute rolling baselines, build statistical anomaly detection, correlate events, calculate SLOs, and express logic that doesn’t cleanly map to predefined UI controls. While query builders are useful for getting started, they inevitably trade flexibility for simplicity.
+
+![99th_by_service.png](https://clickhouse.com/uploads/99th_by_service_2a37d86d3b.png)
+
+_Query builders are inherently limited and only ever cover a subset of user query requirements_
+
+Because ClickStack is built on ClickHouse, supporting raw SQL felt like a natural extension of the platform rather than a bolt-on feature. SQL charts allow users to leverage the same expressive analytical capabilities that make ClickHouse so powerful while still integrating directly into dashboards, filters, and visualizations.
+
+While SQL-based visualizations can be used for simple charts, their real value lies in helping users move beyond straightforward aggregations and apply richer analytical logic directly within their observability workflows.
+
+
+---
+
+## Get started today
+
+Interested in seeing how ClickStack works for your observability data? Get started with ClickStack in ClickHouse Cloud in minutes and receive $300 in free credits.
+
+[Sign up](https://console.clickhouse.cloud/signUp?intent=o11y&loc=blog-cta-566-get-started-today-sign-up&utm_blogctaid=566)
+
+---
+
+### Example - Detecting anomalies with rolling baselines
+
+One of the most common requests from advanced observability teams is the ability to visualize anomalies relative to recent system behavior rather than static thresholds. For example, a checkout endpoint taking 800ms may be normal during peak traffic, but highly abnormal for a lightweight internal service.
+
+With SQL-based charting, users can build rolling averages and standard deviation baselines directly into their queries using ClickHouse window functions. Instead of visualizing only raw latency, charts can show when latency deviates from its expected range over time for a service.
+
+
+```sql
+WITH buckets AS (
+  SELECT
+    toStartOfInterval(
+      Timestamp,
+      INTERVAL {intervalSeconds:Int64} second
+    ) AS ts,
+    ServiceName,
+    quantile(0.95)(Duration) / 1000000 AS p95_latency_ms
+  FROM $__sourceTable
+  WHERE Timestamp >= fromUnixTimestamp64Milli({startDateMilliseconds:Int64})
+    AND Timestamp < fromUnixTimestamp64Milli({endDateMilliseconds:Int64})
+    AND SpanKind = 'Server'
+    AND $__filters
+  GROUP BY
+    ts,
+    ServiceName
+),
+
+baselines AS (
+  SELECT
+    ts,
+    ServiceName,
+    p95_latency_ms,
+    avg(p95_latency_ms) OVER (
+      PARTITION BY ServiceName
+      ORDER BY ts
+      ROWS BETWEEN 12 PRECEDING AND 1 PRECEDING
+    ) AS rolling_avg_latency_ms,
+    stddevPop(p95_latency_ms) OVER (
+      PARTITION BY ServiceName
+      ORDER BY ts
+      ROWS BETWEEN 12 PRECEDING AND 1 PRECEDING
+    ) AS rolling_stddev_latency_ms
+  FROM buckets
+)
+
+SELECT
+  ts,                                      -- Timestamp column
+  ServiceName,                             -- Group name column
+  p95_latency_ms,                          -- Series value column
+  rolling_avg_latency_ms,                  -- Series value column
+  rolling_avg_latency_ms
+    + 3 * rolling_stddev_latency_ms
+      AS upper_bound_latency_ms            -- Series value column
+FROM baselines
+WHERE rolling_avg_latency_ms IS NOT NULL
+ORDER BY ts ASC
+
+```
+
+[Run code block](null)
+
+This produces a time-series chart where ts is used as the timestamp column, ServiceName is treated as the group column, and each numeric column is plotted as a separate series. The chart shows current p95 latency, the rolling average, and an upper statistical boundary for each service.
+
+![sql-chart.png](https://clickhouse.com/uploads/sql_chart_f45569e162.png)
+
+This allows teams to see whether latency is moving outside its recent baseline, rather than relying on a fixed threshold that may be too sensitive for one workload and too permissive for another. This type of analysis is extremely difficult to express in traditional query builders because it requires window functions, historical baselines, percentile calculations, grouped time-series logic, and multi-stage query composition. With raw SQL, these workflows become straightforward.
+
+Some astute readers may have noticed that the previous SQL query includes macros for the query time range, dashboard filters, and source table selection. Users coming from Grafana may also find these macros very familiar…
+
+### Allowing dynamic SQL charts
+
+While static SQL queries are useful, observability dashboards still need to remain dynamic and interactive. Charts need to automatically respond to dashboard time ranges, intervals, and filters, without users having to manually rewrite queries every time the dashboard changes.
+
+This is where query parameters and macros become critical.
+
+Query parameters expose dashboard state directly to the SQL query. These include values such as the dashboard start time, end time, and interval size. They use ClickHouse parameter syntax such as `{startDateMilliseconds:Int64}` and `{intervalSeconds:Int64}` and allow queries to dynamically adapt to the active dashboard context.
+
+Macros build on top of these parameters and provide shorthand expressions for common observability workflows. For example, macros such as `$__filters` and `$__sourceTable` automatically inject dashboard filters and source table references directly into the query. Time-filtering and bucketing macros further simplify the creation of dynamic time-series visualizations.
+
+One of our goals when building SQL-based visualizations was to make the experience feel immediately familiar to existing Grafana and ClickHouse users. As a result, many of the supported macros intentionally mirror the conventions used by the [ClickHouse Grafana plugin](https://github.com/grafana/clickhouse-datasource). In many cases, users can bring existing SQL queries directly from Grafana into ClickStack and have them work with minimal or no modification.
+
+This compatibility is an important design philosophy for us. Teams already invest significant time building operational queries, dashboards, and alerting logic, and we wanted SQL-based visualizations to integrate naturally into existing workflows rather than forcing users to rewrite everything from scratch.
+
+These macros also ensure that SQL charts remain fully interactive inside dashboards. When a user changes the dashboard time range, applies a filter, or switches the underlying source, the SQL query automatically adapts to reflect the new context. 
+
+Considering the previous visualization and query, if we apply a dashboard time range and service-level filter, the macros automatically inject the corresponding SQL conditions into the query execution while preserving the visualization logic.
+
+<video autoplay="1" muted="1" loop="1" controls="0">
+  <source src="https://clickhouse.com/uploads/clickstack_sql_filtering_a84b8a14c2.mp4" type="video/mp4" />
+</video>
+
+For users interested in the full list of supported macros and query parameters, see the SQL-based visualizations documentation:[ SQL-based visualizations documentation](https://clickhouse.com/docs/use-cases/observability/clickstack/dashboards/sql-visualizations?utm_source=chatgpt.com).
+
+### Charting query results
+
+While SQL-based visualizations provide full flexibility over query logic, ClickStack still needs to understand how returned query columns should map onto visualization elements. This mapping depends on both the visualization type and the data types returned by the query itself. For example, for Line and Stacked Bar charts, the first `Date` or `DateTime` column is interpreted as the timestamp axis, with numeric columns plotted as series values, and String, `Map`, and `Array` columns are treated as grouping dimensions, allowing separate lines or bars to be rendered per group.
+
+Other visualization types, such as Pie, Number, and Table charts, use slightly different mapping rules. For a complete breakdown of how query results are interpreted across visualization types, see the documentation section on[ how query results are plotted](https://clickhouse.com/docs/use-cases/observability/clickstack/dashboards/sql-visualizations#how-results-are-plotted).
+
+## The next step: SQL-powered alerting
+
+While SQL-powered charting dramatically expands what users can visualize, SQL-powered alerting is where the real operational impact emerges.
+
+Last year, we introduced [native alerting support in ClickStack](https://clickhouse.com/blog/alerting-arrives-in-clickstack-for-clickhouse-cloud) with integrations for platforms such as PagerDuty and Incident.io, allowing teams to build alerts directly from searches and charts. This made it easy to define threshold-based alerts over logs, traces, and metrics directly inside ClickStack.
+
+But ultimately, alerting is only ever as expressive as the query capabilities beneath it.
+
+Traditional threshold alerts work well for straightforward conditions, but observability teams increasingly want to alert on more advanced operational patterns. They want to detect anomalies relative to rolling baselines, identify sudden changes in behavior, correlate multiple signals together, or build alerts based on statistical analysis rather than fixed values.
+
+Historically, this often forced teams to maintain separate tooling, such as Grafana, solely for advanced alerting workflows, even though ClickHouse was already their primary observability datastore.
+
+SQL-based alerting is the natural evolution of SQL-powered charting. Once users can express arbitrary analytical logic in SQL visualizations, they can apply that same power directly to alerting.
+
+While SQL alerts can still be used for richer threshold-based conditions, such as alerting on rolling averages or dynamically calculated baselines, the real power comes from moving the complexity into the query itself rather than the threshold configuration.
+
+![sql-chart-alert.png](https://clickhouse.com/uploads/sql_chart_alert_f3287f11d8.png)
+
+Instead of returning a raw metric and comparing it against a static threshold, SQL queries can encapsulate the entire alerting decision. A query can look back over previous time windows, calculate statistical boundaries, compare historical behavior, and ultimately return a binary result such as 1 or 0, indicating whether an alert condition should fire.
+
+This fundamentally changes how alerting logic can be expressed. Rather than configuring increasingly complex threshold rules, users can leverage the full analytical power of ClickHouse directly inside the query itself.
+
+### Example: anomaly detection with lagging averages
+
+For example, consider detecting sudden spikes in error volume relative to historical behavior.
+Rather than alerting when error counts exceed a fixed threshold, we can instead calculate a rolling average and standard deviation over previous intervals, then determine whether the current bucket deviates significantly from its recent baseline.
+
+
+```sql
+WITH buckets AS (
+  SELECT
+    toStartOfInterval(
+      Timestamp,
+      INTERVAL {intervalSeconds:Int64} second
+    ) AS ts,
+    countIf(StatusCode = 'Error') AS error_count
+  FROM $__sourceTable
+  WHERE Timestamp >= fromUnixTimestamp64Milli({startDateMilliseconds:Int64})
+        - toIntervalSecond({intervalSeconds:Int64} * 30)
+    AND Timestamp < fromUnixTimestamp64Milli({endDateMilliseconds:Int64})
+    AND SpanKind = 'Server'
+    AND $__filters
+  GROUP BY ts
+  ORDER BY ts
+),
+
+baselines AS (
+  SELECT
+    ts,
+    error_count,
+    avg(error_count) OVER (
+      ORDER BY ts
+      ROWS BETWEEN 30 PRECEDING AND 1 PRECEDING
+    ) AS rolling_avg,
+    stddevPop(error_count) OVER (
+      ORDER BY ts
+      ROWS BETWEEN 30 PRECEDING AND 1 PRECEDING
+    ) AS rolling_stddev
+  FROM buckets
+)
+
+SELECT
+  ts,
+  if(
+    error_count > rolling_avg + (2 * rolling_stddev),
+    1,
+    0
+  ) AS anomaly_detected
+FROM baselines
+WHERE rolling_avg IS NOT NULL
+ORDER BY ts ASC
+```
+
+[Run code block](null)
+
+_This query first buckets failed requests into time intervals and calculates the total error count for each interval. It then computes a rolling average and standard deviation across the previous 30 intervals using ClickHouse window functions. Finally, the query compares the current error count against this rolling baseline and returns 1 when the current interval exceeds the rolling average by more than two standard deviations; otherwise returning 0._
+
+Here, the SQL query itself fully encapsulates the alerting logic. Rather than visualizing raw error counts and configuring a fixed threshold externally, the query determines whether the current interval represents a statistically significant anomaly relative to recent history.
+
+The alert configuration itself then becomes extremely simple. If the query returns 1, the alert fires.
+
+This approach unlocks a dramatically wider range of alerting strategies because the complexity lives inside SQL rather than inside a constrained alert configuration model.
+
+![threshold_alerting.png](https://clickhouse.com/uploads/threshold_alerting_9dffb1f964.png)
+
+### Alerting on query results
+
+SQL-based alerts work by inspecting the results returned from a SQL query and determining which values should be evaluated against the configured threshold. For time-series visualizations such as Line and Stacked Bar charts, ClickStack identifies the returned timestamp column as the evaluation bucket and independently evaluates the final numeric column returned by the query for each interval. Any non-numeric columns are treated as grouping dimensions, allowing alerts to trigger independently per service, environment, or other grouping key. See [our documentation](https://clickhouse.com/docs/use-cases/observability/clickstack/alerts#sql-result-interpretation) for the full rules on when alerts will fire.
+
+Just like SQL-based visualizations, SQL [alert queries fully support query parameters](https://clickhouse.com/docs/use-cases/observability/clickstack/alerts#query-params) and macros. This ensures alerts remain dynamic and automatically adapt to dashboard time ranges, evaluation intervals, and filters. In most cases, queries should include both interval macros and time-range filters so that alert evaluations remain scoped to the configured execution window rather than scanning the entire dataset during every alert run.
+
+## Conclusion
+
+SQL-based alerting is the natural evolution of SQL-powered charting. Once users can express arbitrary analytical logic inside visualizations, extending those same capabilities into alerting becomes the obvious next step.
+
+
+---
+
+## ClickHouse Cloud: Fast, Updatable Lookups with the Join Table Engine
+Published: 2026-05-12T15:55:17+00:00
+URL: https://clickhouse.com/blog/join-table-engine
+
+---
+title: "ClickHouse Cloud: Fast, Updatable Lookups with the Join Table Engine"
+date: "2026-05-12T15:55:17.028Z"
+author: "Hellmar Becker"
+category: "Engineering"
+excerpt: "Learn how ClickHouse Cloud's Join table engine enables fast, updatable in-memory lookups for dimensional modeling — with automatic upserts, deduplication, and data compaction powered by ReplacingMergeTree under the hood."
+---
+
+# ClickHouse Cloud: Fast, Updatable Lookups with the Join Table Engine
+
+## Dictionaries in ClickHouse {#dictionaries-in-clickhouse}
+
+When you move data from your transactional or event-based data sources to an analytical database like ClickHouse, you will likely consider modeling a dimensional schema according to the [Kimball methodology](https://en.wikipedia.org/wiki/Dimensional_modeling).
+
+> [Dimensional modeling](https://en.wikipedia.org/wiki/Dimensional_modeling) always uses the concepts of facts (measures), and dimensions (context). Facts are typically (but not always) numeric values that can be aggregated, and dimensions are groups of hierarchies and descriptors that define the facts.
+
+It follows that fact tables are typically immutable, and data are appended to them; whereas dimension tables are smaller, and subject to (infrequent) updates ([slowly changing dimensions](https://en.wikipedia.org/wiki/Slowly_changing_dimension)). When you run an analytical query, you have to join those dimensions against the fact table.
+
+One common approach to do this in ClickHouse is to have a copy of the dimension data in memory in a [Dictionary](https://clickhouse.com/docs/engines/table-engines/special/dictionary). This approach enables [Direct Joins](https://clickhouse.com/blog/clickhouse-fully-supports-joins-direct-join-part4#direct-join) and is [recommended for optimizing join performance](https://clickhouse.com/blog/postgres-to-clickhouse-data-modeling-tips-v2#optimizing-joins).
+
+A Dictionary is set up by specifying, among others, the `SOURCE` and `LIFETIME` attributes. ClickHouse pulls fresh data from the source and uses `LIFETIME` to determine how often it should refresh the Dictionary. But some customers asked me: Isn't there a way to update a Dictionary like a regular table? And indeed, there is a way to achieve this, using another special table engine.
+
+## The `Join` table engine {#the-join-table-engine}
+
+The [`Join` table engine](https://clickhouse.com/docs/engines/table-engines/special/join) is just what we need here. It is an in-memory structure, laying out data for a *specific* type of join that has to be stated in the table definition, and it is backed by a persistence layer. Setting up the `Join` table, you need to configure
+
+- *join strictness*
+- *join type*
+- the *key column(s)* you want to use in the join.
+
+### Join strictness {#join-strictness}
+
+This can be `ANY` or `ALL`. With `ALL`, all matching rows are taken from the `Join` table; `ANY` takes only the latest one.
+
+This means with `ANY` type *an **`INSERT`** becomes an **`UPSERT`** by key:* you update a dimension row by inserting another row with the same key.
+
+### Join Type {#join-type}
+
+One of ClickHouse's [join types](https://clickhouse.com/docs/sql-reference/statements/select/join#supported-types-of-join), like `INNER` or `LEFT` or `RIGHT`. For dimensional modeling, you will mostly use `LEFT`.
+
+## Querying a `Join` table {#querying-a-join-table}
+
+While a `Join` table can be queried like any regular table using `SELECT`, there are two more ways of using it:
+
+1. If you place the `Join` table in a `JOIN` query where the join parameters match the ones in the definition of the table, ClickHouse will automatically know to use the Direct Join algorithm.
+2. You can look up values for a given key using `joinGet`. This works just like `dictGet` for Dictionaries.
+
+## Drawbacks in the open source implementation {#drawbacks-in-the-open-source-implementation}
+
+So a `Join` table with `ANY LEFT` join condition would be just the thing to implement a [Type 1 slowly changing dimension](https://en.wikipedia.org/wiki/Slowly_changing_dimension#Type_1:_overwrite), right? You can update values for a given key and have a high performing join. Why don't we use it all the time, then?
+
+It turns out that the implementation of the `Join` table engine in open source ClickHouse has a couple of drawbacks that make it less suitable for this use case:
+
+1. **`Join` tables are not distributed**; each cluster node would have to maintain its own copy/version of the table.
+2. **The persistence layer is not built for frequent inserts/updates**. The Join table engine persists data as compressed Native-format .bin files in the table's data directory on disk (one file per INSERT batch). On server startup, these files are read back sequentially and the in-memory HashJoin hash table is reconstructed from them. This means each update will create a new numbered .bin file. There is no background compaction process — files are never merged automatically. Over time, this leads to performance degradation.
+
+## Implementation in ClickHouse Cloud {#implementation-in-clickhouse-cloud}
+
+**These issues have been solved very elegantly in ClickHouse Cloud.** In ClickHouse Cloud, a `Join` table is actually transparently implemented as a `SharedJoin` table with a MergeTree family backing table:
+
+- for `ALL` join, this is a `MergeTree` table
+- for `ANY` join, a `ReplacingMergeTree` table.
+
+You can find these tables in `system.tables`. The naming convention for the underlying table is `.inner_id.SharedJoin.<uuid of Join table>`.
+
+> **Note:** there is a setting [`join_any_take_last_row`](https://clickhouse.com/docs/operations/settings/settings#join_any_take_last_row) that is **not** honored
+
+The in-memory table is populated from the persistent (underlying) table using a query (which includes `FINAL` in the case of `ANY` join) on insert to Join table (with filter to select only newest data) and on table load on startup.
+
+## Example: Data Enrichment {#example-data-enrichment}
+
+Probably the most meaningful use case is enrichment / dimensional modeling with an `ANY LEFT` join. To illustrate this specific case, let's take the example from the ClickHouse [docs](https://clickhouse.com/docs/engines/table-engines/special/join#example) and modify it a bit:
+
+<pre><code type='click-ui' language='sql'>
+-- Create the fact table and insert some data
+CREATE OR REPLACE TABLE id_val (
+    `id` UInt32,
+    `val` UInt32
+) ENGINE = MergeTree
+ORDER BY (id);
+
+INSERT INTO id_val VALUES
+    (1, 11), (2, 12), (3, 13);
+
+-- Creating the right-side Join table:
+CREATE OR REPLACE TABLE id_val_join (
+    `id` UInt32,
+    `val` UInt8
+) ENGINE = Join(ANY, LEFT, id);
+
+-- Insert some values
+INSERT INTO id_val_join VALUES
+    (1, 21), (1, 22), (3, 23);
+
+-- Enrichment query
+SELECT *
+FROM id_val
+ANY LEFT JOIN id_val_join USING (id);
+</code></pre>
+
+```shell
+   ┌─id─┬─val─┬─id_val_join.val─┐
+1. │  1 │  11 │              22 │
+2. │  2 │  12 │               0 │
+3. │  3 │  13 │              23 │
+   └────┴─────┴─────────────────┘
+```
+
+Now, let's find out what happens in the `Join` table and in the underlying table when we upsert an entry for key `1`.
+
+<pre><code type='click-ui' language='sql'>
+-- And another insert
+INSERT INTO id_val_join VALUES (1,42);
+</code></pre>
+
+Look up the underlying table:
+
+<pre><code type='click-ui' language='sql'>
+SELECT database, name, uuid, engine
+FROM system.tables
+WHERE name = 'id_val_join'
+FORMAT Vertical;
+</code></pre>
+
+```shell
+database:                         default
+name:                             id_val_join
+uuid:                             64f169ee-977d-46c2-b067-580fdf8c1d4b
+engine:                           SharedJoin
+```
+
+The `Join` table deduplicates and keeps the latest entry only:
+
+<pre><code type='click-ui' language='sql'>
+SELECT * FROM id_val_join;
+</code></pre>
+
+```shell
+   ┌─id─┬─val─┐
+1. │  3 │  23 │
+2. │  1 │  42 │
+   └────┴─────┘
+```
+
+Constructing the underlying `ReplacingMergeTree` table from the UUID, we see this one retains the duplicates until they are merged out:
+
+<pre><code type='click-ui' language='sql'>
+SELECT * FROM default.`.inner_id.SharedJoin.64f169ee-977d-46c2-b067-580fdf8c1d4b`;
+</code></pre>
+
+```shell
+   ┌─id─┬─val─┐
+1. │  1 │  22 │
+2. │  3 │  23 │
+3. │  1 │  42 │
+   └────┴─────┘
+```
+
+Finally, running the enrichment query again, we see how the updated dimension entry reflects in the result:
+
+<pre><code type='click-ui' language='sql'>
+SELECT *
+FROM id_val
+ANY LEFT JOIN id_val_join USING (id);
+</code></pre>
+
+```shell
+   ┌─id─┬─val─┬─id_val_join.val─┐
+1. │  1 │  11 │              42 │
+2. │  2 │  12 │               0 │
+3. │  3 │  13 │              23 │
+   └────┴─────┴─────────────────┘
+```
+
+Every time you insert a new row or a set of rows:
+
+- The data is inserted into the underlying `ReplacingMergeTree` table.
+- The in-memory representation is updated on insert to the Join table (with a filter on block ID to select only newest data) and on table load on startup.
+- This query also applies `FINAL`, so the in-memory `Join` table will never have duplicates.
+- The `join_any_take_last_row` is ignored. You always get the latest entry.
+
+## Conclusion {#conclusion}
+
+- The `Join` table engine in ClickHouse provides a precomputed hash map that can be used to speed up JOINs.
+- Like a dictionary, a `Join` table is kept in memory. But it is backed by a persistence layer (saved in files).
+- In ClickHouse Cloud, `Join` tables are automatically clustered and backed by full `MergeTree` tables, making them suitable for frequent updates.
+- In particular, for dimensional modeling in ClickHouse Cloud, use `Join(ANY, LEFT, id)` — upserting, deduplication, and data compaction is automatically handled by the underlying `ReplacingMergeTree`!
+
+
+---
+
+## Get started today
+
+Interested in seeing how ClickHouse works on your data? Get started with ClickHouse Cloud in minutes and receive $300 in free credits.
+
+[Sign up](https://console.clickhouse.cloud/signUp?loc=blog-cta-560-get-started-today-sign-up&utm_blogctaid=560)
+
+---
 
 ---
 
