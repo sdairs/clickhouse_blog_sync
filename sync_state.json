@@ -1,5 +1,5 @@
 {
-  "last_sync": "2026-05-23T07:01:07.237605Z",
+  "last_sync": "2026-05-24T07:12:11.062040Z",
   "processed_blogs": {
     "https://clickhouse.com/blog/clickhouse-raises-400-million-series-d-acquires-langfuse-launches-postgres": {
       "title": "ClickHouse raises $400M Series D led by Dragoneer to accelerate expansion across analytics and AI infrastructure",
@@ -4734,9 +4734,21 @@
       "pub_date": "2026-05-20T20:54:03+00:00",
       "file_path": "blogs/2026-05-20-clickhousectl-v0-2-0-postgres-clickpipes-and-more.md",
       "processed_at": "2026-05-22T07:20:24.047900Z"
+    },
+    "https://clickhouse.com/blog/native-random-sampling": {
+      "title": "Native random sampling in ClickHouse",
+      "pub_date": "2026-05-22T09:53:15+00:00",
+      "file_path": "blogs/2026-05-22-native-random-sampling-in-clickhouse.md",
+      "processed_at": "2026-05-24T07:12:10.686642Z"
+    },
+    "https://clickhouse.com/blog/integrating-rust-delta-kernel": {
+      "title": "Integrating the Rust Delta Kernel into ClickHouse",
+      "pub_date": "2026-05-22T09:32:20+00:00",
+      "file_path": "blogs/2026-05-22-integrating-the-rust-delta-kernel-into-clickhouse.md",
+      "processed_at": "2026-05-24T07:12:10.974099Z"
     }
   },
-  "total_blogs": 789,
+  "total_blogs": 791,
   "failed_blogs": [
     {
       "url": "https://clickhouse.com/jp/blog/clickhouse-gcp-japan-availability",

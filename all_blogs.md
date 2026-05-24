@@ -1,6 +1,778 @@
 # ClickHouse Blogs
-Last updated: 2026-05-23 07:01:07 UTC
-Total blogs: 789
+Last updated: 2026-05-24 07:12:10 UTC
+Total blogs: 791
+
+---
+
+## Native random sampling in ClickHouse
+Published: 2026-05-22T09:53:15+00:00
+URL: https://clickhouse.com/blog/native-random-sampling
+
+---
+title: "Native random sampling in ClickHouse"
+date: "2026-05-22T09:53:15.900Z"
+author: "Mark Needham"
+category: "Engineering"
+excerpt: "Learn how to use ClickHouse's SAMPLE BY clause to run fast, approximate queries on large datasets with minimal accuracy trade-off."
+---
+
+# Native random sampling in ClickHouse
+
+Sometimes running aggregate queries against all your data isn't fast enough.
+ClickHouse's native random sampling lets you execute a query against a random fraction or sample of the data instead - and with the right setup, the results stay surprisingly accurate.
+
+<iframe width="768" height="432" src="https://www.youtube.com/embed/RHkfT7Uj38k?si=CdYvg80QWt5TBy_U" title="YouTube video player" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" referrerpolicy="strict-origin-when-cross-origin" allowfullscreen></iframe>
+
+## Setup
+
+We'll use the [UK house prices dataset](https://clickhouse.com/docs/getting-started/example-datasets/uk-price-paid), which has just over 30 million property transactions.
+Let's first create the table:
+
+<pre><code type='click-ui' language='sql'>
+CREATE TABLE uk_price_paid
+(
+    price UInt32,
+    date Date,
+    postcode1 LowCardinality(String),
+    postcode2 LowCardinality(String),
+    type Enum8('terraced' = 1, 'semi-detached' = 2, 'detached' = 3, 'flat' = 4, 'other' = 0),
+    is_new UInt8,
+    duration Enum8('freehold' = 1, 'leasehold' = 2, 'unknown' = 0),
+    addr1 String,
+    addr2 String,
+    street LowCardinality(String),
+    locality LowCardinality(String),
+    town LowCardinality(String),
+    district LowCardinality(String),
+    county LowCardinality(String)
+)
+ENGINE = MergeTree
+ORDER BY (postcode1, postcode2, addr1, addr2);
+</code></pre>
+
+And then ingest the data:
+
+<pre><code type='click-ui' language='sql'>
+INSERT INTO uk_price_paid
+SELECT
+    toUInt32(price_string) AS price,
+    parseDateTimeBestEffortUS(time) AS date,
+    splitByChar(' ', postcode)[1] AS postcode1,
+    splitByChar(' ', postcode)[2] AS postcode2,
+    transform(a, ['T', 'S', 'D', 'F', 'O'], ['terraced', 'semi-detached', 'detached', 'flat', 'other']) AS type,
+    b = 'Y' AS is_new,
+    transform(c, ['F', 'L', 'U'], ['freehold', 'leasehold', 'unknown']) AS duration,
+    addr1,
+    addr2,
+    street,
+    locality,
+    town,
+    district,
+    county
+FROM url(
+    'http://prod1.publicdata.landregistry.gov.uk.s3-website-eu-west-1.amazonaws.com/pp-complete.csv',
+    'CSV',
+    'uuid_string String,
+    price_string String,
+    time String,
+    postcode String,
+    a String,
+    b String,
+    c String,
+    addr1 String,
+    addr2 String,
+    street String,
+    locality String,
+    town String,
+    district String,
+    county String,
+    d String,
+    e String'
+) SETTINGS max_http_get_redirects=10;
+</code></pre>
+
+We can then write the following query to get a count of all the rows in the table:
+
+<pre><code type='click-ui' language='sql'>
+SELECT count()
+FROM uk_price_paid;
+</code></pre>
+
+Which returns:
+
+```shell
+┌──count()─┐
+│ 30452463 │ -- 30.45 million
+└──────────┘
+
+1 row in set. Elapsed: 0.002 sec.
+```
+
+## Choosing a sample key
+
+Now let's say we want to run aggregate queries on a sample of this data, because running those queries against all the data isn't fast enough. To do that, we need to specify a sample key when we create our table.
+
+A sample key is an expression that determines which rows get included when you sample your data. The key should be an unsigned integer (like a hash), have high cardinality, and distribute evenly across its range. One such function is [`sipHash64`](https://clickhouse.com/docs/sql-reference/functions/hash-functions#sipHash64), a cryptographic hash function that returns a 64-bit value.
+
+We can verify this by checking how evenly it distributes `postcode1` and `postcode2`.
+The following query uses `sipHash64` on `postcode1` and `postcode2` and then rounds down the hashes into 10 buckets, and each of them should hold around 10% of the values.
+
+<pre><code type='click-ui' language='sql'>
+WITH pow(2, 64) AS maxUInt64, 10 AS numBuckets
+SELECT
+    floor(sipHash64(postcode1, postcode2) / (maxUInt64 / numBuckets)) AS bucket,
+    count() AS rows,
+    round(count() / (SELECT count() FROM uk_price_paid) * 100, 2) AS pct
+FROM uk_price_paid
+GROUP BY bucket
+ORDER BY bucket;
+</code></pre>
+
+If we run the query, we'll see the following output:
+
+```shell
+┌─bucket─┬────rows─┬───pct─┐
+│      0 │ 3106578 │  10.2 │
+│      1 │ 3025622 │  9.94 │
+│      2 │ 3043133 │  9.99 │
+│      3 │ 3033438 │  9.96 │
+│      4 │ 3063534 │ 10.06 │
+│      5 │ 3048884 │ 10.01 │
+│      6 │ 3005960 │  9.87 │
+│      7 │ 3053378 │ 10.03 │
+│      8 │ 3029517 │  9.95 │
+│      9 │ 3042419 │  9.99 │
+└────────┴─────────┴───────┘
+```
+
+Each bucket holds right around 10% - some a little less, some a little more, but very close.
+`postcode1` and `postcode2` would therefore be a good choice of key.
+
+On the other hand, let's see what happens if we hash `county` instead:
+
+<pre><code type='click-ui' language='sql'>
+WITH pow(2, 64) AS maxUInt64, 10 AS numBuckets
+SELECT
+    floor(sipHash64(county) / (maxUInt64 / numBuckets)) AS bucket,
+    count() AS rows,
+    round(count() / (SELECT count() FROM uk_price_paid) * 100, 2) AS pct
+FROM uk_price_paid
+GROUP BY bucket
+ORDER BY bucket;
+</code></pre>
+
+```shell
+┌─bucket─┬────rows─┬───pct─┐
+│      0 │ 2853723 │  9.37 │
+│      1 │ 2543953 │  8.35 │
+│      2 │ 4568680 │    15 │
+│      3 │ 1402093 │   4.6 │
+│      4 │ 5547516 │ 18.22 │
+│      5 │ 1402865 │  4.61 │
+│      6 │ 4854564 │ 15.94 │
+│      7 │ 2820334 │  9.26 │
+│      8 │ 2649867 │   8.7 │
+│      9 │ 1808868 │  5.94 │
+└────────┴─────────┴───────┘
+```
+
+This time, the amount of data in each bucket ranges from 4.6% to 18%, which isn't as well spread out. `county` therefore wouldn't be such a good choice for our sampling key. The reason for this is that `county` is a low cardinality column, with only 132 unique values. We therefore compute 132 hashes which are spread across 10 buckets, giving us roughly 13 counties per bucket. The number of rows per bucket is dependent on the number of properties sold in that county. 
+
+The following query shows us how uneven the spread of property sales by county is:
+
+<pre><code type='click-ui' language='sql'>
+SELECT county,
+       round((100 * count()) / sum(count()) OVER (), 2) AS pct
+FROM uk_price_paid
+GROUP BY county
+ORDER BY pct DESC
+LIMIT 10
+</code></pre>
+
+```shell
+┌─county─────────────┬──pct─┐
+│ GREATER LONDON     │ 12.7 │
+│ GREATER MANCHESTER │ 4.45 │
+│ WEST MIDLANDS      │  3.8 │
+│ WEST YORKSHIRE     │  3.8 │
+│ KENT               │ 2.84 │
+│ ESSEX              │ 2.77 │
+│ HAMPSHIRE          │  2.6 │
+│ LANCASHIRE         │ 2.29 │
+│ SURREY             │ 2.23 │
+│ MERSEYSIDE         │ 2.13 │
+└────────────────────┴──────┘
+```
+
+Greater London accounts for almost 13% of all sales, so whichever bucket it lands in will be heavily skewed.
+
+By contrast, there are 1.32 million distinct postcode1/postcode2 combinations, which is enough to let the hash function do its job of distributing the data evenly.
+
+## Creating the table
+
+Next, let's create a new version of the table with our sampling key.
+The [`SAMPLE BY`](https://clickhouse.com/docs/engines/table-engines/mergetree-family/mergetree#sample-by) key must be part of your primary key (i.e. your `ORDER BY` expression).
+We'll add `sipHash64(postcode1, postcode2)` at the beginning of the `ORDER BY` so that we see the most benefit from sampling.
+
+<pre><code type='click-ui' language='sql'>
+CREATE TABLE uk_price_paid_sample
+(
+    price UInt32,
+    date Date,
+    postcode1 LowCardinality(String),
+    postcode2 LowCardinality(String),
+    type Enum8('terraced' = 1, 'semi-detached' = 2, 'detached' = 3, 'flat' = 4, 'other' = 0),
+    is_new UInt8,
+    duration Enum8('freehold' = 1, 'leasehold' = 2, 'unknown' = 0),
+    addr1 String,
+    addr2 String,
+    street LowCardinality(String),
+    locality LowCardinality(String),
+    town LowCardinality(String),
+    district LowCardinality(String),
+    county LowCardinality(String)
+)
+ENGINE = MergeTree
+ORDER BY (sipHash64(postcode1, postcode2), postcode1, postcode2, addr1, addr2)
+SAMPLE BY sipHash64(postcode1, postcode2);
+</code></pre>
+
+Now let's insert the data from our original table into the new one:
+
+<pre><code type='click-ui' language='sql'>
+INSERT INTO uk_price_paid_sample
+SELECT * 
+FROM uk_price_paid;
+</code></pre>
+
+## Sampling the data in a table
+
+With the table set up, it's time to do some sampling!
+Data sampling is deterministic, which means the result of the same `SELECT .. SAMPLE` query is always the same.
+The `SAMPLE` clause works in two modes.
+
+The first mode is **by fraction**, where we provide a value between 0 and 1 and the query will be executed on that fraction of the data.
+
+<pre><code type='click-ui' language='sql'>
+SELECT count() 
+FROM uk_price_paid_sample 
+SAMPLE 0.1;
+</code></pre>
+
+This query takes the first 10% of the hash value range, effectively all rows where `sipHash64(postcode1, postcode2) < 2^64 * 0.1`.
+The result of running the query is shown below:
+
+```shell
+┌─count()─┐
+│ 3106578 │ -- 3.11 million
+└─────────┘
+
+1 row in set. Elapsed: 0.043 sec.
+```
+
+There are 30.45 million rows in the table, so 10% of that is 3.045 million, which is reasonably close to the 3.11 million we got back.
+
+The second mode is **by row count**, where we specify a minimum number of rows to return:
+
+<pre><code type='click-ui' language='sql'>
+SELECT count() 
+FROM uk_price_paid_sample 
+SAMPLE 100000;
+</code></pre>
+
+This returns *at least* 100,000 rows. ClickHouse computes a threshold of `(100000 / estimated_table_rows) * 2^64` and selects rows whose hash falls below it.
+The output of running the query is shown below:
+
+```shell
+┌─count()─┐
+│  103347 │
+└─────────┘
+
+1 row in set. Elapsed: 0.009 sec.
+```
+
+In both cases, because the hash is part of the primary index, ClickHouse can quickly skip granules whose hash values are above the threshold.
+
+## The `_sample_factor` virtual column
+
+When using sampling, we can also use `_sample_factor`, a virtual column that tells you how many rows from the full dataset each sampled row represents.
+When there's no sampling, it's 1. For a 10% sample it's 10. For the row-count sample it's around 304.5.
+
+If we want to estimate the total number of rows, we can sum `_sample_factor`, as shown in the following query:
+
+<pre><code type='click-ui' language='sql'>
+SELECT 'None' AS sampleType, count(), sum(_sample_factor)
+FROM uk_price_paid_sample
+
+UNION ALL
+
+SELECT 'Fraction (0.1)' AS sampleType, count(), sum(_sample_factor)
+FROM uk_price_paid_sample SAMPLE 0.1
+
+UNION ALL
+
+SELECT 'Number (100,000)' AS sampleType, count(), sum(_sample_factor)
+FROM uk_price_paid_sample SAMPLE 100000;
+</code></pre>
+
+```shell
+┌─sampleType───────┬──count()─┬─sum(_sample_factor)─┐
+│ None             │ 30452463 │            30452463 │
+│ Fraction (0.1)   │  3106578 │            31065780 │
+│ Number (100,000) │   103347 │  31471706.936610293 │
+└──────────────────┴──────────┴─────────────────────┘
+```
+
+Both of the sampling techniques over estimate the total number of rows by 2-3%, which isn't too bad. 
+
+The same principle applies to other aggregations. If we run `sum(price)` on a 10% sample, we'll get roughly 10% of the true total:
+
+<pre><code type='click-ui' language='sql'>
+SELECT sum(price) 
+FROM uk_price_paid_sample 
+SAMPLE 0.1;
+</code></pre>
+
+```shell
+┌───sum(price)─┐
+│ 741594301263 │ -- 741.59 billion
+└──────────────┘
+```
+
+To get a full-dataset estimate, we need to multiply by `_sample_factor`:
+
+<pre><code type='click-ui' language='sql'>
+SELECT sum(price * _sample_factor) 
+FROM uk_price_paid_sample 
+SAMPLE 0.1;
+</code></pre>
+
+```shell
+┌─sum(multiply⋯le_factor))─┐
+│            7415943012630 │ -- 7.42 trillion
+└──────────────────────────┘
+```
+
+`avg` and `count` are safe on samples without adjustment - averaging or counting a subset gives the same result as the full dataset, but any aggregation that depends on population totals, like `sum`, needs `_sample_factor` to scale back up.
+
+Keep in mind that there will always be a little bit of error when sampling - that's the trade-off we make for faster query times.
+
+## Sampling a real analytical query
+
+Now let's run this against a real analytical query. For each county, town, and property type in a given year, we want the total sales, the average price, and the median. We limit to one row per county and town, otherwise we'd just get Greater London everywhere.
+
+<pre><code type='click-ui' language='sql'>
+SELECT county, town, type,
+       toYear(date) AS year,
+       sum(_sample_factor) AS sales,
+       round(avg(price)) AS avgPrice,
+       round(quantile(0.5)(price)) AS median
+FROM uk_price_paid_sample
+GROUP BY county, town, type, year
+ORDER BY sales DESC
+LIMIT 1 BY county, town
+LIMIT 5;
+</code></pre>
+
+```shell
+┌─county─────────────┬─town───────┬─type─────┬─year─┬─sales─┬─avgPrice─┬─median─┐
+│ GREATER LONDON     │ LONDON     │ flat     │ 2006 │ 65567 │   296793 │ 242500 │
+│ GREATER MANCHESTER │ MANCHESTER │ terraced │ 2004 │  9896 │    80212 │  71000 │
+│ WEST MIDLANDS      │ BIRMINGHAM │ terraced │ 2002 │  8266 │    73946 │  67500 │
+│ MERSEYSIDE         │ LIVERPOOL  │ terraced │ 2003 │  6507 │    52895 │  42500 │
+│ WEST YORKSHIRE     │ LEEDS      │ terraced │ 2002 │  5921 │    64886 │  55000 │
+└────────────────────┴────────────┴──────────┴──────┴───────┴──────────┴────────┘
+
+```
+
+I ran this a few times and the elapsed time is shown below:
+
+```shell
+5 rows in set. Elapsed: 0.687 sec. Processed 30.45 million rows, 290.09 MB (44.36 million rows/s., 422.55 MB/s.)
+Peak memory usage: 481.82 MiB.
+
+5 rows in set. Elapsed: 0.721 sec. Processed 30.45 million rows, 290.09 MB (42.22 million rows/s., 402.20 MB/s.)
+Peak memory usage: 496.21 MiB.
+
+5 rows in set. Elapsed: 0.748 sec. Processed 30.45 million rows, 290.09 MB (40.69 million rows/s., 387.62 MB/s.)
+Peak memory usage: 500.59 MiB.
+```
+
+Now let's see what happens if we sample 10% of the data:
+
+<pre><code type='click-ui' language='sql'>
+SELECT county, town, type,
+       toYear(date) AS year,
+       sum(_sample_factor) AS sales,
+       round(avg(price)) AS avgPrice,
+       round(quantile(0.5)(price)) AS median
+FROM uk_price_paid_sample SAMPLE 0.1
+GROUP BY county, town, type, year
+ORDER BY sales DESC
+LIMIT 1 BY county, town
+LIMIT 5;
+</code></pre>
+
+```shell
+┌─county─────────────┬─town───────┬─type─────┬─year─┬─sales─┬─avgPrice─┬─median─┐
+│ GREATER LONDON     │ LONDON     │ flat     │ 2006 │ 70500 │   287644 │ 240000 │
+│ GREATER MANCHESTER │ MANCHESTER │ terraced │ 2004 │ 10380 │    75479 │  66000 │
+│ WEST MIDLANDS      │ BIRMINGHAM │ terraced │ 2002 │  8480 │    73869 │  68000 │
+│ MERSEYSIDE         │ LIVERPOOL  │ terraced │ 2004 │  6640 │    78769 │  68000 │
+│ WEST YORKSHIRE     │ LEEDS      │ terraced │ 2002 │  6320 │    64598 │  54050 │
+└────────────────────┴────────────┴──────────┴──────┴───────┴──────────┴────────┘
+```
+
+And again, we'll run it three times:
+
+```shell
+5 rows in set. Elapsed: 0.169 sec. Processed 2.91 million rows, 38.31 MB (17.23 million rows/s., 226.97 MB/s.)
+Peak memory usage: 238.06 MiB.
+
+5 rows in set. Elapsed: 0.141 sec. Processed 3.15 million rows, 41.49 MB (22.30 million rows/s., 294.09 MB/s.)
+Peak memory usage: 177.00 MiB.
+
+5 rows in set. Elapsed: 0.185 sec. Processed 2.12 million rows, 27.82 MB (11.45 million rows/s., 150.14 MB/s.)
+Peak memory usage: 179.40 MiB.
+```
+
+Taking the best times of each run, it took 141 milliseconds when sampling and 687 milliseconds when querying the whole dataset, which is about 80% better.
+
+The query plan for the sampled query is shown below:
+
+```shell
+    ┌─explain──────────────────────────────────────────────────────┐
+ 1. │ Expression (Project names)                                   │
+ 2. │   Limit                                                      │
+ 3. │     LimitBy                                                  │
+ 4. │       Expression ((Before LIMIT BY + (Before ORDER BY + Proj⋯│
+ 5. │         Sorting (Sorting for ORDER BY)                       │
+ 6. │           Expression ((Before ORDER BY + Projection))        │
+ 7. │             Aggregating                                      │
+ 8. │               Expression ((Before GROUP BY + Change column n⋯│
+ 9. │                 ReadFromMergeTree (default.uk_price_paid_sam⋯│
+10. │                 Indexes:                                     │
+11. │                   PrimaryKey                                 │
+12. │                     Keys:                                    │
+13. │                       sipHash64(postcode1, postcode2)        │
+14. │                     Condition: (sipHash64(postcode1, postcod⋯│
+15. │                     Parts: 9/9                               │
+16. │                     Granules: 384/3719                       │
+17. │                     Search Algorithm: binary search          │
+18. │                   Ranges: 9                                  │
+    └──────────────────────────────────────────────────────────────┘
+```
+
+We can see from line 16 that the query has only scanned 384/3719 granules, which explains the reduced query time.
+
+Results-wise, the sales figures are roughly 7–8% off, average price is closer, and the medians are slightly off as well. This is probably reasonable for exploratory work.
+
+## In summary
+
+Sampling is useful when you need fast, approximate answers and can tolerate a small margin of error. 
+If you remember only three things from this post: pick a high-cardinality column as your sampling key, put your sample key at the front of your `ORDER BY` for the fastest queries, and scale sum aggregations with `_sample_factor`.
+
+---
+
+## Get started today
+
+Interested in seeing how ClickHouse works on your data? Get started with ClickHouse Cloud in minutes and receive $300 in free credits.
+
+[Sign up](https://console.clickhouse.cloud/signUp?loc=blog-cta-661-get-started-today-sign-up&utm_blogctaid=661)
+
+---
+
+---
+
+## Integrating the Rust Delta Kernel into ClickHouse
+Published: 2026-05-22T09:32:20+00:00
+URL: https://clickhouse.com/blog/integrating-rust-delta-kernel
+
+---
+title: "Integrating the Rust Delta Kernel into ClickHouse"
+date: "2026-05-22T09:32:20.999Z"
+author: "Melvyn Peignon, Kseniia Sumarokova and Raúl Marín"
+category: "Engineering"
+excerpt: "How we integrated the Rust Delta Kernel to replace our native Delta Lake implementation, reducing maintenance overhead while unlocking writes, schema evolution, time travel, and partition pruning."
+---
+
+# Integrating the Rust Delta Kernel into ClickHouse
+
+Unless you've spent the last few years in a cave without internet access, you've probably heard of open table formats like Delta Lake and Iceberg.
+
+The goal is simple: define a data format that any query engine can read and write, as long as it follows the protocol. Over time, these formats have evolved beyond simple interoperability, introducing richer table semantics such as transactional support, schema evolution, and versioned data management directly on top of the underlying data.
+
+Recently, we announced that ClickHouse [is data lake ready](https://clickhouse.com/blog/clickhouse-is-data-lake-ready), with it supporting these table formats as a query engine. As part of that journey, we've been working more closely with these formats and, like many others, have run into some of the same challenges.
+
+Adopting these table formats is not trivial. Supporting them requires keeping up with complex and evolving protocols, whether through external libraries or custom implementations. Each query engine remains responsible for maintaining its own integration, often leading to fragmented feature support and increasing maintenance overhead.
+
+In this post, we explore how we addressed this by integrating the Rust Delta Kernel into ClickHouse. This provides a maintained and consistent interface between the table format and ClickHouse's query engine, enabling us to expose more features while significantly reducing integration complexity.
+
+## What is ClickHouse? {#what-is-clickhouse}
+
+ClickHouse is a high-performance, column-oriented SQL database management system (DBMS) for online analytical processing (OLAP). OLAP refers to SQL queries with complex calculations (e.g., aggregations, string processing, arithmetic) over massive datasets, processing billions and trillions of rows in milliseconds.
+
+For an introduction to ClickHouse, including why it exists and how it delivers its performance, we recommend the [Getting Started Guides](https://clickhouse.com/docs/get-started/quick-start). For a deeper look at the architectural decisions behind its speed, see the ["Why ClickHouse is Fast"](https://clickhouse.com/docs/concepts/why-clickhouse-is-so-fast) series.
+
+For the rest of this post, we'll focus specifically on ClickHouse's integration with Delta Lake, exploring how we integrated with the Delta Kernel.
+
+## Working with Delta Lake {#working-with-delta-lake}
+
+One of the key goals in making ClickHouse data lake-ready was enabling users to query data directly from open table formats like Delta Lake. Our initial approach involved implementing native support by working directly with the [Delta protocol](https://github.com/delta-io/delta/blob/master/PROTOCOL.md). While this gave us full control, it also exposed the complexity of the format and the ongoing cost of keeping up with an evolving specification.
+
+<pre><code type='click-ui' language='sql'>
+SELECT
+    cityHash64(URL),
+    count() AS cnt
+FROM deltaLake('https://datasets-documentation.s3.amazonaws.com/lake_formats/delta_lake/')
+GROUP BY cityHash64(URL)
+ORDER BY cnt DESC
+LIMIT 5
+</code></pre>
+
+```shell
+Query id: 99b0ef8a-f8e0-4c27-bb8b-33c99733c0c7
+
+   ┌──────cityHash64(URL)─┬─────cnt─┐
+1. │  8128408125044552281 │ 3288173 │ -- 3.29 million
+2. │ 17146718649009901992 │ 1625250 │ -- 1.63 million
+3. │   935030221159485792 │  791465 │
+4. │  6972355099133249997 │  582400 │
+5. │ 13961208022208327194 │  514984 │
+   └──────────────────────┴─────────┘
+
+5 rows in set. Elapsed: 3.878 sec. Processed 100.00 million rows, 14.82 GB (25.78 million rows/s., 3.82 GB/s.)
+Peak memory usage: 9.16 GiB.
+```
+
+As support expanded, it became clear that achieving full feature coverage while keeping the integration maintainable would be increasingly difficult. This led us to adopt the Delta Kernel, allowing us to offload protocol handling and focus on what ClickHouse does best: high-performance query execution.
+
+## Introducing the Delta Kernel {#introducing-the-delta-kernel}
+
+The Delta Lake kernel abstracts away much of the complexity of the underlying format, providing a clear boundary between the query engine and the protocol. It handles the processing of Delta files and exposes well-defined interfaces to the engine, allowing ClickHouse to operate on "black box" objects without managing the underlying mechanics.
+
+In contrast to our original approach, where ClickHouse directly implemented the protocol, this reduces both implementation complexity and maintenance overhead while making it easier to keep pace with new features.
+
+![](https://clickhouse.com/uploads/rust_delta_kernel_may2026_image1_3cb8590336.png)
+
+The Delta Kernel provides a set of guarantees that make it an attractive foundation for supporting Delta Lake, without requiring the engine to implement the protocol itself. In particular, it takes responsibility for:
+
+- Parsing transaction logs stored as JSON
+- Reading and interpreting Delta metadata
+- Resolving snapshots and determining the correct set of data files
+- Applying data skipping based on metadata
+
+By centralizing this logic, the Kernel removes the need for each query engine to independently implement and maintain support for an evolving protocol.
+
+At the same time, query engines like ClickHouse still need to retain control over performance-critical components, particularly file reading. Significant engineering effort goes into optimizing Parquet readers, and these optimizations are essential to overall query performance.
+
+The Delta Kernel is designed with this balance in mind.
+
+![](https://clickhouse.com/uploads/rust_delta_kernel_may2026_image2_99f451f52c.png)
+
+Through its Engine APIs, it allows engines to plug in their own optimized implementations for components such as file access and data reading, providing metadata about data files including statistics and deletion vectors to allow ClickHouse to do efficient downstream filtering and processing. It also informs the query engine of any transformations that need to be applied to the on-disk data to make it match the table's logical format in addition to higher-level interfaces for interacting with snapshots.
+
+## What the Delta Kernel adds {#what-the-delta-kernel-adds}
+
+Beyond abstracting the complexity of the Delta protocol, the Delta Kernel unlocks a number of capabilities that would have been more challenging to implement and maintain ourselves. Instead of building and evolving support for each feature independently, we inherit a consistent and well-defined implementation that allows us to expose these features directly in ClickHouse.
+
+In practice, this allowed us to deliver a much broader set of functionality, much faster than would have been feasible with a native implementation.
+
+**Writes.** The Delta Kernel provides full support for managing writes to Delta tables at the transactional level, including handling transaction logs and ensuring consistency. Delta Lake guarantees ACID semantics for these operations, preventing partial or conflicting updates and enabling safe concurrent access patterns that are difficult to implement correctly from scratch. The underlying Parquet data files, however, are written by ClickHouse, while the Delta Kernel is responsible solely for coordinating and recording the associated transactional metadata.
+
+**Schema evolution.** Delta tables can evolve over time without requiring full rewrites. Columns can be added or modified in a controlled way, with all changes tracked in the transaction log. This allows ClickHouse to interact with datasets whose structure changes over time without breaking queries or pipelines.
+
+To achieve this, the Delta Kernel exposes both the logical schema, which reflects how the table is presented to users, and the physical schema used by the underlying Parquet files. For each data file, it also provides schema transformation metadata, enabling ClickHouse to reconcile differences between file-level schemas and the current table definition. This ensures that data is read consistently and transparently, even as the schema evolves over time.
+
+**Time travel.** Every change to a Delta table is versioned, allowing queries against previous snapshots of the data. This enables reproducibility, auditing, and debugging workflows, as users can query historical versions of a dataset without maintaining separate copies.
+
+The Delta Kernel supports flexible, versioned access patterns, allowing users to read a table at a specific snapshot. It also provides row-level change visibility through Change Data Feed (CDF), exposing inserts, updates, and deletes as a stream of events. This makes it straightforward to build incremental pipelines, audit modifications, or synchronize downstream systems. In ClickHouse 25.12, we [exposed Delta Lake's CDF](https://github.com/ClickHouse/ClickHouse/pull/90431) through the [deltaLake table function](https://clickhouse.com/docs/sql-reference/table-functions/deltalake). This allows users to query row-level changes between table versions using the `delta_lake_snapshot_start_version` and `delta_lake_snapshot_end_version` settings.
+
+<pre><code type='click-ui' language='sql'>
+SELECT *
+FROM deltaLake('s3://path/to/table')
+SETTINGS
+    delta_lake_snapshot_start_version = 5,
+    delta_lake_snapshot_end_version = 10;
+</code></pre>
+
+Results include metadata columns such as `_change_type`, `_commit_version` and `_commit_timestamp`, allowing users to reason about how data has evolved over time and traverse table history more directly.
+
+As we discuss later, we plan to exploit the latter to build Change Data Feed support in ClickPipes.
+
+**Partition pruning.** Delta metadata includes partition information that allows engines to skip entire subsets of data during query execution. By exposing this through the Kernel, ClickHouse can avoid scanning irrelevant files and reduce I/O, improving query performance.
+
+**Statistics-based pruning.** In addition to partitions, Delta tracks file-level statistics such as min and max values. These can be used for data skipping, allowing queries to ignore files that cannot satisfy a given predicate. This is a key optimization for large datasets, significantly reducing the amount of data that needs to be read.
+
+Taken together, these features represent a substantial surface area of functionality. Implementing them natively would have required not only significant engineering effort, but also ongoing maintenance to keep up with the evolving Delta protocol. By adopting the Delta Kernel, we were able to focus on query execution and performance, while relying on a shared implementation for protocol correctness and feature completeness.
+
+## Using the Delta Kernel in ClickHouse - adding a Rust Library to a C++ database {#using-the-delta-kernel-in-clickhouse}
+
+To see how this integration fits into ClickHouse, it's important to first understand the design of its build system.
+
+### The ClickHouse build system {#the-clickhouse-build-system}
+
+ClickHouse has a number of design choices that can feel peculiar at first, but often prove to be powerful once understood. A good example is its SQL extensions, such as expression aliases. ClickHouse [allows aliases to be defined](https://clickhouse.com/docs/sql-reference/syntax#expression-aliases) and reused within the same subquery, and even referenced from different parts of a column declaration, not just the final projection. While this may seem surprising initially, it enables more flexible and concise query patterns.
+
+The build system is no exception. Like other parts of ClickHouse, it has its own peculiarities which can seem surprising at first, but are the result of deliberate design decisions. To understand the challenges we encountered when integrating [delta-kernel-rs](https://github.com/delta-io/delta-kernel-rs/), it's important to first look at these characteristics and how they shape the way code is integrated.
+
+First and foremost, the resulting binary has no external dependencies, with the sole exception of the libc library, at least for now. The default Linux build depends only on a relatively old glibc version, 2.4 for x86_64, nearly 20 years old, or 2.18, around 11 years old, for ARM. It does not rely on libstdc++ or any other external libraries. This ensures the binary runs consistently across environments, with identical behavior regardless of what is installed on the system.
+
+The second peculiarity follows directly from this. Since dynamic loading is not possible, all dependencies must be built into the binary. We achieve this by vendoring them as submodules within the repository under `contrib/`. This greatly simplifies development, removing concerns around system library versions and ensuring all required code is always available. This approach is increasingly common in newer ecosystems like Go and Rust. That said, it does come with trade-offs, particularly from a packaging perspective, where it can lead to larger binaries and concerns around dependency freshness.
+
+These constraints naturally lead to the next design choice. External dependencies are built using the same compiler options and flags as the core codebase, with only minimal exceptions where required. We also maintain our own simplified CMake configurations for each dependency, tailored specifically to our needs.
+
+Treating external code with the same standards as internal code quickly proves its value. By running our sanitizers and fuzzers across all dependencies, we often uncover issues early in the integration process. Fixing these not only improves ClickHouse itself but also contributes back to the broader open source ecosystem.
+
+### Rust inside ClickHouse {#rust-inside-clickhouse}
+
+Rust [was introduced to ClickHouse](https://github.com/ClickHouse/ClickHouse/pull/33435) as a way to add minor functionality, such as new functions, to the database engine. The initial demonstration introduced the [BLAKE3](https://github.com/BLAKE3-team/BLAKE3) crate to provide the `blake3` function, using some hand-written C wrappers and [Corrosion](https://github.com/corrosion-rs/corrosion) to handle the `cmake` targets.
+
+Although this original library was later removed (replaced by LLVM's C++ implementation) other libraries were added and are still present:
+
+- [prql](https://github.com/PRQL/prql) to support the PRQL dialect
+- [skim](https://github.com/skim-rs/skim) to support fuzzy search in the client
+- [chcache](https://github.com/ClickHouse/ClickHouse/tree/4baea3af01456dfd4c64c87f07657836c55014e7/rust/chcache): An experimental tool meant to replace sccache for ClickHouse development
+- [chdig](https://github.com/azat/chdig) - not strictly a library but a cool Terminal User Interface (TUI) for debugging ClickHouse like top.
+
+But while evolving our Rust integration, or just simply developing other features, we noticed some drawbacks of the initial implementation that we had to address.
+
+First, supporting [sanitizers](https://doc.rust-lang.org/beta/unstable-book/compiler-flags/sanitizer.html). All code in ClickHouse is built and tested with sanitizers. ASAN, MSAN, TSAN and UBSAN builds are run for every commit and PR, so Rust code needed to meet the same standard.
+
+After some initial issues, we chose to enable sanitizers directly within Rust rather than relying on external tooling. However, Rust's sanitizer support currently depends on unstable compiler features, which are only available on the nightly toolchain. As a result, adopting sanitizers for Rust means we are required to use a nightly Rust release for all builds involving Rust code.
+
+A second issue we encountered was intermittent network failures when Cargo or GitHub attempted to fetch crates, which conflicted with our broader policy of avoiding reliance on external services during the build process.
+
+At our scale, this became more than a minor inconvenience. We run thousands of builds per day, so even a low failure rate translates into a steady stream of disruptions that require investigation and remediation. This pushed us to treat dependency fetching as an infrastructure concern rather than a transient edge case.
+
+To address this, we [vendored all crates](https://github.com/ClickHouse/ClickHouse/pull/62297) and their dependencies into a submodule using [cargo-local-registry](https://github.com/dhovart/cargo-local-registry), along with custom config.toml settings and flags to:
+
+1. disable online fetching of dependencies and
+2. use the vendored sources instead
+
+One consequence of this approach is that some dependencies are tied to specific `rustc` versions, particularly for sanitizer builds. As a result, we are constrained to use a compiler version that matches the vendored dependency set.
+
+As part of this effort to vendor dependencies, we introduced a workspace encompassing all crates. This allowed us to unify dependency resolution while simplifying configuration and build management.
+
+You can find a summary of the year or so of us dealing with Rust [in this other blog post](https://clickhouse.com/blog/rust).
+
+### Integrating Delta Lake {#integrating-delta-lake}
+
+Although we had iterated on and improved the Rust integration multiple times, the simplified approach that had previously covered all use cases did not work out of the box for integrating [delta-kernel-rs](https://github.com/delta-io/delta-kernel-rs).
+
+#### Building the crate {#building-the-crate}
+
+To integrate delta-kernel-rs, we had to move away from our previous approach and build it as a standalone package, or more accurately, as its own workspace.
+
+Previously, when we only had a couple of small and simple crates, we handled builds by copying their sources into the build directory and compiling them from there. This served two purposes. First, it avoided Cargo cache collisions. In our earlier approach, we copied crate sources into a shared build directory to inject custom Cargo configurations. This caused multiple crates and workspaces to reuse the same target directory, leading Cargo to incorrectly reuse or invalidate artifacts and trigger unnecessary rebuilds. Second, it gave us a straightforward way to inject different build configurations by generating a custom Cargo.toml per build.
+
+This approach does not scale to a project like delta-kernel-rs. The crate we care about (ffi, along with its dependencies) relies on path-based links to parent directories and references other crates within the same repository. Unlike our previous crates which were self-contained with no references to other crates, `ffi` has internal relationships that are tightly coupled to the repository layout. Copying sources breaks those assumptions and would require a deep restructuring of the project.
+
+Instead, we now build the project in place, preserving its original workspace structure. Rather than copying sources or modifying upstream files, we generate a single Cargo.toml per build configuration and pass it via [Cargo's --config flag](https://github.com/ClickHouse/ClickHouse/blob/d05a951295ed8e86187c421ca2c912b872de77e6/contrib/delta-kernel-rs-cmake/CMakeLists.txt#L78-L95). This allows us to control build settings while keeping the source tree intact.
+
+However, this change reintroduced the original issue of cache conflicts when multiple workspaces are built into the same target directory. Rather than working around this at the Cargo level, [we addressed it directly in Corrosion](https://github.com/corrosion-rs/corrosion/pull/609). In practice, this means Corrosion now isolates build artifacts per workspace or configuration, preventing cross-workspace cache interference and eliminating unnecessary rebuilds.
+
+#### OpenSSL dependency {#openssl-dependency}
+
+Deep in its dependency graph, delta-kernel-rs pulls in the [openssl crate](https://crates.io/crates/openssl), which in turn links against the system-installed OpenSSL dynamic library. This conflicts with our requirement to avoid system dependencies.
+
+> Note: While it's possible in theory to avoid OpenSSL by switching to rustls, in practice, this has not worked for us. Using reqwest with rustls introduces build failures due to aws-lc-sys linking against system libraries, and attempts with native-tls have also proven unsuccessful.
+
+After some iterations, we moved away from trying to control this purely through Cargo flags and instead configured it properly through Corrosion. This allowed us to link against our own [statically built OpenSSL library](https://github.com/ClickHouse/ClickHouse/blob/d05a951295ed8e86187c421ca2c912b872de77e6/contrib/delta-kernel-rs-cmake/CMakeLists.txt#L71-L76) and ensure CMake correctly resolves the dependency chain. While this setup works reliably in most cases, it requires careful coordination between Cargo configuration and CMake integration.
+
+#### Broken cross-compilation {#broken-cross-compilation}
+
+After getting the crate building and integrated, we discovered that cross-compilation was failing. The root cause was relatively simple: Cargo was attempting to [build dynamic libraries](https://github.com/ClickHouse/ClickHouse/issues/76807) that referenced system libraries unavailable in the target environment.
+
+The fix was to restrict the build to staticlib only, rather than using the default crate types. This avoids linking against system-provided dynamic libraries and ensures compatibility in cross-compilation scenarios.
+
+In the process, we uncovered [a Cargo bug](https://github.com/rust-lang/cargo/issues/15312), now fixed, where specifying --crate-type=staticlib multiple times on the command line caused incremental builds to break.
+
+#### Random CI failures due to missing sanitizer symbols {#random-ci-failures-due-to-missing-sanitizer-symbols}
+
+This was another issue we encountered, unrelated to the crate itself, and after the code had already been integrated and was running in CI. Following some build changes, we began seeing inexplicable linker errors about missing [ASAN symbols](https://github.com/ClickHouse/ClickHouse/pull/76921#issuecomment-2688688637).
+
+This was unexpected, as these builds did not have sanitizers enabled. There was no obvious reason for internal objects to depend on ASAN. After several rounds of trial and error, we traced the issue to sccache. However, attempts to reproduce the problem locally were unsuccessful, as changes in build flags resulted in different cache keys.
+
+Upgrading sccache from 0.7.7 to 0.10.0 appeared to resolve the issue initially (along with several patches [[1]](https://github.com/ClickHouse/ClickHouse/pull/85686/commits/bac766dd68c913a848bf2d3cf06ba811ca0a76e3)[[2]](https://github.com/ClickHouse/ClickHouse/pull/85686/commits/29369fd875d80ea69860139d3c4542afeae097aa)), although the underlying cause remained unclear. A few weeks later, the problem resurfaced, and we have since disabled sccache. At present, we are not using any wrapper to cache Rust builds.
+
+#### Current status {#current-status}
+
+On one hand, things are working, which is nice. Keep in mind that, at least for me personally, I've spent easily 20 to 50 times more effort debugging and setting up Rust builds than reading Rust code, let alone writing it, so the most important part is in place.
+
+On the other hand, several things are not working.
+
+- Memory sanitizer builds of the crate are disabled. There are issues when linking [ring](https://github.com/briansmith/ring) built with MSAN. Fixing this would require understanding how a nested dependency of a nested dependency is built, and I'd rather focus on removing it than building it correctly.
+
+- In general, when building Rust crates, we are not respecting all CMake options that ClickHouse uses. As a result, Cargo may introduce instruction sets into the libraries that we want to avoid. For example, we use NO_ARMV81_OR_HIGHER to disable newer ARM instructions and support older standards. The issue is that [ring](https://github.com/briansmith/ring) assumes Neon SIMD instructions are always available.
+
+All three issues would be resolved if we could pass our own S3 client to delta-lake-ffi and delegate requests externally. ClickHouse already has a complex networking stack with retries, logging, event tracking, and monitoring, so in an ideal setup, we would be able to completely opt out of network access within Rust. That would eliminate both the dependency and the associated build complexity.
+
+In practice, uncovering these kinds of issues is a constant when working across multiple, opinionated build systems, and often requires digging deeply into their internals. More broadly, we found that Rust's approach to composing dependencies introduces significantly more complexity than C++, making integration and control over the build far more challenging.
+
+## Contributing back to the ecosystem {#contributing-back-to-the-ecosystem}
+
+Operating at scale, as is common with ClickHouse deployments, surfaces edge cases and performance bottlenecks that rarely appear in smaller or less demanding environments. Testing against real customer workloads exposed several limitations in the Rust kernel that required targeted fixes. Rather than maintaining long-lived forks or internal patches, we have prioritized contributing these improvements upstream wherever possible, ensuring they benefit not just ClickHouse, but the broader ecosystem as well.
+
+Notable contributions include:
+
+- **[Improved logging flexibility for debugging performance issues.](https://github.com/delta-io/delta-kernel-rs/pull/1111)** In environments with large numbers of metadata files, we observed slow query performance originating within the Delta kernel, with limited visibility into execution due to static logging initialization. We contributed enhancements to allow logging to be configured dynamically at runtime, enabling more effective troubleshooting and operational introspection in production systems.
+- **[Asynchronous metadata processing for improved scalability.](https://github.com/delta-io/delta-kernel-rs/pull/1827)** We identified a bottleneck in the synchronous handling of metadata files, particularly in tables with high metadata cardinality. To address this, we introduced changes to support asynchronous processing by modifying the FFI interface to pass handles instead of references. This allows metadata operations, including object storage reads, to be parallelized outside of a single-threaded callback, significantly improving metadata file read performance at scale.
+
+## Looking forward {#looking-forward}
+
+While we are very satisfied with the current state of the Rust kernel and its integration with ClickHouse, a number of gaps remain that become apparent when operating at scale and building production-grade workflows.
+
+One of the most immediate limitations is the inability to create empty Delta Lake tables through the Rust kernel. Today, ClickHouse can attach to existing Delta tables, infer their schema and make them queryable via a ClickHouse table, e.g.:
+
+<pre><code type='click-ui' language='sql'>
+CREATE TABLE hits_delta
+    ENGINE = DeltaLake('https://datasets-documentation.s3.amazonaws.com/lake_formats/delta_lake/');
+
+SELECT
+    cityHash64(URL),
+    count() AS cnt
+FROM hits_delta
+GROUP BY cityHash64(URL)
+ORDER BY cnt DESC
+LIMIT 5;
+</code></pre>
+
+```shell
+Query id: 8eb0cb7a-fc22-46d4-94eb-e44fce02f0d9
+
+   ┌──────cityHash64(URL)─┬─────cnt─┐
+1. │  8128408125044552281 │ 3288173 │ -- 3.29 million
+2. │ 17146718649009901992 │ 1625250 │ -- 1.63 million
+3. │   935030221159485792 │  791465 │
+4. │  6972355099133249997 │  582400 │
+5. │ 13961208022208327194 │  514984 │
+   └──────────────────────┴─────────┘
+
+5 rows in set. Elapsed: 3.608 sec. Processed 100.00 million rows, 14.82 GB (27.72 million rows/s., 4.11 GB/s.)
+Peak memory usage: 9.27 GiB.
+```
+
+However, it cannot initialize a new table and materialize the corresponding Delta log and metadata on object storage. Addressing this would significantly improve usability, allowing users to define tables directly from ClickHouse and have them backed by Delta Lake from the outset. This is an area we intend to contribute to, enabling a more complete and bidirectional integration.
+
+The Change Data Feed (CDF) support in the Delta Kernel described earlier provides row-level changes between table versions. Looking forward, this will provide the foundation for CDC-oriented workflows on top of Delta Lake data in ClickPipes.
+
+Building on this foundation, there is a clear path to improving usability and introspection. Exposing table history, commit timelines, and version metadata as native system tables in ClickHouse would make it significantly easier to understand data evolution, debug pipelines, and operate incremental workloads with confidence.
+
+## Conclusion {#conclusion}
+
+Integrating the Rust Delta Kernel into ClickHouse represents a shift in how we approach open table formats, moving from bespoke implementations toward shared, well-defined abstractions. This has allowed us to accelerate feature development, reduce maintenance overhead, and focus on what matters most: delivering high-performance analytics at scale. At the same time, working with real-world workloads has reinforced that these integrations are only as strong as the ecosystems around them. By contributing improvements upstream and continuing to close the remaining gaps, we hope to shape a more robust and interoperable data lake ecosystem. As this work evolves, we expect the combination of ClickHouse and Delta Lake to provide an increasingly seamless foundation for both batch and real-time analytical workloads.
+
+
+---
+
+## Get started today
+
+Interested in seeing how ClickHouse works on your data? Get started with ClickHouse Cloud in minutes and receive $300 in free credits.
+
+[Sign up](https://console.clickhouse.cloud/signUp?loc=blog-cta-660-get-started-today-sign-up&utm_blogctaid=660)
+
+---
 
 ---
 
