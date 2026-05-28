@@ -1,5 +1,5 @@
 {
-  "last_sync": "2026-05-27T07:33:26.844172Z",
+  "last_sync": "2026-05-28T07:27:57.787862Z",
   "processed_blogs": {
     "https://clickhouse.com/blog/clickhouse-raises-400-million-series-d-acquires-langfuse-launches-postgres": {
       "title": "ClickHouse raises $400M Series D led by Dragoneer to accelerate expansion across analytics and AI infrastructure",
@@ -4746,9 +4746,33 @@
       "pub_date": "2026-05-22T09:32:20+00:00",
       "file_path": "blogs/2026-05-22-integrating-the-rust-delta-kernel-into-clickhouse.md",
       "processed_at": "2026-05-24T07:12:10.974099Z"
+    },
+    "https://clickhouse.com/blog/clickhouse-tops-250m-arr-and-4000-customers": {
+      "title": "ClickHouse tops $250M ARR and 4,000 customers, launches Claude-powered agents at Open House 2026",
+      "pub_date": "2026-05-27T14:35:41+00:00",
+      "file_path": "blogs/2026-05-27-clickhouse-tops-250m-arr-and-4-000-customers.md",
+      "processed_at": "2026-05-28T07:27:56.760014Z"
+    },
+    "https://clickhouse.com/blog/costbench-data-warehouse-cost-performance": {
+      "title": "Introducing CostBench: an open benchmark for data warehouse cost-performance",
+      "pub_date": "2026-05-27T14:05:56+00:00",
+      "file_path": "blogs/2026-05-27-introducing-costbench-an-open-benchmark-for-data.md",
+      "processed_at": "2026-05-28T07:27:57.114099Z"
+    },
+    "https://clickhouse.com/blog/thank-you-for-building-with-us": {
+      "title": "Thank you for building with us",
+      "pub_date": "2026-05-27T14:03:09+00:00",
+      "file_path": "blogs/2026-05-27-thank-you-for-building-with-us.md",
+      "processed_at": "2026-05-28T07:27:57.418793Z"
+    },
+    "https://clickhouse.com/blog/alexey-apj-ai-tour": {
+      "title": "5 Countries, 12 Days, One ClickHouse: Inside Alexey's APJ AI Tour",
+      "pub_date": "2026-05-27T08:38:31+00:00",
+      "file_path": "blogs/2026-05-27-5-countries-12-days-one-clickhouse-inside-alexey.md",
+      "processed_at": "2026-05-28T07:27:57.720128Z"
     }
   },
-  "total_blogs": 791,
+  "total_blogs": 795,
   "failed_blogs": [
     {
       "url": "https://clickhouse.com/jp/blog/clickhouse-gcp-japan-availability",

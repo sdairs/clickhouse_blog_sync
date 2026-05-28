@@ -1,6 +1,344 @@
 # ClickHouse Blogs
-Last updated: 2026-05-27 07:33:26 UTC
-Total blogs: 791
+Last updated: 2026-05-28 07:27:57 UTC
+Total blogs: 795
+
+---
+
+## ClickHouse tops $250M ARR and 4,000 customers, launches Claude-powered agents at Open House 2026
+Published: 2026-05-27T14:35:41+00:00
+URL: https://clickhouse.com/blog/clickhouse-tops-250m-arr-and-4000-customers
+
+---
+title: "ClickHouse tops $250M ARR and 4,000 customers, launches Claude-powered agents at Open House 2026"
+date: "2026-05-27T17:57:17.743Z"
+author: "ClickHouse"
+category: "Company and culture"
+excerpt: "ClickHouse today opened Open House 2026, its second annual user conference, with a set of announcements that mark one of the company's most active quarters since founding."
+---
+
+# ClickHouse tops $250M ARR and 4,000 customers, launches Claude-powered agents at Open House 2026
+
+_Annual run-rate revenue more than tripled year-over-year; new CostBench benchmark shows ClickHouse Cloud at 23x better cost-performance than the nearest cloud data warehouse_
+
+**SAN FRANCISCO — May 27, 2026 —** ClickHouse today opened Open House 2026, its second annual user conference, with a set of announcements that mark one of the company's most active quarters since founding. ClickHouse’s serverless cloud offering has crossed over $250 million in annual run-rate revenue — more than triple a year ago — and added more than 1,000 net new customers since January, bringing its total to 4,000. To meet the demands of AI-era workloads, the company also launched ClickHouse Agents, a fully managed agentic analytics service powered by Anthropic's Claude; published CostBench, an open benchmark comparing the major cloud data warehouses on cost-performance; and introduced House Mates, its first formal partner program.
+
+## Growth
+When ClickHouse closed its $400 million Series D in January 2026, it had just crossed 3,000 customers. One quarter later, it has surpassed 4,000 and ARR has crossed over $250 million, more than tripling year-over-year. Recent additions and expansions include Capital One, Lovable, Decagon, Polymarket, and Airwallex, joining a base that includes Anthropic, Meta, Cursor, Sony, Tesla, Memorial Sloan Kettering, Lyft, and Instacart.
+
+The customer speakers at Open House 2026 reflect how broadly ClickHouse now sits in the enterprise stack: Visa, Cisco, Intuit, Shopify, DoorDash, Mercado Libre, Vercel, Weights & Biases, Zoox, and Jump Trading. Partner speakers and sponsors include Anthropic, AWS, Google, Microsoft, dbt Labs, Fivetran, Temporal, Hex, and Sigma.
+
+"AI workloads demand the performance and cost efficiency ClickHouse was built for, and the last quarter has made that clearer than ever," said Aaron Katz, CEO of ClickHouse. "More than 1,000 new customers and a tripling of ARR within months of our Series D tell us this isn't a cycle, it's a structural shift in what data infrastructure has to do. What we're announcing this week is built to extend that lead as AI moves from experiment to production."
+
+## ClickHouse Agents, powered by Claude
+ClickHouse Agents is a fully managed agentic analytics service in ClickHouse Cloud, powered by Claude. It is a no-code agent builder that lets anyone define, configure, and ship agents grounded in ClickHouse data. Out of the box, it includes a chat interface, a sandboxed code interpreter, shareable artifacts, skills management, memory, and multi-agent workflows. Agents connect natively to ClickHouse and to any MCP-compatible third-party system, drawing context from across an organization's stack, including a native integration with the AWS Agent Registry.
+
+ClickHouse Agents is part of a broader set of product investments aimed at the workloads AI applications generate: high-concurrency queries, agent-driven analytics, model-training telemetry, and end-to-end observability of AI systems in production:
+
+- **Managed Postgres** is in public beta, with native integration to ClickHouse analytics, giving AI applications a single platform for transactional state and high-throughput analytics on the same data.
+- **AI observability.**  Managed ClickStack is now available as a fully managed service for infrastructure and model-training observability. Langfuse, acquired in January, provides agent observability — correctness, evaluation, and model-cost tracking for production AI.
+- **Expanded analytics.** Full-text search is generally available, addressing one of the most common observability and AI-grounding workloads. Automatic query optimization now puts ClickHouse on par with established warehouses on TPC-H and other standard JOIN benchmarks.
+- **ClickHouse Cloud.** Agentic onboarding takes new users from sign-up to first production query with no manual schema work. Cross-region replication is now available for enterprise resiliency.
+
+## CostBench: the AI era runs on cost-performance
+AI workloads run at high concurrency and low latency, which makes cost-performance, not raw speed, the relevant measure for the platforms underneath them. CostBench, launched today, is an open and reproducible benchmark that applies each vendor's real compute billing model to the same analytical workload, producing directly comparable cost-per-query results across ClickHouse Cloud, Snowflake, Databricks, BigQuery, and Redshift.
+
+ClickHouse Cloud is the only system that stays in the "Fast & Low-Cost" zone across datasets of varying scale. The nearest competitor lands at 23x worse on cost-performance. The full benchmark, interactive explorer, and methodology are at [clickhouse.com/benchmarks](https://clickhouse.com/benchmarks/?utm_medium=referral&utm_source=press&utm_campaign=clickhouse-tops-250m-arr).
+
+## House Mates: a partner community for the next stage
+ClickHouse also introduced House Mates, its first formal partner community and program. It launches with a founding cohort of more than 25 technology partners and over 35 services, consulting, and channel partners across six continents, including dbt Labs, Fivetran, Sigma, Notion, Temporal, Tiger Analytics, DoIT, Ciklum, and MegazoneCloud. The program is organized across three tracks: Technology, Services, and Reseller, each with three tiers: Ignite, Accelerate, and Prime. Benefits scale with tier and include joint go-to-market motions, co-innovation and integration support, enablement and certifications, incentives, and a dedicated partner portal. More on the House Mates program at [clickhouse.com/partners](https://clickhouse.com/partners?utm_medium=referral&utm_source=press&utm_campaign=clickhouse-tops-250m-arr).
+
+ClickHouse maintains deep partnerships with AWS, Microsoft, and Google Cloud. House Mates extends that foundation across the broader ecosystem, giving customers pre-built integrations, proven implementation expertise, and clear routes to market for the full ClickHouse Cloud platform, including Langfuse.
+
+"ClickHouse powers some of our most demanding workloads, ingesting over a million events per minute across hundreds of billions of logs to fuel the real time dashboards our customers depend on. Hex's native ClickHouse connector gives us a seamless analytics layer on top of that data, enabling every team at Modal to explore and act on insights without having to ETL a large amount of data into a separate warehouse." said Kenny Ning, Head of Data at Modal. "It is exciting to see the ClickHouse and Hex partnership getting deeper because, for teams like ours that run on both real time and analytical data, a tighter integration between the two means fewer tradeoffs and faster answers for everyone in the organization."
+
+"ClickHouse is one of the fastest-growing databases in the market, and our customers are building on it because it delivers disruptive cost-performance," said Mike Palmer, CEO, Sigma. "Entering the House Mates partner program is our commitment to delivering the best runtime layer on top of ClickHouse."
+
+"ClickHouse's real-time analytics combined with Tiger Analytics' expertise in data science, AI engineering, and data engineering gives customers a strong foundation to modernize their data platforms." said Rajeev Nayar, VP of Data Engineering, Tiger Analytics. "Together, we aim to help organizations accelerate innovation and derive greater value from their data investments."
+
+![Founders_AMS_2025.jpeg](https://clickhouse.com/uploads/Founders_AMS_2025_df2919ac2a.jpeg)
+
+
+
+---
+
+## Introducing CostBench: an open benchmark for data warehouse cost-performance
+Published: 2026-05-27T14:05:56+00:00
+URL: https://clickhouse.com/blog/costbench-data-warehouse-cost-performance
+
+---
+title: "Introducing CostBench: an open benchmark for data warehouse cost-performance"
+date: "2026-05-27T14:05:56.392Z"
+author: "Tom Schreiber and Lionel Palacin"
+category: "Engineering"
+excerpt: "Introducing CostBench, an open benchmark that turns cloud data warehouse runtime and billing models into comparable performance-per-dollar results."
+---
+
+# Introducing CostBench: an open benchmark for data warehouse cost-performance
+
+> **TL;DR**<br/>
+CostBench is an open benchmark for cloud data warehouse cost-performance: performance-per-dollar, not just speed.<br/><br/>It helps teams choose the system that delivers the most performance per dollar for real-time analytical workloads.
+
+<br/>
+
+## Performance alone is only half the story
+
+Most benchmarks tell you how fast a query runs. That is useful, but incomplete.
+
+> In cloud data platforms, speed and cost are inseparable.  
+ 
+If warehouse A is faster than warehouse B, A looks better on a performance chart. But if A costs three times more to run, the comparison changes. You might spend the same budget on a larger configuration of B, get more compute, and make B faster than A for less money overall.
+
+That comparison is hard because every platform exposes cost differently: credits, DBUs, slot-seconds, compute units, RPUs.
+
+![Blog-Bench2Cost.001.png](https://clickhouse.com/uploads/Blog_Bench2_Cost_001_341b09cafb.png)
+
+The unit names differ, but the underlying question is the same: 
+
+> How much compute did the system need to finish the workload, and what did that compute cost?
+
+CostBench answers that question directly. It also exposes where cost-performance breaks: during ingest, while making data query-ready, or when serving reads.
+
+
+## Why this matters in the AI era
+
+Agentic analytics raises the pressure on every layer of the database.
+
+New data never stops: events, transactions, logs, traces, user activity, fraud signals, operational state. At the same time, users and agents expect fast answers over fresh data.
+
+> If the database is slow, the agent is slow. If the database is expensive, teams start rationing what agents can do: fewer retries, smaller datasets, less context, stale data.
+
+In the AI era, fast and low-cost has to hold across the full analytics path: continuous ingest, query-ready preparation, and reads.
+
+![Blog-Bench2Cost.002.png](https://clickhouse.com/uploads/Blog_Bench2_Cost_002_7f4af0a308.png)
+
+**Read-side pressure** comes from query volume. A single user question can trigger many SQL queries: schema exploration, validation, retries, refinements, drilldowns, and follow-ups. Each extra query burns compute. At agentic scale, query volume turns directly into cost pressure.
+
+**Write-side pressure** comes from real-time freshness: fresh data has to be continuously ingested, compressed, and organized so queries can skip more data. That work burns compute before the first query even runs, and determines how much compute those queries burn later.
+
+## What CostBench measures
+
+CostBench turns that pressure into a full-path cost-performance lens with two measurable dimensions:
+
+* **Read-side cost-performance**: how much query performance you get per dollar.
+* **Write-side cost-performance**: how efficiently each dollar turns fresh ingest into query-ready data. 
+
+
+Together, they help answer the question that matters when choosing a platform: 
+ 
+> Which system gives you the most performance per dollar for real-time analytical workloads?
+
+![Blog-Bench2Cost.003.png](https://clickhouse.com/uploads/Blog_Bench2_Cost_003_c9407dbe1a.png)
+
+
+The first release focuses on the read side: analytical queries over data that has already been loaded. We have also started measuring the write side, beginning with [Snowflake as a contrast point for ClickHouse](https://clickhouse.com/blog/write-side-cost-performance-snowflake-clickhouse). Broader write-side coverage will follow.
+
+This gives CostBench a simple roadmap: expose whether real-time cost-performance holds across the full analytics pipeline, from making fresh data query-ready to querying it efficiently.
+
+
+## The first results: read-side cost-performance
+
+The first CostBench release turns read-side performance into a comparable performance-per-dollar result across major cloud data warehouses.
+
+We compare ClickHouse Cloud, Snowflake, Databricks, BigQuery, and Redshift using 43 production-derived analytical queries on a real anonymized dataset, then apply [each vendor’s actual compute billing model](https://clickhouse.com/blog/how-cloud-data-warehouses-bill-you) to place every system on the same cost-performance plane: faster or slower, lower-cost or higher-cost.
+
+![Blog-Bench2Cost.004.png](https://clickhouse.com/uploads/Blog_Bench2_Cost_004_66900fe22f.png)
+
+ClickHouse Cloud is the only system that stays in the fast and low-cost zone as data scales. The nearest competitor is 23× worse in cost-performance.
+
+That is the value of CostBench: it turns vendor-specific runtimes and billing models into a result teams can use when choosing a platform.
+
+
+## Open and reproducible by design
+
+CostBench is open because cost-performance claims should be inspectable.
+
+The benchmark publishes the workload, scripts, configurations, pricing assumptions, raw JSON results, and methodology. If a result looks surprising, you can inspect the setup that produced it. If a configuration can be improved, it can be reviewed and corrected in the open.
+
+
+## Try it yourself
+
+Explore the results on the [ClickHouse benchmark hub](https://clickhouse.com/benchmarks), inspect the raw data, or clone the [CostBench repository](https://github.com/ClickHouse/CostBench) and run the benchmark yourself.
+
+Cost-performance should not be a black box. CostBench makes it inspectable.
+
+
+
+---
+
+## Thank you for building with us
+Published: 2026-05-27T14:03:09+00:00
+URL: https://clickhouse.com/blog/thank-you-for-building-with-us
+
+---
+title: "Thank you for building with us"
+date: "2026-05-27T17:57:49.611Z"
+author: "Aaron Katz"
+category: "Company and culture"
+excerpt: "Today we welcome over 500 data engineers to our annual user conference in San Francisco and announce some exciting product launches and company milestones. "
+---
+
+# Thank you for building with us
+
+Today we welcome over 500 data engineers to our annual user conference in San Francisco and announce some exciting product launches and company milestones. ClickHouse has surpassed 4,000 customers and $250 million in annual run-rate revenue — adding over 1,000 customers in the single quarter since January and more than tripling ARR year-over-year.
+
+This momentum and achievement is thanks to the community that has built, broken, debated, contributed to, and pushed ClickHouse forward long before there was a company to put a logo on it. Thank you.
+
+## A note on where this started
+
+None of this exists without Alexey Milovidov. Alexey created ClickHouse to solve a real problem, and then made the decision that changed everything: he open-sourced it in June 2016. Next month marks ten years of ClickHouse as an open-source project. A decade of contributors, maintainers, issue-filers, benchmark-runners, and production operators who took a database and made it the standard for real-time analytics. Alexey, thank you. To everyone who has committed code, filed a bug, or run ClickHouse in production over the last ten years: this milestone is yours as much as ours.
+
+## What you're building
+
+A year ago, "AI workloads" was a phrase people said at conferences. Now it's a category, and the work being done on top of ClickHouse is the proof.
+Anthropic, Cursor, Lovable, Decagon, Weights & Biases, Sierra, and Modal are building the AI products reshaping how software gets made. Polymarket and Airwallex are running markets and money flows on ClickHouse. Capital One, Visa, Cisco, Intuit, Shopify, DoorDash, Mercado Libre, Vercel, Zoox, and Jump Trading are doing things every day that, frankly, we never could have designed for ourselves. And the companies that defined the last era of software — Sony, Tesla, Meta, Memorial Sloan Kettering, Lyft, Instacart — keep moving more of their analytics, observability, and AI infrastructure to ClickHouse Cloud.
+The breadth is what I'm most proud of. An LLM lab and a global bank running the same engine for the same reason: when something is genuinely fast and genuinely affordable, the people who need both show up.
+
+## What we're shipping
+
+The pace of AI adoption has made one thing [obvious](https://clickhouse.com/blog/ai-redrawing-database-market): cost-performance is the new constraint. High-concurrency, low-latency, always-on workloads make raw speed table stakes. Speed without efficiency just produces an expensive bill. 
+
+That conviction shapes most of what we are announcing this week:
+- **ClickHouse Agents** is a fully managed agentic analytics service, powered by Anthropic's Claude. It's a no-code way to ship agents grounded in your ClickHouse data, with a chat interface, sandboxed code interpreter, shareable artifacts, skills, memory, and multi-agent workflows, connecting natively to ClickHouse and any MCP-compatible system. Working with the Anthropic team to bring this to life has been one of the most rewarding things I've done as CEO.
+- **CostBench** is an open, reproducible benchmark that applies each cloud data warehouse's real billing model to the same workload. We built it because we think customers deserve apples-to-apples comparisons. The results are at [clickhouse.com/benchmarks](https://clickhouse.com/benchmarks). Please check it out and judge for yourself.
+- **House Mates** is our first formal partner program. More than 50 partners across six continents at launch. We do what we do better because of what they build on top of us, and now we have a way to make that collaboration formal. Check it out on [clickhouse.com/partners](https://clickhouse.com/partners).
+- **Under the hood:** Managed Postgres in public beta, observability for the AI era through Managed ClickStack and Langfuse, full-text search now GA, and automatic JOIN optimization that closes the last gaps with traditional warehouses.
+
+## What comes next
+
+We're here at our user conference [Open House 2026 in San Francisco](https://clickhouse.com/openhouse/san-francisco). If you're here, find us. I want to hear what's working and what isn't. If you can't make it, the talks will be online soon, and our team will be at every meetup we can get to over the next year.
+
+A milestone is a good moment to look up. It's not a finish line. The work that matters most is what we build for the next 4,000 customers, and the 40,000 after that.
+
+Thank you for trusting us with it.
+
+_— Aaron, Alexey, Yury_
+
+![founders.png](https://clickhouse.com/uploads/founders_b7ca2b2d0f.png)
+
+---
+
+## 5 Countries, 12 Days, One ClickHouse: Inside Alexey's APJ AI Tour
+Published: 2026-05-27T08:38:31+00:00
+URL: https://clickhouse.com/blog/alexey-apj-ai-tour
+
+---
+title: "5 Countries, 12 Days, One ClickHouse: Inside Alexey's APJ AI Tour"
+date: "2026-05-27T08:38:31.735Z"
+author: "Siddhant Agarwal"
+category: "Community"
+excerpt: "5 Countries, 12 Days, One ClickHouse: Inside Alexey's APJ AI Tour"
+---
+
+# 5 Countries, 12 Days, One ClickHouse: Inside Alexey's APJ AI Tour
+
+When the person who wrote ClickHouse decides to fly halfway across the world to meet customers in person, you make space on the calendar. When he decides to do it in five countries in twelve days, you start wondering if he secretly runs on the same query engine he built.
+
+Last month, our CTO and the creator of ClickHouse, [Alexey Milovidov](https://clickhouse.com/authors/alexey-milovidov), embarked on a crazy 12-day APJ tour that would have flattened most mortals. Mumbai, Bengaluru, Singapore, Jakarta, Seoul, Tokyo. Customer meetings, keynotes, executive roundtables, press interviews, and meetups - often on the same day, sometimes on opposite ends of a city, occasionally on opposite ends of a continent.
+
+Here's how it went down.
+
+## First Pitstop: India - Mumbai & Bangalore (April 13–18)
+
+Alexey landed in Mumbai just after midnight on Sunday, April 12, fresh off a KLM flight from Amsterdam. The first stop was the [Confluent Data Streaming World Tour](https://events.confluent.io/dswt2026mumbai) at the Jio World Convention Centre, where Alexey took the stage to talk about real-time analytics at the scale our customers are actually running. A 30-minute speaking slot, followed by an ET Executive Roundtable, followed by a [press interview](https://etedge-insights.com/resources/in-conversation/the-case-for-simplicity-how-clickhouses-alexey-milovidov-wants-to-rewire-enterprise-data-thinking/). Welcome to APJ.
+<table>
+  <tr>
+    <td><img src="/uploads/1_10f8d8016a.png" alt="Mumbai DSWT" style="width:100%; height:100%; object-fit:cover;" /></td>
+    <td><img src="/uploads/2_b1824e82a2.png" alt="Mumbai DSWT" style="width:100%; height:100%; object-fit:cover;" /></td>
+  </tr>
+</table>
+
+The next two days in Mumbai were back-to-back customer meetings across very different industries, different workloads, different scale problems but the same underlying need for real-time analytics that actually keeps up.
+
+Then on Thursday, April 16, Alexey and Chris Rodrigues, our Senior Field Marketing Manager based in Australia, flew down to Bengaluru for the [Bengaluru edition of Confluent's Data Streaming World Tour](https://events.confluent.io/dswt2026bangalore). Another speaking slot, another roundtable, another press cycle. That evening was spent at the [PeakXV (formerly Sequoia India) executive roundtable](https://luma.com/efm38aln), a room full of founders and operators from across the Indian tech ecosystem.
+<table>
+  <tr>
+    <td><img src="/uploads/3_23c2d0a73c.png" alt="Bangalore DSWT" style="width:100%; height:240px; object-fit:cover;" /></td>
+    <td><img src="/uploads/4_75e68cff30.png" alt="PeakXV roundtable" style="width:100%; height:240px; object-fit:cover;" /></td>
+  </tr>
+</table>
+
+Friday added two more customer meetings before the week closed with the [Bengaluru ClickHouse Meetup](https://www.meetup.com/clickhouse-bangalore-user-group/events/313739871/) at Awfis Residency Square on Saturday. If you've ever attended a ClickHouse meetup, you know they tend to run long. This one was no exception.
+<table>
+  <tr>
+    <td><img src="/uploads/5_b88a10eddf.png" alt="Bangalore ClickHouse Meetup" style="width:100%; height:240px; object-fit:cover;" /></td>
+    <td><img src="/uploads/6_71bec921b3.png" alt="Bangalore ClickHouse Meetup" style="width:100%; height:240px; object-fit:cover;" /></td>
+  </tr>
+</table>
+
+## Next Stop: Singapore → Jakarta (April 19–20)
+
+Sunday morning, IndiGo 1091 to Singapore. By Monday, Alexey was in customer brown-bag technical sessions across town, then straight back to Changi for a Singapore Airlines flight to Jakarta. Land, hotel, and host the [Jakarta ClickHouse Meetup](https://www.meetup.com/clickhouse-indonesia-user-group/events/314050152/) at The Glasshouse, Ritz Carlton Pacific Place - all in a single day.
+<table>
+  <tr>
+    <td><img src="/uploads/7_4c0d4e51f6.png" alt="Singapore / Jakarta" style="width:100%; height:240px; object-fit:cover;" /></a></td>
+    <td><img src="/uploads/8_5eee54a0a1.png" alt="Singapore / Jakarta" style="width:100%; height:240px; object-fit:cover;" /></a></td>
+  </tr>
+</table>
+
+Tuesday in Jakarta was the [Data Streaming World Tour Jakarta](https://events.confluent.io/dswt2026jakarta), where Alexey did a fireside chat with Nick, Field CTO at Confluent. That was followed by an [executive luncheon](https://clickhouse.com/company/events/202604-APJ-Jakarta-ExecutiveLuncheon) with prospects and customers, and capped with an evening flight to Seoul.
+<table>
+  <tr>
+    <td><img src="/uploads/9_e3969841d7.png" alt="Singapore / Jakarta" style="width:100%; height:240px; object-fit:cover;" /></a></td>
+    <td><img src="/uploads/10_2c5dc11079.png" alt="Singapore / Jakarta" style="width:100%; height:240px; object-fit:cover;" /></a></td>
+  </tr>
+   <tr>
+    <td><img src="/uploads/11_eea50f26f3.png" alt="Singapore / Jakarta" style="width:100%; height:240px; object-fit:cover;" /></a></td>
+    <td><img src="/uploads/12_e6dcce693f.png" alt="Singapore / Jakarta" style="width:100%; height:240px; object-fit:cover;" /></a></td>
+  </tr>
+</table>
+
+## Onward to Seoul (April 22)
+
+A single day in Seoul, but a heavy one - two customer meetings with major Korean enterprises, spanning conversations from connected products to analytics at industrial scale.
+
+A [press interview](https://www.dt.co.kr/article/12059938) followed, and then the [Seoul ClickHouse Meetup](https://www.meetup.com/clickhouse-seoul-user-group/events/314064921/) at DreamPlus Gangnam - the Korean community has been growing fast, and Alexey wanted to show up for them in person.
+<table>
+  <tr>
+    <td><img src="/uploads/13_ed70ccd4f6.png" alt="Seoul ClickHouse Meetup" style="width:100%; height:240px; object-fit:cover;" /></td>
+    <td><img src="/uploads/14_e6f96cb589.png" alt="Seoul ClickHouse Meetup" style="width:100%; height:240px; object-fit:cover;" /></td>
+  </tr>
+</table>
+
+## Final Stop: Japan (April 23–27)
+
+The Japan leg was anchored by two things: customer meetings with major Japanese enterprises, and the ClickHouse Japan Launch Event on Monday, April 27 - a milestone moment as we officially planted our flag in the Japan market.
+
+Between customer conversations, a [Langfuse Night](https://langfuse.connpass.com/event/387257/) with partners, press, a team dinner, and the launch itself, it was a fitting finale to twelve days on the road.
+<table>
+  <tr>
+    <td><img src="/uploads/15_7cea5505e8.png" alt="Japan" style="width:100%; height:240px; object-fit:cover;" /></a></td>
+    <td><img src="/uploads/16_e9ab8dd82a.png" alt="Japan" style="width:100%; height:240px; object-fit:cover;" /></a></td>
+  </tr>
+   <tr>
+    <td><img src="/uploads/17_994af07fd1.png" alt="Japan" style="width:100%; height:240px; object-fit:cover;" /></a></td>
+    <td><img src="/uploads/18_249f1716c4.png" alt="Japan" style="width:100%; height:240px; object-fit:cover;" /></a></td>
+  </tr>
+</table>
+
+## What 12 days looks like in numbers
+
+- **5 countries:** India, Singapore, Indonesia, South Korea, Japan
+- **6 cities:** Mumbai, Bangalore, Singapore, Jakarta, Seoul, Tokyo
+- **6 flights** across three weeks
+- **3 major industry events:** Confluent Data Streaming World Tour in Mumbai, Bangalore, and Jakarta
+- **4 ClickHouse meetups:** Bangalore, Jakarta, Seoul, and the Langfuse Night
+- **10+ enterprise customer meetings** across a wide range of industries
+- **A market launch:** ClickHouse, officially in Japan
+
+## Why It Mattered
+
+It would have been easy for Alexey to do this from a webcam. He didn't. And that's the point.
+
+ClickHouse has always been built in the open, by people who actually use it. Showing up - in Mumbai's Jio Convention Centre, on a stage in Jakarta, at a meetup in Bangalore's Awfis Residency Square, in a customer's office in Seoul - this is how that culture scales beyond GitHub contributions. The questions you get from a data engineer in person are not the same questions you get on a Zoom call. The conversations at a Bangalore meetup at 10 AM on a Saturday are not the conversations you have in a sales deck.
+
+APJ is one of the fastest-growing regions for ClickHouse, and the customers Alexey met on this trip are pushing the engine in ways that keep making ClickHouse better for everyone alongside what we're seeing from customers in the US, EMEA, and beyond. That feedback loop only works if the creator of the database is in the room.
+
+Twelve days. Five countries. One very tired CTO but a super satisfied one, and a whole lot of new ClickHouse stories from across APJ.
+
+---
+_Huge thanks to the APJ team: Cheryl, Chris, Sid, Zoe, Lalit, Anshul, Mit, Rahul, Narasingh, Rakesh, Swaroop, Piyush, Rana, Bryan, Si Shuo, Maruthi, Sunny, Ken, Ted, Takeshi, Kiyo, Masato, Yasuhiro, Miki, Tomoko and everyone behind the scenes for pulling this off. And thanks to every customer, partner, and community member who made the time to meet us._
+
+*Be in the know when Alexey's back in the region by joining our [Slack community](http://clickhouse.com/slack).*
 
 ---
 
