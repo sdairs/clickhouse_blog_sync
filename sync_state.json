@@ -1,5 +1,5 @@
 {
-  "last_sync": "2026-05-28T07:27:57.787862Z",
+  "last_sync": "2026-05-29T07:27:31.867925Z",
   "processed_blogs": {
     "https://clickhouse.com/blog/clickhouse-raises-400-million-series-d-acquires-langfuse-launches-postgres": {
       "title": "ClickHouse raises $400M Series D led by Dragoneer to accelerate expansion across analytics and AI infrastructure",
@@ -4770,9 +4770,57 @@
       "pub_date": "2026-05-27T08:38:31+00:00",
       "file_path": "blogs/2026-05-27-5-countries-12-days-one-clickhouse-inside-alexey.md",
       "processed_at": "2026-05-28T07:27:57.720128Z"
+    },
+    "https://clickhouse.com/blog/multi-stage-distributed-query-execution-clickhouse-cloud": {
+      "title": "Introducing multi-stage distributed query execution in ClickHouse Cloud",
+      "pub_date": "2026-05-28T08:56:59+00:00",
+      "file_path": "blogs/2026-05-28-introducing-multi-stage-distributed-query.md",
+      "processed_at": "2026-05-29T07:27:29.558781Z"
+    },
+    "https://clickhouse.com/blog/open-house-2026-day-1": {
+      "title": "Open House 2026 Day 1: real-time data without lock-in and what teams can build next",
+      "pub_date": "2026-05-28T03:59:05+00:00",
+      "file_path": "blogs/2026-05-28-open-house-2026-day-1-real-time-data-without-lock.md",
+      "processed_at": "2026-05-29T07:27:29.884476Z"
+    },
+    "https://clickhouse.com/blog/open-house-2026-day-1-jp": {
+      "title": "Open House 2026 Day 1: ロックインなきリアルタイムデータと、チームが次に構築できるもの",
+      "pub_date": "2026-05-28T01:28:08+00:00",
+      "file_path": "blogs/2026-05-28-open-house-2026-day-1.md",
+      "processed_at": "2026-05-29T07:27:30.196015Z"
+    },
+    "https://clickhouse.com/blog/clickhouse-tops-250m-arr-and-4000-customers-jp": {
+      "title": "ClickHouse、ARR前年同期比300%超、顧客数4,000社突破、Claude搭載のAIエージェントを発表",
+      "pub_date": "2026-05-28T00:01:00+00:00",
+      "file_path": "blogs/2026-05-28-clickhouse-arr-300-4-000-claude-ai.md",
+      "processed_at": "2026-05-29T07:27:30.485376Z"
+    },
+    "https://clickhouse.com/blog/observability-mcp-server-ai-notebooks": {
+      "title": "Open House observability announcements: MCP server, AI Notebooks, and ClickStack Cloud",
+      "pub_date": "2026-05-27T23:33:05+00:00",
+      "file_path": "blogs/2026-05-27-open-house-observability-announcements-mcp-server.md",
+      "processed_at": "2026-05-29T07:27:30.793263Z"
+    },
+    "https://clickhouse.com/blog/clickstack-cloud-private-preview": {
+      "title": "Introducing ClickStack Cloud: Serverless observability powered by ClickHouse",
+      "pub_date": "2026-05-27T17:00:18+00:00",
+      "file_path": "blogs/2026-05-27-introducing-clickstack-cloud-serverless.md",
+      "processed_at": "2026-05-29T07:27:31.098065Z"
+    },
+    "https://clickhouse.com/blog/introducing-house-mates": {
+      "title": "Introducing House Mates: the ClickHouse partner community and program",
+      "pub_date": "2026-05-27T16:59:43+00:00",
+      "file_path": "blogs/2026-05-27-introducing-house-mates-the-clickhouse-partner.md",
+      "processed_at": "2026-05-29T07:27:31.390373Z"
+    },
+    "https://clickhouse.com/blog/postgres-managed-by-clickhouse-beta": {
+      "title": "Postgres managed by ClickHouse is now in beta",
+      "pub_date": "2026-05-27T16:59:21+00:00",
+      "file_path": "blogs/2026-05-27-postgres-managed-by-clickhouse-is-now-in-beta.md",
+      "processed_at": "2026-05-29T07:27:31.814242Z"
     }
   },
-  "total_blogs": 795,
+  "total_blogs": 803,
   "failed_blogs": [
     {
       "url": "https://clickhouse.com/jp/blog/clickhouse-gcp-japan-availability",

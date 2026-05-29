@@ -1,6 +1,1436 @@
 # ClickHouse Blogs
-Last updated: 2026-05-28 07:27:57 UTC
-Total blogs: 795
+Last updated: 2026-05-29 07:27:31 UTC
+Total blogs: 803
+
+---
+
+## Introducing multi-stage distributed query execution in ClickHouse Cloud
+Published: 2026-05-28T08:56:59+00:00
+URL: https://clickhouse.com/blog/multi-stage-distributed-query-execution-clickhouse-cloud
+
+---
+title: "Introducing multi-stage distributed query execution in ClickHouse Cloud"
+date: "2026-05-28T08:56:59.790Z"
+author: "Alexander Gololobov"
+category: "Engineering"
+excerpt: "ClickHouse Cloud introduces multi-stage distributed query execution, a new foundation for scaling single queries across many nodes and accelerating large joins and high-cardinality aggregations."
+---
+
+# Introducing multi-stage distributed query execution in ClickHouse Cloud
+
+> **TL;DR**<br/>Multi-stage distributed execution gives ClickHouse Cloud a new way to scale one query across many nodes. It repartitions intermediate data between stages, removing key bottlenecks in large joins and high-cardinality aggregations.<br/><br/>Early TPC-H results show up to 3.4× speedups for join-heavy queries while retaining near-linear aggregation scaling: 7.4× faster on 8 nodes than on 1 node.
+
+ 
+<br/>
+
+## Scaling one query across many nodes
+
+ClickHouse has always been able to scale a single query across multiple nodes. In shared-nothing deployments, users do this with physical sharding and the `Distributed` table engine. In ClickHouse Cloud, parallel replicas brought intra-query scaling to shared storage.
+
+These mechanisms work well for many analytical queries, but they were not the final answer for modern PB-scale workloads. They could fan out work across nodes, but they could not freely repartition intermediate results between execution stages. That limited how far ClickHouse could scale high-cardinality aggregations, and especially large joins.
+
+Multi-stage distributed query execution is the next step. It gives ClickHouse Cloud a new way to parallelize a single query across the CPU and memory of all available nodes, without the bottlenecks of the previous execution models.
+
+In this post, we introduce the new extension of ClickHouse’s query execution model and walk through how it works. We use a multi-table join as the running example because joins are among the hardest analytical workloads to scale, but the mechanism is much broader: it is a new foundation for distributed query execution in ClickHouse Cloud.
+
+Before we look at the new mechanics, let’s review what came before and why those approaches weren’t enough for modern PB-scale workloads.
+
+
+## Why existing distributed execution was not enough
+
+The existing distributed execution was useful but not elastic enough for PB-scale workloads. 
+ 
+In shared-nothing open source deployments, ClickHouse scales a query by physically [sharding](https://clickhouse.com/docs/shards) data across nodes and querying those shards through a [Distributed table](https://clickhouse.com/docs/engines/table-engines/special/distributed). Each node processes its local slice, and the requester merges the results.
+
+![Blog-Distributed_JOINS-introduction.001.png](https://clickhouse.com/uploads/Blog_Distributed_JOINS_introduction_001_bf34c79f03.png)
+
+That works, but capacity is tied to the shard layout.
+
+> **Bottleneck: capacity is tied to shard layout**<br/>Adding compute does not automatically make one query faster. Large tables must first be redistributed across more shards.
+
+<br/>
+
+Large joins across physically sharded tables expose a second limitation. A join only works when matching rows meet on the same machine. With a distributed JOIN, each node keeps its local left side, fetches the missing right-side shards from the other nodes, builds a full right-side hash table, and returns its local join result to the requester.
+
+![Blog-Distributed_JOINS-introduction.002.png](https://clickhouse.com/uploads/Blog_Distributed_JOINS_introduction_002_68e4f2362c.png)
+
+GLOBAL JOIN reduces the many-to-many network round-trip by computing the right side once and broadcasting it to every node.
+
+![Blog-Distributed_JOINS-introduction.003.png](https://clickhouse.com/uploads/Blog_Distributed_JOINS_introduction_003_69a7171fae.png)
+
+But the core problem remains: large right sides still have to be copied across the cluster. 
+
+> **Bottleneck: large right sides are copied everywhere**<br/>Distributed JOIN and GLOBAL JOIN handle network traffic in different ways, but both still make every shard join against a full right side.
+
+<br/>
+
+[ClickHouse Cloud](https://clickhouse.com/cloud) removed the physical sharding problem by moving to [shared storage](https://clickhouse.com/blog/clickhouse-cloud-boosts-performance-with-sharedmergetree-and-lightweight-updates). Any node can access the same table data, and [parallel replicas](https://clickhouse.com/docs/deployment-guides/parallel-replicas) allow multiple nodes to participate in a single query. Nodes can be added or removed instantly, with no data copying or reshuffling.
+
+![Blog-Distributed_JOINS-introduction.004.png](https://clickhouse.com/uploads/Blog_Distributed_JOINS_introduction_004_1af1e0a189.png)
+
+That made [intra-query scaling](https://clickhouse.com/blog/clickhouse-parallel-replicas) in ClickHouse Cloud much more elastic. But parallel replicas still had a structural limitation: they could split work across replicas, but they could not freely repartition intermediate data between execution stages. 
+ 
+This shows up in two places. 
+ 
+First, joins. On a single node, ClickHouse can [parallelize both sides of its default hash join strategy](https://clickhouse.com/blog/clickhouse-fully-supports-joins-hash-joins-part2#parallel-hash-join): it partitions rows by the join key into multiple hash tables, so both build and probe work can run across CPU cores. The same remains true inside each node when parallel replicas are used.
+
+The limitation is one level higher. Across multiple nodes, dividing the build side itself would require a shuffle stage that repartitions both inputs by join key between nodes. Parallel replicas do not have that mechanism. The next best option is to distribute the left-side read ranges after [primary-index pruning](https://clickhouse.com/docs/primary-indexes). That parallelizes probe-side work across nodes, but those ranges are not partitioned by the join key. A row in one left-side range can match rows anywhere in the right-side table, so each node still needs the full right side to build its local hash table(s) before probing its local slice. 
+
+![Blog-Distributed_JOINS-introduction.005.png](https://clickhouse.com/uploads/Blog_Distributed_JOINS_introduction_005_8a9fda944e.png)
+
+> **Bottleneck: the build side does not scale out**<br/>The left-side probe is divided across nodes, but the build side is not. Every node still builds the same hash table from the full right side, so the build step is repeated instead of divided across the cluster. 
+ 
+ <br/>
+ 
+Second, aggregations. Nodes can scan and aggregate locally in parallel. But without a shuffle by the GROUP BY key, ClickHouse cannot guarantee that all rows for the same GROUP BY key end up on the same node.
+
+![Blog-Distributed_JOINS-introduction.006.png](https://clickhouse.com/uploads/Blog_Distributed_JOINS_introduction_006_72425a40cd.png)
+
+> **Bottleneck: final aggregation is still single-node**<br/>Partial groups must be merged by one coordinator. For high-cardinality GROUP BY, that final merge is bounded by one node’s CPU and memory, not the cluster.
+
+<br/>
+
+Both problems have the same root cause: there is no general way to repartition intermediate data between execution stages. That is what multi-stage distributed execution adds.
+
+
+## Introducing multi-stage distributed execution
+
+Multi-stage distributed execution adds the missing primitive: it lets ClickHouse Cloud move intermediate data between nodes while a query is running.
+
+Instead of executing a query as one distributed fan-out plus a final merge, ClickHouse splits the query plan into stages running in parallel across worker nodes. Between stages, exchange operators move the intermediate results into the shape required by the next stage.
+
+![Blog-Distributed_JOINS-introduction.007.png](https://clickhouse.com/uploads/Blog_Distributed_JOINS_introduction_007_f6cb8aa8b8.png)
+
+For example, data can be shuffled by a join key so each worker receives the matching slice of both join inputs. It can be shuffled by a GROUP BY key so each worker owns complete groups. Small inputs can be broadcast to all workers. Final results can be gathered by the coordinator.
+
+> **Prior bottlenecks removed: data can move between stages**<br/>Large joins no longer need every node to build the full right-side hash table. High-cardinality aggregations no longer need one coordinator to merge all partial groups.
+
+<br/>
+ 
+The core abstraction is the exchange operator, a well-known building block in parallel query execution, [introduced](https://scholar.colorado.edu/concern/reports/sj139272m) for the Volcano system and used by MPP databases like Teradata and Greenplum, as well as in SQL Server. 
+
+The exchange operator redistributes data between plan stages. Multi-stage distributed execution uses three main exchange types:
+
+
+
+1. **GatherExchange** (N-to-1):  sends worker output to the coordinator, usually at the top of the plan to produce the final result. 
+
+2. **ShuffleExchange** (M-to-N): repartitions rows by a key, such as a join key or GROUP BY key. This is what lets each worker own a complete, disjoint slice of the next operation. 
+
+3. **BroadcastExchange** (1-to-N):  copies a small input to every worker, useful when one side of a join is small enough to replicate cheaply.
+
+There is also **ScatterExchange**, which spreads rows randomly amongst workers.
+
+Those are the mechanics in the abstract. The easiest way to see why they matter is to follow one query through the stages.
+
+
+###  How one analytical join query avoids the old bottlenecks
+
+Let’s make this concrete with a [TPC-H](https://clickhouse.com/docs/getting-started/example-datasets/tpch)-like query that hits both bottlenecks from the previous section: a large join side that should not be copied to every worker node, and an aggregation that should not collapse into a single-node final merge.
+
+The query computes total shipment revenue per nation: it joins lineitem to supplier, joins the result to the small nation table, groups by n_name, and sorts by revenue.
+
+<pre>
+<code type='click-ui' language='sql' show_line_numbers='false'>
+SELECT n_name, sum(l_extendedprice) AS revenue
+FROM lineitem
+JOIN supplier ON l_suppkey = s_suppkey
+JOIN nation ON s_nationkey = n_nationkey
+WHERE l_shipdate >= '1994-01-01' AND l_shipdate < '1995-01-01'
+GROUP BY n_name
+ORDER BY revenue DESC;
+</code>
+</pre>
+
+The distributed plan (inspected via [EXPLAIN](https://clickhouse.com/docs/sql-reference/statements/explain)) contains one BroadcastExchange, two ShuffleExchanges, and one GatherExchange:
+
+<pre><code type='click-ui' language='text' show_line_numbers='false'>
+┌─explain──────────────────────────────────────────────────┐
+│ Output: n_name, sum(l_extendedprice)                     │
+│                                                          │
+│ GatherExchange (sorted by (sum(l_extendedprice) DESC))   │
+│ └──Sorting (Sorting for ORDER BY)                        │
+│    └──Aggregating                                        │
+│       └──ShuffleExchange (by hash([n_name]))             │
+│          └──JoinLogical                                  │
+│             ├──ShuffleExchange (by hash([l_suppkey]))    │
+│             │  └──ReadFromMergeTree (sf100.lineitem)     │
+│             └──ShuffleExchange (by hash([s_suppkey]))    │
+│                └──JoinLogical                            │
+│                   ├──ReadFromMergeTree (sf100.supplier)  │
+│                   └──BroadcastExchange                   │
+│                      └──ReadFromMergeTree (sf100.nation) │
+└──────────────────────────────────────────────────────────┘
+</code></pre>
+
+Read from the bottom up, the plan first builds the small supplier ⋈ nation join: nation is broadcast, supplier is read, and each worker produces an enriched supplier ⋈ nation side. That enriched side is then repartitioned by s_suppkey, while lineitem is read and repartitioned by l_suppkey, so matching rows meet on the same worker. The joined rows are then shuffled by n_name for aggregation, and the sorted final result is gathered by the coordinator. 
+ 
+Let’s walk through those steps.
+
+#### **Step 1: Join supplier with nation** 
+
+
+ClickHouse first broadcasts the tiny `nation` table to every worker and builds a small local `nation` hash table. 
+
+![Blog-Distributed_JOINS-introduction.008.png](https://clickhouse.com/uploads/Blog_Distributed_JOINS_introduction_008_9f01f1a3b7.png)
+
+Each worker then reads its slice of `supplier` …
+
+![Blog-Distributed_JOINS-introduction.009.png](https://clickhouse.com/uploads/Blog_Distributed_JOINS_introduction_009_9d34292f7b.png)
+…and probes that local hash table.
+
+The result is an enriched `supplier ⋈ nation` side.
+
+![Blog-Distributed_JOINS-introduction.010.png](https://clickhouse.com/uploads/Blog_Distributed_JOINS_introduction_010_ec2f2a7c59.png)
+
+Nothing has been shuffled yet: each worker still keeps the rows from its original `supplier` slice.
+
+
+#### **Step 2:  Co-locate lineitem with enriched supplier rows**
+
+Next, ClickHouse prepares the larger join `lineitem` ⋈ (`supplier` ⋈ `nation`). 
+
+Workers first read slices of `lineitem`…
+
+![Blog-Distributed_JOINS-introduction.011.png](https://clickhouse.com/uploads/Blog_Distributed_JOINS_introduction_011_535d471633.png)
+
+…and both join sides are repartitioned by supplier key: `lineitem` by `l_suppkey`, and the enriched `supplier ⋈ nation` rows by `s_suppkey`. 
+
+![Blog-Distributed_JOINS-introduction.012.png](https://clickhouse.com/uploads/Blog_Distributed_JOINS_introduction_012_82b5335d17.png)
+
+After the shuffle, each worker owns a disjoint supplier-key bucket containing the matching rows from both sides, and the enriched `supplier ⋈ nation` rows from Step 1 become the build side.
+
+> **Prior bottleneck removed: no full build-side copy**<br/>Previously, each node needed the full right side of the join in memory. After the shuffle, each worker node owns only a disjoint supplier-key bucket, so it builds only its share of the hash table.
+
+<br/>
+
+
+#### **Step 3: Join locally within each supplier-key bucket**
+
+After the shuffle, each worker owns one supplier-key bucket. For that bucket, it has both sides of the join: matching `lineitem` rows and the enriched `supplier ⋈ nation` rows.
+
+Each worker can now join locally by probing its bucket-local hash table. No worker needs the full build side, and no additional network exchange is needed for this join.
+
+![Blog-Distributed_JOINS-introduction.013.png](https://clickhouse.com/uploads/Blog_Distributed_JOINS_introduction_013_65c74d64b3.png)
+
+#### **Step 4: Shuffle by GROUP BY key for final aggregation**
+
+The join output is still partitioned by supplier key, not by `n_name`. So the same nation can appear on multiple workers. ClickHouse reshuffles the joined rows by the `GROUP BY` key, `n_name`, so each worker owns complete groups and can compute `sum(l_extendedprice)` independently.
+
+![Blog-Distributed_JOINS-introduction.014.png](https://clickhouse.com/uploads/Blog_Distributed_JOINS_introduction_014_1ef92c67b0.png)
+
+> **Prior bottleneck removed: no single-node final aggregate merge**<br/>Previously, nodes could produce partial groups locally, but the same GROUP BY key could appear on multiple nodes, so one coordinator had to merge all partial states. After the shuffle by the GROUP BY key, each worker owns complete groups and can compute the final aggregate for its keys locally.
+
+<br/>
+
+Here,` n_name` has only 25 distinct values, so the final merge would be small. But for high-cardinality GROUP BY, shuffling by the grouping key avoids the single-coordinator merge bottleneck. We’ll come back to this planning tradeoff at the end. 
+
+
+
+#### **Step 5: Sort locally and gather the final result**
+
+Each worker sorts its aggregated results by revenue. The GatherExchange (line 3) combines the sorted results from all workers at the coordinator to produce the final output. 
+
+![Blog-Distributed_JOINS-introduction.015.png](https://clickhouse.com/uploads/Blog_Distributed_JOINS_introduction_015_227587d6be.png)
+
+> **Prior bottleneck avoided: the coordinator only gathers final rows**<br/>The coordinator still receives the query result, but the expensive work has already happened across the workers. It gathers sorted, already-aggregated rows; it does not merge large partial groups or build a large join hash table.
+
+<br/>
+
+The example above shows the logical data movement: shuffle here, broadcast there, gather at the end. Under the hood, ClickHouse Cloud needs a transport layer that can move those intermediate blocks efficiently between workers.
+
+
+### How does data move between stages?
+
+Exchanges can move data in two ways.
+
+The default is **streaming exchange**. Workers send blocks directly to other workers over TCP using a custom binary protocol. Data starts moving as soon as it is produced: a worker reading lineitem can begin sending blocks into a ShuffleExchange immediately, while the receiving workers start consuming them without waiting for the full input. In other words, exchanges are pipelined rather than “write everything, then read everything.”
+
+The second mode is **persisted exchange**. Instead of sending intermediate blocks directly between workers, ClickHouse writes them to shared object storage. This is useful for future fault recovery and for spilling intermediate results when a query exceeds cluster memory.
+
+Streaming exchange is optimized for fast interactive queries and is the default. If a worker fails, the query fails and the client retries it. For these workloads, rerunning the query is usually cheaper than checkpointing every exchange. 
+
+### Why ClickHouse Cloud makes this possible
+
+Multi-stage distributed execution depends on workers being interchangeable. A stage can run on any worker only if that worker can access the data and metadata it needs.
+
+
+#### Shared storage makes workers interchangeable
+
+ClickHouse Cloud already has that foundation. Table data lives in shared object storage, and every node has access to the metadata needed to read it. The coordinator can therefore assign stages dynamically across the cluster: any worker can scan table data, receive shuffled rows, build its share of a hash table, aggregate its assigned groups, or sort its local result.
+
+
+#### Shuffle improves memory utilization
+
+This also improves memory utilization. When a ShuffleExchange partitions a large join across 8 workers, each worker receives roughly 1/8 of the rows and builds roughly 1/8 of the hash table. A join that would require 16 GiB of memory on one node can instead use about 2 GiB per worker across 8 nodes.
+
+
+#### Shared storage can avoid some broadcasts
+
+Shared storage also opens up future optimizations. For small tables, a worker may not need to receive a broadcast over the network at all; it can read the table directly from object storage and keep it in the local SSD cache for future reads. That is useful for dimension tables like nation or supplier, where local cached reads may be cheaper than broadcasting the table through the exchange layer.
+
+
+#### Toward stateless workers
+
+The longer-term direction is fully stateless workers: nodes that can appear on demand, pick up work for a query, read the data they need from shared storage, and disappear again when the work is done. Without fixed ownership or manual data placement. Multi-stage distributed execution is a step toward that model.
+
+### What about single-node queries?
+
+ClickHouse’s single-node execution path is unchanged. Columnar MergeTree storage, vectorized execution, and aggressive pipeline parallelism are still the foundation of query performance.
+
+Multi-stage distributed execution is an additional, opt-in path for queries that benefit from scaling across multiple nodes. It extends ClickHouse’s execution model and does not replace the single-node engine.
+
+## TPC-H benchmark results for multi-stage distributed query execution
+
+TPC-H is an industry-standard benchmark for analytical query processing. It consists of 22 queries across 8 tables, ranging from simple scans to complex multi-table joins, designed to simulate real-world decision-support workloads. 
+
+We ran it at scale factor 100 (~100GB of data), where the various tables have the following row counts:
+
+* `lineitem` (600M rows)
+* `orders` (150M)
+* `partsupp` (80M)
+* `part` (20M)
+* `supplier` (1M)
+* `nation` (25)
+
+We ran the benchmark on ClickHouse Cloud staging machines with ARM (Graviton), 8 cores, and 32 GB RAM. We’re using ClickHouse’s SharedMergeTree and server version 26.2.1.261
+
+The table below shows the results from running each query on 1 node (our baseline) and 8 nodes using multi-stage distributed query execution. We run each query three times and take the best time.
+
+| Query | 1 node | 8 nodes | Speedup | Notes |
+|---|---:|---:|---:|---|
+| Q01 | 14.36s | 1.94s | 7.4x | Full scan + agg, near-linear |
+| Q02 | 1.33s | 2.31s | 0.6x | Runtime filters are not fully supported |
+| Q03 | 3.67s | 1.27s | 2.9x | 3-table join |
+| Q04 | 3.13s | 0.74s | 4.2x | EXISTS subquery as join |
+| Q05 | 6.16s | 2.31s | 2.7x | 6-table join |
+| Q06 | 0.65s | 0.16s | 4.1x | Single-table scan |
+| Q07 | 3.21s | 1.24s | 2.6x | 6-table join |
+| Q08 | 5.61s | 2.65s | 2.1x | 8-table join |
+| Q09 | 15.42s | 4.60s | 3.4x | 6-table join |
+| Q10 | 5.90s | 2.39s | 2.5x | 4-table join |
+| Q11 | 1.04s | 0.58s | 1.8x | 3-table join |
+| Q12 | 2.45s | 0.81s | 3.0x | 2-table join |
+| Q13 | 5.18s | 1.56s | 3.3x | 2-table join, two-level agg |
+| Q14 | 0.49s | 0.21s | 2.3x | 2-table join |
+| Q15 | 0.07s | 0.07s | 1.0x | Already fast |
+| Q16 | 1.12s | 0.58s | 1.9x | 3-table join |
+| Q17 | 5.99s | 2.88s | 2.1x | 2-table join + subquery |
+| Q18 | 16.07s | 16.32s | 1.0x | EXISTS subquery not distributed by rule-based planner |
+| Q19 | 8.09s | 1.78s | 4.5x | 2-table join |
+| Q20 | 1.54s | 1.10s | 1.4x | 4-table join |
+| Q21 | 14.83s | 8.77s | 1.7x | 4-table join with EXISTS/NOT EXISTS |
+| Q22 | 1.31s | 0.38s | 3.4x | 2-table join |
+| **Total** | **117.6s** | **54.7s** | **2.1x** |  |
+
+### Why is Q02 slower?
+
+Some single-node optimizations are not yet fully supported in distributed mode, e.g., runtime filters (Bloom filter pushdowns across joins). Q02 shows a regression because of this.
+
+
+### What scales well?
+
+**Near-linear scaling for scan-dominated queries.**<br/>
+Q01 (full scan + aggregation of 600M rows) achieves 7.4x on 8 nodes. 
+
+The work is almost entirely reading and aggregating, which splits evenly across workers with minimal exchange overhead.
+
+**Good scaling (2-5x) for multi-join queries.**<br/>
+Q19 (4.5x), Q04 (4.2x), Q06 (4.1x), Q09 (3.4x), Q22 (3.4x), Q13 (3.3x), Q12 (3.0x), Q03 (2.9x).
+
+For these queries, there is significant shuffle overhead, as every exchange involves serializing data, network transfer, and deserialization, but it's proportionally small compared to the parallelized join computation.
+
+
+### Where is there room for smarter plans?
+
+The rule-based strategy works well for most queries, but some plans are suboptimal. 
+
+Q08 shuffles both sides of a join where one side has only 134K rows after filtering - a broadcast would save reshuffling 600M rows. 
+
+Q18's `EXISTS` subquery limits parallelism. Small tables like `supplier` (1M rows) are shuffled over the network even though every worker could read them directly from shared object storage.
+
+These limitations are not fundamental to the execution engine. The engine can execute any plan it's given, the question is which plan to give it. 
+
+
+## What’s next?
+
+We are working on a cost-based optimizer for multi-stage distributed query execution, which we expect will further improve query performance.
+
+One important area is choosing the right aggregation strategy automatically. Some queries benefit from shuffling by the GROUP BY key so each worker owns complete groups; others are better served by local partial aggregation followed by a final merge. A cost-based optimizer can choose between these strategies based on cardinality, data size, and cluster shape.
+
+Stay tuned for a future post.
+
+
+## How can I use multi-stage distributed query execution?
+
+At the time of writing (May 2026), multi-stage distributed execution is **experimental** and only available in ClickHouse Cloud as part of a private preview program. 
+ 
+To request access, reach out to your ClickHouse account team or contact us at support@clickhouse.com 
+
+
+
+
+
+
+---
+
+## Open House 2026 Day 1: real-time data without lock-in and what teams can build next
+Published: 2026-05-28T03:59:05+00:00
+URL: https://clickhouse.com/blog/open-house-2026-day-1
+
+---
+title: "Open House 2026 Day 1: Real-time data without lock-in and what teams can build next "
+date: "2026-05-29T02:16:06.714Z"
+author: "ClickHouse"
+category: "Product"
+excerpt: "A full recap of Day 1 at Open House 2026, covering every major announcement across ClickHouse Cloud, Postgres, distributed queries, ClickPipes, ClickHouse Agents, Langfuse V4, ClickStack, and the House Mates partner program."
+---
+
+# Open House 2026 Day 1: Real-time data without lock-in and what teams can build next 
+
+## Summary
+
+- ClickHouse Open House 2026 Day 1 brought announcements across ClickHouse Cloud, Postgres, distributed query execution, AI agents, observability, and lakehouse interoperability.
+- ClickHouse Postgres moves to public beta delivering over 5x more transactions per second than AWS RDS; multi-stage distributed queries cut TPC-H SF100 runtime from 117.6 seconds to 54.7 seconds; Langfuse V4 delivers 200x query performance improvements.
+- ClickHouse Agents powered by Claude entered public beta with a native chat experience and no-code agent builder; write support landed for Microsoft OneLake and Unity Catalog, enabling bi-directional workflows between ClickHouse and external lakehouse systems.
+
+Today at Open House 2026 in San Francisco, we shared a broad set of announcements across ClickHouse Cloud, AI agents, observability, Postgres, and lakehouse interoperability.
+
+Open House has always been a chance for our users to come together and exchange ideas about where real-time data systems are heading, and this year’s launches reflect many of the conversations we’ve been having with users, contributors, customers, and partners over the last year. This post rounds up the major announcements from Day 1, and tomorrow we’ll be back with another set of announcements from Day 2.
+
+## Improving the UX for humans and agents {#improving-the-ux-for-humans-and-agents}
+
+ClickHouse Cloud is now serving two audiences: the teams that operate it in production and the AI agents that query it programmatically. These product updates bring improvements across resilience, observability, schema management, and developer tooling to make ClickHouse Cloud easier to operate and easier to build on.
+
+Cross-Region Replication brings an active-passive failover architecture to ClickHouse Cloud. Data is synchronously replicated to a secondary region, with recovery time measured in minutes and recovery point measured in seconds. We will begin a limited private preview later this year.
+
+Monitoring v2 overhauls observability with opinionated service health signals, schema exploration, query insights, and mutation tracking all in one place.
+
+A Materialized View Pipeline Visualization will give teams a live visual map of data flowing across materialized views, one-click debugging for unhealthy refreshes, and a drag-and-drop pipeline builder for creating new pipelines.
+
+![](https://clickhouse.com/uploads/open_house_day1_may2026_image3_ed975af860.png) 
+
+*Coming soon* Schema Management and Optimization introduces a fully guided, end-to-end AI-assisted schema management experience. It includes a workload-aware recommendation engine, a dedicated sandboxing environment, automated impact analysis, and a guided blue-green deployment flow for zero-downtime schema changes.
+
+![](https://clickhouse.com/uploads/open_house_day1_may2026_image10_182df22dd5.png)
+
+On the developer and agent side, the ClickHouse CLI is built for agentic workflows, with official ClickHouse skills installable directly into Cursor, Claude Code, and other coding agents. The same CLI manages both local development and production Cloud services.
+
+Query API Endpoints gets a unified management pane, enterprise-grade RBAC, native IDE integrations, and MCP tooling support. The AI-Enhanced Query Builder UI lets analysts build complex queries visually and move fluidly between the visual builder and ClickHouse Assistant.
+
+And MCP-as-a-Service enables fully managed, domain-specific remote MCP servers to be spun up directly from the ClickHouse Cloud UI, with fine-grained access control and support for custom context.
+
+Together, these updates make ClickHouse Cloud a more complete platform for running production workloads, whether the queries come from a dashboard, a notebook, or an agent.
+
+## Postgres announcements {#postgres-announcements}
+
+AI workloads are collapsing the divide between transactional and analytical databases. Applications that once ran predictable, hard-coded queries now generate unpredictable bursts of agent-driven requests that need answers from both sides of the stack. Best-of-breed matters more than ever: Postgres for OLTP, ClickHouse for OLAP. But composing them has traditionally meant standing up each database independently and bridging the two with custom CDC pipelines, message brokers, and orchestration logic.
+
+ClickHouse Postgres, now moving from private preview to public beta, is built to close that gap. The service runs on local NVMe storage, eliminating the primary bottleneck in transactional workloads by colocating storage with compute instead of relying on network-attached volumes.
+
+In early benchmarks, this delivers over 5x more transactions per second than AWS RDS and 2.4x more than the next closest alternative. High availability is supported with up to two standby replicas across availability zones, synchronous commit to the fastest standby, and automatic failover. Continuous WAL archiving to S3 provides point-in-time recovery, branching, and region-survivable durability.
+
+![](https://clickhouse.com/uploads/open_house_day1_may2026_image8_904253765c.png)
+
+On the integration side, a Postgres-native CDC pipeline streams inserts, updates, and deletes directly into ClickHouse with no intermediate infrastructure, handling both parallel initial snapshots and continuous replication.
+
+To make the experience even simpler for developers already building on Postgres, a new open-source extension, pg_clickhouse, makes ClickHouse-backed tables queryable directly from within a standard Postgres session, transparently pushing projections, filters, and aggregations down to ClickHouse for fast analytical queries. Developers continue using familiar Postgres SQL and tooling while the right engine handles the right workload behind the scenes.
+
+For a deeper look at the architecture, benchmarks, and roadmap, read the [dedicated blog post](https://clickhouse.com/blog/postgres-managed-by-clickhouse-beta).
+
+## Distributed queries in ClickHouse {#distributed-queries-in-clickhouse}
+
+ClickHouse Cloud now supports multi-stage distributed query execution in private preview. The feature scales large joins and high-cardinality aggregations across many nodes by repartitioning intermediate data between execution stages.
+
+Parallel replicas already distribute probe-side work, but every node still rebuilds the full hash table from the right side of the join. High-cardinality aggregations hit a similar wall, with final aggregation collapsing onto a single coordinator. Multi-stage execution removes both bottlenecks.
+
+![](https://clickhouse.com/uploads/open_house_day1_may2026_image1_73ff57b040.png)
+
+Workers exchange intermediate results, re-partition by join or GROUP BY keys, and operate on independent slices of the problem.
+
+The feature builds on ClickHouse Cloud's shared-storage architecture, where any worker can access any data without fixed shard ownership. That makes it possible to distribute query stages dynamically across available compute, pointing toward more elastic execution with interchangeable worker pools.
+
+In early TPC-H testing at scale factor 100, the full benchmark suite ran in 54.7 seconds on eight nodes, down from 117.6 seconds on a single node. Roughly a 2x improvement, with further gains expected as the cost-based optimizer matures.
+
+For more technical details, we recommend users read the [dedicated blog post](https://clickhouse.com/blog/multi-stage-distributed-query-execution-clickhouse-cloud).
+
+## **Join performance and other core improvements**
+
+We presented how JOIN performance in ClickHouse improved by over 6x in the last year through support for correlated subqueries, lazy materialization, runtime filters, and automatic join reordering. These optimizations and features now put ClickHouse on par with established data warehouses across TPC-H and other standard JOIN benchmarks, often matching or exceeding the performance of systems such as Snowflake, BigQuery, and Databricks.
+
+![image5.png](https://clickhouse.com/uploads/image5_760140b60c.png)
+
+We also recapped some of the most recent improvements in the core database, including Full-Text Search being made [generally available](https://clickhouse.com/blog/full-text-search-ga-release), addressing one of the most common requirements for observability and AI workloads. 
+
+## Write support for Microsoft OneLake and Unity catalogs {#write-support-for-microsoft-onelake-and-unity-catalogs}
+
+Following our [recent announcement that ClickHouse is now Data Lake Ready](https://clickhouse.com/blog/clickhouse-is-data-lake-ready), we’ve continued expanding support for open data lake ecosystems and catalog integrations. ClickHouse now supports write operations to Iceberg tables via Unity Catalog. Furthermore, Microsoft users can now also write directly to Iceberg tables managed by Microsoft OneLake.
+
+This makes it possible to support fully bi-directional workflows between ClickHouse and external lakehouse systems. As organizations increasingly adopt open table formats and shared catalog layers, it is important not only for ClickHouse to act as a fast analytical engine on top of these systems, but also to allow users to write data back in open formats to ensure data remains interoperable. Write support for additional catalogs is planned over the coming months.
+
+## ClickPipes {#clickpipes}
+
+We're bringing ClickPipes natively to GCP! Starting today, new ClickHouse Cloud services on GCP run ClickPipes in the same region for lower-latency ingestion, data locality guarantees, and tighter integration with GCP-native features.
+
+This includes Private Service Connect (PSC) support for secure, direct private connections to GCP-managed services behind a VPC; before, you had to tunnel connections via an SSH bastion host.
+
+Note: If you’re using ClickPipes with existing GCP services, please reach out to your account executive to discuss a migration plan.
+
+![](https://clickhouse.com/uploads/open_house_day1_may2026_image9_9179adfb9e.gif)
+
+To deepen our integration with the GCP ecosystem even further, we’re also announcing a new ClickPipes connector for Google Cloud Pub/Sub, in Private Preview. If Pub/Sub is part of your stack, you can now subscribe to topics and stream data directly into ClickHouse Cloud with no additional infrastructure. The connector supports all common formats (JSON, Avro, Protobuf) and schema registry integration, with attribute-based message filtering, flexible seek options, and per-key ordered delivery. Like all connectors, it can also be managed programmatically via OpenAPI and the ClickHouse Terraform provider.
+
+## Bring any agent to your real-time data, with zero lock-in {#bring-any-agent-to-your-real-time-data-with-zero-lock-in}
+
+AI agents are a new kind of workload, and they're breaking the old playbook. They fire ten to a hundred times the volume of queries a human analyst would, in bursts, all at once, and most analytical engines simply weren't built for it. Closed data platforms make it worse, locking teams into limited and proprietary models, a single agent, and one rigid way of working, while costs spiral. The agentic era needs a real-time substrate that's fast, affordable, and refuses to lock anyone in.
+
+![](https://clickhouse.com/uploads/open_house_day1_may2026_image2_2a92f8d9fc.png)
+
+Today, we're introducing ClickHouse Agents, a fully managed agentic analytics service on ClickHouse Cloud, powered by Claude and now in public beta.
+
+Every ClickHouse Cloud user gets a native chat experience and a no-code agent builder for shipping agents grounded in their own data, with zero setup. Under the hood is a sandboxed code interpreter, shareable artifacts, skills, memory, and multi-agent workflows, all built on LibreChat - the open-source platform that [joined ClickHouse last November](https://clickhouse.com/blog/clickhouse-acquires-librechat).
+
+Because it speaks MCP natively, context can be pulled from any MCP-compatible system. ClickHouse is purpose-fit for this agentic era, where sub-second queries on billions of rows, petabyte scale, and cost efficiency are key to running agentic analytics in production successfully. Customers don't have to choose between us and the tools they already love. Use our agents out of the box, build or bring your own, get speed, transparency, and full control with your analytics AI stack.
+
+## Langfuse announcements {#langfuse-announcements}
+
+As we discussed in the previous section, AI agents are introducing a fundamentally different workload pattern for data systems, and observability platforms are feeling that shift just as strongly. A single agent run can produce hundreds of observations across LLM calls and tool calls, and the interesting signal is rarely at the top of the trace but requires deep evaluation workflows in production and in development. Langfuse solves for this problem, and the team [joined ClickHouse in January](https://clickhouse.com/blog/clickhouse-acquires-langfuse-open-source-llm-observability).
+
+Today, we're announcing Langfuse V4, in beta on Langfuse Cloud and soon to be available for self-hosted deployments.
+
+This represents a "simplify for scalability" rewrite that collapses the data model into a single immutable observations table with no joins and no deduplication. The result is millisecond dashboard loads, 200x query performance across many important routes, and a single project that comfortably handles billions of events, all benefiting from ClickHouse's performance. Learn more about the details of this change in this [technical blog post](https://langfuse.com/blog/2026-03-10-simplify-langfuse-for-scale).
+
+On top of V4, we're shipping a tighter improvement loop: Experiments now ship with an improved UI, code-based evaluators, and CI/CD workflows. This means prompt and agent changes can be scored before they reach production, with LLM-as-a-judge supporting categorical, boolean, and free-text scores and alerting, ensuring teams can react to score and latency regressions at agent scale.
+
+The platform itself is becoming agent-native, with v2 of the MCP server exposing most API routes to agents, a rewritten Langfuse CLI, and skills that wrap every Langfuse capability so the same building blocks work for humans and agents. Soon, these APIs will include fast full-text search, allowing agents to explore traces in a more free-form/semantic way.
+
+Finally, Langfuse Cloud users can now sign in using their ClickHouse Cloud identity, making adoption seamless and removing the need to manage a separate login. Langfuse itself remains open source, OpenTelemetry-native, self-hostable, and built to scale with the realities of agent workloads.
+
+## ClickStack announcements {#clickstack-announcements}
+
+### ClickStack Cloud {#clickstack-cloud}
+
+Today, we announced the private preview of ClickStack Cloud, a fully managed, serverless observability platform built on ClickHouse. Teams can send OpenTelemetry data to a managed OTLP endpoint, then investigate logs, metrics, and traces through the ClickStack UI without operating collectors, ingestion pipelines, or ClickHouse clusters themselves. ClickStack Cloud enters private preview with managed ingestion, a serverless query experience, and integrated observability workflows built directly on ClickHouse Cloud.
+
+During the private preview, we’re focused on two areas that matter for large-scale observability workloads: independently scaling ingestion and query infrastructure, and automatically tuning the underlying datastore based on how teams actually use their telemetry data.
+
+This means improving systems that learn from common query patterns and automatically optimize telemetry data over time. Planned areas of automatic tuning include materializing frequently queried fields, adjusting primary keys around common filters, and adding materialized views and indexes for common dashboard and investigation workflows. These capabilities will be refined alongside early adopters and design partners throughout the private preview period.
+
+Private preview spots are limited. If you are interested in using ClickStack Cloud, sign up for the [preview program](https://clickhouse.com/cloud/clickstack-cloud-waitlist) and tell us about your observability workload.
+
+![](https://clickhouse.com/uploads/open_house_day1_may2026_image6_0cf7b01fd7.png)
+
+For more details, see our [dedicated blog post](https://clickhouse.com/blog/clickstack-cloud-private-preview).
+
+### Managed ClickStack {#managed-clickstack}
+
+In addition to ClickStack Cloud entering private preview, our existing Managed ClickStack offering is now generally available.
+
+Managed ClickStack is designed for teams that want direct operational control over their observability stack, including ingestion pipelines, compute sizing, workload isolation, schema design, and datastore tuning. Users manage their own OpenTelemetry collectors and ingestion architecture while using ClickHouse Cloud as the underlying observability datastore. For many large-scale deployments, that control is essential for optimizing performance and achieving market-leading cost efficiency.
+
+![image8.png](https://clickhouse.com/uploads/image8_75f25bb9a6.png)
+
+### PromQL support
+
+While we believe SQL is the lingua franca of data analysis, some workloads benefit from a domain-specific language. PromQL for Prometheus-style metrics is one example.
+
+To close out our observability announcements, we wanted to share an early preview of a major area of investment for 2026: PromQL support in ClickHouse and ClickStack.
+
+During the demo, we showed PromQL queries running against ClickHouse through the ClickStack UI.
+
+![promql.png](https://clickhouse.com/uploads/promql_9967e55514.png)
+
+This is still very early work. There are dragons here. The implementation is incomplete, behavior will change, and there is still a large gap between the current state and something we would consider production-ready.
+
+For anyone curious enough to experiment, the underlying functionality is already available experimentally in ClickHouse, with integration also available in open-source ClickStack.
+
+Most of the recent work has focused on language coverage and compatibility. The goal is straightforward: existing PromQL queries should behave the way users expect when pointed at ClickHouse. Performance work is happening alongside this, so PromQL queries can still benefit from the scale and execution speed of the ClickHouse engine.
+
+## Partner program announcement {#partner-program-announcement}
+
+ClickHouse also introduced House Mates, its first formal partner community and program. It launches with a founding cohort of more than 25 technology partners and over 35 services, consulting, and channel partners across six continents. The program is organized across three tracks: Technology, Services, and Reseller, each with three tiers: Ignite, Accelerate, and Prime. Benefits scale with tier and include joint go-to-market motions, co-innovation and integration support, enablement and certifications, incentives, and a dedicated partner portal. [Read the announcement blog](https://clickhouse.com/blog/introducing-house-mates) for more details. 
+
+![image6.png](https://clickhouse.com/uploads/image6_39ae0d5084.png)
+
+## Wrap-up {#wrap-up}
+
+Today’s announcements span distributed query execution, observability, lakehouse interoperability, agentic analytics, and transactional workloads, all while keeping teams in control of the tools and architectures they use. Whether that means bringing your own agent, your own catalog, your own collectors, or continuing to work from familiar Postgres workflows, the focus remains the same: fast real-time systems without lock-in. 
+
+The performance improvements behind these launches were equally significant, including over 5x higher throughput than AWS RDS for Postgres workloads, roughly 2x faster distributed query execution at TPC-H scale factor 100, and up to 200x query performance improvements in Langfuse V4. We’ll be back tomorrow with another round of announcements and deeper technical sessions for Day 2.
+
+---
+
+## Get started today
+
+Interested in seeing how ClickHouse works on your data? Get started with ClickHouse Cloud in minutes and receive $300 in free credits.
+
+[Sign up](https://console.clickhouse.cloud/signUp?loc=blog-cta-729-get-started-today-sign-up&utm_blogctaid=729)
+
+---
+
+---
+
+## Open House 2026 Day 1: ロックインなきリアルタイムデータと、チームが次に構築できるもの
+Published: 2026-05-28T01:28:08+00:00
+URL: https://clickhouse.com/blog/open-house-2026-day-1-jp
+
+---
+title: "Open House 2026 Day 1: ロックインなきリアルタイムデータと、チームが次に構築できるもの"
+date: "2026-05-28T01:28:08.108Z"
+author: "ClickHouse"
+category: "Product"
+excerpt: "Open House 2026 の Day 1 を完全総括。ClickHouse Cloud、Postgres、分散クエリ、ClickPipes、ClickHouse Agents、Langfuse V4、ClickStack、House Mates パートナープログラムにわたる主要な発表をすべてカバーします。"
+---
+
+# Open House 2026 Day 1: ロックインなきリアルタイムデータと、チームが次に構築できるもの
+
+## 概要
+
+- ClickHouse Open House 2026 Day 1では、ClickHouse Cloud、Postgres、分散クエリ実行、AIエージェント、オブザーバビリティ、レイクハウス相互運用性にまたがる発表が行われました。
+- ClickHouse Postgresがパブリックベータに移行し、AWS RDSと比較して1秒あたり5倍以上のトランザクションを実現。マルチステージ分散クエリによりTPC-H SF100の実行時間が117.6秒から54.7秒に短縮され、Langfuse V4ではクエリ性能が200倍向上しました。
+- Claudeを搭載したClickHouse Agentsがパブリックベータに入り、ネイティブなチャット体験とノーコードエージェントビルダーを提供。Microsoft OneLakeおよびUnity Catalogへの書き込みサポートが追加され、ClickHouseと外部レイクハウスシステム間の双方向ワークフローが可能になりました。
+
+本日サンフランシスコで開催された Open House 2026 にて、ClickHouse Cloud、AI エージェント、可観測性、Postgres、レイクハウス相互運用性にわたる幅広い発表を行いました。
+
+Open House は、リアルタイムデータシステムがどこへ向かっているのかについてユーザーが集まりアイデアを交換する場として常に機能してきました。今年の発表は、過去1年間にユーザー、コントリビューター、お客様、パートナーと交わしてきた数多くの会話を反映したものです。本投稿では Day 1 の主な発表をまとめており、明日は Day 2 の発表を別途お届けします。
+
+## 人間とエージェントの両方に向けた UX の改善 {#improving-the-ux-for-humans-and-agents}
+
+ClickHouse Cloud は現在、本番環境で運用するチームと、プログラム的にクエリを実行する AI エージェントという2種類のオーディエンスにサービスを提供しています。これらの製品アップデートにより、レジリエンス、可観測性、スキーマ管理、開発者ツールなど多方面で改善が加わり、ClickHouse Cloud がより運用しやすく、より構築しやすくなります。
+
+Cross-Region Replication により、ClickHouse Cloud にアクティブ・パッシブのフェイルオーバーアーキテクチャがもたらされます。データはセカンダリリージョンに同期的にレプリケートされ、復旧時間は数分単位、復旧ポイントは数秒単位で測定されます。今年後半に限定的なプライベートプレビューを開始する予定です。
+
+Monitoring v2 は、定見のあるサービスヘルスシグナル、スキーマ探索、クエリインサイト、ミューテーション追跡を1つの場所にまとめ、可観測性を全面的に刷新します。
+
+Materialized View Pipeline Visualization は、マテリアライズドビュー全体を流れるデータのライブビジュアルマップ、不健全なリフレッシュに対するワンクリックデバッグ、新しいパイプラインを作成するためのドラッグ&ドロップのパイプラインビルダーをチームに提供します。
+
+![](https://clickhouse.com/uploads/open_house_day1_may2026_image3_ed975af860.png) 
+
+*近日公開* Schema Management and Optimization では、完全にガイド付きでエンドツーエンドの AI 支援スキーマ管理体験を導入します。ワークロード認識型のレコメンデーションエンジン、専用のサンドボックス環境、自動化された影響分析、そしてゼロダウンタイムのスキーマ変更を実現するガイド付きブルーグリーンデプロイメントフローが含まれます。
+
+![](https://clickhouse.com/uploads/open_house_day1_may2026_image10_182df22dd5.png)
+
+開発者およびエージェント側では、ClickHouse CLI がエージェント型ワークフロー向けに構築されており、公式の ClickHouse スキルを Cursor、Claude Code、その他のコーディングエージェントに直接インストール可能です。同じ CLI で、ローカル開発と本番 Cloud サービスの両方を管理できます。
+
+Query API Endpoints には、統合された管理ペイン、エンタープライズグレードの RBAC、ネイティブ IDE 統合、MCP ツールサポートが追加されます。AI-Enhanced Query Builder UI は、アナリストが複雑なクエリをビジュアルに構築でき、ビジュアルビルダーと ClickHouse Assistant の間をスムーズに行き来できるようにします。
+
+そして MCP-as-a-Service により、フルマネージドでドメイン特化のリモート MCP サーバーを ClickHouse Cloud UI から直接立ち上げ、きめ細かなアクセス制御とカスタムコンテキストのサポートを実現できます。
+
+これらのアップデートにより、ClickHouse Cloud は、ダッシュボード、ノートブック、エージェントのいずれからクエリが来る場合でも、本番ワークロードを実行するためのより完全なプラットフォームになります。
+
+## Postgres に関する発表 {#postgres-announcements}
+
+AI ワークロードは、トランザクショナルデータベースと分析データベースの間の境界を崩しつつあります。かつて予測可能でハードコードされたクエリを実行していたアプリケーションは、今やエージェントが駆動する予測不能なリクエストの突発的なバーストを生成し、スタックの両側からの回答を必要としています。ベストオブブリードはこれまで以上に重要です。OLTP には Postgres、OLAP には ClickHouse。しかし、それらを組み合わせるには、伝統的にそれぞれのデータベースを個別に立ち上げ、カスタム CDC パイプライン、メッセージブローカー、オーケストレーションロジックで両者を橋渡しする必要がありました。
+
+ClickHouse Postgres は、プライベートプレビューからパブリックベータに移行し、そのギャップを埋めるために構築されています。このサービスはローカル NVMe ストレージ上で動作し、ネットワーク接続ボリュームに依存する代わりにストレージとコンピュートを同じ場所に配置することで、トランザクショナルワークロードの主要なボトルネックを解消します。
+
+初期のベンチマークでは、AWS RDS と比較して毎秒5倍以上のトランザクション、次に近い代替品と比較して2.4倍のトランザクションを実現しています。高可用性は、アベイラビリティーゾーンをまたいで最大2つのスタンバイレプリカ、最速のスタンバイへの同期コミット、自動フェイルオーバーでサポートされます。S3 への継続的な WAL アーカイブにより、ポイントインタイムリカバリ、ブランチング、リージョン障害に耐える耐久性が提供されます。
+
+![](https://clickhouse.com/uploads/open_house_day1_may2026_image8_904253765c.png)
+
+統合面では、Postgres ネイティブの CDC パイプラインが、中間インフラストラクチャなしで挿入、更新、削除を ClickHouse に直接ストリーミングし、並列の初期スナップショットと継続的なレプリケーションの両方を処理します。
+
+Postgres ですでに構築している開発者にとってさらに体験をシンプルにするため、新しいオープンソース拡張 pg_clickhouse により、ClickHouse がバックエンドのテーブルを標準的な Postgres セッション内から直接クエリ可能になり、射影、フィルター、集計を ClickHouse に透過的にプッシュダウンして高速な分析クエリを実現します。開発者は使い慣れた Postgres SQL とツールを使い続けながら、適切なエンジンが裏側で適切なワークロードを処理します。
+
+アーキテクチャ、ベンチマーク、ロードマップの詳細については、[専用のブログ記事](https://clickhouse.com/blog/postgres-managed-by-clickhouse-beta)をご覧ください。
+
+## ClickHouse での分散クエリ {#distributed-queries-in-clickhouse}
+
+ClickHouse Cloud は現在、プライベートプレビューでマルチステージの分散クエリ実行をサポートしています。この機能は、実行ステージ間で中間データを再パーティション化することで、大規模なジョインや高カーディナリティの集計を多数のノードにスケールします。
+
+並列レプリカは既にプローブ側の作業を分散していますが、すべてのノードが依然としてジョインの右側から完全なハッシュテーブルを再構築しています。高カーディナリティの集計も同様の壁にぶつかり、最終集計が単一のコーディネーターに集約されます。マルチステージ実行はこれら両方のボトルネックを取り除きます。
+
+![](https://clickhouse.com/uploads/open_house_day1_may2026_image1_73ff57b040.png)
+
+ワーカーは中間結果を交換し、ジョインまたは GROUP BY キーで再パーティション化し、問題の独立したスライスで動作します。
+
+この機能は、ClickHouse Cloud の共有ストレージアーキテクチャの上に構築されており、固定的なシャード所有権なしにあらゆるワーカーがあらゆるデータにアクセスできます。これにより、利用可能なコンピュート全体にクエリステージを動的に分散することが可能になり、交換可能なワーカープールを備えたより弾力的な実行へと向かいます。
+
+スケールファクター100での初期 TPC-H テストでは、フルベンチマークスイートが8ノードで54.7秒で実行され、単一ノードでの117.6秒から短縮されました。コストベースのオプティマイザーが成熟するにつれてさらなる向上が期待されますが、おおよそ2倍の改善です。
+
+技術的な詳細については、[専用のブログ記事](https://clickhouse.com/blog/multi-stage-distributed-query-execution-clickhouse-cloud)をお読みいただくことをお勧めします。
+
+## **JOIN パフォーマンスとその他のコア改善**
+
+過去1年間で、相関サブクエリのサポート、レイジーマテリアライゼーション、ランタイムフィルター、自動ジョイン並べ替えにより、ClickHouse の JOIN パフォーマンスが6倍以上向上したことを発表しました。これらの最適化と機能により、ClickHouse は TPC-H や他の標準的な JOIN ベンチマークにおいて確立されたデータウェアハウスと同等の性能を発揮し、Snowflake、BigQuery、Databricks などのシステムのパフォーマンスにしばしば匹敵またはそれを上回るようになりました。
+
+![image5.png](https://clickhouse.com/uploads/image5_760140b60c.png)
+
+また、可観測性および AI ワークロードで最もよくある要件の1つに対応する、Full-Text Search が[一般提供](https://clickhouse.com/blog/full-text-search-ga-release)になったことを含む、コアデータベースにおける最近の改善のいくつかを振り返りました。
+
+## Microsoft OneLake および Unity カタログへの書き込みサポート {#write-support-for-microsoft-onelake-and-unity-catalogs}
+
+[ClickHouse が Data Lake Ready になったという最近の発表](https://clickhouse.com/blog/clickhouse-is-data-lake-ready)に続いて、オープンデータレイクのエコシステムおよびカタログ統合のサポートを拡大し続けています。ClickHouse は、Unity Catalog 経由で Iceberg テーブルへの書き込み操作をサポートするようになりました。さらに、Microsoft ユーザーは Microsoft OneLake が管理する Iceberg テーブルへ直接書き込みもできるようになりました。
+
+これにより、ClickHouse と外部のレイクハウスシステム間で完全な双方向ワークフローをサポートすることが可能になります。組織がオープンテーブルフォーマットと共有カタログレイヤーをますます採用する中で、ClickHouse がこれらのシステム上の高速分析エンジンとして機能するだけでなく、データの相互運用性を保つためにユーザーがオープンフォーマットでデータを書き戻すこともできることが重要です。追加のカタログへの書き込みサポートは、今後数ヶ月にわたって計画されています。
+
+ :::global-blog-cta::: 
+
+## ClickPipes {#clickpipes}
+
+ClickPipes を GCP にネイティブに展開します!本日より、GCP 上の新しい ClickHouse Cloud サービスは、低レイテンシーの取り込み、データローカリティ保証、GCP ネイティブ機能とのより緊密な統合のため、同一リージョン内で ClickPipes を実行します。
+
+これには、VPC の背後にある GCP マネージドサービスへの安全な直接プライベート接続のための Private Service Connect (PSC) サポートが含まれます。以前は、SSH 踏み台ホスト経由で接続をトンネリングする必要がありました。
+
+注意:既存の GCP サービスで ClickPipes を使用している場合は、移行計画について担当のアカウントエグゼクティブにご連絡ください。
+
+![](https://clickhouse.com/uploads/open_house_day1_may2026_image9_9179adfb9e.gif)
+
+GCP エコシステムとの統合をさらに深めるために、Google Cloud Pub/Sub 用の新しい ClickPipes コネクタをプライベートプレビューとして発表します。Pub/Sub がスタックの一部であれば、追加のインフラストラクチャなしでトピックをサブスクライブして ClickHouse Cloud にデータを直接ストリーミングできるようになりました。このコネクタは、すべての一般的なフォーマット(JSON、Avro、Protobuf)とスキーマレジストリ統合をサポートし、属性ベースのメッセージフィルタリング、柔軟なシークオプション、キーごとの順序付き配信を備えています。すべてのコネクタと同様に、OpenAPI および ClickHouse Terraform プロバイダーを介してプログラム的に管理することもできます。
+
+## ロックインなしで、任意のエージェントをリアルタイムデータに接続 {#bring-any-agent-to-your-real-time-data-with-zero-lock-in}
+
+AI エージェントは新しい種類のワークロードであり、これまでのプレイブックを覆しています。エージェントは人間のアナリストの10倍から100倍のクエリ量をバーストで一気に発射しますが、ほとんどの分析エンジンはそのために構築されていません。クローズドなデータプラットフォームは事態をさらに悪化させ、限定的かつ独自仕様のモデル、単一のエージェント、硬直的な作業方法にチームを閉じ込めながら、コストは膨れ上がります。エージェント時代には、高速で手頃な価格で、誰もロックインしないリアルタイム基盤が必要です。
+
+![](https://clickhouse.com/uploads/open_house_day1_may2026_image2_2a92f8d9fc.png)
+
+本日、ClickHouse Cloud 上のフルマネージドなエージェント分析サービスである ClickHouse Agents を、Claude を搭載しパブリックベータとして導入します。
+
+すべての ClickHouse Cloud ユーザーは、ネイティブのチャット体験と、自分のデータに基づくエージェントをセットアップなしで出荷するためのノーコードエージェントビルダーを利用できます。その内部には、サンドボックス化されたコードインタープリター、共有可能なアーティファクト、スキル、メモリ、マルチエージェントワークフローがあり、すべて [11月に ClickHouse に加わった](https://clickhouse.com/blog/clickhouse-acquires-librechat) オープンソースプラットフォーム LibreChat の上に構築されています。
+
+MCP をネイティブに話すため、コンテキストは任意の MCP 互換システムから取り込むことができます。ClickHouse は、数十億行に対するサブセカンドクエリ、ペタバイトスケール、コスト効率がエージェント分析を本番環境で成功裏に実行するための鍵となるこのエージェント時代に最適化されています。お客様は、私たちと既に愛用しているツールのどちらかを選ぶ必要はありません。すぐに使えるエージェントを利用したり、独自のエージェントを構築または持ち込んだりして、分析 AI スタックでスピード、透明性、完全な制御を得られます。
+
+## Langfuse に関する発表 {#langfuse-announcements}
+
+前のセクションで議論したように、AI エージェントはデータシステムに根本的に異なるワークロードパターンをもたらしており、可観測性プラットフォームも同様にそのシフトを強く感じています。1回のエージェント実行で、LLM 呼び出しとツール呼び出しにわたって数百の観測が生成され、興味深いシグナルがトレースの最上位にあることはまれで、本番環境および開発環境での深い評価ワークフローが必要です。Langfuse はこの問題を解決し、チームは[1月に ClickHouse に加わりました](https://clickhouse.com/blog/clickhouse-acquires-langfuse-open-source-llm-observability)。
+
+本日、Langfuse V4 を Langfuse Cloud のベータとして発表し、まもなくセルフホストデプロイメントでも利用可能になります。
+
+これは、データモデルを単一の不変な observations テーブルに集約し、ジョインも重複排除もない「スケーラビリティのためのシンプル化」書き換えを表しています。結果として、ミリ秒単位のダッシュボードのロード、多くの重要なルートで200倍のクエリパフォーマンス、数十億のイベントを快適に処理する単一のプロジェクトが実現し、すべて ClickHouse のパフォーマンスから恩恵を受けています。この変更の詳細については、この[テクニカルブログ記事](https://langfuse.com/blog/2026-03-10-simplify-langfuse-for-scale)をご覧ください。
+
+V4 の上に、よりタイトな改善ループを出荷しています。Experiments は、改善された UI、コードベースの評価器、CI/CD ワークフローと共に出荷されます。これは、プロンプトとエージェントの変更が本番環境に到達する前にスコア付けされることを意味し、LLM-as-a-judge がカテゴリカル、ブーリアン、フリーテキストのスコアとアラートをサポートすることで、チームがエージェント規模でスコアとレイテンシーの後退に対応できるようになります。
+
+プラットフォーム自体がエージェントネイティブになりつつあり、MCP サーバーの v2 がほとんどの API ルートをエージェントに公開し、書き換えられた Langfuse CLI、そしてすべての Langfuse 機能をラップするスキルにより、同じビルディングブロックが人間とエージェントの両方で動作します。まもなく、これらの API には高速な全文検索が含まれるようになり、エージェントがトレースをより自由形式/セマンティックな方法で探索できるようになります。
+
+最後に、Langfuse Cloud ユーザーは ClickHouse Cloud のアイデンティティを使用してサインインできるようになり、採用がシームレスになり、別途ログイン管理する必要がなくなりました。Langfuse 自体はオープンソース、OpenTelemetry ネイティブ、セルフホスト可能であり、エージェントワークロードの現実に合わせてスケールするように構築されています。
+
+## ClickStack に関する発表 {#clickstack-announcements}
+
+### ClickStack Cloud {#clickstack-cloud}
+
+本日、ClickHouse 上に構築されたフルマネージドのサーバーレス可観測性プラットフォームである ClickStack Cloud のプライベートプレビューを発表しました。チームは OpenTelemetry データをマネージド OTLP エンドポイントに送信し、コレクター、取り込みパイプライン、ClickHouse クラスター自体を運用することなく、ClickStack UI を介してログ、メトリクス、トレースを調査できます。ClickStack Cloud は、マネージド取り込み、サーバーレスクエリ体験、ClickHouse Cloud 上に直接構築された統合可観測性ワークフローを備えてプライベートプレビューに入ります。
+
+プライベートプレビュー期間中、大規模な可観測性ワークロードにとって重要な2つの分野に焦点を当てます。取り込みインフラストラクチャとクエリインフラストラクチャを独立してスケールすること、そしてチームが実際にテレメトリデータをどのように使用しているかに基づいて基盤となるデータストアを自動的にチューニングすることです。
+
+これは、一般的なクエリパターンから学び、時間とともにテレメトリデータを自動的に最適化するシステムを改善することを意味します。計画されている自動チューニングの領域には、頻繁にクエリされるフィールドのマテリアライズ、共通フィルター周辺のプライマリキーの調整、一般的なダッシュボードと調査ワークフローのためのマテリアライズドビューおよびインデックスの追加が含まれます。これらの機能は、プライベートプレビュー期間を通じて、アーリーアダプターおよびデザインパートナーと共に洗練されていきます。
+
+プライベートプレビュー枠には限りがあります。ClickStack Cloud の使用にご興味がある方は、[プレビュープログラム](https://clickhouse.com/cloud/clickstack-cloud-waitlist)にサインアップして、可観測性ワークロードについてお聞かせください。
+
+![](https://clickhouse.com/uploads/open_house_day1_may2026_image6_0cf7b01fd7.png)
+
+詳細については、[専用のブログ記事](https://clickhouse.com/blog/clickstack-cloud-private-preview)をご覧ください。
+
+### Managed ClickStack {#managed-clickstack}
+
+ClickStack Cloud のプライベートプレビュー入りに加えて、既存の Managed ClickStack 提供が一般提供となりました。
+
+Managed ClickStack は、取り込みパイプライン、コンピュートサイジング、ワークロードの分離、スキーマ設計、データストアのチューニングなど、可観測性スタックに対する直接的な運用制御を望むチーム向けに設計されています。ユーザーは、ClickHouse Cloud を基盤となる可観測性データストアとして使用しながら、独自の OpenTelemetry コレクターと取り込みアーキテクチャを管理します。多くの大規模デプロイメントでは、その制御がパフォーマンスの最適化と市場をリードするコスト効率の達成に不可欠です。
+
+![image8.png](https://clickhouse.com/uploads/image8_75f25bb9a6.png)
+
+### PromQL サポート
+
+SQL がデータ分析のリングア・フランカであると信じていますが、一部のワークロードはドメイン固有の言語から恩恵を受けます。Prometheus 形式のメトリクス用の PromQL はその一例です。
+
+可観測性に関する発表を締めくくるにあたり、2026年に向けた主要な投資領域である ClickHouse および ClickStack での PromQL サポートの早期プレビューを共有したいと考えています。
+
+デモでは、ClickStack UI を介して ClickHouse に対して実行される PromQL クエリを示しました。
+
+![promql.png](https://clickhouse.com/uploads/promql_9967e55514.png)
+
+これはまだ非常に初期の作業です。ここにはドラゴンがいます。実装は不完全であり、挙動は変更され、現在の状態と本番対応とみなせるものとの間にはまだ大きなギャップがあります。
+
+実験してみる好奇心のある方は、基盤となる機能はすでに ClickHouse で実験的に利用可能で、統合はオープンソースの ClickStack でも利用可能です。
+
+最近の作業のほとんどは、言語のカバレッジと互換性に焦点を当てています。目標は単純です。既存の PromQL クエリは、ClickHouse に向けた際にユーザーが期待する通りに動作するべきです。パフォーマンス作業はこれと並行して進んでおり、PromQL クエリは引き続き ClickHouse エンジンのスケールと実行速度から恩恵を受けることができます。
+
+## パートナープログラムの発表 {#partner-program-announcement}
+
+ClickHouse はまた、最初の正式なパートナーコミュニティおよびプログラムである House Mates も導入しました。創設コホートとして6大陸にわたる25以上のテクノロジーパートナーと35以上のサービス、コンサルティング、チャネルパートナーで開始します。プログラムは、Technology、Services、Reseller の3つのトラックで構成されており、それぞれ Ignite、Accelerate、Prime の3つの階層があります。階層に応じて特典が拡大し、共同の市場開拓活動、共同イノベーションと統合のサポート、イネーブルメントと認定、インセンティブ、専用のパートナーポータルが含まれます。詳細については、[発表ブログ](https://clickhouse.com/blog/introducing-house-mates)をお読みください。
+
+![image6.png](https://clickhouse.com/uploads/image6_39ae0d5084.png)
+
+## まとめ {#wrap-up}
+
+本日の発表は、分散クエリ実行、可観測性、レイクハウス相互運用性、エージェント分析、トランザクショナルワークロードに及び、すべてチームが使用するツールとアーキテクチャを制御し続けることを可能にしています。独自のエージェント、独自のカタログ、独自のコレクターを持ち込むこと、または使い慣れた Postgres ワークフローから引き続き作業することを意味するかどうかに関わらず、焦点は同じままです。ロックインなしの高速リアルタイムシステムです。
+
+これらのローンチの背後にあるパフォーマンス改善も同様に重要であり、Postgres ワークロードでの AWS RDS と比較した5倍以上のスループット、TPC-H スケールファクター100でのおおよそ2倍の分散クエリ実行、Langfuse V4 での最大200倍のクエリパフォーマンス改善が含まれます。明日は、別の発表と Day 2 のより深い技術セッションでお戻りします。
+
+---
+
+## ClickHouse、ARR前年同期比300%超、顧客数4,000社突破、Claude搭載のAIエージェントを発表
+Published: 2026-05-28T00:01:00+00:00
+URL: https://clickhouse.com/blog/clickhouse-tops-250m-arr-and-4000-customers-jp
+
+---
+title: "ClickHouse、ARR前年同期比300%超、顧客数4,000社突破、Claude搭載のAIエージェントを発表"
+date: "2026-05-28T00:01:00.559Z"
+author: "ClickHouse"
+category: "Company and culture"
+excerpt: "ClickHouseがARR前年同期比300%超、顧客数4,000社を突破。年次カンファレンスにて、Claude搭載のAIエージェント分析サービスや、主要クラウドDWとのコスト比較ベンチマーク「CostBench」を発表しました。"
+---
+
+# ClickHouse、ARR前年同期比300%超、顧客数4,000社突破、Claude搭載のAIエージェントを発表
+
+![](https://clickhouse.com/uploads/JP_arr250m_4000customers_1822cecf62.png)
+
+_〜 年次カンファレンス「Open House 2026」にて発表。年間経常収益（ARR）は2億5,000万ドルに到達、新たなベンチマーク「CostBench」では競合比23倍の優れたコストパフォーマンスを実証 〜_
+
+**サンフランシスコ — 2026年5月27日** — 本日、ClickHouseは第2回年次ユーザーカンファレンス「Open House 2026」を開幕し、創業以来最も躍進した四半期を象徴する一連の重大発表を行いました。
+
+ClickHouseのサーバーレスクラウドサービスは、年間経常収益（ARR）が前年同期比の3倍以上となる2億5,000万ドルを突破しました。また、2026年1月以降に1,000社以上の新規顧客を獲得し、総顧客数は4,000社に達しています。
+
+さらに、AI時代のワークロード需要に応えるため、Anthropic社の「Claude」を搭載したフルマネージド型のエージェント型分析サービス「ClickHouse Agents」のローンチ、主要クラウド・データウェアハウスのコストパフォーマンスを比較するオープンベンチマーク「CostBench」の公開、および同社初となる公式パートナープログラム「House Mates」の設立を発表しました。
+
+---
+
+## 主な発表概要
+
+### 1. 驚異的なビジネス成長
+2026年1月に4億ドルのシリーズD資金調達を完了した時点で約3,000社だった顧客数は、わずか1四半期で4,000社を突破しました。ARRも前年同期比3倍以上の2億5,000万ドル超に達しています。
+
+* **新規・拡大ユーザーの例：** 既存ユーザーである Anthropic、Meta、Cursor、Sony、Tesla、Memorial Sloan Kettering、Lyft、Instacart などに加えて、新たにCapital One、Lovable、Decagon、Polymarket、Airwallexなどが導入。
+* **Open House 2026の登壇企業：** Visa、Cisco、Intuit、Shopify、DoorDash、Mercado Libre、Vercel、Weights & Biases、Zoox、Jump Tradingなど、企業のデータ基盤の中核としてClickHouseは幅広く採用されています。
+
+> **Aaron Katz（CEO, ClickHouse）のコメント：**
+> 「AIの処理には、ClickHouseの本質である『高い性能』と『コストパフォーマンス』が不可欠です。この四半期、その需要はかつてないほどの高まりを見せました。シリーズDの資金調達からわずか数ヶ月で1,000社を超えるお客様が増え、ARRが3倍に急増したという事実は、これが一過性のブームではなく、データインフラのあり方そのものが根本から変わったことを意味しています。今週の発表は、AIが実験段階から本格的な本番運用へと移行する中で、当社の市場における優位性をさらに確固たるものにするためのものです。」
+
+### 2. Claude搭載の「ClickHouse Agents」を発表
+「ClickHouse Agents」は、ClickHouse Cloud上で提供される、Claudeを基盤としたフルマネージドのエージェント型分析サービスです。ノーコードのエージェントビルダーにより、誰でも簡単にClickHouseのデータを基盤としたAIエージェントを定義・構築・デプロイできます。
+
+* **機能：** チャットインターフェース、サンドボックス化されたコードインタープリター、共有可能なアーティファクト、スキル管理、メモリ、マルチエージェントワークフローなどを標準装備。
+* **拡張性：** ClickHouseのほか、MCP（Model Context Protocol）互換のサードパーティシステムや、AWS Agent Registryともネイティブに連携し、組織全体のデータを活用可能です。
+
+#### 【その他のAI向けプロダクト投資】
+* **Managed Postgres（パブリックベータ版）：** ClickHouseの分析機能とネイティブに統合。AIアプリケーション開発において、トランザクション状態（ステート）の管理と、同一データに対する高スループットな分析を単一のプラットフォーム上で実現します。
+* **AIオブザーバビリティ（可観測性）：** インフラやモデル学習のモニタリングを行う「Managed ClickStack」を、フルマネージドサービスとして提供開始。また、2026年1月に買収した「Langfuse」により、本番環境におけるAIエージェントの出力の正確性、評価、モデルコストの追跡（エージェント・オブザーバビリティ）が可能になります。
+* **分析機能の拡張：** オブザーバビリティやAIのグラウンディング（根拠付け）で最も需要の高い「全文検索機能」の一般提供（GA）を開始。さらに、クエリの自動最適化機能により、TPC-Hをはじめとする標準的なJOINベンチマークにおいて、既存の主要データウェアハウスと同等以上の性能を達成しました。
+* **ClickHouse Cloudの進化：** 「エージェント駆動型オンボーディング」により、新規ユーザーは手動でのスキーマ設計を行うことなく、サインアップから最初の本番クエリ実行までをシームレスに行えます。また、企業のレジリエンス（可用性）を強化する「クロスリージョン・レプリケーション」の提供を開始しました。
+
+### 3. コストパフォーマンスを可視化するベンチマーク「CostBench」
+AIワークロードには、高い同時実行性と低レイテンシが求められるため、単なる処理速度だけでなく「コストパフォーマンス」が極めて重要になります。本日公開された「CostBench」は、各ベンダーの実際の計算料金モデルを同一の分析ワークロードに適用し、コストを直接比較できるオープンなベンチマークです。
+
+* **結果：** ClickHouse Cloud、Snowflake、Databricks、BigQuery、Redshiftを比較した結果、さまざまなデータスケールにおいて「高速かつ低コスト」の領域を維持できたのはClickHouse Cloudのみでした。最も近い競合相手でも、コストパフォーマンスはClickHouseより23倍劣る結果となっています。
+* *詳細は [clickhouse.com/benchmarks](https://clickhouse.com/benchmarks) にて公開中。*
+
+### 4. 初の公式パートナープログラム「House Mates」の発足
+世界6大陸から25社以上のテクノロジーパートナー、35社以上のサービス／コンサルティング／チャネルパートナー（dbt Labs、Fivetran、Sigma、Notion、Temporal、Tiger Analytics、DoIT、Ciklum、MegazoneCloud等）を創設メンバーに迎え、初の公式パートナーコミュニティを立ち上げました。
+
+* **3つのパートナータイプと3つのパートナーティア：** 「サービスパートナー」「チャネルパートナー」「テクノロジーパートナー」の3タイプ、および「プライム」「アクセラレート」「イグナイト」の3ティアで構成。
+* AWS、Microsoft、Google Cloudとの深い連携をベースに、エコシステム全体へとプログラムを拡張し、顧客に対して構築済みの統合環境や実証済みの導入ノウハウを提供します。
+
+---
+
+### ClickHouseについて
+ClickHouseは、リアルタイムデータ処理および分析のために設計された、高速なオープンソースのカラム型データベース管理システムです。高いパフォーマンスを実現するよう設計されたClickHouse Cloudは、卓越したクエリ速度と高い同時実行性能を提供し、膨大なデータ量から即座に洞察を得ることが求められるアプリケーションに最適です。
+
+AIエージェントがソフトウェアにますます組み込まれ、これまでよりもはるかに頻繁かつ複雑なクエリを生成するようになる中で、ClickHouseは、こうした課題に対応するために特別に設計された、高スループットかつ低レイテンシのエンジンを提供します。
+
+---
+
+![Founders_AMS_2025.jpeg](https://clickhouse.com/uploads/Founders_AMS_2025_df2919ac2a.jpeg)
+
+※本記事（プレスリリース）は、米国ClickHouse本社が発表した内容の抄訳版です。原文は下記URLをご参照ください。
+https://clickhouse.com/blog/clickhouse-tops-250m-arr-and-4000-customers
+
+---
+
+## Open House observability announcements: MCP server, AI Notebooks, and ClickStack Cloud
+Published: 2026-05-27T23:33:05+00:00
+URL: https://clickhouse.com/blog/observability-mcp-server-ai-notebooks
+
+---
+title: "Open House observability announcements: MCP server, AI Notebooks, and ClickStack Cloud"
+date: "2026-05-27T23:33:05.671Z"
+author: "Mike Shi and Brandon Pereira"
+category: "Product"
+excerpt: "At Open House 2026, we announced ClickStack Cloud in private preview, AI Notebooks in beta, and the ClickStack MCP server: three updates that make observability on ClickHouse faster to get started with, easier to investigate in, and more composable with y"
+---
+
+# Open House observability announcements: MCP server, AI Notebooks, and ClickStack Cloud
+
+Open House brought the ClickHouse community together for three days of workshops, technical deep dives, product announcements, demos, and conversations about what’s next for real-time data. We were glad to meet so many users, customers, and members of the observability community throughout the event.
+
+For those who couldn’t join us in person, here’s a recap of the observability announcements we shared at Open House.
+
+We announced three major updates across ClickStack and observability: ClickStack Cloud, AI Notebooks in beta, and a new ClickStack MCP server.
+
+## ClickStack Cloud {#clickstack-cloud}
+
+The biggest announcement, and one that deserved its own [blog post](https://clickhouse.com/blog/clickstack-cloud-private-preview), was the introduction of ClickStack Cloud in private preview.
+
+ClickStack Cloud is a fully managed, serverless observability platform built on ClickHouse. Instead of managing collectors, infrastructure sizing, scaling policies, or schema tuning directly, users simply send OpenTelemetry data to a managed endpoint and immediately start exploring logs, metrics, and traces through the ClickStack UI.
+
+ClickStack Cloud is aimed at reducing that operational work while still keeping the performance characteristics people love about ClickHouse.
+
+For more details, we recommend the [dedicated post](https://clickhouse.com/blog/clickstack-cloud-private-preview).
+
+### Managed ClickStack is generally available {#managed-clickstack-is-generally-available}
+
+In addition to ClickStack Cloud entering private preview, our existing Managed ClickStack offering is now generally available.
+
+Managed ClickStack is designed for teams that want direct operational control over their observability stack, including ingestion pipelines, compute sizing, workload isolation, schema design, and datastore tuning. Users manage their own OpenTelemetry collectors and ingestion architecture while using ClickHouse Cloud as the underlying observability datastore. For many large-scale deployments, that control is essential for optimizing performance and achieving market-leading cost efficiency.
+
+Managed ClickStack and ClickStack Cloud are designed for different operational models.
+
+As discussed above, ClickStack Cloud will provide a fully managed, serverless observability experience where teams send telemetry to a managed endpoint and immediately begin exploring logs, metrics, and traces without managing infrastructure directly. Conversely, Managed ClickStack is intended for organizations that want deeper control over scaling strategy, ingestion architecture, and workload optimization while still running on ClickHouse Cloud infrastructure. Together, the two offerings give teams a choice between a turn-key observability experience and a more configurable platform for operating observability at scale.
+
+![](https://clickhouse.com/uploads/clickstack_cloud_may2026_image4_d8d0f91b43.png)
+
+## AI Notebooks in Beta {#ai-notebooks-in-beta}
+
+We also announced AI Notebooks entering beta for Managed ClickStack.
+
+Over the last year, nearly every observability platform has added some form of AI chat experience, but we increasingly felt that chat alone does not match how real incident investigations actually unfold. Production debugging is messy, and engineers jump between logs, traces, dashboards, deployments, and hypotheses. They backtrack, split into parallel investigations, and revisit earlier assumptions as new signals appear. Incidents are rarely single-threaded conversations, so we did not want the interface to force them into one.
+
+![](https://clickhouse.com/uploads/clickstack_cloud_may2026_image5_4095d770f0.png)
+
+> Investigations are rarely single-threaded. SREs typically need to explore multiple branching hypotheses before reaching a resolution.
+
+AI Notebooks are designed as a persistent investigative workspace rather than a transient chat session. Each investigation becomes a structured sequence of prompts, queries, charts, reasoning steps, and findings that remain visible and editable throughout the process.
+
+Engineers can branch from any point in the notebook to explore alternative theories without losing previous work or context. In practice, the workflow feels more like a collaborative debugging experience.
+
+<video autoplay="1" muted="1" loop="1" controls="0">
+  <source src="https://clickhouse.com/uploads/AI_Notebooks_Take3_1080p_26e5921ef2.mp4" type="video/mp4" />
+</video>
+
+We were also pretty opinionated about transparency while building this. In a production incident, engineers need to understand what the system is actually doing, especially if AI is involved in the investigation loop. Every query, chart, reasoning step, and intermediate result is visible inside the notebook. You can edit queries manually, insert your own searches, or ignore the suggested path entirely and take the investigation somewhere else. We wanted the AI to behave more like a collaborator sitting beside the engineer than a system producing black-box conclusions in the background.
+
+![](https://clickhouse.com/uploads/clickstack_cloud_may2026_image6_02f1301f8d.png)
+
+Underneath the interface, Notebooks are built directly on top of ClickStack’s observability primitives and optimized ClickHouse workflows. The system is not simply attaching an LLM to a SQL console. The model operates against structured investigative tools that already power ClickStack itself, allowing it to execute optimized searches, aggregations, and visualizations while still exposing the generated queries for inspection and refinement. Notebooks can also be shared across teams, turning investigations into persistent collaborative artifacts instead of disposable chat histories that disappear once the incident ends.
+
+For users already running Managed ClickStack, AI Notebooks are now available directly from the left navigation panel inside the ClickStack UI.
+
+![](https://clickhouse.com/uploads/clickstack_cloud_may2026_image7_ae16f00c1f.png)
+
+Finally, the Notebook experience also naturally led us to our third observability announcement at Open House. As part of building structured investigative workflows inside ClickStack, we also introduced a new ClickStack MCP server, allowing external AI systems and agents to integrate directly with the same observability primitives that power Notebooks internally.
+
+## ClickStack MCP Server {#clickstack-mcp-server}
+
+Alongside Notebooks, we also spent time at Open House discussing a broader shift we think is underway in AI and observability tooling.
+
+While AI-assisted investigation inside ClickStack matters, we think teams will want to leverage the same powerful tools we expose within ClickStack in their own agents. Increasingly, users are building their own agents, prompts, workflows, and automation around observability data. Some are doing this inside Cursor or Claude Code. Others are wiring together SDKs and running agents locally against internal systems. In many cases, the teams building these workflows already have strong operational knowledge baked into how they debug incidents, and they want their tooling to reflect that.
+
+Our view is that observability platforms should meet users where they already work instead of forcing them into a single AI experience, and we want to build based on a “Bring your own agents” philosophy.
+
+The first step is to expose the same investigative building blocks that power ClickStack Notebooks internally and make them available to external agents and workflows. For this, we are pleased to announce the ClickStack MCP server in open source ClickStack.
+
+### Why a specialized ClickStack MCP? {#why-a-specialized-clickstack-mcp}
+
+There is already a generic ClickHouse MCP server available today, and it works well for broad analytical tasks and SQL-driven exploration. But while building AI Notebooks, we repeatedly found that observability workflows behave differently from general BI workloads. Models perform much better when they operate against structured investigative tools rather than generating raw SQL queries over and over again.
+
+![](https://clickhouse.com/uploads/clickstack_cloud_may2026_image8_e7cbc93a2a.png)
+
+> AI for observability with ClickHouse combines collaborative notebook experiences and MCP tools delivered through ClickStack, integrations with external agents such as Claude and Codex, and ClickHouse as the high-performance analytics engine enabling full-fidelity investigations with sub-second query performance and high concurrency at scale.
+
+Raw SQL is powerful, but many observability investigations are awkward to express as one-off queries. Tasks like mining recurring log patterns, comparing behavior across time windows, root causing trace outliers, or following an investigation across logs, metrics, and traces require multi-step analysis and domain-specific logic. Leaving all of that to the model means it has to reconstruct the required query patterns and analysis logic from scratch each time, spending context on query mechanics instead of the problem itself.
+
+The ClickStack MCP server gives agents higher-level semantic tools for observability work. Instead of exposing only a raw SQL interface, it provides stable tools for finding trends in patterns of logs, correlating attributes with outliers, inspecting slow traces, and moving through an investigation with repeatable workflows. Under the hood, those tools still execute optimized ClickHouse queries, but the agent interacts with intent-level operations rather than hand-assembling complex analysis every time.
+
+This is the same approach used inside AI Notebooks. The model is not manually stitching together large SQL statements for every step of an investigation. Instead, it works against specialized tools that already understand the underlying observability workflows and ClickStack optimizations.
+
+In our internal benchmarks, investigations completed with 25% fewer tool calls, showed a 2.5x increase in consistency and improved evaluation scores by almost 20% vs the standard ClickHouse MCP. A large part of that came from giving the model high-leverage semantic investigation tools instead of forcing it to generate every workflow from raw SQL alone.
+
+### Retaining flexibility {#retaining-flexibility}
+
+At the same time, we do not think structured investigative tools should completely replace direct SQL access.
+
+One of the reasons ClickHouse works so well for agentic workloads and observability is that SQL remains an incredibly powerful exploratory language. Sometimes an incident eventually reaches a point where there is no higher-level abstraction that helps anymore, and you simply need direct access to the underlying data. The structured tools handle many of the repetitive and common investigation paths efficiently, but SQL remains the escape hatch when engineers or agents need to go deeper, test unusual hypotheses, or answer questions the system was never explicitly designed around.
+
+In practice, the workflows end up complementing each other quite naturally: use optimized investigative primitives for the majority of the investigation, then drop into native queries when the situation calls for it.
+
+### Orchestration, not just investigation {#orchestration-not-just-investigation}
+
+While some engineers are perfectly happy working directly in the terminal or inside an agent harness like Claude Code, investigations eventually need to be shared with other people. SREs need to collaborate, preserve context, and present evidence once they reach a conclusion.
+
+That is why we do not think observability MCP servers should only expose investigative primitives. Real operational workflows also require orchestration primitives for creating dashboards, persisting searches, managing alerts, and sharing findings across teams.
+
+This becomes especially important for local agent workflows. If an agent investigates an incident locally, the resulting evidence needs to be persisted somewhere for sharing and review by the larger team. Copying raw chat output into documents or generating static reports quickly breaks down during real incidents, leading to inconsistencies.
+
+For that reason, the ClickStack MCP server exposes bi-directional management tools directly inside ClickStack itself. Agents can not only investigate incidents, but also create dashboards, persist searches, and validate that the resulting artifacts contain the required evidence and visualizations.
+
+In practice, investigations naturally evolve into persistent operational artifacts rather than disposable chat histories.
+
+### Using the MCP {#using-the-mcp}
+
+Getting started with the ClickStack MCP server is straightforward. The easiest way to try the full stack locally is to [use the ClickStack all-in-one container](https://clickhouse.com/docs/use-cases/observability/clickstack/getting-started/oss), which includes ClickHouse, the ClickStack UI (HyperDX), an OpenTelemetry ingestion endpoint, and the MCP server.
+
+<pre><code type='click-ui' language='bash'>
+docker run --name clickstack \
+  -p 8123:8123 \
+  -p 8080:8080 \
+  -p 4317:4317 \
+  -p 4318:4318 \
+  clickhouse/clickstack-all-in-one:latest \
+  clickstack
+</code></pre>
+
+Once the container is running, the ClickStack UI will be available at [http://localhost:8080](http://localhost:8080). Create a user and log-in.
+
+For a sample dataset, you can modify your local data source to point to our demo server by following steps (1) and (2) in [this guide](https://clickhouse.com/docs/use-cases/observability/clickstack/getting-started/remote-demo-data#connect-to-the-demo-server).
+
+To use the MCP server, you will also need a Personal API Access Key. Inside the ClickStack UI, navigate to: `Team Settings`  → `Integrations` → `API Keys` → `Personal API Access Key`.
+
+![](https://clickhouse.com/uploads/clickstack_cloud_may2026_image9_be45abcb79.png)
+
+The MCP endpoint is exposed at [http://localhost:8080/api/mcp](http://localhost:8080/api/mcp).
+
+From there, you can connect whichever MCP-compatible client or agent framework you already use.
+
+For example, to connect Claude Code:
+
+<pre><code type='click-ui' language='bash'>
+claude mcp add --transport http clickstack http://localhost:8080/api/mcp \
+  --header "Authorization: Bearer &lt;your-api-key&gt;"
+</code></pre>
+
+```shell
+Added HTTP MCP server clickstack with URL: http://localhost:8080/api/mcp to local config
+Headers: {
+  "Authorization": "Bearer &lt;your-api-key&gt;"
+}
+File modified: /Users/demo_user/.claude.json [project: /Users/demo_user]
+```
+
+Once connected, the agent can begin interacting directly with ClickStack’s observability primitives. For example, you can ask questions like:
+
+“Show me the services with the highest error rate over the last hour”
+
+![](https://clickhouse.com/uploads/clickstack_cloud_may2026_image10_ad26cd5f59.png)
+
+Underneath, the MCP server routes these requests through the same optimized investigative tools used by AI Notebooks rather than relying entirely on ad hoc SQL generation.
+
+Suppose we investigate elevated latency in a payment service and eventually determine, through Claude, that the root cause is a cache eviction issue.
+
+![](https://clickhouse.com/uploads/clickstack_cloud_may2026_image11_d6a8f4ef67.png)
+
+At that point, we need a way to persist and share the investigation. We could copy the raw Claude output into a document or ask the model to generate a static HTML report, but neither workflow feels particularly natural.
+
+Below, we use the MCP server to generate a dashboard summarizing the investigation and to persist the findings directly in ClickStack, with a validation step confirming that the dashboard presents the required evidence.
+
+![](https://clickhouse.com/uploads/clickstack_cloud_may2026_image12_68ca0875fc.png)
+
+![](https://clickhouse.com/uploads/clickstack_cloud_may2026_image13_a6ed816b79.png)
+
+Our resulting dashboard provides a persisted artifact summarizing the incident and presenting evidence for any RCA document.
+
+## Conclusion {#conclusion}
+
+These announcements all reflect the same broader direction: observability tooling should help engineers investigate systems without locking them into predefined workflows. ClickStack Cloud reduces much of the operational burden, AI Notebooks make investigations easier to document and share, and the MCP server lets teams integrate the same capabilities into their own agents and internal tooling. We’re still at the beginning of this shift, but we expect observability systems to become far more collaborative and programmable than the tooling most teams rely on today.
+
+
+---
+
+## Get started today
+
+Interested in seeing how ClickHouse works on your data? Get started with ClickHouse Cloud in minutes and receive $300 in free credits.
+
+[Sign up](https://console.clickhouse.cloud/signUp?loc=blog-cta-700-get-started-today-sign-up&utm_blogctaid=700)
+
+---
+
+---
+
+## Introducing ClickStack Cloud: Serverless observability powered by ClickHouse
+Published: 2026-05-27T17:00:18+00:00
+URL: https://clickhouse.com/blog/clickstack-cloud-private-preview
+
+---
+title: "Introducing ClickStack Cloud: Serverless observability powered by ClickHouse"
+date: "2026-05-27T17:00:18.144Z"
+author: "Mike Shi"
+category: "Product"
+excerpt: "Introducing ClickStack Cloud: a fully managed, serverless observability platform built on ClickHouse where you send OpenTelemetry data to a managed endpoint and immediately explore logs, metrics, and traces without operating any infrastructure."
+---
+
+# Introducing ClickStack Cloud: Serverless observability powered by ClickHouse
+
+## Summary
+
+- ClickStack Cloud is a fully managed observability service built on ClickHouse, designed for teams that want ClickHouse-powered observability without operating the underlying infrastructure.
+- Teams point their OpenTelemetry Collector at a managed OTLP endpoint and can immediately explore logs, metrics, and traces in the ClickStack UI, with ingestion, buffering, scaling, and storage handled automatically.
+- During private preview, we are building automatic schema tuning based on query patterns, with dedicated query compute for agentic workloads planned after preview completes.
+
+Today, we’re announcing the private preview of **ClickStack Cloud**, a turn-key observability offering built on ClickHouse.
+
+ClickStack Cloud is designed for teams that want the performance, scale, and cost efficiency of ClickHouse for observability, without having to operate their own observability infrastructure.
+
+Send OpenTelemetry data to a managed OTLP endpoint, then explore logs, metrics, and traces in the ClickStack UI. Teams can start investigating telemetry without managing collectors, sizing infrastructure, making scaling decisions, designing schemas, or becoming ClickHouse experts first.
+
+If you want to use ClickHouse for observability, ClickStack Cloud is intended to be the default path: send telemetry data, start investigating, and let the platform handle the operational complexity underneath.
+
+
+---
+
+## What to try out ClickStack Cloud?
+
+If you’re interested in trying ClickStack Cloud, please sign up for the preview program. 
+
+[Sign up](https://clickhouse.com/cloud/clickstack-cloud-waitlist?loc=blog-cta-698-what-to-try-out-clickstack-cloud-sign-up&utm_blogctaid=698)
+
+---
+
+## Why ClickStack Cloud {#why-clickstack-cloud}
+
+Observability data are a natural fit for ClickHouse.
+
+Logs, metrics, and traces are high-volume, high-cardinality, time-series-heavy datasets. Teams need to search across raw events, aggregate quickly, retain more data for longer, and correlate incidents with what is happening across their systems and business.
+
+ClickHouse has already become a foundation for many modern observability architectures because it can deliver fast queries over large volumes of telemetry at a fraction of the cost of traditional approaches. ClickStack brought that power into a complete observability experience with OpenTelemetry-native ingest and a purpose-built UI.
+
+ClickStack Cloud gives teams a fully turn-key way to use ClickStack, backed by ClickHouse Cloud, without having to operate the underlying ingestion, storage, or query infrastructure themselves.
+
+## Send OpenTelemetry data. Start observing. {#send-opentelemetry-data-start-observing}
+
+With ClickStack Cloud, users send OpenTelemetry data to a managed endpoint. From there, ClickStack Cloud handles ingestion, buffering, scaling, storage, and query serving behind the scenes.
+
+In practice, setup can be as simple as pointing your OpenTelemetry Collector at a ClickStack Cloud ingestion endpoint once you start your new ClickStack Cloud service:
+
+<pre><code type='click-ui' language='yaml'>
+exporters:
+  otlphttp:
+    endpoint: https://your_service.otel.us-east-2.aws.clickhouse.cloud:4318
+    headers:
+      authorization: Bearer ${CLICKSTACK_CLOUD_TOKEN}
+</code></pre>
+
+Once data is flowing, users can explore their logs, metrics, and traces all from the ClickStack UI, with integrated authentication and RBAC.
+
+Teams can just focus on understanding and operating their production systems, not operating the systems that store and query their telemetry.
+
+## A fully managed ingestion layer for OpenTelemetry {#a-fully-managed-ingestion-layer-for-opentelemetry}
+
+The goal is a simple user experience. The hard part is making it scale seamlessly behind the scenes.
+
+Observability traffic is bursty by nature. Incidents, deployments, cron jobs, customer behavior, and new instrumentation can all quickly change telemetry volume. A managed observability service needs to absorb those changes without asking users to resize infrastructure or debug ingest bottlenecks. 
+
+That is where ClickStack Cloud’s managed ingestion layer comes in. Users send telemetry to a managed endpoint, and ClickStack Cloud handles the ingestion path behind the service: buffering, scaling, storage, and delivery into ClickHouse.
+
+Under the hood, telemetry is buffered through a durable event queue backed by object storage. A scalable ingestion layer then allocates resources based on incoming traffic patterns and ingestion pressure.
+
+![ingestion_with_clickstack_cloud.png](https://clickhouse.com/uploads/ingestion_with_clickstack_cloud_d98564d804.png)
+
+For users, the experience stays simple: send OpenTelemetry data to ClickStack Cloud and let the platform manage the path from ingestion to queryable telemetry.
+
+## What we are building during private preview {#what-we-are-building-during-private-preview}
+
+ClickStack Cloud is entering private preview with managed ingestion, a serverless query experience, and the ClickStack UI for logs, metrics, and traces.
+
+During private preview, we are focused on two areas that matter for high-volume observability workloads: separating ingestion and query resources, and automatically tuning the underlying datastore, ClickHouse, based on how teams actually use it.
+
+Observability systems have two very different jobs. They need to continuously ingest high-volume telemetry data while serving fast, interactive queries for dashboards, investigations, and ad hoc analysis. These workloads do not scale the same way.
+
+ClickStack Cloud builds on ClickHouse Cloud’s architecture, which separates compute and storage, allowing write infrastructure to scale independently of query infrastructure. During the private preview, we are refining how the system dynamically responds to each user's workload characteristics, such as ingestion pressure, query concurrency, and data density.
+
+The goal is to let teams grow their observability workloads without having to size clusters, split services, or tune infrastructure themselves.
+
+## Automatic tuning for observability workloads {#automatic-tuning-for-observability-workloads}
+
+Observability workloads evolve as systems and teams change, which means the shape of the data that matters can shift quickly. A field that was rarely used last month might become central to every dashboard this month, while a new service can introduce attributes that teams begin relying on in their day-to-day investigations. 
+
+During the private preview, we are working on systems that can learn from common query patterns and automatically optimize telemetry data over time. Planned areas of automatic tuning include:
+
+* Materializing frequently queried fields  
+* Adjusting primary keys based on common filters  
+* Adding materialized views for frequent access patterns  
+* Adding indexes for common dashboards and investigations
+
+During private preview, we’ll refine these systems alongside design partners and early adopters based on real-world feedback and usage
+
+![](https://clickhouse.com/uploads/clickstack_cloud_intro_may2026_image5_2d229af760.png)
+
+The intent is straightforward: bring ClickHouse-level performance to observability users without requiring every team to design schemas, tune indexes, or understand ClickHouse's internals.
+
+## Built for agentic observability workloads {#built-for-agentic-observability-workloads}
+
+As teams adopt AI agents for debugging, reliability, and operational analysis, observability systems will need to support workloads that look very different from traditional dashboards.
+
+Dashboards usually run a known set of queries on a predictable cadence. Agents behave differently. They may issue many exploratory queries, test hypotheses across logs, metrics, and traces, move between raw events and aggregate views, and keep searching until they find the source of a problem.
+
+This kind of workload does not fit well with observability platforms that rely on application-level query caps, pre-aggregates, rate limits, or fixed concurrency limits to control cost.
+
+To support these exploratory workloads, we plan to let users attach dedicated query compute to their telemetry data for agentic and high-volume analytical workloads. Instead of being limited by shared query capacity, teams would be able to provision the compute they need and run intensive analysis directly against their telemetry data.
+
+![clickstack_cloud_intro_may2026_image3.png](https://clickhouse.com/uploads/clickstack_cloud_intro_may2026_image3_8b7b2de915.png)
+
+This gives teams more control: more compute when they need it, stronger isolation from their primary interactive observability experience, and a clearer relationship between query-heavy agentic workloads and the infrastructure that serves them.
+
+This capability is currently under active development and is expected to become available following the completion of the private preview.
+
+## Who ClickStack Cloud is for {#who-clickstack-cloud-is-for}
+
+ClickStack Cloud is for teams that want ClickHouse-powered observability without operating observability infrastructure directly.
+
+Our existing Managed ClickStack offering remains the right fit for teams that want direct control and management over schemas, ingestion pipelines, workload isolation, schema tuning, and compute sizing. For many large-scale users, that control is essential, allowing users to achieve market-leading cost efficiency.
+
+ClickStack Cloud is designed for teams that want a more turn-key path:
+
+- Send OpenTelemetry data to a managed observability service  
+- Investigate logs, metrics, and traces without running ClickHouse infrastructure  
+- Avoid sizing ingestion, storage, and query components themselves  
+- Keep telemetry data close to the broader analytical workloads they run on ClickHouse  
+- Use ClickHouse as an observability backend without becoming ClickHouse operators
+
+If your team wants the speed and efficiency of ClickHouse for logs, metrics, and traces, but does not want to manage the underlying infrastructure, ClickStack Cloud is built for you.
+
+![clickstack_cloud_intro_may2026_image1.png](https://clickhouse.com/uploads/clickstack_cloud_intro_may2026_image1_9f330af200.png)
+
+> Pricing for ClickStack Cloud has not been finalized yet, but our philosophy is clear: it should be simple, predictable, and cost-efficient at scale. We intend to finalize pricing during the private preview stage over the coming months.
+
+## Join the private preview {#join-the-private-preview}
+
+ClickStack Cloud is available today in private preview.
+
+Private preview spots are limited. If you are interested in using ClickStack Cloud, sign up for the [preview program](https://clickhouse.com/cloud/clickstack-cloud-waitlist) and tell us about your observability workload.
+
+We are looking for teams that want to send OpenTelemetry data, explore logs, metrics, and traces in ClickStack, and give feedback on the managed ClickStack Cloud experience.
+
+
+---
+
+## Introducing House Mates: the ClickHouse partner community and program
+Published: 2026-05-27T16:59:43+00:00
+URL: https://clickhouse.com/blog/introducing-house-mates
+
+---
+title: "Introducing House Mates: the ClickHouse partner community and program"
+date: "2026-05-27T16:59:43.885Z"
+author: "Abhinav Mehla"
+category: "Community"
+excerpt: "We are launching House Mates, a partner community and program bringing together 60+ ISV, consulting, and channel partners to help customers build, scale, and buy ClickHouse solutions with confidence."
+---
+
+# Introducing House Mates: the ClickHouse partner community and program
+
+## Summary
+
+- House Mates is the ClickHouse partner community and program, comprising 60+ ISV, services, consulting, and reseller partners built to help customers move faster with ClickHouse.
+- The inaugural cohort includes over 25 ISV partners delivering production-ready integrations, including dbt Labs, Fivetran, Confluent, Grafana Labs, and Sigma, alongside over 35 consulting and services partners, each trained and certified through ClickHouse Academy.
+- Structured across three tiers (Ignite, Accelerate, and Prime), House Mates gives customers validated integrations, certified regional experts, and procurement through preferred channels, while offering partners joint GTM, enablement, and co-innovation opportunities.
+
+Six months ago, a fintech company based in Latin America came to us. They wanted a regional system integrator to help them build a real-time analytics platform on ClickHouse. They needed help with data pipelines and integrating ClickHouse with the rest of their tool chain. At the time, I did not have an answer for them. Not because the technology was not ready, but because we did not have a trusted services partner in the region to help them build it. Today, I can confidently say that we have a robust ecosystem of 60+ services, consulting, reseller, and ISV partners to help our customers build on ClickHouse. 
+
+I’m excited to announce **House Mates: the ClickHouse partner community and program** that brings together prebuilt ISV integrations, implementation expertise, and a growing network of resellers. It is designed to help customers move faster with ClickHouse while giving partners a clearer path to build, sell, and support solutions with us.
+
+The inaugural cohort of House Mates includes more than 60 partners:
+
+**Over 25 ISV partners,** including dbt Labs, Fivetran, Temporal, Grafana Labs, Confluent, Sigma, and many more, are working with the ClickHouse team to deliver validated, production-ready integrations.
+
+And **over 35 Consulting, Services, and Channel partners,** including TigerData, DoIT, Ciklum, SDG, Megazone, ShellKode, and many more, that are ready to help you build and scale. Every service and consulting partner in House Mates is trained and certified through ClickHouse Academy. 
+
+![house_mates_may2026_image1.png](https://clickhouse.com/uploads/house_mates_may2026_image1_760c9c22fd.png)
+
+> "ClickHouse powers some of our most demanding workloads, ingesting over a million events per minute across hundreds of billions of logs to fuel the real-time dashboards our customers depend on. Hex's native ClickHouse connector gives us a seamless analytics layer on top of that data, enabling every team at Modal to explore and act on insights without having to ETL a large amount of data into a separate warehouse. It is exciting to see the ClickHouse and Hex partnership getting deeper because, for teams like ours that run on both real-time and analytical data, a tighter integration between the two means fewer tradeoffs and faster answers for everyone in the organization."
+> 
+> Kenny Ning, Head of Data at Modal
+
+## Why we built House Mates {#why-we-built-house-mates}
+
+ClickHouse is one of the fastest-growing data companies in the world. The open source project has had hundreds of millions of downloads over the past decade. ClickHouse Cloud has grown to over 4,000 customers in just four years, and that growth is global. Companies like Meta, Cursor, Sony, Tesla, Capital One, Lovable, Decagon, Polymarket, and Airwallex are running ClickHouse in production across real-time analytics, observability, AI, data warehousing, and just about every workload where speed and scale matter.
+
+Alongside that adoption, integrations were appearing everywhere. We built some. The open source community built some. And partners, without a formal program, started building them too. There are over 200 integrations in the wild, and we lacked a structured way to manage and support them. And customers were telling us exactly what they needed: validated integrations they could trust, certified ClickHouse experts in their region, and the ability to buy through the channels and marketplaces they already use.
+
+It was clear that whatever we built had to be scalable. Bespoke partnerships were not going to cut it. One-off deals and handshake arrangements do not scale. We needed a programmatic approach, a foundation we could build on, measure the impact of, and use to reward the partners who invest and go deeper with the ones that stand out. That is why building a partner community and program became my top priority when I joined ClickHouse.
+
+> "ClickHouse's real-time analytics, combined with Tiger Analytics' expertise in data science, AI engineering, and Data engineering, gives customers a strong foundation to modernize their data platforms. Together, we aim to help organizations accelerate innovation and derive greater value from their data investments.”
+> 
+> Rajeev Nayar, VP of Data Engineering, Tiger Analytics
+
+Over the past six months, we studied the ClickHouse ecosystem and the market signals. We worked with leading service and consulting firms worldwide to train and certify ClickHouse experts. We will continue to expand here. We evaluated customer demand to build partnerships with ISVs and align on a roadmap to launch validated integrations. There is a lot more to come on this front. We have also been expanding our reseller network, especially for customers in LATAM, APJ, and the Middle East, where buying through a reseller is the preferred procurement path.
+
+The result is House Mates, the ClickHouse partner community and program. For customers, this means the tools you already use work with ClickHouse out of the box, there are certified experts available across key regions, and you can procure ClickHouse through the channels you prefer. For partners, it means joint GTM, enablement, attractive referral and resell incentives, and a structured way to co-innovate.
+
+> "Working with Kainam, we have seen firsthand how their platform, powered by the speed and scale of ClickHouse, delivers the real-time insights necessary for modern performance management. Leveraging ClickHouse as a core component of the Kainam solution has been a game-changer for how Hackett advances performance management and delivers these capabilities to our own stakeholders."  
+> 
+> Paulo Dominguez, Chief AI Innovation Officer, The Hackett Group
+
+We call House Mates a community and a program for a reason. The program provides structure: tiers, benefits, enablement paths, and a clear framework for how we work together. The community is the vision to drive collaboration across different partners, not just between each partner and ClickHouse individually, to drive successful outcomes for our customers.
+
+A data platform is only part of the equation. Customers are using multiple technologies as part of their stack, and they need expertise to tie it all together. The customer experience is the sum of all these relationships, and House Mates is designed to connect them.
+
+Here is a real example. A leading data analytics and consumer intelligence company was facing latency issues with its legacy data platform. We tapped into the partnerships we built over the past few months to bring an ISV and a services partner together. The ISV provided low-latency data sync between ClickHouse and the legacy platform. The services partner helped them design and modernize their analytics architecture. That is the community and program working as intended: multiple partners, one positive customer outcome.
+
+> "We are thrilled to be the pioneer partner for the ClickHouse 'House Mates' program in Indonesia. At All Data International, we see data modernization as the non-negotiable first step toward an AI future. Our early investment in ClickHouse allows us to help our collective customers modernize their data environments today, ensuring they are fully prepared to handle the complex, real-time demands of tomorrow's agentic AI workloads." 
+> 
+> Indra Gunawan, Deputy CEO, PT All Data International
+
+## Three tiers. One trajectory. {#three-tiers-one-trajectory}
+
+House Mates has three partnership tiers, and the journey through them is straightforward. 
+
+Every partnership begins at **Ignite**. For Services partners, this is about enablement, readiness, and delivering your first lighthouse projects. For ISV partners, it is about getting the integration live and driving early adoption. This is where you build the foundation. **Accelerate** is where we turn up the dial. Enhanced GTM support, richer incentives, deeper co-innovation. This is where momentum takes over. **Prime** is our strategic partnership tier, reserved for partners with the largest joint pipeline, significant investment and boldest ambitions. This is where we operate together at scale.
+
+> "Enterprise AI is moving from batch intelligence to real-time reasoning. Agentic systems need to query, learn, and act on live data at the speed of decisions, not reports. ClickHouse gives us the real-time analytical foundation to make that possible at enterprise scale. Combined with AWS infrastructure and complementary layers such as Langfuse for observability and LLM evaluation, ShellKode is building production-grade AI platforms where speed, accuracy, and data freshness are not tradeoffs. We joined House Mates because this is exactly the stack the next generation of enterprise AI runs on." 
+> 
+> Bhuvanesh R, Co-founder and CTO, ShellKode
+
+**We are just getting started.**
+
+This is day one for House Mates, and the program will evolve. We will add more partners, expand into new regions, and refine based on feedback from customers and partners alike. But the goals will remain the same. For customers: build faster and build with confidence. For partners: ClickHouse will keep innovating and delivering value to your customers, and House Mates will be your growth engine alongside it.
+
+
+---
+
+## Need a House Mate for your next project? 
+
+If you need to find a House Mate for your next project, you can search our directory!
+
+[Find a House Mate](http://clickhouse.com/partners/find-partner?loc=blog-cta-696-need-a-house-mate-for-your-next-project-find-a-house-mate&utm_blogctaid=696)
+
+---
+
+---
+
+## Want to be a House Mate?
+
+If you would like to partner with us and join House Mates, apply to join the program.
+
+[Become a House Mate](http://clickhouse.com/partners?loc=blog-cta-697-want-to-be-a-house-mate-become-a-house-mate&utm_blogctaid=697)
+
+---
+
+---
+
+## Postgres managed by ClickHouse is now in beta
+Published: 2026-05-27T16:59:21+00:00
+URL: https://clickhouse.com/blog/postgres-managed-by-clickhouse-beta
+
+---
+title: "Postgres managed by ClickHouse is now in beta"
+date: "2026-05-27T16:59:21.310Z"
+author: "Sai Srirampur"
+category: "Product"
+excerpt: "Postgres managed by ClickHouse is now in public beta - a fully managed, NVMe-backed Postgres service with native CDC into ClickHouse and a unified query layer via pg_clickhouse."
+---
+
+# Postgres managed by ClickHouse is now in beta
+
+**TL;DR:** ClickHouse Cloud users can now provision a fully managed Postgres service, backed by local NVMe for up to 10x faster transactions, with native CDC into ClickHouse for real-time analytics and a unified query layer via pg_clickhouse. Free until June 15, 2026, with a 50% discount after that for the duration of the beta. CDC and pg_clickhouse are included at no extra cost.
+
+ClickHouse Cloud users can now provision a fully managed Postgres service backed by local NVMe storage, natively integrated with ClickHouse. Any ClickHouse Cloud user can now provision an enterprise-grade, fully managed Postgres service powered by local NVMe storage and natively integrated with ClickHouse. We offer a **best-of-breed data stack** that combines Postgres for transactional (OLTP) workloads and ClickHouse for analytical (OLAP) workloads, eliminating the traditional complexity of stitching together separate systems and providing a foundation essential for real-time and AI-native applications.
+
+> [Sign up for ClickHouse Cloud today to get started with Postgres managed by ClickHouse](https://console.clickhouse-staging.com/signUp?intent=PG)
+
+You get a high-performance Postgres service backed by local NVMe with up to [10x faster]() transactional performance. Using native CDC, you can sync data from Postgres to ClickHouse in just a few clicks for [100x faster analytics](https://benchmark.clickhouse.com/). With a unified query layer powered by the [pg_clickhouse](https://clickhouse.com/blog/introducing-pg_clickhouse) extension, you can build applications that combine transactions and analytics, without managing separate systems. And all of this comes at a cost-effective price point, so you never have to compromise on a fast and reliable data foundation for building your apps.
+
+## AI needs the “best-of-breed” data stack {#ai-needs-the-best-of-breed-data-stack}
+
+[AI workloads are collapsing the traditional divide between transactional and analytical databases.](https://clickhouse.com/blog/ai-redrawing-database-market#real-time_analytics) Applications that once ran predictable, hard-coded queries now generate unpredictable bursts of agent-driven requests that need answers from both sides of the stack. At the same time, data volumes, concurrency, and performance expectations are growing exponentially, while security and reliability have become more critical than ever.
+
+That’s why best-of-breed matters more than ever: Postgres for OLTP and ClickHouse for OLAP. It’s also why thousands of AI-native companies have already converged on this architecture.
+
+![postgres_beta_may2026_image1.png](https://clickhouse.com/uploads/postgres_beta_may2026_image1_4ffdd4d2c0.png)
+
+Our vision for Postgres managed by ClickHouse is simple: make it easy  for developers to build AI-native applications on the unified data stack by eliminating the overhead of stitching together Postgres and ClickHouse through external pipelines, custom application logic, and operational complexity.
+
+## Customers {#customers}
+
+We announced the private preview of Postgres managed by ClickHouse earlier this year, and thousands of companies have already joined the waitlist, with many already running multi-terabyte, mission-critical production workloads.
+
+Customers have migrated from RDS, Aurora, CloudSQL, Neon, PlanetScale Postgres, and more, while others have built entirely new AI-native applications. These workloads span cybersecurity, fintech, retail, real estate, social media, and beyond—all powered by a deeply integrated platform that unifies OLTP and OLAP with Postgres and ClickHouse.
+
+Here are a few raw testimonials from our reference customers.
+
+### **Physical Intelligence** {#physical-intelligence}
+
+*Scaling AI workloads and annotation pipelines, migrated from RDS*
+
+“ClickHouse helped us move off RDS and build a data platform that can support our growing AI workloads. We use Postgres for OLTP and ClickHouse for OLAP in the ClickHouse Cloud platform, giving researchers, training pipelines, and agents fast access to the same data foundation… As our annotation volume grows 10x and continues toward billions of annotations, ClickHouse gives us the platform headroom to keep scaling...”
+
+### **Sterling Labs** {#sterling-labs}
+
+*Running 8.5 TB of hot Postgres data on NVMe, migrated from Aurora.*
+
+“Postgres managed by ClickHouse has been an incredible fit for us as we migrated from Aurora and scaled our production workload... We’re now running around 8.5 TB of hot data in Postgres, and enjoy the super low-latency offered by the NVMe drives…The performance has been simply impressive...”
+
+### **Quinto Andar** {#quinto-andar}
+
+*Using Postgres as a universal interface for analytics*
+
+“With pg_clickhouse, ClickHouse becomes a plug-and-play database for virtually any third-party tool.. Instead of being forced into the overhead of BigQuery or Snowflake just to satisfy an integration like Hightouch, we can now expose key datasets directly through Postgres... It’s the best of both worlds: ClickHouse’s raw performance with the ubiquitous compatibility of Postgres.”
+
+### **DoControl** {#docontrol}
+
+*Simplifying cybersecurity data pipelines at scale,*
+
+“We moved multiple multi-terabyte workloads from RDS and Aurora to Postgres managed by ClickHouse with hands-on support from the ClickHouse team.Given the scale and complexity of our cybersecurity data sources, reliability and price-performance were critical… Postgres managed by ClickHouse lets us move Postgres workloads more easily, use ClickPipes, and bring data into ClickHouse without the operational complexity we originally expected.”
+
+Other reference customers we’d like to call out include Y Combinator companies like Trainy.ai and EndClose, AI safety companies like Mpathic, AI-native inventory management companies like Prediko, and many more power the next generation of AI-native applications on Postgres managed by ClickHouse.
+
+## **Product** {#product}
+
+Postgres managed by ClickHouse brings together high-performance OLTP and real-time OLAP into a single, deeply integrated platform. At the core of the platform are three foundational capabilities:
+
+* **NVMe-backed Postgres** delivering up to 10x faster transactional performance  
+* **Native CDC into ClickHouse** for real-time analytics without external pipelines  
+* **pg_clickhouse**,  a unified query layer that allows applications to span transactions and analytics
+
+Together, these capabilities eliminate the operational complexity of stitching together Postgres and analytical infrastructure manually, making it simpler to build real-time and AI-native applications.
+
+<video autoplay="1" muted="1" loop="1" controls="0">
+  <source src="https://clickhouse.com/uploads/open2_compressed_5863ec1cce.mp4" type="video/mp4" />
+</video>
+
+### **Fully managed migrations with ClickPipes** {#fully-managed-migrations-with-clickpipes}
+
+Migrating production Postgres workloads is one of the hardest parts of adopting a new platform. With fully managed migration workflows powered by [ClickPipes](https://clickhouse.com/docs/cloud/managed-postgres/migrations/clickpipes), customers can move workloads from RDS, Aurora, CloudSQL, Neon, and other providers with minimal downtime and operational overhead.
+
+Customers can continuously replicate data in real time, simplify cutovers, and avoid building custom migration infrastructure themselves, a capability that has quickly become one of the most loved aspects of the platform among customers running production workloads.
+
+### **Enterprise-grade Postgres for production workloads** {#enterprise-grade-postgres-for-production-workloads}
+
+Postgres managed by ClickHouse includes the operational capabilities customers expect to run mission-critical applications at scale, including:
+
+* High availability with up to two standbys  
+* Point-in-time recovery and database branching  
+* Read replicas for scaling read-heavy workloads  
+* 90+ PostgreSQL extensions  
+* Enterprise-grade security with Private Link  
+* Integrated monitoring, logs, and [Query Insights](https://clickhouse.com/blog/postgres-query-insights-clickhouse-cloud)  
+* Prometheus-compatible metrics  
+* Agent-based access with `clickhousectl`  
+* Infrastructure as Code via OpenAPI  
+* And more!
+
+And this is just the beginning. We’re building toward a fully unified operational and analytical data platform for real-time and AI-native applications.
+
+For detailed documentation on the above features, you can visit our official docs [here](https://clickhouse.com/docs/cloud/managed-postgres).
+
+## Pricing {#pricing}
+
+Postgres managed by ClickHouse is designed to be cost-effective, so developers never have to compromise on a fast, reliable data foundation powered by Postgres and ClickHouse. We’ve priced the service to deliver some of the most competitive pricing compared to alternative managed Postgres offerings. This excludes the price-performance benefits you get from local NVMe storage.
+
+The service remains free until usage metering begins on June 15, 2026\. During Beta, all plans include a 50% discount as part of our commitment to early customers.
+
+> For exact pricing, visit [the Pricing Calculator](https://clickhouse.com/pricing?service=postgres#pricing-calculator) to find the best configuration and pricing for your workload.
+
+Native CDC via ClickPipes and the pg_clickhouse extension are included at no additional cost, aligning with our vision for a unified OLTP + OLAP platform powered by Postgres and ClickHouse.
+
+The platform supports more than 50 local NVMe-backed VM configurations, ranging from 1 vCPU / 8 GB RAM / 59 GB NVMe deployments starting at approximately $32/month to clusters with 96 vCPUs / 768 GB RAM / 60 TB NVMe storage. This provides the flexibility to support everything from lightweight developer workloads to compute-intensive and storage-heavy production deployments.
+
+During Beta, backups and network egress are also included at no additional cost. 
+
+As we move toward General Availability, pricing and packaging may evolve. Please refer to the pricing [documentation](https://clickhouse.com/docs/cloud/managed-postgres/pricing) for additional details and disclaimers.
+
+## Get Started {#get-started}
+
+Postgres managed by ClickHouse is available today in Beta on ClickHouse Cloud!
+
+---
+
+## Get started today
+
+Sign up for ClickHouse Cloud to provision your first NVMe-backed Postgres service, set up native CDC into ClickHouse, and start querying across both with pg_clickhouse. 
+
+Every new account includes $300 in free credits.
+
+[Sign up](https://console.clickhouse-staging.com/signUp?intent=PG&loc=blog-cta-695-get-started-today-sign-up&utm_blogctaid=695)
+
+---
+
+Visit the [Postgres managed by ClickHouse page](https://clickhouse.com/cloud/postgres) to learn more, or jump into the [documentation](https://clickhouse.com/docs/cloud/managed-postgres) to start building.
 
 ---
 
