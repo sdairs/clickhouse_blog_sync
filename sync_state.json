@@ -1,5 +1,5 @@
 {
-  "last_sync": "2026-05-29T07:27:31.867925Z",
+  "last_sync": "2026-05-30T07:06:40.200586Z",
   "processed_blogs": {
     "https://clickhouse.com/blog/clickhouse-raises-400-million-series-d-acquires-langfuse-launches-postgres": {
       "title": "ClickHouse raises $400M Series D led by Dragoneer to accelerate expansion across analytics and AI infrastructure",
@@ -4818,9 +4818,21 @@
       "pub_date": "2026-05-27T16:59:21+00:00",
       "file_path": "blogs/2026-05-27-postgres-managed-by-clickhouse-is-now-in-beta.md",
       "processed_at": "2026-05-29T07:27:31.814242Z"
+    },
+    "https://clickhouse.com/blog/open-house-2026-day-2-jp": {
+      "title": "Open House 2026 2日目: オープンソース10年の歩みと、エコシステムが次に築くもの",
+      "pub_date": "2026-05-29T01:26:35+00:00",
+      "file_path": "blogs/2026-05-29-open-house-2026-2-10.md",
+      "processed_at": "2026-05-30T07:06:39.795482Z"
+    },
+    "https://clickhouse.com/blog/open-house-2026-day-2": {
+      "title": "Open House 2026 Day 2: 10 years of open source and what the ecosystem is building next",
+      "pub_date": "2026-05-28T22:21:47+00:00",
+      "file_path": "blogs/2026-05-28-open-house-2026-day-2-10-years-of-open-source-and.md",
+      "processed_at": "2026-05-30T07:06:40.099004Z"
     }
   },
-  "total_blogs": 803,
+  "total_blogs": 805,
   "failed_blogs": [
     {
       "url": "https://clickhouse.com/jp/blog/clickhouse-gcp-japan-availability",
