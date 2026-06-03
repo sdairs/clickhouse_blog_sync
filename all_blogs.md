@@ -1,6 +1,3434 @@
 # ClickHouse Blogs
-Last updated: 2026-06-02 07:45:36 UTC
-Total blogs: 805
+Last updated: 2026-06-03 07:49:38 UTC
+Total blogs: 826
+
+---
+
+## TPC-H for less than a cent: ClickHouse Cloud vs. Snowflake, Databricks, BigQuery, and Redshift
+Published: 2026-06-02T08:48:01+00:00
+URL: https://clickhouse.com/blog/tpc-h-clickhouse-cloud-vs-snowflake-databricks-bigquery-redshift
+
+---
+title: "TPC-H for less than a cent: ClickHouse Cloud vs. Snowflake, Databricks, BigQuery, and Redshift"
+date: "2026-06-02T09:50:29.876Z"
+author: "Tom Schreiber, Mark Needham, Alexander Gololobov, Andriy Yakovlev and Robert Schulze"
+category: "Engineering"
+excerpt: "ClickHouse Cloud takes on Snowflake, Databricks, BigQuery, and Redshift on TPC-H, ranking first on SF100 cost-performance and running SF10 for less than one cent."
+---
+
+# TPC-H for less than a cent: ClickHouse Cloud vs. Snowflake, Databricks, BigQuery, and Redshift
+
+> **TL;DR**<br/>On TPC-H SF100, a single 59-core ClickHouse Cloud node is competitive on raw runtime against Snowflake, Databricks, BigQuery, and Redshift, while ranking first on cost-performance. At SF10, it runs all 22 queries for less than one cent.  
+
+ 
+<br/>
+
+## ClickHouse Cloud joins the TPC-H comparison
+
+We ran the full [TPC-H](https://clickhouse.com/docs/getting-started/example-datasets/tpch) workload on ClickHouse Cloud, Snowflake, Databricks, BigQuery, and Redshift.
+
+At SF100, that is 100 GB of data, 866M rows, and 22 join-heavy analytical queries.
+
+The result: ClickHouse Cloud was competitive on raw runtime and ranked first on cost-performance.
+
+At SF10, the full workload ran in 2.9 seconds for $0.009 in compute cost.
+
+Less than one cent.
+
+This post shows the benchmark results. The companion post will be released tomorrow and explains the two years of join engineering behind them.
+
+
+## Benchmark setup
+
+All benchmark scripts, queries, and result files are available in a public GitHub [repository](https://github.com/ClickHouse/tpc-h-openhouse), so the results can be reproduced and inspected.
+
+
+### Dataset and runtime measurement
+
+The main comparison uses TPC-H SF100: 22 queries over 866M rows.
+
+For runtime measurements, we distinguish between cold and hot runs:
+
+**Cold runs**: We did not systematically compare cold-start performance. Cloud warehouses exhibit different caching behavior, and most do not let users reliably reset OS-level page cache or restart compute on demand. Because cold conditions cannot be standardized, cold results would not be fair or reproducible.
+
+**Hot runs**: Each query was run three times with result caching disabled. Charts use the fastest hot run. Result caching was disabled, so the benchmark measures query execution, not returning a previously cached result.
+
+
+### Compared systems
+
+For **ClickHouse Cloud**, we used one fixed configuration: a single AWS compute node with 59 cores. For the other systems, we selected practical warehouse or serverless capacity configurations, and discuss the closest hardware comparisons later.
+
+
+
+* **Snowflake**: Small, Medium, Large, and 4X-Large Gen2 [warehouses](https://clickhouse.com/blog/how-cloud-data-warehouses-bill-you#snowflake)
+* **Databricks (SQL Serverless)**: Small, Medium, Large, and 4X-Large [warehouses](https://clickhouse.com/blog/how-cloud-data-warehouses-bill-you#databricks-sql-serverless)
+* **BigQuery**: 2,000 [slots](https://clickhouse.com/blog/how-cloud-data-warehouses-bill-you#bigquery)
+* **Redshift Serverless**: 128 [RPUs](https://clickhouse.com/blog/how-cloud-data-warehouses-bill-you#redshift-serverless)
+
+
+### Cost calculations
+
+For cost calculations, we use the same methodology introduced in our earlier posts on cloud data warehouse [billing](https://clickhouse.com/blog/how-cloud-data-warehouses-bill-you) and [cost-performance](https://clickhouse.com/blog/cloud-data-warehouses-cost-performance-comparison). We apply each vendor’s public billing model to the measured query runtimes, [assume perfect per-second compute billing](https://clickhouse.com/blog/cloud-data-warehouses-cost-performance-comparison#a-note-on-metering-granularity) for all systems, and use Enterprise-tier pricing in comparable US East regions: AWS `us-east` for supported systems and GCP `us-east` for BigQuery.
+
+With that setup, we first look at raw hot runtime.
+
+
+## TPC-H SF100: raw hot runtime
+
+[TPC-H SF100](https://clickhouse.com/docs/getting-started/example-datasets/tpch) consists of **100 GB of data**, **866M rows**, and **22 join-heavy analytical queries**.
+
+In the diagram below, each bar sums the fastest of three runs for each of the 22 TPC-H queries. Lower is better.
+
+![Blog-JOINS-results.001.png](https://clickhouse.com/uploads/Blog_JOINS_results_001_43c308f4a0.png)
+
+**ClickHouse Cloud** completed the workload in [19.8s](https://github.com/ClickHouse/tpc-h-openhouse/blob/main/clickhouse-cloud/results_sf100/aws.1.236_run_01_sf100.json).
+
+**Snowflake** finished in [32.7s](https://github.com/ClickHouse/tpc-h-openhouse/blob/main/snowflake/results_sf100/snowflake_sf100_small_gen2.json) on a Small warehouse, [22.9s](https://github.com/ClickHouse/tpc-h-openhouse/blob/main/snowflake/results_sf100/snowflake_sf100_medium_gen2.json) on Medium, [15.9s](https://github.com/ClickHouse/tpc-h-openhouse/blob/main/snowflake/results_sf100/snowflake_sf100_large_gen2.json) on Large, and [14.7s](https://github.com/ClickHouse/tpc-h-openhouse/blob/main/snowflake/results_sf100/snowflake_sf100_4xl_gen2.json) on 4X-Large.
+
+**Databricks** finished in [37.3s](https://github.com/ClickHouse/tpc-h-openhouse/blob/main/databricks/results_sf100/databricks_sf100_Small.json) on a Small warehouse, [40.0s](https://github.com/ClickHouse/tpc-h-openhouse/blob/main/databricks/results_sf100/databricks_sf100_medium.json) on Medium, [28.9s](https://github.com/ClickHouse/tpc-h-openhouse/blob/main/databricks/results_sf100/databricks_sf100_large.json) on Large, and [26.4s](https://github.com/ClickHouse/tpc-h-openhouse/blob/main/databricks/results_sf100/databricks_sf100_4xlarge.json) on 4X-Large.
+
+**BigQuery** finished in [26.2s](https://github.com/ClickHouse/tpc-h-openhouse/blob/main/bigquery/results_sf100/results.json) with 2,000 slots. 
+
+**Redshift Serverless** finished in [30.7s](https://github.com/ClickHouse/tpc-h-openhouse/blob/main/redshift/results_sf100/results.json) with 128 RPUs.
+
+Note that the compute behind these numbers is not identical across systems. ClickHouse Cloud used one Graviton3 compute node with 59 cores and 236 GiB of memory.
+
+For Snowflake and Databricks, we tested multiple warehouse sizes to show how runtime changes as compute scales. The closest hardware reference points to ClickHouse Cloud’s 59-core node are Snowflake Large Gen2, [understood](https://select.dev/posts/snowflake-warehouse-sizing) to [use](https://medium.com/snowflake-engineering/deep-dive-inside-snowflakes-new-gen2-standard-warehouses-powered-by-aws-graviton3-6aacca73ae2d) 64 AWS Graviton3 cores and 128 GB of memory, and Databricks Large, which [maps](https://docs.databricks.com/aws/en/compute/sql-warehouse/warehouse-behavior#sizing-and-cluster-provisioning) to 64 Intel Xeon E5-2686 v4 cores and 488 GiB of memory in the documented classic compute-plane sizing. We used Databricks SQL [Serverless](https://docs.databricks.com/aws/en/getting-started/high-level-architecture#serverless-workspace-architecture) for the benchmark, but the published warehouse sizing provides a useful reference point.
+
+Also note that systems with serverless capacity models automatically fan out query work across large, pre-provisioned compute pools: BigQuery used up to 2,000 [slots](https://clickhouse.com/blog/how-cloud-data-warehouses-bill-you#bigquery) in this benchmark, and Redshift Serverless used 128 [RPUs](https://clickhouse.com/blog/how-cloud-data-warehouses-bill-you#redshift-serverless).
+
+> With one 59-core compute node, **ClickHouse Cloud is competitive** on raw TPC-H SF100 runtime against major cloud data warehouses, including comparable 64-core Snowflake and Databricks warehouse configurations and serverless engines that automatically fan out across large pre-provisioned compute pools far beyond 59 cores.
+
+ 
+
+
+## Runtime is only half the story
+
+As mentioned above, it is hard to directly compare the compute each system used to run the TPC-H SF100 workload. 
+
+But we can directly compare the [cost](https://clickhouse.com/blog/cloud-data-warehouses-cost-performance-comparison) of running the workload.
+
+The chart below keeps the same runtime bars and overlays the hot-run compute cost using each vendor’s public [billing model](https://clickhouse.com/blog/how-cloud-data-warehouses-bill-you).
+
+![Blog-JOINS-results.002.png](https://clickhouse.com/uploads/Blog_JOINS_results_002_b4220f44f7.png)
+
+**ClickHouse Cloud** finished the workload in 19.8s with a compute cost of [$0.063](https://github.com/ClickHouse/tpc-h-openhouse/blob/main/clickhouse-cloud/results_enriched_sf100/aws.1.236_run_01_sf100.json). 
+
+**Snowflake** Large was faster at 15.9s, but cost [$0.143](https://github.com/ClickHouse/tpc-h-openhouse/blob/main/snowflake/results_enriched_sf100/snowflake_sf100_large_gen2_enriched.json). Snowflake 4X-Large was faster again at 14.7s, but cost [$2.121](https://github.com/ClickHouse/tpc-h-openhouse/blob/main/snowflake/results_enriched_sf100/snowflake_sf100_4xl_gen2_enriched.json). **Databricks** ranged from [$0.087](https://github.com/ClickHouse/tpc-h-openhouse/blob/main/databricks/results_enriched_sf100/databricks_sf100_Small_enriched.json) to [$2.714](https://github.com/ClickHouse/tpc-h-openhouse/blob/main/databricks/results_enriched_sf100/databricks_sf100_4xlarge_enriched.json). **BigQuery** finished in 26.2s for [$0.163](https://github.com/ClickHouse/tpc-h-openhouse/blob/main/bigquery/results_enriched_sf100/results_enriched.json), and **Redshift Serverless** in 30.7s for [$0.436](https://github.com/ClickHouse/tpc-h-openhouse/blob/main/redshift/results_enriched_sf100/enriched_results.json).
+
+The section below collapses runtime and cost into a single cost-performance score.
+
+
+## TPC-H SF100: cost-performance ranking
+
+The previous chart showed runtime and cost side by side. Now we combine both into a simple [cost-performance score](https://clickhouse.com/blog/cloud-data-warehouses-cost-performance-comparison#how-we-measure-overall-cost-performance-ranking):
+
+`cost-performance score = compute cost × runtime`
+
+Lower is better.
+
+That lets us answer the real cloud benchmark question:
+
+> Who gives the most join performance per dollar?
+
+Fast systems score better. Low-cost systems score better. Slow or expensive systems fall behind quickly. And when a system is both slower and more expensive, the two effects compound.
+
+![Blog-JOINS-results.003.png](https://clickhouse.com/uploads/Blog_JOINS_results_003_cf3d793dd4.png)
+
+
+**ClickHouse Cloud** ranks first.
+
+The next closest configurations were **Snowflake** Large and Snowflake Medium, both about 2× worse. **Databricks** Small and **BigQuery** with 2,000 slots are at 3× worse. **Databricks** Large and Medium followed at 5× and 6× worse.
+
+At the high end, **Redshift Serverless** was 11× worse, Snowflake 4X-Large was 25× worse, Databricks 4X-Large was 57× worse, and BigQuery [On-demand](https://clickhouse.com/blog/how-cloud-data-warehouses-bill-you#compute-pricing-3) was 67× worse.
+
+> ClickHouse Cloud delivers the best cost-performance on TPC-H SF100: lowest score overall, with the nearest tested configurations about 2× worse.
+
+
+## TPC-H SF100: per-query runtime breakdown
+
+For completeness, here is the per-query runtime breakdown. Each bar shows the fastest of three runs for one of the 22 TPC-H queries.
+
+
+![Blog-JOINS-results.004.png](https://clickhouse.com/uploads/Blog_JOINS_results_004_71f35d37c4.png)
+
+
+The aggregate result is not driven by one outlier. ClickHouse Cloud is consistently competitive across the full query set.
+
+
+## Scaling down: TPC-H for less than a cent
+
+SF100 is the main benchmark in this post. But scaling down to SF10 gives us the title moment.
+
+At SF10, the workload contains **86M rows** across the same **22 join-heavy TPC-H queries**. 
+
+On the same ClickHouse Cloud configuration with one 59-core compute node, the full hot workload ran in [2.9s](https://github.com/ClickHouse/tpc-h-openhouse/blob/main/clickhouse-cloud/results_sf10/aws.1.236_run_01_sf10.json) with a compute cost of [$0.009](https://github.com/ClickHouse/tpc-h-openhouse/blob/main/clickhouse-cloud/results_enriched_sf10/aws.1.236_run_01_sf10.json).
+
+![Blog-JOINS-results.005.png](https://clickhouse.com/uploads/Blog_JOINS_results_005_f2a4c0e257.png)
+
+The chart below collapses runtime and cost into a single cost-performance score to answer the “Who gives the most join performance per dollar?” question.
+
+![Blog-JOINS-results.006.png](https://clickhouse.com/uploads/Blog_JOINS_results_006_84c9e91fa5.png)
+
+At this scale, **ClickHouse Cloud** wins on both dimensions: it is the fastest tested configuration and the cheapest to run. **Snowflake** was next in terms of cost-performance, but still **8× worse**. **BigQuery** was **12× worse**, **Redshift** Serverless **27× worse**, and the larger Snowflake and **Databricks** configurations were much further behind.
+
+>  At SF10, ClickHouse Cloud runs all 22 TPC-H queries in 2.9s for less than one cent, and delivers the best cost-performance by a wide margin.
+
+
+## Scaling up: SF1000 and beyond
+
+The SF100 results show where ClickHouse is today: with a single 59-core compute node, ClickHouse Cloud is competitive on both runtime and cost-performance against major cloud data warehouses, including systems using larger or more elastic compute configurations.
+
+But SF100 is not the end of the story.
+
+For much larger scale factors, such as **TPC-H SF1000 and beyond**, join execution needs to scale across multiple nodes properly. That is where the engineering team is focusing next, with [multi-stage distributed query execution](/blog/multi-stage-distributed-query-execution-clickhouse-cloud) for large distributed joins in ClickHouse Cloud.
+
+That is the next chapter. This one was made possible by the last two years of join engineering.
+
+
+## How we got here
+
+The results above are the outcome of two years of focused join engineering at ClickHouse.
+
+![Blog-JOINS-results.007.png](https://clickhouse.com/uploads/Blog_JOINS_results_007_7f6820e069.png)
+
+A year into that effort, the same TPC-H SF100 join-heavy workload was already **4.4× faster than in 22.4**. One year later, it is now **26× faster overall**, with the last year alone contributing another **6× improvement** under default settings.
+
+That progress came from improvements across the stack: faster hash joins, better planning, correlated subquery support, lazy column replication, runtime filters, and statistics-based join reordering.
+
+The companion post will be released tomorrow and will explain the engineering story behind those numbers: how ClickHouse went from “fast, but not for joins” to competitive join performance by default.
+
+> Two years of focused join engineering made ClickHouse 26× faster on the TPC-H SF100 join-heavy workload, and that is what made these benchmark results possible.
+
+
+
+
+
+---
+
+## トラブルは向こうからやってくる: Cloudflareがクアドリリオン(千兆)行規模の分析をスケールするためにClickHouseをどう活用しているか
+Published: 2026-06-02T03:23:28+00:00
+URL: https://clickhouse.com/blog/cloudflare-jp
+
+---
+title: "トラブルは向こうからやってくる: Cloudflareがクアドリリオン(千兆)行規模の分析をスケールするためにClickHouseをどう活用しているか"
+date: "2026-06-02T03:23:28.969Z"
+author: "ClickHouse"
+category: "User stories"
+excerpt: "「Cloudflareでは、常にスケールし続けています。明日にはさらに大きな課題が待っているのが当たり前です。しかし、私たちはClickHouseを中心にシステムを設計することで、それに対応できるようにしてきました。」 Jamie Herre, Senior Director of Engineering"
+---
+
+# トラブルは向こうからやってくる: Cloudflareがクアドリリオン(千兆)行規模の分析をスケールするためにClickHouseをどう活用しているか
+
+## まとめ
+
+- 桁違いのスケールと障害耐性: 世界のWebサイトの約5分の1にサービスを提供するCloudflareでは、データセンターの切断といった不可避の障害（トラブル）と、爆発的なトラフィック急増に耐えうる「壊れずに曲がるインフラ」の構築を最優先しています。
+- 圧倒的なクエリ性能: 同社はオープンソース版のClickHouseを約10年間運用しており、デモでは北米全域の通信切断シミュレーション下でも、1日あたり1.61京（クアドリリオン）件ものイベントをわずか2秒未満（誤差1%未満）でスキャンする圧倒的な応答性と弾力性を実証しました。
+- ClickHouseが選ばれる理由: RaftやPaxosによる過度な交渉を必要としないノード設計や、健全なノードに動的かつ柔軟に問い合わせができる「ソフトクラスタ」思想、HTTPプロトコルによるシンプルな統合、そして必要最小限の調整でスケールできる運用の容易さを高く評価しています。
+
+[Cloudflare](https://www.cloudflare.com/en-ca/) のJamie Herre氏にとって、トラブルとはエンジニア版のマーフィーの法則のようなものです。*起こり得る*ことは*必ず起こる*。そして大規模なシステムでは、それが起こるか*どうか*ではなく、*いつ*起こるかという問題なのです。ドライブが壊れる。サーバーがダウンする。証明書が期限切れになる。リンクが切れる。「ポケベルを持って働いているなら、私の言っていることがわかるはずです」とJamie氏は語ります。「常にどこかで何かが壊れていると思っていていいんです。」
+
+Jamie氏が2018年にシニア・ディレクター・オブ・エンジニアリングとしてCloudflareに入社したとき、同社のイベントパイプラインは彼がそれまで見てきた中で「ダントツに」最大規模でした。それから7年が経った今、同社は世界中のWebサイトの約5分の1にサービスを提供するまでに成長しました。当時巨大だと感じたものも、Cloudflareが今日処理する数千兆件のイベントと比較すると、控えめに思えるほどです。
+
+Jamie氏に言わせれば、スケーリングはマイルストーンでもチェックボックスでもありません。それは絶え間ない適応の旅路——より多くのデータ、より高い複雑性、より多くの障害への適応です。新しい天井はやがて、次に来るものの床になります。「スケーリングについて話すとき、それは終わりのあるプロセスではないのです」と彼は言います。「規模が大きくなるにつれて、物事はより頻繁に失敗するようになります。」
+
+その意味で、トラブルとスケーリングは表裏一体です。突然のトラフィック急増は、障害で容量の半分を失うのとよく似ていますし、その逆も同様です。どちらの場合も、システムは昨日までの限界を超えて引き伸ばされます。Jamie氏によれば、設計者やエンジニアの課題はそのストレスを避けることではなく——それは不可能ですから——壊れずに曲がるインフラ、そして必然的な障害に直面しても回答を返し続けるインフラを構築することなのです。
+
+## 「よいトラブル」とはどんなものか
+
+「壊れずに曲がる」とは実際にはどんなものか。それを示すために、Jamie氏はサンフランシスコのCloudflareオフィスで開催された[2025年8月のClickHouseミートアップ](https://clickhouse.com/videos/meetupsf_august_2025_2)で、自身のチームの分析システムをデモしました。
+
+<iframe width="768" height="432" src="https://www.youtube.com/embed/kmvnpejZ_CY?si=xVMLa96L5XoRLiiX" title="YouTube video player" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" referrerpolicy="strict-origin-when-cross-origin" allowfullscreen></iframe>
+
+最初の結果が示したのは、システムの規模感です。たった1つのクエリが1時間あたり96兆件のイベントをスキャンし、2秒未満で結果を返しました。誤差は1%未満。範囲を1日に広げると、同じクエリは1.61京件のイベントを対象にしましたが、それでも2秒未満で完了しました。Jamie氏にとっては「クアドリリオン（千兆）」と口に出して言えること自体が楽しみの一部でした（「ちょっとした見栄ですね」と冗談を言います）が、彼の主張は真面目なものでした。多くのチームにとっては想像を超えるようなボリュームでも、システムは瞬時に正確に応答し続けるのです。
+
+そして次はストレステストです。トラブルがトラフィック急増ではなく、容量の喪失として襲ってきたらどうなるでしょうか？Jamie氏は北米の主要なデータセンターを切断し、続いて北米全域を一度に切断するシミュレーションを行いました。予想通りエラーは急増しましたが、クエリは結果を返し続けました。Cloudflareの分散型・アクティブ-アクティブ設計により、世界中に300以上のデータセンターがあり、欧州のクラスタが自動的に負荷を引き受け、結果は同じ厳しい誤差範囲内で一貫していました。
+
+クエリのウィンドウを1時間から1日、1週間、1か月、さらには1年へと拡大しても、システムのパフォーマンスは安定していました。「どれだけ要求しても、2秒未満で結果を返してくれます」とJamie氏は言います。
+
+このデモは、Cloudflareの分析システムが弾力性と応答性の両方を備えていることを証明しました。大規模な障害や規模の変動にも崩れることなく耐え、負荷や容量、ボリュームに関係なく数秒でクエリを返します。他のシステムであれば、極端な規模でこのレベルの応答性を維持するには、複雑な調整や積極的なチューニング、大きなアーキテクチャ上のトレードオフが必要になりますが、ClickHouseはCloudflareが設計上このように運用することを可能にしています。基本的な前提は「常に何かが最適ではない」というものですが、それは成功した応答を妨げません。
+
+「Cloudflareでは、常にスケーリングしています」とJamie氏は言います。「明日には常により多くのトラブルがあります。でも、私たちはそれに対処できるよう、ClickHouseを中心にシステムを設計してきました。」
+
+## なぜClickHouseがCloudflareに合っているのか
+
+「ClickHouseの何がそんなにすごいのか？」とJamie氏は問いかけます。実は、たくさんあります。
+
+Cloudflareはオープンソース版のClickHouseを約10年間運用しており、このOLAPデータベースの最も早い大規模採用者の一つです。その長い歴史が、Jamie氏とチームがグローバル規模での弾力性とパフォーマンスをどう考えるかを形作ってきました。
+
+Jamie氏によれば、「過小評価されている機能」の一つはHTTPプロトコルです。Cloudflareの分析クライアントは、ClickHouseとのやり取りをすべてHTTP経由で行います。これにより、統合がシンプルかつ普遍的になります。「活用できるツールやモードがたくさんあります」と彼は言います。
+
+彼はまた、「必要となる調整が最小限である」点も強調します。常にRaftやPaxosで交渉するシステムとは異なり、ClickHouseのノードは動作を維持するために大掛かりなオーケストレーションを必要としません。「デモでやったように容量の3分の1を取り除いても、それほど多くは壊れません。なぜなら、残りのノードはすべてまだそこにあるからです」と彼は説明します。
+
+その思想は、Jamie氏が「ソフトクラスタ」と呼ぶもの——任意のノードに問い合わせて動的な組み合わせを選べる機能——にも及んでいます。「これにより、動作していて健全なノードを見つけるための制御と柔軟性が大きく得られます」と彼は言います。さらに「オプショナルな複雑性」、つまり必要に応じて機能をオン・オフできる能力もあります。「私たちは、特定のユースケースに合うものを活用するよう努めてきました」と彼は付け加えます。
+
+SQLの方言でさえ、「意外な利点」だとわかってきました。慣れるのに少し時間はかかりましたが、時間が経つにつれてJamie氏は、それがチームのワークロードに対していかに表現力豊かで効率的かを評価するようになりました。「本当にクールです」と彼は言います。
+
+最後に、Jamie氏はClickHouseのオープンソースコミュニティとソースコードの価値を強調します。Cloudflareにとって、データベースの進化を理解し、貢献し、信頼できることは大きな価値を持ちます。「このコミュニティの一員であることで、長年にわたって多くのものを得てきました」と彼は言います。
+
+## Jamie氏のアドバイス——とにかくやるべし！
+
+Jamie氏は、スケーリングに終わりはないというリマインダーで講演を締めくくりました。準備を始めるのに最適なタイミングは、まさに今です。「早すぎることも、遅すぎることもありません」と彼は言います。「終わりは決して訪れないのですから。」
+
+重要なのは、トラブルに迫られる*前に*スケーリングについて考えることだ、と彼は主張します。「ワークロードが突然10倍、100倍にスケールしたとしましょう——それはよい形で失敗しますか、それとも悪い形で失敗しますか？逆に、容量の10分の9を失ったらどうでしょう？単に倒れてしまうのか？それとも引き続き正常に使えるのか？」
+
+Cloudflareにとって、これらは仮定の話ではありません。1日あたり数千兆件のイベント、世界中に数百のデータセンターがあり、障害は遍在し不可避である中、同社は爆発的な成長と壊滅的な損失の両方に対して同時に設計しなければなりません。ClickHouseはJamie氏とチームに、速度や弾力性を犠牲にせずに、どちらのシナリオにも対処できる柔軟性を提供します。
+
+あなたの会社はCloudflareほどの規模で運用していないかもしれませんが、同じ設計原則は、ギガバイトから始めるにせよ、テラバイトからペタバイトへとスケールするにせよ、変わらず適用できます——目標は単純に、スケールが訪れたときに準備ができていることです。
+
+その教訓は普遍的です。トラブルは保証されています。問われるのはただ一つ、それがあなたを見つけたときに、あなたに準備ができているかどうかだけです。
+
+---
+
+## システムをより回復力のあるものにする準備はできましたか?
+
+ClickHouseがあなたのデータでどのように動作するか試してみませんか？ClickHouse Cloudなら数分で始められ、$300分の無料クレジットも受け取れます。
+
+[サインアップ](https://console.clickhouse.cloud/signUp?loc=blog-cta-786&utm_blogctaid=786)
+
+---
+
+---
+
+## Luzmo が ClickHouse Cloud を活用して高速なエンドユーザー分析を実現する方法
+Published: 2026-06-02T03:20:20+00:00
+URL: https://clickhouse.com/blog/luzmo-jp
+
+---
+title: "Luzmo が ClickHouse Cloud を活用して高速なエンドユーザー分析を実現する方法"
+date: "2026-06-02T03:20:20.475Z"
+author: "ClickHouse"
+category: "User stories"
+excerpt: "「ClickHouse Cloudは、当社の中で爆発的に広がっています。非常に高速で、極めて汎用性が高く、そしてコスト効率にも優れています。」 Haroen Vermylen、共同創業者兼CTO"
+---
+
+# Luzmo が ClickHouse Cloud を活用して高速なエンドユーザー分析を実現する方法
+
+## まとめ
+
+- Luzmoは、顧客が自由に定義する変動の大きいデータを扱うデータドリブン企業向けに、高速な組み込み分析を提供するためにClickHouse Cloudを活用しています。
+- 長年オープンソース版のClickHouseを利用してきたLuzmoは、インフラ管理から解放され、クラスタの運用ではなく分析機能の構築に集中するため、ClickHouse Cloudへと移行しました。
+- 現在、ClickHouseは組み込み分析、クエリおよびプラグインのログ解析、ベクトル検索を支え、高いパフォーマンスと柔軟性、コスト効率を実現しています。
+
+[Luzmo](https://www.luzmo.com/) は、データ集約型アプリケーションがユーザーに対して、超高速でアクセスしやすい分析機能を提供できるようにします。強力なビジュアライゼーションとAIによる探索機能をアプリケーションに直接統合することで、Luzmoはデータ中心のソフトウェアを構築するチームが、大量の情報を顧客にとって直感的で実行可能なインサイトへと変えられるよう支援しています。
+
+Luzmoを利用する企業の中には、マーケティングや営業のプラットフォーム内で、おなじみのSaaSメトリクス(キャンペーンのパフォーマンス、ROI、利用傾向など)を可視化するために使っている企業もあります。一方、ベルギー最大の通信事業者であるProximusのように、まったく異なる領域で運用している企業もあり、そこではロケーションインテリジェンスや大規模な運用データの可視化、探索、そしてマネタイズが求められます。いずれのケースでも、基盤となるデータがどれほど複雑であっても、分析は瞬時に行えるように感じられる必要があります。
+
+最初から、そうした体験を提供するには、それに追従できるインフラを選ぶ必要がありました。Luzmoの共同創業者兼CTOであるHaroen Vermylen氏に話を聞き、なぜチームが当初ClickHouseを採用したのか、オープンソースから [ClickHouse Cloud](https://clickhouse.com/cloud) への移行のきっかけは何だったのか、そしてClickHouseがその後社内でどのように広まり、エンドユーザー分析からオブザーバビリティ関連のワークロード、ベクトル検索に至るまであらゆるものを支えているかについて伺いました。
+
+<iframe width="748" height="432" src="https://www.youtube.com/embed/dEwnRl1wH-Q" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe>
+
+## Luzmoが当初ClickHouseを選んだ理由
+
+Luzmoは2015年にベルギーのルーヴェンで(Cumul.ioとして)設立されました。それから2年後、チームはClickHouseに出会いました。「なかなかの道のりでした」とHaroen氏は笑顔で語ります。
+
+当時Luzmoは、Luzmoにデータをホスティングしてもらうことを好む顧客向けにデータを保存・分析するための、高速な内部ウェアハウスを必要としていました。Luzmoはフェデレーション型(多くの顧客は自社のシステム内にデータを保持する)ですが、効率的にデータを保存しクエリ実行してもらうためにLuzmoを利用する顧客もいます。
+
+当時はまだ、分析の世界の多くで「本格的なパフォーマンス」と言えば、大規模な分散システムや巨大なクラスタが連想されていました。スケールするには通常、インフラに多額の投資をし、運用上の大きな複雑さを引き受ける必要がありました。
+
+その1年前にオープンソース化されたClickHouseは、異なるトレードオフを提示しました。スピードを引き出すために大規模なインフラを必要とするのではなく、小規模でも大きなパフォーマンス向上を実現し、必要に応じてスケールアップする明確な道筋も用意されていたのです。「ClickHouseが登場して、自分のノートパソコンで動いた」とHaroen氏は振り返ります。「それはかなり驚きでした。」
+
+チームはいくつかの代替案も評価しましたが、ClickHouseのようなパフォーマンス・柔軟性・スケーラビリティの組み合わせを兼ね備えたものはありませんでした。「私たちは顧客に高速な体験を届けたい」とHaroen氏は言います。「だからこそ、ClickHouseに落ち着いたのです。」
+
+## オープンソースからClickHouse Cloudへ
+
+2022年後半、ClickHouseは [ClickHouse Cloud](https://clickhouse.com/cloud) をリリースし、クラスタの管理を自分たちで行わずにClickHouseを運用できる手段を提供しました。Luzmoは最初の顧客の一社として登録しました。
+
+Haroen氏とチームにとって、その動機は非常にシンプルでした。彼らはそもそもインフラを管理することを目指していたわけではないからです。「私たちのビジネスは分析を構築することです」と彼は言います。「クラスタの運用は本来のコアビジネスではないので、それは手放したい仕事でした。」
+
+マネージドサービスに移行することで、チームは日々の運用作業から解放され、顧客向けの分析やレポート機能の構築に集中し続けることができました。プロビジョニング、アップグレード、継続的なメンテナンスをClickHouse Cloudが引き受けつつ、Haroen氏とチームが当初ClickHouseに惹かれたパフォーマンス上の利点とスケーラビリティはそのまま保持されるという、「両方の世界の良いとこ取り」の状況でした。
+
+## 1つのプラットフォーム、多様なユースケース
+
+長年にわたり、LuzmoによるClickHouseの活用は、顧客向け分析の枠を大きく超えて発展してきました。Haroen氏が冗談めかして言うように、「ClickHouseは社内でかなり感染力が強かった」のです。
+
+たとえばLuzmoは現在、オブザーバビリティ関連のワークロードにもClickHouseを使い、クエリログやプラグインログを保存することで、チームと顧客の双方が本番環境でのクエリの挙動を理解できるようにしています。この可視性により、顧客は遅いクエリを特定し、問題を特定のデータソースまで追跡し、分析がどのように動作しているかについて十分な情報に基づく意思決定を下せるようになります。
+
+最近では、ClickHouseはLuzmoの [ベクトル検索](https://clickhouse.com/docs/knowledgebase/vector-search) への取り組みの一部にもなっています。別のシステムを導入する代わりに、チームはClickHouseを使って埋め込み、メタデータ、関連データを保存し、Haroen氏が「あまり想像されないユースケース」と表現する領域にもプラットフォームを拡張しています。
+
+実際のところ、ClickHouseは一種のデフォルトになっています。一度導入されると、不必要なアーキテクチャの肥大化を招かずに、次の問題に対する最もシンプルで効果的な選択肢となることが多いのです。
+
+## 未知に対応するエンジニアリング
+
+Luzmoのアーキテクチャには、いくつかのユニークな課題があります。マルチテナントプラットフォームとして、チームはデータが届くまで、どのようなデータを受け取ることになるか分からないことがよくあります。これにより、数万のテーブル、変動の大きいスキーマ、そして事前定義されたモデルにきれいに収まらないワークロードが生じます。
+
+加えて、多くの顧客クエリは複数のシステムにまたがります。この複雑さを管理するため、Luzmoは独自のクエリエンジンを構築し、これらのリクエストを最適化・調整し、順序付けやグループ化を行って負荷を軽減し効率を改善しています。場合によっては、大量の受信クエリを単一のより効率的な操作に統合することができ、ClickHouseへの負荷を減らしながら高速な結果を提供できます。
+
+これらの課題の一部にはカスタムなエンジニアリングが必要でした。しかし時間とともに、ClickHouse自体の改善によって多くの粗さが解消されてきたとHaroen氏は言います。新機能やデータ型は、本質的に予測不能なデータを扱う環境においても、可能なことを拡張し続けています。
+
+## 「高速、汎用的、コスト効率に優れる」
+
+Luzmoは自社を「製品に分析機能を組み込む最速の方法」と謳っています。Haroen氏にとって、その約束は内部でClickHouseが果たす役割と密接に結びついています。
+
+現在、ClickHouse Cloudはエンドユーザー分析からオブザーバビリティ、そしてベクトル検索のような新しいワークロードまで、あらゆるものをサポートしています。Luzmoが必要とするパフォーマンス、新たなユースケースに対応する柔軟性、そして摩擦なくスケールできるコストプロファイルを提供します。そしてそのすべてを、エンドユーザーにとっての分析を高速かつ容易に保ちながら実現しています。
+
+LuzmoのClickHouse体験を一言でまとめてほしいと尋ねると、Haroen氏は少し考えてからこう答えました。「極めて高速、極めて汎用的、極めてコスト効率に優れる。」
+
+---
+
+## データベースに速度とスケーラビリティが求められていますか?
+
+ClickHouseが自分のデータでどう動作するか試してみませんか?数分でClickHouse Cloudを始められ、$300の無料クレジットを受け取れます。
+
+[サインアップ](https://console.clickhouse.cloud/signUp?loc=blog-cta-784&utm_blogctaid=784)
+
+---
+
+---
+
+## InMobi が ClickHouse で実現したクエリ20倍高速化と80%のコスト削減
+Published: 2026-06-02T03:17:41+00:00
+URL: https://clickhouse.com/blog/inmobi-jp
+
+---
+title: "InMobi が ClickHouse で実現したクエリ20倍高速化と80%のコスト削減"
+date: "2026-06-02T03:17:41.554Z"
+author: "ClickHouse"
+category: "User stories"
+excerpt: "「私たちはスピードを求めてClickHouseを採用しました。結果として得られたのはスピードだけでなく、高速かつ信頼性が高く、コスト面でも予測可能なプラットフォームを構築できたことです。」 - Anand Tirthgirikar, Staff Engineer"
+---
+
+# InMobi が ClickHouse で実現したクエリ20倍高速化と80%のコスト削減
+
+## まとめ
+
+- InMobiは、広告のリアルタイムレポーティングAPIをClickHouseで支えており、厳格なレイテンシおよび可用性SLAのもとで主要指標(インプレッション、クリックなど)を提供しています。
+- サーバーレスウェアハウスからClickHouseへ移行したことで、P99レイテンシは60秒から3秒未満に短縮され、月間コストは80%削減(4万ドルから8千ドル)されました。
+- 現在、このシステムは10TBのデータに対して1日あたり40万件以上のクエリを処理し、InMobi全社における新たなユースケース向けの再利用可能な分析基盤として機能しています。
+
+多くの消費者と同じように、あなたもおそらくモバイルアプリを開き、広告を目にし、タップするかどうかを一瞬で判断し、そして次へと進んでいるでしょう。目に入らなければ、気にも留めない…。
+
+しかしパブリッシャーにとって、その一瞬は決して忘れ去られるようなものではありません。それはデバイス、地域、そして数百万人のユーザーにわたって、自分たちのインベントリがどのようなパフォーマンスを発揮しているかを、毎日、毎分、リアルタイムで下される判定なのです。そして彼らは、[InMobi](https://www.inmobi.com/) のようなアドテクのリーダーに、単に広告を配信するだけでなく、その瞬間を信頼できる即時的なインサイトに変えてくれることを期待しています。
+
+2007年にインドで設立されたInMobiは、30,000を超えるブランドおよびパブリッシャーを、150カ国以上の20億人を超える人々と接続し、毎日およそ2,500億件の広告リクエストと300億件のイベントを処理しています。プラットフォーム全体としては、1日あたり240 TBを超えるデータを取り込んでいます。
+
+[バンガロールで開催されたOpen House Roadshow](https://clickhouse.com/videos/open-house-bangalore-inmobi) において、InMobiのエンジニアであるAnand TirthgirikarとAmber Vaidが「Project Velocity」のストーリーを語ってくれました。これは、パブリッシャー向けのレポーティングを再設計し、リアルタイムな意思決定に十分なほど高速で、厳格なSLAを満たせるほど信頼性が高く、InMobiの成長に追従できるほどコスト効率に優れたものにするための取り組みです。
+
+Anandの言葉を借りれば、「これは、私たちにとって最も重要なユースケースの一つに対し、高速で信頼性が高く、コスト効率の良いソリューションを構築するためにClickHouseをどのように採用したか、というストーリーです」。
+
+<iframe width="768" height="432" src="https://www.youtube.com/embed/JL25O63VUnM" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe>
+
+## 旧システム:遅すぎてコストもかかる
+
+数千ものパブリッシャーにとって、InMobiのAPIは自社インベントリの状況を覗き見る窓です。Anandは次のように説明します。「彼らはOS、デバイスタイプ、地域などのさまざまなディメンションをまたいで、何件のインプレッションとクリックが発生しているのかをリアルタイムで知りたがっています」。
+
+これらのAPIにはP99レイテンシ10秒以下というSLAが課せられています。しかし時間の経過とともに、その約束を守ることが難しくなってきました。「以前の構成では、ピーク時に1分を超えるという問題が発生していました」とAnandは語ります。
+
+しかも負荷は決して小さくありません。システムは1日あたり40万件以上のリクエストを処理しており、クエリ量は時間帯によって毎分200から600クエリにのぼっていました。
+
+さらにチームが「コスト問題」と呼ぶ課題もありました。InMobiの既存スタックは、ブロブストレージから直接読み込むサーバーレスウェアハウスに依存していました。「ライセンス費用は月額約4万ドルでした」とAnandは言います。「そしてコストモデル上、トラフィックが増えれば、コストも線形に増加する仕組みでした」。
+
+## ClickHouseでのPOC成功
+
+何かを変えなければならないのは明らかでした。チームに必要だったのは、サブセカンドのパフォーマンス、コストを抑える方法、そしてInMobiの成長に追従できる分析プラットフォームでした。
+
+そこで彼らはベイクオフを開催し、同じパブリッシャーレポーティングワークロードに対して複数のデータベースをテストし、クエリレイテンシ、圧縮率、インフラ要件で評価しました。
+
+「私たちにとって最も良かったのがClickHouseでした」とAnandは語ります。ClickHouseは「既存の構成と比較して3倍速いクエリパフォーマンス」を実現し、さらに5:1の圧縮比を達成しました。「そして発行されるすべてのクエリにおいて、スキャン行数が70%減少することを観測しました」と彼は付け加えます。
+
+インフラの比較も同様に印象的でした。旧サーバーレスウェアハウスは、稼働を維持するためだけに、56から448 vCPU、0.5から3.5 TB RAMへと頻繁にオートスケールしていました。ClickHouseは同じワークロードを、固定された60 vCPUと240 GB RAMで処理できました。
+
+「これが80%のコスト削減を実現できた理由を物語っています」とAnandは語ります。
+
+## InMobiのClickHouseベースのアーキテクチャ
+
+新しいClickHouseベースの本番アーキテクチャでも、データはクラウドストレージから流れ、1時間ごとに更新されますが、取り込みは旧ウェアハウスではなくClickHouseに書き込むSparkジョブを経由するようになりました。
+
+![InMobi User Story Issue 1230 (1).jpg](https://clickhouse.com/uploads/In_Mobi_User_Story_Issue_1230_1_1c9c42ca93.jpg)
+
+*1時間ごとのSpark取り込みと、分離されたリーダー/ライターサービスを用いたInMobiのClickHouseベースのアーキテクチャ。*
+
+ClickHouseのマネージドインスタンスを使用し、読み取りと書き込みのために親子サービスパターンを採用しました。「リーダーサービスは、バックエンドがすべてのAPIリクエストを処理するための専用リソースとして用意しています」とAnandは説明します。「そしてライターサービスは、データ取り込みのために毎時起動して、終わったらシャットダウンする一時的なサービスです」。
+
+両サービスは同じ分散ストレージを共有していますが、コンピュートはきれいに分離されています。「これにより、リーダーサービスは無事に保たれ、レイテンシの問題に直面することがありません」と彼は述べます。
+
+ストレージに関しては、変化は劇的でした。非圧縮で10 TBを超えていたデータが、Parquetで2.5 TBに、そしてClickHouseではおよそ500 GBになりました。
+
+## 本番稼働の課題と解決策
+
+もちろん、有望なアーキテクチャ図を実戦投入できる本番システムへと仕上げるには、いくつかの難問を解決しなければなりませんでした。Amberが、チームが直面した最大の課題と、それらをどのように解決していったかを説明してくれました。
+
+## 課題 #1 - 大規模なアトミック取り込み
+
+フォールトトレランスは素晴らしいものです…ただしデータ保証を破壊しない限り。Amberは次のように説明します。「Sparkはフォールトトレラントですが、いずれかのエグゼキューターが停止したりタスクが失敗すると、パイプラインが再トリガーされ、ターゲット層で重複が発生します」。パブリッシャー向けのメトリクスにおいて、これは許容できませんでした。
+
+![InMobi User Story Issue 1230.jpg](https://clickhouse.com/uploads/In_Mobi_User_Story_Issue_1230_b711389f2c.jpg)
+
+*検証とパーティション移動によるアトミック取り込みを行うClickHouseのステージングから本番へのパイプライン。*
+
+そこでチームは、ステージング → 検証 → 本番のパターンを導入しました。Sparkは毎時のバッチをステージングテーブルに書き込み、システムは行数とKPIを期待値と照合して検証します。検証に合格した場合にのみ、ClickHouseの [MOVE PARTITION](https://clickhouse.com/docs/sql-reference/statements/alter/partition#move-partitionpart) コマンドを使用して本番テーブルへ昇格させます。何かが失敗すれば昇格は行われないため、本番ビューはクリーンかつアトミックに保たれます。
+
+## 課題 #2 - 同時実行性と接続数の制限
+
+POCの段階では、チームはClickHouseへのクエリに対してシンプルな「fire and forget」アプローチを採っていました。「POCの数値は非常に魅力的で良好で、このまま進められそうに見えました」とAmberは語ります。「しかし本番化したとき、小さな問題に直面しました。それがmax_concurrent_connectionsです」。
+
+本番環境では、アプリケーション層がClickHouseとのセッションを開きっぱなしにしており、各セッションはそれぞれメモリオーバーヘッドを抱えていました。「そのメモリオーバーヘッドのせいで」と彼は説明します、「クラスタが詰まり、メモリ不足例外が発生しました」。
+
+修正は、同時実行性の考え方を見直すことでした。チームは軽量な同時実行性のためにgevent with greenletsを採用し、サービングプラットフォームを正しい非同期パターンを使うように書き換え、接続あたりのフットプリントを削減しました。変更後、ピークトラフィック時でもP99レイテンシは6秒以下を維持しました。「そして、それ以来OOMの問題には一度も遭遇していません」とAmberは語ります。
+
+## 課題 #3 - ダウンタイム時のフォールバック
+
+利害関係の大きさを考えると、InMobiのレポーティングAPIは盤石でなければなりません。「外部のパブリッシャーがこのテーブルにクエリを発行するため、ダウンタイムを発生させるわけにはいきません」とAmberは語ります。
+
+フォールバックとして、チームはGrafanaのダッシュボードをClickHouseのサーバーメトリクスに接続し、シンプルなルールを定めました。「5分のウィンドウで2%を超える失敗を観測した場合、トラフィックを自動的にサーバーレスプラットフォームに戻します」と彼は説明します。「これが信頼性を提供する方法です」。
+
+## 課題 #4 - ステップ関数型のコストスケーリング
+
+InMobiは、データ量が今後2年間で5倍に成長すると予測しています。彼らのストレステストでは、ClickHouseノードまたはレプリカを1つ追加するごとに30%多くのトラフィックを処理できることが示されました。
+
+これにより、コストの成長は直線ではなくステップ関数となり、コストはクエリが少しずつ増えるたびに上がるのではなく、チームが意図的にキャパシティを追加したときにのみ増加するようになりました。Amberの言葉を借りれば、「レプリカを増やすだけで、時間とともに多くのトラフィックを処理できるのです」。
+
+## ClickHouseで20倍高速、80%安く
+
+取り込み、同時実行性、信頼性、コストのすべてが制御下に入り、システムは本格的な本番稼働の準備が整いました。そしてClickHouseは期待を上回る成果を出しました。
+
+Amberはこう語ります。「以前は1分を超えていたP99レイテンシは、ピーク時でも3秒未満にまで短縮されました」。プラットフォームは現在、10 TBを超える非圧縮データ(ClickHouseでは圧縮しておよそ500 GB)に対して、1日40万件を超えるクエリを余裕で処理しています。
+
+一方で月額コストは4万ドルから8000ドルへと80%削減されました。「これは私たちにとって大きな勝利でした」とAmberは語り、「サーバーレスプラットフォームのコストは指数関数的に増えていきましたが、今では今後2年間のコストがどうなるかがわかっています」と続けます。
+
+信頼性も向上しました。アトミック取り込み、適切な接続管理、自動フォールバックにより、チームは火消しに追われることなくSLAを満たせるようになりました。そしてパブリッシャーは、より応答性の高いレポーティングAPIを通じて、より速くインサイトを得ています。
+
+メリットは1つのワークロードを改善することにとどまりませんでした。Data PlatformチームはProject Velocityをパブリッシャーレポーティング向けの一回限りの修正として扱うのではなく、全社的な分析パターンへと発展させました。「私たちのメインの目標は、これらのAPIをInMobiのすべての開発者に提供し、できる限り汎用的にすることでした」とAmberは語ります。
+
+チームは、クエリ履歴を分析し、インデックスオプションを含む最適化された [CREATE TABLE](https://clickhouse.com/docs/sql-reference/statements/create/table) 定義を提案するツールを構築しました。汎用的な取り込みパイプラインが、[型変換](https://clickhouse.com/docs/sql-reference/functions/type-conversion-functions) や、Deltaまたはブロブストレージからの ClickHouse への同期を処理します。ClickHouseの内部に精通していないInMobiの開発者にとって、Project Velocityは複雑さを抽象化し、新たな分析ユースケースのために実戦で鍛えられた既製の基盤を提供します。
+
+## 学んだ教訓と今後の展望
+
+これまでの歩みを振り返り、AnandとAmberは、現在InMobiでデータシステムを設計する際の指針となっているいくつかの教訓を挙げてくれました。
+
+第一に、取り込みで重要なのは速度だけでなく*正確性*であるということ。Sparkのリトライと毎時バッチにより、部分書き込みや重複書き込みは避けられませんでした。ステージングと検証のモデルが、「私たちが顧客に報告しているデータは、すべて正確で検証されたもの」(Anand)であることを保証します。
+
+次に、非同期の接続管理は「APIにとって不可欠」です。アプリケーションを高速なデータベースに向けるだけでは不十分です。同時実行モデル、そして接続が作成、再利用、クリーンアップされる方法こそが、信頼性とゼロ障害のプラットフォームを保証するのです。
+
+チームはまた、予測可能性はパフォーマンスと同じくらい価値があることを学びました。ClickHouseで線形のコストカーブからステップ関数モデルへと移行したことで、トラフィック増加に応じた支出を予測できるようになりました。Anandの言葉を借りれば、「予測可能性はInMobi規模では金に等しい」のです。
+
+最後に、ガードレール、つまり取り込み時の検証、セカンダリシステムへの自動フォールバック、モニタリングのエラー閾値は必須です。各レイヤーが、外部の顧客があなたのエンドポイントを叩く際の運用リスクを低減します。
+
+最終的に、Project Velocityはシンプルなミッションから始まりました。それは、パブリッシャーレポーティングをより速く、より安くすることです。ClickHouseはそれを実現し、それ以上の成果をもたらしました。InMobiに対し、テラバイト規模で高速、信頼性が高く、経済的にも賢明な分析を構築するための基盤を与えてくれたのです。
+
+「私たちはスピードを求めてClickHouseを採用しました」とAnandは語ります。「結果として、スピードだけでなく、コスト面でも高速・信頼性・予測可能性を兼ね備えたプラットフォームの構築につながりました。それがInMobiにおけるProject Velocityの意味です」。
+
+
+---
+
+## データ運用をスケールさせる準備はできていますか?
+
+ClickHouseがあなたのデータでどのように機能するかを試してみませんか？ClickHouse Cloudなら数分で始められ、$300の無料クレジットも受け取れます。
+
+[サインアップ](https://console.clickhouse.cloud/signUp?loc=blog-cta-781&utm_blogctaid=781)
+
+---
+
+---
+
+## 毎秒100万イベント: LagoがClickHouse Cloudで使用量ベースの課金をスケールさせる方法
+Published: 2026-06-02T03:14:51+00:00
+URL: https://clickhouse.com/blog/lago-jp
+
+---
+title: "毎秒100万イベント: LagoがClickHouse Cloudで使用量ベースの課金をスケールさせる方法"
+date: "2026-06-02T03:14:51.665Z"
+author: "ClickHouse"
+category: "User stories"
+excerpt: "「私たちは本当に多くのデータベースを試してきました。実際にうまく機能し、しかも理解しやすかった唯一のものがClickHouseでした。」 「私たちは、毎秒100万イベントの取り込みを提供できる唯一の課金ソリューションです。ClickHouseがなければ、これは実現できなかったでしょう。"
+---
+
+# 毎秒100万イベント: LagoがClickHouse Cloudで使用量ベースの課金をスケールさせる方法
+
+## まとめ
+
+* Lago は ClickHouse Cloud を活用して大量の利用イベントを取り込み・保存・クエリし、大企業向けのリアルタイムな従量課金や複雑なマネタイズを実現しています
+* ClickHouse Cloud と ClickPipes への移行により、Lago は毎秒1万イベントの規模から、毎秒100万イベントというエンタープライズ規模のワークロードへとスケールしました。
+* ClickHouse により、Lago は自社でデータ基盤を構築・運用することなく、より大規模で複雑な顧客に対して、正確かつ低レイテンシーな課金処理を提供できるようになりました。
+
+## ビリングの基盤を築く
+
+[Lago](http://www.getlago.com) のチームには、こんな言い回しがあります。「友達には、ビリングシステムを自作させない」と。
+
+2010年代後半、このフランスのスタートアップの創業者たちは、ヨーロッパで急成長を遂げていたフィンテック企業 Qonto で働いていました。多くのプロダクトチームと同じく、彼らもビリングはサイドプロジェクト程度のもの——さっと片付けて次に進める類のものだと考えていました。ところが実際には、新しい料金モデル、新しい顧客要件、新しいエッジケースが次々と現れ、複雑さは一気に積み上がっていきました。当初はわずかなスクリプトの集まりだったものが、10〜15 名のフルタイムエンジニアで支える巨大な社内プラットフォームに膨れ上がっていったのです。彼らが学んだのは、ビリングは重要なインフラであり、プロダクト、地域、顧客が増えるほど難しさが増していくということでした。
+
+2021 年に Lago を立ち上げたとき、彼らの目標は単なる新しいビリングツールを作ることではありませんでした。ビリングの作り方そのものを変えること——ブラックボックスでも、マイクロサービスの寄せ集めでもない形を実現することでした。オープンソースは、その理念の中核にあり、哲学的な理由と同じくらい実務的な理由からも重要でした。ビリングが企業の収益の屋台骨である以上、それは透明であり、拡張可能であり、プライバシー・コンプライアンス・セキュリティを最大限に実現できるものでなければなりません。Lago は、開発者がコードを検査し、自社のシステムに合わせて適応させ、硬直したブラックボックス的なワークフローに縛られずに済むように設計されました。
+
+それは同時に、彼らが市場で目にしていた状況への反応でもありました。彼らの言葉を借りれば、「他の多くのビリングベンダーは顧客を囲い込んだり、柔軟性が限定的だったりするため、顧客が結局ビリングロジックの多くを自社内で構築する羽目になっている」のです。スケールしてくると、そのモデルは綻び始めます。Lago の Head of Growth である Lisa Bardet はこう語ります。「企業はある程度の規模と複雑性に達すると、多くの回避策を作らざるを得なくなります。そうなるタイミングでお客様が私たちのドアを叩いてくれることが多いんです。」
+
+Lago は最初から複雑なビリングのために作られました。つまり、従量課金、サブスクリプション、クレジット、そしてほぼあらゆる価格モデル(あるいはそれらのハイブリッド)をサポートしています。AI 駆動のプロダクトや API ファーストのビジネスがソフトウェアの売り方を一変させるなかで、その判断はますます意味を持つようになっています。すべてのリクエスト、すべてのトークン、すべての機能利用が課金対象イベントになるのです。Lisa は言います。「だからこそ、取り込めるイベント数をスケールできることが極めて重要なのです。それによって私たちは、いかなる時点でも顧客のマージンを最も正確に提示できるようになります。」
+
+## なぜ Lago は ClickHouse Cloud に行き着いたのか
+
+Lago のプラットフォームが成熟するにつれ、提供先となる企業の顔ぶれも変わってきました。当初は急成長中のスタートアップ向けのソリューションだったものが、PayPal、CoreWeave、Mistral といった、より大規模で複雑、かつ要求の厳しいエンタープライズに採用されるケースが増えています。そして上位市場へのシフトとともに、データ量も爆発的に増加します。ある時点を境に、ビリングはアプリケーションの問題ではなく、データの問題になるのです。
+
+その新たな現実を支えるためには、Lago のインフラを根本から見直す必要がありました。チームに必要だったのは、膨大な使用イベントのストリームをリアルタイムに取り込み、効率的にクエリし、顧客のニーズの変化に合わせて進化できるシステム——しかも、Lago を硬直的・プロプライエタリな制約に押し込めることのないシステムでした。「オープンソース企業として、特定のソリューションに縛られたくなかったんです」と Engineering Lead の Jérémy Denquin は言います。
+
+チームは代表的な候補をいくつも評価しました。Redshift、Timescale、DuckDB、そして Postgres ベースのアプローチなど。それぞれを実際のワークロードでテスト・ベンチマークし、限界まで負荷をかけてみました。あるものは取り込みで詰まり、あるものは構成が重く、運用面でスケールさせるには複雑すぎました。「本当にいろいろなデータベースを試しました」と Jérémy は語ります。「本当にうまく動いて、しかも理解しやすかったのは ClickHouse だけでした。」
+
+当時、毎秒100万イベント規模のワークロードはまだ少し先の話でした。Lago の当初の目標は毎秒1万〜2万イベント程度——それでも、既存システムが快適にさばけるレベルをすでに大きく超えていました。そのレベルでも ClickHouse は際立っていました。導入直後から高速で、書き込み量の多さを難なくこなし、何かを動かすために何週間ものチューニングを必要としませんでした。ドキュメントは明快で、エコシステムは活発で、柔軟性とコントロールを保てるという点でチームのオープンソース哲学にもフィットしていました。
+
+ClickHouse を選ぶことが一つの決断だとすれば、それをどう運用するかはもう一つの決断でした。Jérémy はインフラ面では実質的に一人で運用しており、チームとしてもデータベース運用者になるつもりは毛頭ありませんでした。「時間がなかったんです」と彼は言います。「私にとっては、ClickHouse Cloud を使うほうがはるかに簡単でした。」マネージドサービスがスケーリング、アップグレード、メンテナンスの負担を肩代わりしてくれることで、チームはインフラではなくビリングソリューションに集中できるようになりました。
+
+[ClickHouse Cloud](https://clickhouse.com/cloud) は Lago の既存パイプラインにも自然に収まりました。チームは使用イベントのストリーミングに Kafka と Redpanda を多用しています。ClickHouse Cloud のネイティブな取り込みサービスである [ClickPipes](https://clickhouse.com/clickpipes) のおかげで、独自コネクタを構築・保守することなくデータを ClickHouse に流し込めるようになりました。プライベートネットワーキング、ネイティブな統合、明快な運用モデルを備えた ClickHouse Cloud は、インフラを「もう一つの仕事」にすることなく、Jérémy とチームに必要なパフォーマンスと信頼性をもたらしました。
+
+## ClickHouse ベースの Lago のビリングエンジン
+
+現在、ClickHouse は Lago のビリングインフラの中心に位置しています。プラットフォームは ClickHouse を 3 つのコアワークロードに利用しています。大量の課金イベント取り込み、利用データに対する高速な[分析クエリ](https://clickhouse.com/resources/engineering/oltp-vs-olap)、そしてプロダクト全体にわたるアクティビティ/監査ログです。
+
+このうち最大規模なのが課金イベントのパイプラインです。Lago の顧客のアプリケーションで課金対象のアクション——API 呼び出し、機能の利用、消費されたコンピュートユニットなど——が発生するたびに、そのイベントは Kafka または Redpanda を経由してストリーミングされ、ClickPipes 経由で ClickHouse に取り込まれます。多くの顧客では、毎秒数万件のイベントが常時システムを流れることになります。そして一部の顧客では、それをはるかに上回ります。
+
+たとえばあるラージカスタマーでは、Lago に毎秒約 100 万件のイベントの取り込みをサポートすることを求めてきました。「私たちはそれを成し遂げ、成功させました」と Jérémy は言います。このワークロードの規模は、より大規模なエンタープライズが消費ベースのモデルを採用するなかで、従量課金がどこへ向かっているのかを示しています。「ビリングサイドで毎秒100万件のイベント取り込みを提供できるのは、市場で私たちだけです」と彼は付け加えます。「ClickHouse なしでは不可能でした。」
+
+Lago は、その使用状況をリアルタイムにクエリするためにも ClickHouse を利用しています。プラットフォームは消費量を計算し、価格ロジックを適用し、正確な使用データを最小限のレイテンシで顧客に提供する必要があります。ClickHouse の[カラムナストレージ](https://clickhouse.com/resources/engineering/what-is-columnar-database)とクエリ性能のおかげで、データ量が増え続けてもなお、事前集計や複雑なパイプラインなしに生のイベントデータに対して直接これらの分析ワークロードを実行できます。
+
+最近追加されたのが、アクティビティ/監査ログです。Lago に対するすべての API 呼び出しは ClickHouse に記録され、プラットフォーム全体で何が起きているかについて、完全で検索可能な履歴をチームに提供します。このデータは社内でデバッグと可観測性のために、社外では顧客に自分たちのアクティビティを可視化するために利用されています。これもまた、最初は小さく始まっても急速にスケールするタイプのワークロードであり、パフォーマンスと信頼性が重要になるもう一つの領域です。
+
+## Lago と ClickHouse のこれから
+
+Lago が上位市場への進出を続けるなかで、ClickHouse の役割はますます大きくなっています。チームはすでにコアの課金イベントとログを超えて利用範囲を拡大し、リアルタイムの利用トラッキング、集計、分析へとさらに踏み込んでいます。目指すのは、自社プロダクトがどう使われ、その利用がどう収益に転換されているかを、顧客にこれまで以上に明確かつ即時に見せることです。「これからもますます使うことになるでしょう」と Jérémy は ClickHouse について語ります。
+
+この拡大は、Lago がサービスを提供する顧客層と密接に結びついています。彼らは最高水準の課金精度、パフォーマンス、信頼性を要求します。「私たちはどんどん大きな組織にサービスを提供する方向に進んでいます」と Lisa は言います。「そのレベルでスケールしながらパフォーマンスを維持するうえで、ClickHouse は大きな役割を果たしています。私たちのインフラの中核コンポーネントです。」
+
+時間が経つにつれ、ClickHouse は Lago のデータワークロードのさらに大きな部分を担うようになるとチームは見ています。現在も一部の分析やイベントストレージは Postgres 上で動いていますが、長期的な方向性は明確です。「いずれ本番環境では、イベントストアとしての Postgres を取り除くことになるでしょう」と Jérémy は語ります。目指すのは、生の取り込みからリアルタイム分析まですべてを扱える、単一の高性能な基盤に集約しつつ、運用をシンプルに保つことです。
+
+Lago が成長し、より大規模で複雑な組織を迎え入れていく中で、その基盤の重要性はかつてないほど高まっています。複雑なビリングをシンプルに感じさせるというビジョンから始まった企業にとって、ClickHouse は最も困難な部分をボンネットの内側にしっかり収めておくための鍵となっているのです。
+
+---
+
+## 今すぐ始める
+
+ClickHouseが自分のデータでどのように動作するか試してみませんか？数分でClickHouse Cloudを始められ、$300の無料クレジットがもらえます。
+
+[サインアップ](https://console.clickhouse.cloud/signUp?loc=blog-cta-779&utm_blogctaid=779)
+
+---
+
+---
+
+## ReploがClickHouseで1,000億件以上のイベントを最適化して学んだこと
+Published: 2026-06-02T03:11:36+00:00
+URL: https://clickhouse.com/blog/replo-jp
+
+---
+title: "ReploがClickHouseで1,000億件以上のイベントを最適化して学んだこと"
+date: "2026-06-02T03:11:36.651Z"
+author: "ClickHouse"
+category: "User stories"
+excerpt: "Reploは100億件超のイベントをClickHouseでリアルタイムに分析し、4,000以上のShopifyマーチャント向けに高速で快適な分析ダッシュボードを提供しています。"
+---
+
+# ReploがClickHouseで1,000億件以上のイベントを最適化して学んだこと
+
+## まとめ
+
+- Reploは、Shopifyマーチャントが運用するライブページ、オファー、A/Bテストに対して、製品内でリアルタイム分析を提供するためにClickHouseを活用しています。
+- 同チームは複数のデータモデルを試行錯誤しながら、事前計算、重複排除、再計算の境界がスケールにおけるリアルタイム分析にどう影響するかを学んできました。
+- 現在、ClickHouseは毎秒3,000〜5,000イベントの取り込みと、1,000億件を超えるイベントの分析を、ダッシュボードの高速かつレスポンシブな状態を維持しながら支えています。
+
+昨年9月、[Replo](https://www.replo.app/) のエンジニアである Ryan Voris は、サンフランシスコで開催された ClickHouse のミートアップに参加しました。多くのミートアップと同様、満足度の高い顧客が自社のデータ運用をどのように ClickHouse でスケールさせたかを語る場でした。しかし Ryan にとっては、少し物足りなさが残るものでした。
+
+「みんなが ClickHouse の素晴らしさを語り、見事なユースケースを次々と紹介していたんです」と彼は振り返ります。「でも、『こんな風に失敗しました』とか『こうやるとうまくいきませんでした』『これはやめておいた方がいい』といった話は誰もしていなかったんですよ。」
+
+そこで Ryan は、[前回のサンフランシスコ・ミートアップ](https://clickhouse.com/videos/meetupsf_dec_20254) に登壇した際、これまでとは違うことをしようと決めました。きれいに整えられたケーススタディの代わりに、4,000社を超える Shopify マーチャントから信頼される AI 搭載のページビルダーである Replo が、自社の[アナリティクス製品](https://www.replo.app/product/analytics-and-insights) を ClickHouse 上に構築するまでの実話を、失敗や移行、アーキテクチャの仕切り直しまで含めて率直に語ったのです。
+
+<iframe width="768" height="432" src="https://www.youtube.com/embed/nDL48eSsAa8?si=PLF1A8zhHGYPJz5s" title="YouTube video player" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" referrerpolicy="strict-origin-when-cross-origin" allowfullscreen></iframe>
+
+その結果として生まれたのは、1,000億件を超えるイベントを処理・分析しながら、ダッシュボードを高速に保ち、アトリビューションを正確に維持し、オンライン小売業者にとって使えるアナリティクスを提供できるシステムです。
+
+## ライブキャンペーンのためのリアルタイム分析
+
+[Replo Analytics](https://www.replo.app/product/analytics-and-insights) は製品の中に直接組み込まれています。顧客はこれを使ってキャンペーン全体のセッション、購入、コンバージョン率、平均注文額、A/B テストの成績を追跡します。新しいページや広告を立ち上げたブランドは、数時間後ではなく即座に[リアルタイム分析](https://clickhouse.com/resources/engineering/what-is-real-time-analytics) が見えることを期待します。
+
+裏側では、これは秒間 3,000~5,000 件のペースで ClickHouse へと流れ込むフロントエンドイベントの絶え間ないストリームを意味します。「クリック、ページビュー、購入などを追跡しています」と Ryan は説明します。「ページ上で購入があるたびに、そのイベントと購入額を記録し、それをもとに平均注文額、セッションあたりの売上、コンバージョン率などの情報を算出しています。」
+
+Replo のトラフィックパターンは予測可能なリズムに従い、北米の業務時間帯にピークを迎え、夜間には落ち着きます。しかし、期待値が変わることはありません。ダッシュボードは応答性を保たなければなりません。アトリビューションは正確でなければなりません。そして、アナリティクスがライブキャンペーンを不透明あるいは信頼できないものに感じさせるような遅延を持ち込むことは許されません。
+
+最初から(Ryan が入社する以前から)、Replo はこのシステムを ClickHouse 上に構築していました。ClickHouse がボリュームを処理できるかどうかについて疑念はほとんどありませんでした。本当の問題は、Replo Analytics が成長し、利用が拡大し、要件が進化する中で、いかに高速性を保ちながら分析をモデル化・計算するかでした。
+
+## 1テーブルから事前計算へ
+
+Replo の最初のアナリティクスパイプラインはシンプルなものでした。すべてのイベントが単一のテーブルに流れ込み、ダッシュボードのクエリは毎回その場でメトリクスを再計算していました。
+
+これは数ヶ月間うまく機能しましたが、利用が拡大するにつれ問題が現れ始めました。直近1時間のものでも半年前のものでも、すべてのクエリが同じテーブルにヒットし、同じ計算を繰り返していたのです。セッション単位のメトリクスは、そのセッションに変化がなくても何度も再計算されていました。
+
+スキーマ自体も助けにはなりませんでした。Ryan が「変な感じのネストされたペイロード」と表現するものに、他に入りきらないものが詰め込まれていました。「あまり効果的とは言えませんでした」と彼は語ります。「結局これは破綻し、新しいテーブルが必要だと気付きました。」
+
+次のバージョンでは、顧客固有の名前空間に始まり、時間とセッション識別子が続くという、より明確な構造が導入されました。イベントを顧客とセッションでグルーピングすることで、クエリのスコープをより厳密に絞り込み、マーチャントが実際にデータとどう対話しているかを反映できるようになりました。これは、アナリティクスを延々と再計算するものではなく、一度計算して再利用するものとして扱うことへの一歩でした。
+
+そこからチームは、事前計算された結果を保持するための2つ目のテーブルを導入しました。総購入額や AOV のようなメトリクスをあらかじめ計算し、結果を保存しておくことで、クエリのコストを下げるという発想です。ほとんどのイベントは計算をまったく必要としませんでしたが、Ryan が説明するように、「計算が必要なセッション(つまり購入)については少しだけ興味深い話になります。」
+
+これを管理するため、チームは「マーク/アンマーク戦略」を実装しました。[SummingMergeTree](https://clickhouse.com/docs/engines/table-engines/mergetree-family/summingmergetree) を使って、処理が必要なセッションを追跡し、計算が完了したらクリアするという仕組みです。裏側では、[リフレッシュ可能なマテリアライズドビュー](https://clickhouse.com/docs/materialized-view/refreshable-materialized-view) が一定間隔で実行され、巨大な計算関数をトリガーして、マークされた各セッションのすべてのイベントを集め、集計を行い、最終結果を ClickHouse に書き戻していました。
+
+複雑ではありましたが、機能していました。クエリは明らかに高速化されました。「これまでうちのシステムを使えなかった顧客が、実際に使えるようになりました」と Ryan は言います。書き込み時の遅延は多少ありましたが、彼の言葉を借りれば「それでもリアルタイムに感じられた」とのこと。パフォーマンスが制御下に入り、数百億件のイベントが移行されると、チームの自信は高まりました。Ryan は当時を振り返ってこう言います。「プロダクトオーナーたちは『これは素晴らしい、もっと機能を追加しよう』と思ったんです。」
+
+## リアルタイムと結果整合性の衝突
+
+次の大きな機能要望のひとつが、フラクショナル(分割)アトリビューションでした。購入を単一のページにフルで帰属させるのではなく、顧客がセッション中に接触したすべてのページに価値を分配したい、というものです。誰かが5ページを訪問して5ドル使ったら、各ページに1ドルずつ割り当てる、というわけです。理屈は単純に聞こえますが、実際にやってみると数字が合いませんでした。「何かおかしいと気付きました」と Ryan は言います。「計算が合わなかったんです。」
+
+下層のロジックは正しそうに見えました。システムはどのイベントがどのセッションに属するかをすでに把握しており、チームはイベントが書き込まれれば、クエリされたデータはそれらのセッションのクリーンに重複排除されたビューを反映するはずだと考えていました。「そこで、マージツリーは*いずれ*重複排除されるものであって、即座に重複排除されるものではないと気付きました」と Ryan は語ります。「私たちはリアルタイムの情報を使い、意図的に重複データをデータベースに書き込んでいたため、自ら問題を引き起こしていたのです。」
+
+幸いなことに、ClickHouse には [DISTINCT](https://clickhouse.com/docs/sql-reference/statements/select/distinct) や [FINAL](https://clickhouse.com/docs/sql-reference/statements/select/from#final-modifier) のような句があり、クエリ時に重複排除を強制できます。これらを適用すると結果は即座にクリーンになりました。これらの変更によって、テストデータは期待通りの挙動を示し始めました。数十万行程度のローカルデータセットでは、すべて辻褄が合っていました。「クエリはまだサクサク動き、移行も簡単でした」と Ryan は振り返ります。「うまくいっているように見えたんです。でもデプロイした途端、ほぼ即座にすべてが遅くなり始めました。」
+
+今回、チームが詳しく見てみると、同じセッションが何度も繰り返し再処理されていることが分かりました。何ひとつクリアされていなかったのです。「どうもセッションがアンマークされていないようです」と、バックログが膨らみ続ける中、Ryan は Slack でチームにそう書きました。
+
+犯人は、リアルタイム再計算と、大規模なテーブル全体での重複排除の組み合わせでした。テストでは安価だったクエリが、巨大なデータセットをスキャンする必要が生じ、再計算を駆動するマテリアライズドビューの1分間のリフレッシュウィンドウより長い時間がかかるようになりました。前のサイクルが終わる前に、次のサイクルが起動してしまうのです。
+
+Ryan の言葉を借りると、「自分で自分の足を撃ち、システム全体に暴走列車を引き起こしてしまった」状態でした。その時点で、彼は言います。「問いはひとつだけでした。『どうやってこれを直すか?』」
+
+## 最後のアプローチ:データを小さく保つ
+
+最終的な解決策に簡単にたどり着いたわけではありません。「これが次に試したアプローチだと言ったら嘘になります」と Ryan は認めます。「『マーク/アンマーク』方式を必要以上に長く動作させようとしました。それから、あらゆる重複排除や異なる TTL を使った数十個の CTE も試しました。」
+
+最終的に問題を解決したのは、時間に対する考え方のリセットでした。アナリティクスを再計算する必要があるのは、購入がたった今発生したからに他なりません。Ryan が指摘するように、「顧客が6ヶ月前に購入することは絶対にあり得ません。だから6ヶ月前のデータについては気にする必要がないんです。」
+
+この気付きから、ライブセッションイベント専用に設計された新しいテーブルが生まれました。履歴データセット全体をスキャンする代わりに、このテーブルは直近40分間のアクティビティだけを、しかも購入関連のイベントだけを追跡します。「これは私たちが持つ1,000億件のレコードと比べれば、ごくわずかなデータです」と Ryan は言います。クリックやページビューは他の場所に存在しますが、それらが再計算を支配することはなくなりました。
+
+スコープが絞られたことで、処理ロジックも簡素化できました。チームは深くネストされた CTE から離れ、単一のマテリアライズドビューの中で結合(JOIN)を中心とした計算へと作り直しました。出来上がった flusher ビューはよりコンパクトで、理解しやすく、暴走的な再計算に陥る可能性もはるかに低くなりました。
+
+今度はシステムが持ちこたえました。クエリは高速なままでした。書き込み遅延は1分前後で安定しました。履歴データの移行にはさらに労力がかかり、古いイベントをバックフィルするためのスクリプトが必要でしたが、そのトレードオフは意図的なものでした。Ryan の言葉を借りると、「これは扱いやすく、限定された問題です。移行を処理するスクリプトを書けばよく、ライブシステムに対して、はるか過去に起きたことを自動で自己修復するほどのフォールトトレラント性を求める必要はないんです。」
+
+## 次に向けたスケーラブルな基盤
+
+4ヶ月経った今でも、Replo のアナリティクスアーキテクチャは健在です。「すべてが以前と変わらずサクサク動いています」と Ryan は言います。
+
+コアパイプラインが安定したことで、チームはアナリティクスデータのモデリングとクエリ手法の改良を継続しています。それには、[LowCardinality](https://clickhouse.com/docs/sql-reference/data-types/lowcardinality) カラムの導入、JSON ペイロードから頻繁にアクセスされるフィールドのマテリアライズ、そして [Nullable](https://clickhouse.com/docs/sql-reference/data-types/nullable) 型から離れてよりシンプルなデフォルト値を採用することなどが含まれます。
+
+Ryan はこれがゴールではないと明言しています。「もっと多くのパフォーマンスを引き出せると考えています」と彼は語ります。さらに、探求すべき [ClickHouse のクエリ最適化](https://clickhouse.com/resources/engineering/clickhouse-query-optimisation-definitive-guide) は山ほどあります。「やりたいことはまだまだたくさんあります。ただ、まだそこまで手が回っていないだけなんです。」
+
+結局のところ、Replo の ClickHouse ストーリーは、特定のひとつの最適化や機能に集約されるものではありません。それは、リアルタイムシステムがどこでシンプルさから恩恵を受けるか、そしてトレードオフを明確にすることが、いかに理解しやすく、運用しやすく、スケールしやすいシステムにつながるかを学ぶ物語なのです。
+
+---
+
+## 今すぐ始める
+
+ClickHouseが自分のデータでどう動くか試してみませんか?数分でClickHouse Cloudを始められ、$300分の無料クレジットも受け取れます。
+
+[サインアップ](https://console.clickhouse.cloud/signUp?loc=blog-cta-777&utm_blogctaid=777)
+
+---
+
+---
+
+## Critical ManufacturingがClickHouseを活用して工場現場にリアルタイムインテリジェンスをもたらす方法
+Published: 2026-06-02T03:08:55+00:00
+URL: https://clickhouse.com/blog/criticial-manufacturing-jp
+
+---
+title: "Critical ManufacturingがClickHouseを活用して工場現場にリアルタイムインテリジェンスをもたらす方法"
+date: "2026-06-02T03:08:55.611Z"
+author: "ClickHouse"
+category: "User stories"
+excerpt: "「ClickHouseは私たちの取り組みに完璧にマッチしていました。とにかく、ちゃんと動いてくれたんです。」 Ricardo Magalhaes、リードソフトウェアエンジニア"
+---
+
+# Critical ManufacturingがClickHouseを活用して工場現場にリアルタイムインテリジェンスをもたらす方法
+
+## まとめ
+
+- Critical Manufacturingは、ClickHouseを活用してリアルタイム分析とオペレーショナルインテリジェンスを実現し、製造現場で発生する数十億件のイベントをサブ秒単位のインサイトへと変換しています。
+- SQL ServerからClickHouse Cloudへ移行したことで、同チームはKafkaベースの高速なデータ取り込み、リアルタイムダッシュボード、そして最小限のオーバーヘッドでスケーラブルな分析を実現しました。
+- 現在ClickHouseは、ELT、ReplacingMergeTree、非正規化、TTLといった最適化に支えられ、分析、データストレージ、可観測性、AIワークロードを支える基盤となっています。
+
+製造業に一時停止ボタンはありません。eコマースやSaaSのダッシュボードが遅いとイライラします。しかし、工場のダッシュボードが遅延すると、生産ラインが停止したり、検査で不良品が見逃されたり、エンジニアが間違った原因を追いかけて貴重な時間を浪費したりすることになります。工場の現場で意思決定に必要な正確でリアルタイムなデータが手に入らなければ、たった1分のダウンタイムでも数千ドルのコストになり得ます。
+
+それが [Critical Manufacturing](https://www.criticalmanufacturing.com/) が事業を展開する世界です。ポルトガルに本拠を置くこのグローバル企業は、半導体、エレクトロニクス、医療機器、産業機器など、ハイテク製造業向けのエンタープライズMES(製造実行システム)ソフトウェアを開発しています。数十カ国にまたがる100社以上の顧客と、世界中で数百件の導入実績を持つ同社のプラットフォームは、「リアルタイム」が前提となる工場の24時間365日稼働を支えています。
+
+「当社の分析機能は、顧客の生産性と効率に直結します」と、同社のIoTデータプラットフォームを管理するリードソフトウェアエンジニアのRicardo Magalhaes氏は語ります。「私たちは常に、現場から流れてくるイベントストリームをサポートしています」
+
+私たちはRicardo氏に、MESにおける分析の役割、Critical Manufacturingがレガシースタックから [ClickHouse Cloud](https://clickhouse.com/cloud) へ移行した経緯、そしてClickHouseが単一の分析ユースケースからビジネス全体のプラットフォーム層へとどのように拡張されたかについて話を聞きました。
+
+## 工場の「神経系」
+
+ソフトウェアインフラに関わったことがある方なら、テレメトリパイプライン、アドテクの集計、大規模な製品分析の話を耳にしたことがあるでしょう。製造業はそれとは異なる土俵です。データ駆動でないわけではなく、計装される対象が物理的なシステムだという点が違うのです。
+
+Ricardo氏はMESを「工場現場の神経系」と表現します。SAPのようなエンタープライズ計画システムが「何をいつ作るか」を決めるのに対し、MESは生産を現実のものにする場所です。すべての製品をすべての工程で追跡し、設備とオペレーターを管理し、作業指示書とレシピを実行し、最終製品が使用可能かどうかを判断する品質シグナルを取得する役割を担います。
+
+医療機器のような規制された業界では、MESはコンプライアンスとトレーサビリティの記録システムでもあります。どの材料がどの完成品に使われ、いつ加工され、その過程で何が起こったかを、しばしば何年も後まで記録します。
+
+Critical Manufacturingにとって、これはRicardo氏が言う「膨大なデータの課題」を生み出します。オペレーターのあらゆる操作はイベントです。あらゆる品質測定はイベントです。あらゆる材料の移動はイベントです。これに機械、ライン、施設をかけ合わせると、MESは数百万のイベントが分単位、機械単位で取り込まれる洪水となります。
+
+「私たちの分析レイヤーは、このデータの消火栓のような流れを実用的な洞察に変えなければなりません」とRicardo氏は語ります。「インフラ面で極めて要求が厳しく、しかも高速でなければなりません」
+
+## 古いシステムからの脱却
+
+Critical Manufacturingの旧分析システムはMicrosoft SQL Server上で稼働していました。長年機能していましたが、会社の規模が拡大し顧客の期待が変化するにつれ、レガシーなアプローチでは現代の要求に応えるスケーラビリティを実現できなくなりました。
+
+Ricardo氏が説明するように、今日のオペレーターは静的なレポートにはほとんど価値を見出しません。彼らはサブ秒のクエリによる即時の洞察を期待しています。複数ラインにまたがるスライス&ダイス分析、年初来の計算、長期の履歴トレンド、工場現場で何かが変わったときのアドホックな原因分析を求めています。「彼らはレポートを待つ我慢強さなどありません」とRicardo氏は言います。「何も待つ気はないのです」
+
+一方で、Industry 4.0の台頭がデータ量をかつてないほど押し上げ、より多くの機械、センサー、プロセスがオンライン化されるにつれ、システムは数百万から数十億のレコードへと移行しています。
+
+結果は予測可能でした。履歴クエリに時間がかかりすぎるようになり——「時には数時間も」とRicardo氏は語ります。リアルタイムダッシュボードは生産イベントに追従するのに苦労しました。インデックスとパーティションのチューニングそのものが運用上の負担となり、チームはシステムを使える状態に保つだけで、集計ジョブやデータメンテナンスとの戦いを強いられました。ストレージコストは、さらなる遅延を防ぐために設計されたインデックスがシステムに蓄積されるにつれて上昇しました。
+
+Ricardo氏の言葉を借りれば、古いアプローチに本質的に壊れた点はありませんでした。「単に、私たちがそれを上回ってしまったのです」と彼は語ります。
+
+## すべてはRedditから始まった…
+
+2022年までに、Critical Manufacturingは異なるアプローチが必要だと認識していました。イベントストリームを取り込み、サブ秒クエリによるリアルタイムダッシュボードを実現し、大量集計をサポートし、スケールしても費用対効果が高く、メンテナンスが容易なものです。
+
+ある晩、Ricardo氏がRedditを眺めていると、/r/dataengineeringのスレッドで自分のものに非常によく似た問題が説明されているのに偶然出くわしました。大規模な [時系列](https://clickhouse.com/resources/engineering/what-is-time-series-database) 、[リアルタイム分析](https://clickhouse.com/resources/engineering/what-is-real-time-analytics) 、そして追いつけない従来型データベース。
+
+当時、Ricardo氏とチームは「お決まりの候補」——Pinot、Druid、Databricks、Snowflake——を評価していました。それぞれに強みはありましたが、Ricardo氏に言わせれば、「試したソリューションはどれも、重い依存関係と膨大な運用オーバーヘッドを伴っていました」
+
+Redditのスレッドで、誰かがコメントしていました。「ClickHouseを試してみろ」。Ricardo氏はそれまで聞いたことがありませんでしたが、リンクをコピーして自分宛にメールし、翌朝ダウンロードしました。
+
+「昼までには、最初のMESテーブルを作成して本番データをロードしていました」と彼は語ります。「その日の終わりには、最初の [マテリアライズドビュー](https://clickhouse.com/docs/materialized-views) を作って、Kafkaトピックから読み取り、[MergeTreeテーブル](https://clickhouse.com/docs/engines/table-engines/mergetree-family/mergetree) に書き込んでいました。圧倒されました」
+
+SQL Serverで数分かかっていたクエリが、ミリ秒で返ってきました。さらに良いことに、立ち上げが「驚くほど簡単」で、重い依存関係や複雑なセットアップは不要でした。馴染みのあるSQLインターフェースのおかげで、チームは一から学び直す必要もありませんでした。
+
+「エンジニアとして、適切なツールは戦う相手であってはならないと確信しています」とRicardo氏は語ります。「ClickHouseは私たちがやっていたことに完璧にフィットしました。ただ動いたのです」
+
+## POCからプラットフォーム層へ
+
+その初日でチームはPOCを得ましたが、Ricardo氏が言うように「1日のテストでは、すべてを賭けるには不十分でした」。そこで彼らは正式な評価を実施し——ClickHouseは引き続き際立った結果を見せました。
+
+[ネイティブKafka統合](https://clickhouse.com/docs/integrations/kafka) により、ストリーミングトピックからClickHouseへのデータ移動が容易になりました。[カラム型ストレージ](https://clickhouse.com/resources/engineering/what-is-columnar-database) と [ベクトル化クエリ実行](https://clickhouse.com/docs/development/architecture) は、分析負荷下で一貫したパフォーマンスを提供しました。[圧縮](https://clickhouse.com/docs/data-compression/compression-in-clickhouse) と [TTL(time-to-live)](https://clickhouse.com/docs/guides/developer/ttl) ポリシーにより、ストレージ効率の向上と自動化されたデータライフサイクル管理が可能になりました。そして [JSONサポート](https://clickhouse.com/docs/integrations/data-formats/json/overview) により、絶え間ないスキーマの調整なしに半構造化イベントペイロードを処理できるようになりました。
+
+数週間後、彼はリーダーシップチームとのミーティングを設定しました。小さなプロトタイプ——Kafkaを入力、ClickHouseを中間、ダッシュボードとクエリを上に——を構築し、彼らに説明しました。チームが直面している課題を理解していた技術担当VPは、すぐに興奮しました。ミーティングの後、Ricardo氏は彼自身が試せるようにClickHouseのクエリインターフェースへのアクセスを与えました。
+
+「彼はパフォーマンスに圧倒されました」とRicardo氏は語ります。「データを非常に素早くスライス&ダイスできるようになりました。彼は『これはゲームチェンジャーだ。私たちの分析のやり方を変える』と言いました」
+
+技術的な確信とビジネス側の賛同を得て、ClickHouseはPOCから本番へと移行し、分析から始まり、急速にビジネス全体へと拡大しました。
+
+今日、ClickHouseはCritical Manufacturingの履歴データとリアルタイム分析のための運用データストアを支えています。機械センサーデータや状態追跡などの製造設備テレメトリを保存し、現場イベントと空気質、湿度、粒子数などの環境シグナルとの相関分析をサポートしています。
+
+ClickHouseは社内のオブザーバビリティにも使用されています。アプリケーションログ、メトリクス、トレースは [OpenTelemetry](https://clickhouse.com/resources/engineering/opentelemetry-otel) を通じてClickHouseに流れ込み、24時間365日オンラインを維持する必要のあるシステムのトラブルシューティングと監視を統一された場所で行えるようになっています。
+
+同社がAI駆動の機能に投資する中、ClickHouseはそこでも役割を果たし始めており、製品内のRAGシステムをサポートする埋め込みを保存しています。
+
+「私たちは1つの分析問題から始めました」とRicardo氏は語ります。「今では、ClickHouseはどこにでもあります」
+
+## その道のりにおける主要な最適化
+
+チームはClickHouseを環境を超えて柔軟に展開しており、さまざまなメーカーのニーズに応えるためクラウドとオンプレミスの両方の導入をサポートしています。また、パフォーマンスと効率を最大化するための一連の重要な最適化も行ってきました。
+
+大きな転換の1つは、ETLからELTへの移行でした。旧システムでは、変換はロード前に行われていました。メトリクス定義のバグがあれば、チームは集計パイプラインを最初から再実行する必要があり、時には数時間または数日かかることもありました。ELTでは、ソースデータを保持し、変換は後でClickHouse内で適用します。「変換を修正するだけで完了です」とRicardo氏は語り、さらに「ELTは、データベースがクエリ時に変換できるほど高速である場合にのみ機能します。これがClickHouseのスーパーパワーの1つです」と付け加えます。
+
+2つ目の最適化は、遅延到着イベントと重複の管理に [ReplacingMergeTree](https://clickhouse.com/docs/engines/table-engines/mergetree-family/replacingmergetree) を使用することでした。これらはどちらも製造業ではよくあることで、デバイスがオフラインになり、再接続後にバーストでデータを送信することがあります。順序キーを慎重に設計することで、チームは状態テーブル(エンティティの現在の状態)と履歴テーブル(完全な監査証跡)を維持しながら、重複排除の仕組みはClickHouseに任せることができます。
+
+また、JOINの多いリレーショナルクエリパターンを避けるために [非正規化](https://clickhouse.com/docs/data-modeling/denormalization) にも力を入れています。Ricardo氏が説明するように、製造データは本質的にリレーショナルであり、12以上のJOINを必要とするクエリを目にすることもよくあります。しかし、分析的なカラム型システムはそのような形状を必ずしも好みません。チームはリレーションシップのコンテキストをJSONフィールドに埋め込み、クエリ時に値を抽出することで、複数テーブルのJOINを排除し、パフォーマンスを向上させ、開発者体験を簡素化しました。
+
+最後に、[TTLベースのライフサイクル自動化](https://clickhouse.com/docs/guides/developer/ttl) が、手動ジョブとスクリプトの寄せ集めを置き換えました。ホットデータは高速かつアクセス可能なまま維持され、古いデータは自動的に期限切れにしたり、より安価なストレージに移動したりできます。データ保持、トレーサビリティ、コスト管理が重要な環境では、この組み込みのライフサイクル管理が大きな運用負担を取り除きます。
+
+## 次のステップ: 大規模な高可用性
+
+ClickHouseの旅を始めて数年が経ちましたが、Critical Manufacturingにはまだやるべきことがあります。Ricardo氏が指摘するように、同社はSQL ServerからClickHouseへのワークロードの移行を続けており、「データを失うことは大惨事」という厳しい要件があります。
+
+ロードマップの次のステップは、より高い可用性と耐障害性です。これは [Replicated*テーブルエンジン](https://clickhouse.com/docs/engines/table-engines/mergetree-family/replication) への移行と、マルチレプリカ展開への信頼を構築し、その後、フットプリントと顧客の需要が拡大するにつれてシャーディングとレプリケーションのパターンへと拡大することを意味します。
+
+Ricardo氏にとって、その一貫した思いは、RedditでClickHouseを発見した最初の日と変わりません。製造業はますます接続され、計装され、データ駆動になっています。すべてのデバイス、機械、生産ロットが、捕捉する価値のあるシグナルを生成しています。「ワークロードは本当に変化しており、フロンティアは曖昧になっています」と彼は語ります。
+
+機会は、それらのシグナルがアクセス可能になったら何ができるかという点にあります。そして、工場が決して止まらない世界では、その背後にあるデータプラットフォームもまた、止まることはできません。
+
+---
+
+## 今すぐ始める
+
+ClickHouseが自分のデータでどのように動作するか試してみませんか？ClickHouse Cloudならわずか数分で始められ、$300分の無料クレジットも受け取れます。
+
+[サインアップ](https://console.clickhouse.cloud/signUp?loc=blog-cta-775&utm_blogctaid=775)
+
+---
+
+---
+
+## SocialprufがNeonをClickHouse管理のPostgresに置き換えて、より高速で信頼性の高いデータスタックを構築した方法
+Published: 2026-06-02T03:05:36+00:00
+URL: https://clickhouse.com/blog/socialpruf-jp
+
+---
+title: "SocialprufがNeonをClickHouse管理のPostgresに置き換えて、より高速で信頼性の高いデータスタックを構築した方法"
+date: "2026-06-02T03:05:36.263Z"
+author: "ClickHouse"
+category: "User stories"
+excerpt: "Socialpruf は Neon から ClickHouse が管理する Postgres へ移行し、ネットワーク転送コストを排除するとともに、最大 5 倍のクエリパフォーマンス向上を実現しました。これにより、数百万行をミリ秒単位で集計するリアルタイムのソーシャル分析ダッシュボードを支えています。"
+---
+
+# SocialprufがNeonをClickHouse管理のPostgresに置き換えて、より高速で信頼性の高いデータスタックを構築した方法
+
+## まとめ
+
+- Socialpruf は、Postgres と ClickHouse を ClickHouse Cloud 上でフルマネージドで活用し、ブランド、タレントエージェンシー、スポーツメディア企業向けにリアルタイムのソーシャル分析を提供しています。
+- Databricks 傘下の Neon から移行したことで、ネットワーク転送コストを削減し、Postgres クエリのパフォーマンスを最大 5 倍向上させながら、接続の問題をゼロに抑えました。
+- ClickHouse Cloud は Socialpruf の顧客向け分析基盤を支え、数百万行をミリ秒単位で集計し、大規模環境でもほぼ瞬時に表示されるダッシュボードを実現しています。
+
+クリエイターエコノミーは膨大な量のパフォーマンスデータを生み出していますが、その大半は依然としてスクリーンショットや古くなったPDF、そして勘に頼った判断の中に閉じ込められたままです。[Socialpruf](https://socialpruf.com/) は、この状況を変えるために作られました。
+
+トロントを拠点とするこのプラットフォームは、自らをブランド、タレントエージェンシー、スポーツメディア企業向けの「ソーシャルオペレーティングシステム」と称し、Instagram、TikTok、YouTube、Xのパフォーマンスデータを集約して、リアルタイムのダッシュボード、キャンペーントラッカー、共有可能なレポートを提供しています。
+
+このような製品をスケールで支えるには、大きなインフラ上の課題があります。現在、Socialprufは毎秒数百件の投稿を取り込んでいます。データを顧客へ高速かつ確実に届けることが、この製品の価値を支える中核となっています。
+
+私たちは、創業者兼CTOのSemyon Khlavich氏と、プリンシパルエンジニアのEvgenii Baldin氏に話を聞き、Socialprufがどのようにしてスピードと信頼性を最大化するデータスタックを構築したのかを伺いました。同社は分析ワークロードを [ClickHouse Cloud](https://clickhouse.com/cloud) に移行してほぼ瞬時のクエリ性能を実現し、さらに [ClickHouseによるマネージドPostgres](https://clickhouse.com/cloud/postgres) を本番環境で利用する最初のチームの一つとなりました。
+
+## 分析の課題を解決する
+
+Socialprufは、モダンなイベント駆動型アーキテクチャ上で動作しています。顧客向けの製品としてTanstack StartのWebアプリが稼働し、その背後ではNode.jsパイプラインがソーシャルメディアデータを継続的に収集・処理しています。投稿の取り込み、動画フックの分析、デモグラフィックデータの抽出、メンションの処理、プラットフォーム横断での共同投稿者データの集約などを担っています。Pythonワーカーは外部プロバイダーやブラウザベースのコレクターからのデータ収集を行い、すべてのデータは記録システムであるPostgresに流れ込みます。
+
+「Postgresは多機能で素晴らしいデータベースで、立ち上げて稼働させるのが簡単だったので、それをベースに構築を始めました」とEvgenii氏は語ります。
+
+しかしSocialprufが成長するにつれて、分析レイヤーが追いつかなくなってきました。顧客向けダッシュボードはPostgres上でその都度計算されており、ロード時間が1秒、2秒、時には3秒へと延びていました。「当時はそれほど大量のデータがあったわけでもありませんでした」とSemyon氏は付け加えます。「成長して顧客が増えれば、ますます遅くなることは予測できました」。
+
+2025年の夏、彼らはデータ領域の大手プレイヤーが分析ワークロードをどのように扱っているかを調査し始めました。そこでClickHouseにたどり着き、その効果はすぐに表れました。CDCを使ってPostgresからClickHouseへデータをレプリケートし、フロントエンドの分析クエリをすべてClickHouseへルーティングすることで、Socialprufは数百万行をミリ秒単位で集計できるようになりました。これは、スケール時のPostgresでは到底実現できないほどの大幅な改善でした。
+
+製品への影響は明確でした。「顧客にとって本当に『すごい』と感じる体験を提供できています」とSemyon氏は語ります。「私たちには優れたUXがありますが、それにClickHouseのスピードが加わることで、素晴らしいユーザー体験が生まれるのです」。
+
+## Neon Postgres における信頼性の問題とネットワークコストへの対応
+
+Socialpruf は当初から、Databricks 傘下の Neon 上で Postgres を運用していました。立ち上げ当時は、セットアップが速く、開発者体験も良好で、当時のニーズには十分すぎるほどで、自然な選択でした。「しばらく使っていて、うまく機能していました」と Evgenii 氏は語ります。「しかし、規模が拡大し始めると、2 つの問題に直面しました」
+
+1 つ目は安定性です。データ処理パイプラインを妨げる接続切断や再起動が時折発生するようになりました。バックグラウンドジョブが停止し、影響を受けたサービスを特定して再起動するために手動の介入が必要になりました。「極端に時間がかかるわけではありませんが、常に目を配り、定期的にチェックしなければならないボトルネックになっていました」と Semyon 氏は述べています。
+
+2 つ目はコストです。CDC レプリケーションによって Neon から ClickHouse へ絶え間なくデータがストリーミングされるようになると、ネットワーク転送料金が積み重なっていきました。「同じ AWS リージョン内にあるにもかかわらず、Neon はネットワーク転送料金を請求していました」と Semyon 氏は説明します。「コンピュート費用の半分以上に達し、請求額がどんどん膨らんでいたのです」
+
+チームは別のソリューションを試すことも検討しました。「PlanetScale を検討した時期もありましたが、Neon と同様の問題を抱える可能性があると考え、先送りにしていました」と Evgenii 氏は述べます。
+
+[ClickHouse がマネージドする Postgres](https://clickhouse.com/cloud/postgres) が発表されたとき、既存の ClickHouse 顧客であった彼らにとって、その価値提案はすぐに明確になりました。ClickHouse と同じインフラ上に物理的に同居するよう設計されたエンタープライズグレードのサービスで、ネットワーク転送コストを排除し、信頼性とパフォーマンスのために NVMe ストレージで支えられています。
+
+「分析エンジンとトランザクションエンジンを同じプラットフォーム上で共存させたいという我々のビジョンに合致していました」と Semyon 氏は語ります。「このアーキテクチャは、顧客に提供したいと考えていたシームレスな分析体験をもたらしてくれるはずでした」
+
+## 接続切断や再起動ゼロで、Postgres パフォーマンスが最大 5 倍に
+
+まだ移行初期ではありますが、ClickHouse のマネージド Postgres サービスへの移行による最大のインパクトは安定性でした。「切り替えて以来、接続の問題や再起動は一度も発生していません」と Semyon 氏は述べます。スピード重視で開発を進めるチームにとって、こうした切断(およびそれに伴う手動対応)を排除できたことは大きな違いをもたらしました。
+
+「我々は安定性とスピードの両方を重視しています」と Evgenii 氏は付け加えます。「そのバランスを保つことが我々にとって重要なのです」
+
+パフォーマンス面では、数字が明確に物語っています。Postgres のクエリパフォーマンスは全体で約 30% 改善され、一部のクエリは最大 5 倍の向上を示しました。Datadog のメトリクスを見ると、特定のクエリは 42 ミリ秒から 22 ミリ秒へと、およそ 50% の改善を達成しました。これらの向上により、データ量が増加してもインスタンスをダウンスケールする余地が生まれる可能性もあります。NVMe ベースの Postgres によるこれらのパフォーマンス向上は、価格性能比の改善も期待でき、Socialpruf がはるかに効率的にリソースを管理できるようになると見込まれています。
+
+下の画像は、移行前と移行後の Socialpruf の主要クエリの P50 および P99 レイテンシをリアルタイムで表示したダッシュボードです。ご覧の通り、すべてのクエリが以前より高速化され、一部のクエリでは最大 5 倍のパフォーマンス向上を達成しています。
+
+![Image 565019671 2022x420.jpg](https://clickhouse.com/uploads/Image_565019671_2022x420_457bae3940.jpg)
+
+一方、Semyon 氏が「ClickHouse の魔法のような部分」と呼ぶ ClickHouse の分析レイヤーは、引き続きコアプロダクト体験を支えています。数百万行をミリ秒単位で集計し、データ量に関わらずほぼ瞬時にロードされるダッシュボードを実現しています。
+
+「結局のところ、我々は顧客にとって最高の製品を作りたいのです」と Semyon 氏は語ります。「マネージド Postgres は、技術面での運用のシンプルさと信頼性に関わる部分です。分析レイヤーとトランザクションレイヤーを統合することで、技術的なオーバーヘッドが減り、コストが下がり、単一のプラットフォームで作業できるようになります。ClickHouse は、顧客に提供する価値において重要な差別化要因です」
+
+## Neon から ClickHouse マネージド Postgres へのシームレスな移行
+
+Socialpruf が ClickHouse マネージド Postgres への移行を決断する上での要因の 1 つが、移行そのもの、特に ClickHouse チームがそれを実現する上で果たした役割でした。
+
+「最初は Postgres の論理レプリケーションを使って約 0.5 TB のデータを移行しようとしましたが、1 日後に失敗しました」と Semyon 氏は振り返ります。「その後、ClickHouse チームは PeerDB の使用を提案し、移行をシンプルかつ信頼性の高いものにするため、我々と緊密に連携してくれました」
+
+移行は、ターゲットデータベースに必要なスキーマを作成し、必要なテーブルで Neon から ClickHouse マネージド Postgres へのミラーを開始することから始まりました。0.5 TB のデータセットは数時間以内にコピーされ、その後はターゲットデータベースがソースと継続的に同期され続けました。
+
+Socialpruf はこのミラー構成を約 1 週間運用し、同期中のデータベースからフォークを立ち上げてアプリケーションをテストしました。十分な検証が完了した後、本番切り替え枠が予定されました。このフェーズでは、ClickHouse チームが Socialpruf と緊密に協力し、最終的な移行ステップを完了しました。
+
+## PgBouncer による大規模な接続管理
+
+切り替え時に予期しなかった課題の 1 つが接続数でした。接続数が Postgres の `max_connections` 上限を超えてしまったのです。そこで彼らが頼ったのが、ClickHouse マネージド Postgres に含まれている [PgBouncer](https://clickhouse.com/docs/cloud/managed-postgres/connection#pgbouncer) でした。
+
+Socialpruf では、アプリケーションと取り込みワーカーを合わせると、数千のデータベース接続が同時に発生することがあります。移行以来、PgBouncer はその負荷を問題なく安定して処理してきました。
+
+ClickHouse のアプローチにおける重要な差別化要因は、複数のパラレル・ピアード PgBouncer インスタンスをサポートしていることです。これにより、運用の複雑さを顧客から隠したまま、接続処理を水平方向にスケールできます。これにより Socialpruf は、本番環境で大量の接続を効率的に処理することが可能になりました。(PgBouncer アーキテクチャの詳細については、今後の技術ブログ記事で取り上げる予定です。)
+
+## OLTP と OLAP を統合した、将来を見据えた基盤
+
+Semyon 氏と Evgenii 氏にとって、ClickHouse のマネージド Postgres サービスへ移行する決断は、長々と検討するようなものではありませんでした。タイミングは適切で、ソリューションは理にかなっており、ClickHouse がすでに彼らの分析をどう変革したかを踏まえると、ClickHouse なら期待に応えてくれると信頼していたのです。
+
+この実用主義は、より広いチーム哲学を反映しています。Socialpruf はまずプロダクトカンパニーであり、インフラはプロダクトに奉仕するために存在するのであって、その逆ではありません。今日、ClickHouse は顧客に「すごい」と言わせる[リアルタイム分析](https://clickhouse.com/resources/engineering/what-is-real-time-analytics)体験を支えており、その下層ではマネージド Postgres サービスが安定した高性能なトランザクション基盤を提供しています。
+
+Semyon 氏は、チームには Socialpruf に対する「大きな計画」があり、それに見合うデータインフラを手に入れた今、その実行に集中できると述べています。「Postgres と ClickHouse の組み合わせには非常に満足しています。シンプルに機能し、我々のニーズを満たしてくれます。我々が成長するにつれ、その役割はさらに大きくなっていくでしょう」
+
+ClickHouse マネージド Postgres での体験を一言でまとめてほしいと尋ねられると、Semyon 氏と Evgenii 氏は一瞬顔を見合わせてからこう答えました。「信頼性が高く、速く、プレミアム品質」
+
+
+---
+
+## 今すぐ始める
+
+ClickHouseが自社のデータでどのように動作するか試してみませんか?ClickHouse Cloudなら数分で始められ、$300の無料クレジットも付いてきます。
+
+[サインアップ](https://console.clickhouse.cloud/signUp?loc=blog-cta-773&utm_blogctaid=773)
+
+---
+
+---
+
+## ClickHouseの速度で実現するインテリジェントセキュリティ:Cogent SecurityがAIネイティブな脆弱性管理プラットフォームを構築した方法
+Published: 2026-06-02T03:01:52+00:00
+URL: https://clickhouse.com/blog/cogent-security-jp
+
+---
+title: "ClickHouseの速度で実現するインテリジェントセキュリティ:Cogent SecurityがAIネイティブな脆弱性管理プラットフォームを構築した方法"
+date: "2026-06-02T03:01:52.862Z"
+author: "ClickHouse"
+category: "User stories"
+excerpt: "「ClickHouseがAIにもたらす最大の価値はスピードです。AIを駆使する攻撃者に対抗するには、私たちのあらゆる活動をマシンスピードで実行する必要があります。」 Karan Gugle氏、Founding Engineer"
+---
+
+# ClickHouseの速度で実現するインテリジェントセキュリティ:Cogent SecurityがAIネイティブな脆弱性管理プラットフォームを構築した方法
+
+## まとめ
+
+- Cogent SecurityはClickHouseを活用して、数十億件のセキュリティ検出結果をサブ秒で提供し、AIネイティブな脆弱性管理プラットフォームを支えています。
+- PostgresからClickHouseへの移行により、1億行規模においてキャッシュなしでP90クエリレイテンシを5秒から1秒未満へと短縮しました。
+- さらにCogentのChart Agentは、エージェント型ループアーキテクチャとClickHouseのプロジェクションを組み合わせることで、精度を40%から94%へと向上させています。
+
+AIによってソフトウェア脆弱性の悪用がより速く、より容易になる一方で、エンタープライズのセキュリティチームは、しばしばデプロイが難しく使い勝手の悪いポイントソリューションに足かせをはめられ、後れを取りつつあります。
+
+「私たちの目標は、AIによって脅威の状況が急速に変化する中でも、企業が遅れずについていけるようにすることです」と[Cogent Security](https://www.cogent.com/)の創業エンジニアであるKaran Gugle氏は語ります。
+
+プラットフォームのローンチからわずか6か月、Karan氏は2つのことがすでに明らかになっていると言います。1つは、企業は人手不足で、数百万件、時には数億件もの検出結果に対処しなければならないこと。もう1つは、これらの検出結果を実際に修正するには、膨大な組織的コンテキストと、それらが検出されたシステムへの深い理解が必要であることです。
+
+「ユーザーは検出結果をフィルタリングし、自分たちのデータについて質問を投げかけ、リスク修正に着手する必要があります。Cogentのプラットフォームで真に際立つには、これらすべての動作が即時的で、正確で、まるで魔法のように感じられる必要があります」とKaran氏は語ります。「これは、エージェントにとってはなおさら当てはまります。ユーザーが環境内の最新の脅威を追跡したり、コンプライアンスレポートを生成したり、最重要資産の脆弱性を修正したりする際、エージェントは膨大なデータを処理することになるからです。」
+
+2026年3月にサンフランシスコで開催されたClickHouseミートアップで、Karan氏と機械学習エンジニアのSagar Maheshwari氏は、CogentがどのようにClickHouseを基盤としたデータプラットフォームを構築したのか、そしてそれがエージェント型の脆弱性管理にどのような可能性を開くのかについて共有しました。
+
+## 拡大する脅威ギャップ
+
+脆弱性管理の課題は、目に見えて悪化しています。National Vulnerability Database(NVD)は現在32万件以上のCVEを追跡しており、この数字はわずか過去10年で5倍に膨れ上がっています。さらに、LLMを活用したツールキットの台頭により、脅威は新たな形で加速しています。
+
+「悪用を試みるために必要な知識のハードルは、経験豊富なシステムエンジニアレベルから、意図とコーディングエージェントへのアクセスさえあれば誰でも、というレベルにまで下がりました」とKaran氏は語ります。
+
+数字がそれを裏付けています。2018年、平均的なtime-to-exploit(TTE) ―― 脆弱性が公開されてから実際に悪用されるまでの期間 ―― は約2.3年でした。2026年、その数字はわずか1.6日にまで縮まっています。
+
+![](https://clickhouse.com/uploads/cogentsecurity_mar2026_image1_dcb11c08b5.png)
+
+*2018年以降、平均time-to-exploit(TTE)は2.3年から1.6日にまで短縮された。*
+
+防御側を見ると、セキュリティチームは慢性的な人手不足に陥っており、「スキャン → コンテキスト化 → 優先順位付け → 修正」のループは遅く、手動で、摩擦だらけです。ほとんどのチームは自分たち自身の内部SLAを満たすことすらできておらず、最も重大な脆弱性の50%は2か月経っても未解決のままです。「これはかなり恐ろしい現実です」とKaran氏は語ります。
+
+脆弱性が発見されたら、修正フェーズ ―― なぜそれが重要かをエンジニアリングに伝え、実際に修正する適切な担当者を見つけること ―― は、Karan氏の表現を借りれば「綱渡りのよう」であり、技術的課題であると同時に組織的・プロセス的な課題でもあります。
+
+「このループのすべてを、AIを活用した攻撃者に対抗するためにマシン速度で実行する必要があります」と彼は言います。「私たちが解決しようとしているのは、まさにそこです。」
+
+## スケールするセキュリティデータ
+
+Fortune 500の顧客では、わずか90日で100億を超えるデータポイントが生成され、1日あたり最大1億件のチェンジログイベントが発生することもあります。このデータをチャート、フィルター、エージェントクエリ、バックエンドAPIで信頼性高く提供するため、Cogentは各顧客に専用の[ClickHouse](https://clickhouse.com/resources/engineering/what-is-columnar-database)データベースを提供しており、製品の異なる表示面に合わせて最適化された100以上のテーブルを備えています。
+
+データは、クラウドプロバイダー、脆弱性スキャナー、Slack、Confluence、Jiraなどのビジネスツールを含む50以上のソースから到着します。これらのソースは互いに切り離されているため、Cogentのプラットフォームではまずエンティティ解決を行い、顧客のデータソース間の適切な結合キーを見つけて環境の統一されたビューを生成します。その結果として、データ全体をグラフ的にトラバースできるナレッジグラフが出来上がります。
+
+そこからdbtが非正規化テーブルを[Iceberg](https://clickhouse.com/resources/engineering/apache-iceberg)に投影します ―― ナレッジグラフの事前結合・事前集計済みのビューです。これらの投影は次に、[ClickHouse Spark Connector](https://clickhouse.com/docs/integrations/apache-spark/spark-native-connector)を介してClickHouseにロードされます。これにより、ロードパスに対して安価で調整可能、かつ高度にスケーラブルなコンピュートが提供されます。テーブルスキーマとレイアウトの決定はすべて、ClickHouse dbtライブラリを使って定義されます。
+
+![](https://clickhouse.com/uploads/cogentsecurity_mar2026_image2_5f4b32e866.png)
+
+*Cogentのデータパイプライン:取り込みからClickHouse駆動のサービングレイヤーまで。*
+
+「これが素晴らしいのは、Iceberg dbtの変換パイプラインを、必要なClickHouseの最適化と同じ場所に配置できる点です」とKaran氏は説明します。「たとえば、適切なインデックス、ClickHouseのプロジェクション、圧縮タイプなどを設定できます。」結果として、S3上のIcebergをsource of truthとし、ClickHouseをサービングエンジンとする、クリーンなホット/コールド型[データレイクハウス](https://clickhouse.com/resources/engineering/data-lakehouse)アーキテクチャが実現します。
+
+## スピード重視の設計
+
+結果を提示する前に、Karan氏は大規模での読み取り高速化を支えるCogentのアプローチの基盤となる5つの設計原則を共有しました。
+
+1つ目はクエリ駆動設計です。「これは、伝統的なリレーショナルの世界から来た人にとって、おそらく最大のマインドセットの変化でしょう」と彼は言います。「エンティティモデルから始めるのではありません。製品が実行する必要のあるクエリから始めて、そこから逆算してテーブルを設計するのです。」
+
+2つ目の原則は[すべてを非正規化する](https://clickhouse.com/docs/data-modeling/denormalization)ことです。Cogentのdbtプロジェクションは、データがClickHouseに到達する前に事前結合・事前集計を行い、クエリ時の高価なJOIN操作を排除します。
+
+3つ目は[プロジェクション](https://clickhouse.com/docs/sql-reference/statements/alter/projection)と[インデックス](https://clickhouse.com/docs/primary-indexes)の活用です。「これはClickHouseのスーパーパワーの1つです」とKaran氏は言います。「実質的に、わずかなインサート増幅と追加のストレージと引き換えに、フィルタ性能を劇的に向上させているのです。」各プロジェクションは同じデータに対する追加の物理ソート順となり、まったく異なるクエリパターンを単一のテーブルから提供できるようにします。
+
+4つ目は、各カラム型に適した[圧縮コーデック](https://clickhouse.com/docs/data-compression/compression-in-clickhouse)を選ぶこと ―― タイムスタンプにはDelta、文字列にはLZ4、コールドデータにはZSTD ―― により、読み取りI/Oとストレージフットプリントを削減することです。
+
+最後に、[すべてをベンチマークする](https://clickhouse.com/resources/engineering/clickhouse-query-optimisation-definitive-guide)こと。「[system.query_log](https://clickhouse.com/docs/operations/system-tables/query_log)はあなたの味方です」とKaran氏は語ります。
+
+## サブセカンドのパフォーマンス
+
+Cogentの以前のPostgresベースの構成と現状の差は、スピードが大きな差別化要因となる製品において、適切なインフラがどれだけのことを実現できるかを物語っています。
+
+「これがどれほど重要かを強調したいのです ―― 単なるベンチマーク演習としてではなく、私たちの製品と顧客にとってです」とKaran氏は言います。「セキュリティツールはこの種の負荷の下で頻繁に崩壊します。組織全体の何百万もの検出結果をトリアージしようとしているセキュリティエンジニアにとって、25秒のページロードは何より避けたいものです。」
+
+|  | P50 | P90 | P99 |
+| :---- | :---- | :---- | :---- |
+| Postgres | 2秒 | 5秒 | 25秒 |
+| ClickHouse (1億行) | 0.3秒 | 0.9秒 | 2.5秒 |
+| ClickHouse (5億行) | 0.6秒 | 1.8秒 | 4.2秒 |
+| 目標 | 0.5秒 | 1秒 | 3秒 |
+
+現在、クエリの98.7%が1億行で3秒未満に完了し、5億行でも86.3%が3秒未満に完了します。Karan氏が補足するように、「これは、バックエンドやデータベースレベルでのキャッシングを一切行わずに、です。」
+
+## レポーティングを会話型に
+
+インフラの話を終えると、Sagar氏がマイクを取り、その上に構築されたものを順に紹介しました。
+
+「私たちが取引するほぼすべての顧客は、現在および過去のリスク姿勢をモニタリングするためのチャートやダッシュボードを必要としています」と彼は言います。「GRC、取締役会向けプレゼン、SLA追跡、日常的な可観測性など、用途を問わずです。」従来、こうしたニーズに応えるには、データサイロからCSVをエクスポートし、BIツールを手動で設定し、会議前に慌ててデータをかき集める必要がありました。本来であればすぐに答えが出るはずのことに、アナリストが何日もかける状態です。
+
+Cogentのアプローチは、レポーティングを会話型にすることです。同社のChart Agentは、自然言語のリクエストを受け取り、チャートをレンダリングするのに必要なClickHouse SQLを生成し、Change Data Captureログを[リアルタイム](https://clickhouse.com/resources/engineering/what-is-real-time-analytics)でクエリします。「欲しいものを言葉で言えれば、私たちはそのチャートを作成できます」とSagar氏は言います。「総じて、私たちはレポーティングを ―― 正確さを犠牲にすることなく ―― 数日ではなく数秒で可能にしたいのです。」
+
+最初のバージョンはシングルショットのアプローチを採用していました ―― すべてのコンテキストをシステムプロンプトに詰め込み、ユーザーリクエストを送信し、Sagar氏の表現を借りれば「正しいSQLが返ってくることを祈る」というものです。約100件のtext-to-SQLサンプルからなるゴールデンデータセットでは、これは40%の精度を達成しました。失敗のパターンは明白でした。クエリを実行して仮定を検証する能力がないため、LLMは「自信満々で誤ったSQLを書く」上に、無関係なコンテキストに気を取られてしまうのです。
+
+解決策は、3つの主要コンポーネントを備えたエージェント型ループでした。1つ目はagentic RAGで、データモデルを検索し、必要に応じて関連コンテキストを取り出します。2つ目はライブSQL実行ツールで、ClickHouseに対して直接クエリを実行し、実際のデータを見ます。3つ目はインターリーブされた思考で、すべてを事前に計画するのではなく、ツール呼び出しの間で推論を行い、中間結果が別のアプローチを示唆した際に頑なに当初案にこだわらないようにします。結果:シングルショットで40%だった同じデータセットで、94%の精度を達成しました。
+
+## 精度に向けた反復
+
+Chart AgentのSQLは非決定論的なため、評価は厄介ですが不可能ではありません。Cogentは2つの補完的な評価アプローチを使用しています。トレース評価では、LLM-as-a-judgeを使用して、エージェントが正しく振る舞ったか ―― 関連するスキーマを引き出し、中間クエリを実行し、SQLを検証したか ―― を評価します。
+
+SQL出力検証はより難易度の高い評価です。同じデータセットを与えたとき、エージェントが生成したSQLが期待されるSQLと同じデータ出力を生成するかどうかをチェックします。Cogentでは、SQL文字列の等価性ではなくデータ出力の等価性を評価しており、小型言語モデルを使って期待されるカラムを生成されたカラムにマッピングします。さらに、各テストケースは3回実行され、多数決によって判定されます。「一度正しいだけでは十分ではありません」とSagar氏は言います。「一貫している必要があります。」
+
+反復に取り掛かったとき、データモデルを動的に探索しクエリを実行するためのツールを追加すること ―― 最初のエージェント版 ―― によって、精度は58%に押し上げられました。ゴールデンSQLパターンのキュレートされたクエリバンクによって75%に達し、エージェントはクエリロジックをゼロから考案するのではなく、実証済みのパターンに基盤を置けるようになりました。テナントメモリーバンク ―― エージェントが過去の実行から学んだ教訓を参照できるもの ―― によって82%になりました。
+
+最も顕著なジャンプは、エージェント側の変更ではなく、データ側の変更から生まれました。「エージェントに毎回これらをゼロから構築させるのではなく、ClickHouseに事前計算済みの集計を作成しました。私たちはこれをプロジェクションと呼んでいます」とSagar氏は説明します。「エージェントが書く必要のあるクエリを単純化するだけで、精度が94%にジャンプするのを見たのです。」
+
+## 唯一のsource of truth
+
+これらすべてを支えているのが、Cogentが社内で構築したインフラの一部であるOntology Serviceです。
+
+「データモデルが変わると、エージェントは『なんだこれは』という瞬間に直面します。コンテキストと実際のデータの間の不一致で混乱するからです」とSagar氏は言います。Ontology Serviceは、データモデルとそのセマンティクス ―― 説明、列挙、関係性 ―― を物理スキーマと同じ場所に配置することで、この問題を解決します。Sagar氏の言葉を借りれば、「唯一のsource of truth、ドリフトなし」です。
+
+エンタープライズセキュリティはさらに複雑さの層を加えます。「顧客は常にユニークな環境を持っています」とSagar氏は説明します。「Ontology Serviceがないと、エージェントはカスタムフィールドとそのセマンティクスを理解しようとして本当に苦労します。」Ontology Service内のテナント単位のオーバーレイにより、エージェントは各顧客の完全な実効スキーマを自動的に参照できるようになります。
+
+「データモデルをエージェントフレンドリーにすることは新しいパラダイムです」とSagar氏は言います。「これは今後、業界がデータモデリングについて考える方法を変えていくと私は考えています。」
+
+## 好循環
+
+「ClickHouseがAIにもたらす鍵となるものはスピードです」とKaran氏は語ります。
+
+Cogentにおいて、そのスピードはあらゆるレベルでメリットを波及させます。サブセカンドのクエリは、データベースがついていけないと単純に機能しない反復的なエージェントループを可能にします。クエリあたりの低レイテンシは、エージェントの実行全体にわたって積み重なります。そして、高速な評価ループによって、チームは改善をより早く顧客に届けられます。100件のデータ出力比較を、それぞれ3回実行の多数決で行うには、反復を苦行に変えないデータベースが必要です。
+
+Cogentが見出した好循環はシンプルです。高速なデータベースはより多くのツール呼び出しを可能にし、より多くのツール呼び出しはより良い精度を生み、より良い精度はより洗練されたエージェントパターンへの扉を開きます。AI加速型の攻撃者に企業がついていけるよう支援することを急ぐ会社にとって、この循環こそが、他のすべてが構築される土台なのです。
+
+---
+
+## 今すぐ始める
+
+ClickHouse が自分のデータでどのように動作するか試してみませんか？ClickHouse Cloud なら数分で始められ、$300 分の無料クレジットも受け取れます。
+
+[サインアップ](https://console.clickhouse.cloud/signUp?loc=blog-cta-770&utm_blogctaid=770)
+
+---
+
+---
+
+## PadletがClickHouse Cloudを活用してリアルタイムの教室分析を実現する方法
+Published: 2026-06-02T02:59:11+00:00
+URL: https://clickhouse.com/blog/padlet-jp
+
+---
+title: "PadletがClickHouse Cloudを活用してリアルタイムの教室分析を実現する方法"
+date: "2026-06-02T02:59:11.764Z"
+author: "ClickHouse"
+category: "User stories"
+excerpt: "PadletはClickHouse Cloudを活用し、月間数十億件のイベントをサブ秒クエリで処理しながら、専任のデータチームなしで大規模なリアルタイム教室分析を実現しています。"
+---
+
+# PadletがClickHouse Cloudを活用してリアルタイムの教室分析を実現する方法
+
+## まとめ
+
+- リアルタイム分析の必要性: 世界数千万人のユーザーを抱えるPadletは、授業中の生徒のエンゲージメント状況（参加度や滞在時間）を教師がその場で即座に把握できるよう、手動の遅延レポートからリアルタイム分析への移行を必要としていました。
+- ClickHouse Cloudの選定: 月間約80億件にのぼる膨大なイベントデータを処理するため、専任データチームが不要なマネージドサービスであり、超高速な取り込みとクエリ性能、そして持続可能なコストを両立できるClickHouse Cloudを採用しました。
+- シンプルなパイプラインと成果: 既存のイベントに「30秒ごとのハートビート」を加え、ClickPipesやマテリアライズドビューを活用したシンプルな構成を1ヶ月で構築。P99応答時間690ミリ秒以下という圧倒的な高速クエリにより、授業の進行に合わせたデータ可視化を実現しています。
+
+[Padlet](https://padlet.com/) は、授業や課題、アクティビティを生徒が直接参加できる形に変えるためのツールを開発している会社です。プロダクトは本質的にビジュアル重視で、教室の教材を堅苦しくなく親しみやすいものに感じてもらえるよう設計されています。これらはすべて、同社が「良い教育のためのソフトウェアをつくる」と表現するミッションのためにあります。
+
+「良い教育とは、子どもたちが好奇心や創造性を学び、協力することを学ぶことだと私たちは考えています」と、Padletの成長担当バイスプレジデントであるZoheb Jamal氏は語ります。「私たちは、教師がビジュアル的に魅力的なコンテンツを作れて、子どもたちが楽しく夢中になれるプロダクトをつくりたいのです。」
+
+現在、Padletは世界246カ国のうち242カ国で利用されています。「まだ4カ国が残っていますが」とZoheb氏は冗談を交えます。「必ず制覇できると確信しています。」そのリーチが数千万人のユニークユーザーへと拡大するなかで、チームは、教師が教室データをどう活用したいかと、アナリティクスの提供のされ方との間に広がるギャップに気づき始めました。
+
+Zoheb氏は[先日シンガポールで開催されたClickHouseミートアップ](https://clickhouse.com/jp/videos/singapore-meetup-padlet-25sep25)に登壇し、Padletが[ClickHouse Cloud](https://clickhouse.com/cloud)を使ってリアルタイム分析ストリームを構築し、遅延レポートを待つことなく、生徒のエンゲージメント状況を教師が即座に把握できるようにした経緯を共有しました。
+
+<iframe width="768" height="432" src="https://www.youtube.com/embed/vM_0B2LT8-4" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe>
+
+## 教室でリアルタイムが重要な理由
+
+Padletを教室で使う教師たちからは、自然とエンゲージメントに関する疑問が上がるようになりました。生徒は授業に参加しているか? どのアクティビティが響いているか? ページにどれくらいの時間を費やしているか? 長らく、こうした疑問の答えを得るには、Padletにメールを送り、誰かが数字を集計してスナップショットを返してくれるのを待つしかありませんでした。
+
+「これは良くありません」とZoheb氏は言います。「自分の銀行口座の残高を知りたいのに、銀行にメールを書いて2日後に数字が返ってくる、そんな感じですよ。私たちが解消したかったのはまさにそのような体験の悪さです。」
+
+そこでチームは、教師が必要なときにいくつかのコア指標にアクセスできるようにすることに集中しました。目指したのは高度なレポーティングや複雑なダッシュボードではなく、授業の進行に合わせて何が起きているかを教師が見られるようにすることでした。
+
+しかし、Padletの規模となると、その体験を提供するには現実的な技術上の制約が伴います。プロダクトは月間およそ4,000万人のユニークユーザーに利用されており、数十億件のイベントが発生します。「イベントの量がもう少し少なければ、Postgresのようなシンプルなソリューションで済んだでしょう」とZoheb氏は語ります。「ユーザーが少なければと思ったのは、おそらくその時が唯一です。」
+
+教師が必要としているものと、Padletの既存スタックがサポートできるものの間には、明らかなギャップがありました。「私たちに必要なのは、もっと堅牢なソリューションでした」とZoheb氏は言います。
+
+## Padletが分析システムに求めたもの
+
+新しいデータベースを探し始めるにあたって、Padletは機能要件と非機能要件の両方をカバーするシンプルな評価基準を作成しました。
+
+機能面では、リアルタイムが譲れない条件でした。「教師が教室でアクティビティを行っている最中に、その場で数字を見られるようにしたい。翌日では遅いのです」とZoheb氏は言います。
+
+スピードも同じくらい重要でした。「速いというのは、クリックしたらすぐ結果が出るということです」とZoheb氏は説明します。パフォーマンスはプロダクト全体で重視されており、「専任のスピードチーム」がPadletを高速に保つことだけを仕事にしているとのこと。「遅い分析サービスをこっそりリリースするなんて、絶対に無理でしたよ」と笑います。
+
+運用面のハードルも同様に高いものでした。約65人のチームで、専任のデータチームもいないなか、Padletはほぼ自動運転で動くものを求めていました。「サーバーの保守も、パッチ適用も、パイプラインの管理もしたくなかった」とZoheb氏は語ります。「ただセットアップして、後は動かしっぱなしにできるソリューションが欲しかったのです。」
+
+コストも検討要素でした。Padletは最安オプションを求めていたわけではありませんが、利用量が増えても引き続き手の届く価格であってほしいと考えていました。Zoheb氏は「今日も使えて、将来も無理なく払い続けられる持続可能なものが欲しかった」と表現します。
+
+最後に、長く使えることも重要でした。チームは過去、買収後に放棄されたり停止されたりした分析・BIツールに泣かされた経験がありました。「少なくとも21世紀いっぱい持つものが必要でした」とZoheb氏は言います。「つまり、あと70〜80年は使えるものですね。」
+
+## PadletがClickHouse Cloudを選んだ理由
+
+数週間にわたって、チームは一連のPOCを実施し、どの選択肢が要件を満たすかを検証しました。最終的にZoheb氏は「ClickHouseがすべてのチェックボックスにチェックを入れた」と語ります。
+
+まず際立ったのは取り込み速度です。ClickHouseは「とんでもなく速い取り込み」を実現し、遅延やバッチ処理待ちなしにライブ授業のユースケースをサポートできるようになりました。「リアルタイムに必要なのは、まさにこれ——すべてのイベントを非常に速く取り込める能力です」とZoheb氏は語ります。
+
+クエリパフォーマンスも大きな魅力でした。チームは、データをコンパクトに保存し、クエリ時に積極的にプルーニングして、メモリにロードするデータをごく一部に絞り込める[MergeTree](https://clickhouse.com/docs/engines/table-engines/mergetree-family/mergetree)や[AggregatingMergeTree](https://clickhouse.com/docs/engines/table-engines/mergetree-family/aggregatingmergetree)といったClickHouseの専用エンジンに惹かれました。さらに[マテリアライズドビュー](https://clickhouse.com/docs/materialized-views)の強力なサポートが、Zoheb氏が「パフォーマンスのさらなる後押し」と呼ぶものを加えてくれました。
+
+インフラを自社で運用するつもりは最初からなかったため、Padletは[ClickHouse Cloud](https://clickhouse.com/cloud)を選択しました。「この1年、ずっと自動運転で動いています」とZoheb氏は言います。初期に[パーティショニング](https://clickhouse.com/docs/partitions)に関する問題に遭遇したときも、迅速に特定・解決されました。「これが私たちが求めるターンキー型のソリューションであり、ClickHouseで得られたものです。」
+
+マネージドサービスは妥当な価格設定で、導入も簡単だったとZoheb氏は付け加えます。「試してみようと思ったとき、営業チームと話す必要はありませんでした。」
+
+最終的な決め手はClickHouseの成熟度でした。10年以上前にオープンソース化されたこのデータベースは、いまや世界の多くの巨大企業の[リアルタイム分析](https://clickhouse.com/resources/engineering/what-is-real-time-analytics)で使われています。Zoheb氏は「実装さえ正しく行えば、このプロダクトを長く使い続けられるという確信を得られました」と述べています。
+
+## PadletのClickHouseベースの分析パイプライン
+
+ClickHouse Cloudを導入したPadletは、リアルタイムパイプラインの構築に着手しました。ゼロから作るのではなく、既存のイベントインフラの上に積み上げ、必要なところを拡張しつつ、全体設計をシンプルに保ちました。
+
+Padletはすでにページビューや訪問といったコアなインタラクションを追跡していましたが、エンゲージメント時間は別のアプローチが必要でした。生徒がページに能動的に関与しているかを推測する複雑なクライアント側ロジックに頼るのではなく、「ハートビート」イベントに基づくよりシンプルで信頼性の高いモデルを採用しました。アクティブなセッションは30秒ごとに小さなイベントを発信し、それぞれのイベントが一定の長さのエンゲージメント時間を表します。
+
+これらのエンゲージメントイベントは、ClickHouseのネイティブ取り込みサービスである[ClickPipes](https://clickhouse.com/cloud/clickpipes)を使ってClickHouseに取り込まれます。チームがClickPipesを選んだのは、追加のインフラを立ち上げて運用する必要をなくし、取り込みをシンプルに保つためです。「セットアップが簡単で、コスト効率も非常に良かったです」とZoheb氏は言います。既存のビューおよび訪問者イベントは引き続きPadlet内部のイベントパイプラインを通って流れ、両方のストリームが分析のためにClickHouseに集約されます。
+
+![](https://clickhouse.com/uploads/Padlet_User_Story_Issue_1249_86a2a47bad.png)
+
+*ビュー、エンゲージメント時間、ユニーク訪問者をClickHouseに送り込むPadletのイベントパイプライン。*
+
+データがClickHouseに到着したら、Padletはマテリアライズドビューを活用してクエリを高速かつ予測可能に保ちます。ビューとエンゲージメント時間は日付別に事前集計され、ユニーク訪問者は[HyperLogLog](https://clickhouse.com/docs/sql-reference/aggregate-functions/reference/uniqcombined)スケッチを使って時間範囲全体での効率的な集計を可能にしています。「特別な数学は一切やっていません」とZoheb氏は言います。「ClickHouseがネイティブで提供してくれているので、使うのは簡単でした。」
+
+初期セットアップから本番稼働まで、パイプライン全体はおよそ1か月で完成しました。「素晴らしいエンジニアリングチームに恵まれたのと、ClickHouseという非常に堅実なプロダクトがあったおかげです」とZoheb氏は語ります。「だからこそ、これほど素早く動くことができました。」
+
+## 圧倒的な速さと、これからに備えた設計
+
+最終的にPadletが目指したのは、巨大な分析システムを構築することではなく、高速で、信頼でき、スケーラブルで、運用しやすいものを作ることでした。結果は明らかです。
+
+Zoheb氏が[シンガポールミートアップ](https://clickhouse.com/jp/videos/singapore-meetup-padlet-25sep25)で共有したところによれば、Padletは1か月でおよそ80億件のイベントをClickHouseに取り込みました。現在のシステムは秒間約14リクエストをサポートし(当初目標の10から増加)、クエリの中央値レイテンシは45ミリ秒、P99応答時間は690ミリ秒です。教師にとってエンゲージメントデータは、瞬間が過ぎ去ってから届くものではなく、授業そのものの自然な延長のように感じられます。「クリックしたら、その場で結果が見えます」とZoheb氏は言います。
+
+今後、Padletは分析の領域をこの第一段階を超えて大きく広げる計画です。プロダクト全体で新機能やAIを活用したツールが次々と展開されていくなか、教師たちはそれらの機能がどう使われ、生徒がどう関わっているかについて、より深い洞察を求めるようになっています。「これらのユースケースのほぼすべてをClickHouseで支えていく予定です」とZoheb氏は語ります。
+
+ClickHouse Cloudによって、いくつかのコア指標を可視化することから始まった取り組みは、いまや小さなチームでも軽快に運用できるリアルタイム分析レイヤーへと成長しました。Padletが成長を続けるなかで、ClickHouseは——同社と、毎日Padletを頼りにしている教師たちが——学びをその瞬間に理解し改善していくための中心的な存在であり続けるでしょう。
+
+---
+
+## 今すぐ始める
+
+ClickHouseがあなたのデータでどのように動作するか試してみませんか？ClickHouse Cloudなら数分で始められ、$300の無料クレジットも受け取れます。
+
+[サインアップ](https://console.clickhouse.cloud/signUp?loc=blog-cta-768&utm_blogctaid=768)
+
+---
+
+---
+
+## Rill と ClickHouse: メータリング時代のリアルタイム運用 BI
+Published: 2026-06-02T02:51:26+00:00
+URL: https://clickhouse.com/blog/rill-jp
+
+---
+title: "Rill と ClickHouse: メータリング時代のリアルタイム運用 BI"
+date: "2026-06-02T02:51:26.967Z"
+author: "ClickHouse"
+category: "User stories"
+excerpt: "Rillは、ClickHouseを活用して1日あたり1,000億件以上のイベントを処理するリアルタイムなオペレーショナルBIを実現しており、宣言型のBI-as-codeワークフローを通じて、ライブデータセットに対する即時の探索と対話型分析を可能にしています。"
+---
+
+# Rill と ClickHouse: メータリング時代のリアルタイム運用 BI
+
+## まとめ
+
+- Rillは、クラウドコストやAIシステムから生み出される膨大かつ粒度の細かいリアルタイムイベントデータを自社で一元統合し、ビジネス全体を理解するための仕組みを提供しています。
+- 1日1,000億件以上のイベントを処理するRillは、大規模なデータ集計に驚異的な性能を発揮するClickHouseをアーキテクチャの核に据え、キャッシュに頼らない超高速なドリルダウンや分析を実現しています。
+- データ取り込みやメトリクス定義をSQLとYAMLの「コード」として定義することで、Gitでのバージョン管理やCursor等のAIツールによる高速開発、さらには高精度で検証可能なAI会話型分析を可能にしています。
+
+現代のビジネスは、ますます粒度の細かいものになりつつあります。クラウドプロバイダーは個々の操作レベルまで使用量を記録し、決済プラットフォームはトランザクションをリアルタイムで追跡し、AIシステムはトークン、リクエスト、コンピュート消費量を計測しています。かつてはITシステムの内部における可観測性として始まったものが、外側に広がり、ビジネスの他の領域までもがイベントの生きたストリームへと変わりつつあるのです。
+
+「私たちは鏡のようなデジタル世界を手にしていて、私たちが行うすべてのことがイベントになっています」と語るのは、[リアルタイム分析](https://clickhouse.com/resources/engineering/what-is-real-time-analytics)に特化したオペレーショナルBI-as-Codeツール[Rill](https://www.rilldata.com/)の共同創業者兼CEOであるMike Driscollです。「そして、このデータが手元にあるなら、それを理解したいと思うわけです」
+
+Mikeが言うように、課題はデータを集めること自体ではなく、それらがどのように繋がり合うかを理解することにあります。ある企業はAWSやGoogle Cloudでクラウドコストを把握し、Stripeで売上を見て、プロダクトの利用状況はまったく別の場所で追跡しているかもしれません。しかし、そのどれもが、ビジネス全体としてどう動いているかを説明してくれるわけではありません。「他社のダッシュボードに頼って自社のビジネスを理解することはできません」と彼は言います。「結局のところ、自分たちですべてのデータを統合する必要があるのです」
+
+Rillのようなビジネスインテリジェンス(BI)ツールは、このギャップを埋める手段として登場し、オペレーショナルデータと財務データを統合することで、何にいくら使っているのか、その理由は何かをチームが理解できるようにしてきました。しかし、このアプローチには、膨大なデータを高速かつ効率的に集計できる分析システムが必要です。「ClickHouseは大規模な集計を行うのに驚くほど優れています」とMikeは語ります。
+
+[2025年12月のサンフランシスコでのClickHouseミートアップ](https://clickhouse.com/videos/meetupsf_dec_20253)では、Mikeが、dltによる宣言的な取り込み、ClickHouseでの高性能な集計、そしてメトリクスファーストなオペレーショナルBIレイヤーを組み合わせ、計測化された世界を理解するためのシステムをどう構築しているかを共有しました。
+
+<iframe width="768" height="432" src="https://www.youtube.com/embed/ejOKXO2159M" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe>
+
+## リアルタイムデータベース向けの高速BIツール
+
+Rillの分析へのアプローチは、大規模なリアルタイムイベントデータに取り組んできた10年以上の経験から生まれました。2010年、MikeはMetamarketsを共同創業しました。これはApache Druidの開発元であり、ストリーミングデータに対するインタラクティブ分析向けに構築された最初のデータベースのひとつです。2017年にMetamarketsがSnapに買収された後、MikeはNishant Bangarwaとともに2020年にRillを設立し、分析インフラを構築してきた経験を活かして、リアルタイム時代に向けてBIを再考しました。
+
+現在、Rillは数千人のユーザーにわたり、1日あたり1,000億件を超えるイベントを処理しており、BloombergやComcastといったデジタルメディア大手、AT&Tのような大規模エンタープライズ、さらには増加しつつあるフィンテックやEコマース企業にサービスを提供しています。「私たちの顧客の多くは、ClickHouseを愛用しているような顧客と似ています」とMikeは言います。「ですから、ClickHouseをデータベースとして採用してフィットしたのは偶然ではないんです」
+
+Rillは、BI-as-code、開発者フレンドリー、エージェントファーストというアプローチを取っています。データソース、変換、ビジネスロジックはコードとして定義され、Cursorのようなモダンなツールで開発し、Gitで変更をバージョン管理し、ソフトウェアを出荷するのと同じ要領で分析をデプロイできます。「私たちは本当にこの宣言的なデータスタックの支持者なんです」とMikeは語ります。「SQLとYAMLがあれば、ダッシュボードだけでなく[データアプリケーション](https://clickhouse.com/resources/engineering/data-application)も作れるんです」
+
+この哲学はRillのメトリクスファースト設計にも及んでいます。チームはSQL式を使ってメトリクスを宣言し、ダッシュボードはそこから生成されるものであり、作られるものではない、という共有のセマンティックレイヤーを構築します。Mikeが言うように、これはAIや会話型分析がワークフローに加わるにつれて、ますます重要性を増しています。「SQLは価値がありますが」と彼は説明します。「結局のところ、エージェントはセマンティックレイヤーのようなものとやり取りできた方がずっとうまく機能することがわかってきました」
+
+そのすべての基盤にあるのが、リアルタイムのパフォーマンスです。従来のBIツールは、しばしば重いクエリを避けるべきものとして扱い、ダッシュボードのレスポンスを維持するためにキャッシュに頼ってきました。「しかしClickHouseのようなものを使っていれば」とMikeは言います。「ダッシュボードに何百回、何千回もヒットするのを避ける必要はありません」。Rillの顧客にとって、これは即座のドリル、スライス、ダイスを意味し、ライブデータに対して直接動作する高速な会話エージェントも実現します。
+
+Mikeはこう表現します。「ClickHouseのようなリアルタイムデータベースを中心に構築したからこそ、他のダッシュボードでは試みすらしないようなことができるのです」
+
+## RillのClickHouseベースのアーキテクチャ
+
+Rillのアーキテクチャは、分析をデータベース近くに保ちつつ、それ以外のすべてをコードとして定義します。取り込み、モデリング、分析の間に新しいレイヤーを差し込むのではなく、それらを宣言的な構成を中心とした単一のワークフローへと繋ぎ合わせます。
+
+![](https://clickhouse.com/uploads/Rill_User_Story_Issue_1250_0_7064f28ae6.png)
+
+*Rillのアーキテクチャ:宣言的なデータ取り込み、ClickHouseによる集計、そしてオペレーショナルBI。*
+
+データの取り込みは、宣言的なデータロードのためのオープンソースPythonフレームワークであるdlt (data load tool) のようなソフトウェアを使ってオーケストレーションされます。オペレーショナルデータベース、オブジェクトストア、データレイク、データウェアハウスは再利用可能なコネクタを通じて抽出され、変換とソース認証情報はSQLとYAMLで定義されます。チームはカスタムパイプラインを維持する代わりに、データがどう移動すべきかを記述し、dltが抽出とClickHouseへのロードを自動で処理します。
+
+ロードされたデータに対し、ClickHouseが[分析エンジン](https://clickhouse.com/resources/engineering/what-is-columnar-database)として機能し、大規模なイベントデータに対してクエリが直接実行されます。ビジネスロジックは、メジャー式とディメンションメタデータで表現され、クエリ時に集計を行うSQLモデルへとコンパイルされます。これらの定義が共有メトリクスレイヤーを形成し、ダッシュボード、API、プログラムによるアクセスのすべてが同じロジックに依拠することを保証します。
+
+この基盤の上に、Rillのオペレーショナル BIレイヤーが乗っています。ここではロールベースのセキュリティポリシーやダッシュボードの構成もコードとして定義されます。ダッシュボードは手作業で構築するのではなく、メトリクス定義から生成されるため、分析アプリケーションはClickHouseをリアルタイムでクエリする軽量なインターフェースのままに保たれます。
+
+その結果、ツール間でビジネスロジックを重複させることなく、ソースシステムからClickHouseへとデータが流れ、プロダクト、運用、財務の各チーム、さらには外部パートナーへもインタラクティブな分析を届けるコンポーザブルなシステムが実現します。
+
+## BI-as-codeは実際にどう機能するのか
+
+サンフランシスコでのミートアップで、Mikeはノートパソコンを起動し、ライブデモを行いました。「ClickHouseがローカルマシン上でいかに簡単に起動できるかにインスパイアされました」と彼は述べ、ClickHouseと同様に、Rillでも開発者がローカルインスタンスをブラウザで起動し、ローカルのClickHouseデータベースまたは[ClickHouse Cloud](https://clickhouse.com/cloud)のどちらにも接続できるようになっていることを指摘しました。
+
+デモはRill内部の3つの主要なビルディングブロック、すなわちソース、メトリクス、ダッシュボードを中心に行われました。Mikeはまず、Parquetファイルから約100万行のGoogle Cloud使用量データをロードしました。次に、エージェント支援のワークフローを使って、このデータセットをClickHouseに取り込むのに必要なYAML設定を生成しました。
+
+接続が完了すると、Rillはテーブル構造を分析し、メトリクス定義とダッシュボードを自動的に生成しました。数秒のうちに、彼はクラウド支出のトレンドを探索でき、サービスにドリルダウンし、時間範囲をズームし、ディメンションでコストをスライスすることが、すべてClickHouseクエリに支えられて可能になりました。「素晴らしいのは、その簡単さと速さです」とMikeは言います。
+
+Rillでは、開発者はAI支援のコーディングツールを使って構成をコードとして定義できます。デモの中で、MikeはCursorを使って取り込みの構文を生成し、フォーマットを調整し、ダッシュボードを変更しました。かつては広範なUI操作を必要としたタスク、たとえばダッシュボード全体の通貨フォーマットの変更などが、数秒で行えるのです。「これがBI-as-clicksとBI-as-codeの違いです」と彼は言います。
+
+Mikeが説明したように、開発はまずローカルで行われます。チームは小さなデータパーティションに対して反復作業を行い、メトリクスを検証し、変更をGitにコミットしてからクラウドにデプロイします。デプロイ後は、同じ定義がデータの上に重ねられた会話型分析を支えます。
+
+Mikeはこれを、クラウドプロバイダー間でのコスト増加について自然言語で質問することで実演しました。会話型BIは「だいぶ一般的になってきて、データの上にチャットボットを貼り付けたデモはみんな見たことがある」と認めつつも、彼は実際に実運用で機能するかを決定づける2つの制約を強調しました。
+
+第一に、Text-to-SQLアプローチは実際のプロダクション環境では必ずしもスケールしません。「数百のテーブルがあるなら、エージェントが迷子になるのが見えるでしょう」とMikeは言います。「データエンジニアに問題を投げて、『クラウドコストが上がっている理由を突き止めてくれ』と言うようなものです」
+
+第二に、インタラクションの速度は正確性と同じくらい重要です。「バックエンドが高性能でなければなりません」と彼は言います。「もしRillを[SnowflakeやRedshift、BigQuery](https://clickhouse.com/resources/engineering/top-5-cloud-data-warehouses)にぶつけたら、答えが返ってくるのに永遠にかかってしまうでしょう」
+
+最終的に、信頼は知性と同じくらいトレーサビリティから生まれます。Rillでは、生成された各インサイトは元となるダッシュボードとクエリ結果にリンクされており、ユーザーはAIの応答を不透明な出力として扱うのではなく、結論を検証できるようになっています。「信頼できる結果が必要です」とMikeは言います。「検証可能性が必要なんです」
+
+## 完全に計測化された世界のための分析
+
+Mikeが説明したワークフローが、実際の組織内で継続的に動いている様子を想像してみてください。クラウドの請求エクスポートがオブジェクトストレージに着地し、オペレーショナルデータがAPI経由で流れ込み、宣言的なパイプラインがすべてをClickHouseへとストリームし、そこでリアルタイムに集計が行われます。一度定義したメトリクスは自動的にダッシュボードとなり、プロダクト、運用、財務にまたがる各チームは、共有された分析レイヤーを通じて同じ基盤データを探索します。
+
+かつてはETLジョブ、セマンティックレイヤー、ダッシュボードツールのつぎはぎが必要だったものが、コードとして定義され維持される統一的なワークフローへと集約されるのです。
+
+![](https://clickhouse.com/uploads/Rill_User_Story_Issue_1250_1_59c5095254.png)
+
+*実践におけるFinOps:Rillでの宣言的取り込み、リアルタイム集計、そしてオペレーショナルBI。*
+
+総合すると、RillとClickHouseは、あらゆるビジネスプロセスがイベントを生成する世界に向けて構築された、新しい分析モデルを示しています。チームはライブシステムをクエリし、ローカルで反復し、ソフトウェアを出荷するのと同じ方法で分析ロジックをデプロイすることで、運用状況を常に把握できるのです。
+
+組織がリアルタイムで計測されるようになるにつれ、分析は事後的なレポーティングから運用上の意思決定へとシフトしていきます。宣言的なデータ移動、高性能な集計、メトリクスファーストの設計によって、分析を別個の到達点としてではなく、ビジネスそのものと並走するインフラとして扱うことが可能になるのです。
+
+---
+
+## 今すぐ始めましょう
+
+ClickHouseが自分のデータでどのように動作するか試してみませんか? わずか数分でClickHouse Cloudを使い始めることができ、$300分の無料クレジットも受け取れます。
+
+[サインアップ](https://console.clickhouse.cloud/signUp?loc=blog-cta-765&utm_blogctaid=765)
+
+---
+
+---
+
+## RespanがClickHouse CloudでLLMオブザーバビリティをスケールさせる方法
+Published: 2026-06-02T02:44:42+00:00
+URL: https://clickhouse.com/blog/respan-ai-llm-observability-jp
+
+---
+title: "RespanがClickHouse CloudでLLMオブザーバビリティをスケールさせる方法"
+date: "2026-06-02T02:44:42.668Z"
+author: "ClickHouse"
+category: "User stories"
+excerpt: "Respan AIは、1日5,000万件のイベントにわたる高スループットなLLMオブザーバビリティをClickHouse Cloudで支えています。Postgresが秒間50〜100書き込みで限界を迎えた後、同チームはインジェストと分析をClickHouse Cloudへ移行しました。インクリメンタルなマテリアライズドビュー"
+---
+
+# RespanがClickHouse CloudでLLMオブザーバビリティをスケールさせる方法
+
+## まとめ
+
+- Respanは、1日5,000万件に及ぶイベントを扱う大規模なLLMオブザーバビリティを、ClickHouse Cloudで支えています。
+- 毎秒50〜100件の書き込みでPostgresが限界に達した後、同チームはインジェストと分析基盤をClickHouse Cloudへ移行しました。
+- インクリメンタルマテリアライズドビューとトレース集計により、データセットが数十億行規模に拡大してもダッシュボードは高速なまま維持されています。
+
+[Respan](https://www.respan.ai/)（旧称 Keywords AI）は、オブザーバビリティを組み込んだAIゲートウェイを構築しています。本番環境で稼働するLLMアプリケーション向けに設計されたこのプラットフォームは、複数のモデルやプロバイダーにまたがってリクエストをルーティングしながら、パフォーマンス、評価、プロンプト管理に関する可視性をチームに提供します。
+
+YC W24バッチに参加した同社は、数千人の開発者から支持を集めて急成長し、トラフィックは1日数百リクエストから1日約3,000万リクエスト、月間では10億リクエスト近くにまで拡大しました。実際のLLM呼び出しに加え、キャッシュされたリクエストもオブザーバビリティデータを生成するため、全体のイベント量はさらに大きくなります。
+
+現在、Respanは1日あたり約5,000万件のイベントを処理しています。この規模では、アクティビティが途切れることはありません。「今この瞬間にも、何千ものイベントが我々のパイプラインを流れています」と、共同創業者兼CTOのRaymond Huang氏は[2025年12月にサンフランシスコで開催されたミートアップ](https://clickhouse.com/videos/meetupsf_dec_20251)で語っています。
+
+このミートアップでRaymond氏は、Respanのバックエンドがシンプルなpostgresベースの構成から、現在では高スループットなインジェスト、高速な分析、本番品質のLLMオブザーバビリティを支える[ClickHouse Cloud](https://clickhouse.com/cloud)へどのように進化したのかをライブデモで紹介しました。
+
+## PostgresからClickHouseへ
+
+Respanは、真のスタートアップ精神を持つ少数精鋭のチームです。「我々は速く動き、速く作る」とRaymond氏は語ります。当初、プラットフォームのバックエンドはその身軽な発想を反映したもので、Postgresを裏に持つDjangoアプリが、届いたリクエストを逐次ログとして記録する構成でした。「リクエストが1つ届き、Postgresに入り、そこに保存される」とRaymond氏は説明します。「それだけのシンプルな構造です」
+
+ボリュームが小さいうちはこのアプローチで問題ありませんでした。システムは秒間数十イベントを難なく処理し、メンタルモデルも理解しやすいものでした。しかしワークロードが秒間50〜100リクエストの範囲に達し始めると、トランザクション同士が競合し始めました。
+
+Postgresは正しく振る舞っており、整合性を保つために処理を直列化していただけです。しかし継続的な書き込み負荷の下では、各insertがトランザクションを完了させ、write-ahead logに記録されてからでなければ後続の書き込みが進められません。Raymond氏の言葉を借りれば、「処理が積み上がり始め、そこからは急速にエスカレートしていく」のです。
+
+Postgresのトランザクションモデルと、大規模なリアルタイムオブザーバビリティに求められる要件との間には、明らかなミスマッチがありました。既存構成からこれ以上絞り出すという選択肢はなく、チームはより良い解決策を探すことを決断しました。その答えがClickHouse Cloudでした。
+
+「我々はClickHouseへの移行を決めました」とRaymond氏は語ります。「これは大きく効きました。以前は対応できなかったスケールも、今では容易に処理できます」
+
+## 継続的なインジェストを支えるログ設計
+
+ClickHouseへの移行を始めるにあたり、チームはスキーマを正しく設計することに注力しました。書き込みボリュームを扱えることは分かっていましたが、それを実現するにはデータモデルが適切に対応している必要があったのです。
+
+ログはコンパクトかつ構造化された形になるよう設計され、実際にクエリや集計の対象となるフィールドのみを格納しました。レイテンシ、スループット、ルーティング時間、コストといったメトリクスやメタデータは、分析ワークロードに最適化された型付きのカラムとして書き込まれます。
+
+プロンプト入力やモデル出力といったより大きなテキストフィールドは、インジェスト前に意図的に切り詰められます。目的はやり取りのすべてを記録することではなく、行のサイズを無制限に膨らませることなく、デバッグや分析に十分なコンテキストを保持することです。
+
+「メモリ効率が重要なので、大きなデータはClickHouseに保存しません」とRaymond氏は語ります。「メッセージを小さく保ち、インジェストレートを可能な限り高く維持できるように、最小限の情報だけを保存しています」
+
+## マテリアライズドビューによる高速分析の構築
+
+大規模なデータインジェストが価値を持つのは、分析レイヤーがそのスピードに追いつけてこそです。Respanの顧客は、ダッシュボードが素早く読み込まれ、よく使われるデータの切り口を遅延なく扱えることを期待しています。これを実現するため、チームは[インクリメンタルマテリアライズドビュー](https://clickhouse.com/docs/materialized-view/incremental-materialized-view)を全面的に活用しています。
+
+生ログはまず組織単位でパーティション化された分単位のウィンドウに集計され、その後カスケード式に時間単位のロールアップへと展開されます。各マテリアライズドビューは、組織とAPIキー、顧客識別子、環境、デプロイメント、モデルなど特定のディメンションを対象としており、ダッシュボードは生ログをスキャンする代わりに事前集計済みのデータをクエリします。
+
+「このやり方なら、すべての集計を再計算する必要がありません」とRaymondは言います。「これでクエリ処理能力をかなり節約できます。」
+
+早期に集計し再計算を抑えることで、チームはクエリコストを予測可能に保ち、データセットが増えてもフルテーブルスキャンを回避できます。「この分割により、データを簡単に取得して最適なパフォーマンスを得られます」とRaymondは付け加えます。
+
+## リアルタイムメトリクスとユーザーメタデータの分離
+
+すべてのクエリがリアルタイムである必要はありません。一部のダッシュボードでは、集計メトリクスと並んで、顧客ID、名前、メールアドレスといったユーザーレベルのメタデータをソート・結合する必要があります。すべてのメタデータカラムでグループ化すると、特に行数が増えるにつれてクエリは重く高コストになります。
+
+代わりにチームはこの分析レイヤーで[リフレッシュ可能なマテリアライズドビュー](https://clickhouse.com/docs/materialized-view/refreshable-materialized-view)を使用しています。これらのビューは必要なフィールドを集計し、挿入のたびに更新するのではなく、一定の間隔(Raymondのデモでは10分ごと)で再計算されます。
+
+「ユーザーデータはリアルタイムである必要はありません」とRaymondは説明します。高頻度のメトリクスとわずかに遅延したメタデータを分離することで、システムは広範な[GROUP BY](https://clickhouse.com/docs/sql-reference/statements/select/group-by)句を避け、結合を効率的に保てます。
+
+すべては時間でパーティション化された[MergeTree](https://clickhouse.com/docs/engines/table-engines/mergetree-family/mergetree)テーブルに書き込まれるため、クエリは結合前に積極的にフィルタリングできます。その結果、行動メトリクスとユーザー属性を組み合わせる場合でも、高速かつソート可能なダッシュボードが維持されます。
+
+## 高コストな整合処理を必要としないトレース
+
+複雑なLLMワークフローの理解はログだけでは完結しません。Respanは、個々のリクエストがシステム内をどう流れるかを示すトレース機能もサポートしています。各トレースはスパンで構成されますが、分散環境ではこれらが順不同で到着することがあります。
+
+厳密なインジェスト順序を強制する代わりに、システムはデータ内に関係性を直接エンコードします。スパンは親スパンを参照し、その関係はクエリ時に分析的に解決されます。「最終的にデータベースの中で出会えるなら、すべては非同期で構わないのです」とRaymondは語ります。書き込み時の調整を避けることで、パイプライン全体を完全に非同期に保てます。
+
+トレース集計の構築においても、チームは同様に慎重です。[FINAL](https://clickhouse.com/docs/sql-reference/statements/select/from#final-modifier)修飾子の使用は避けています。これを使うとClickHouseがクエリ時にテーブルの大部分を再計算・マージする可能性があるためです。代わりに、スパン数、トークン使用量、コスト、エラー率などのトレースメトリクスは集計関数を使って計算されます。[argMax](https://clickhouse.com/docs/sql-reference/aggregate-functions/reference/argmax)のような関数を使うことで、高コストなフルテーブル処理を発生させずに最新の時点値を選択できます。結果として、スパン量が増えてもトレース分析は予測可能でメモリ効率の良いものに保たれます。
+
+## 大規模運用が容易なシステム
+
+Respanのシステムが拡大するにつれて、運用のシンプルさはますます重要になってきました。Raymondによれば、ClickHouseの最大の強みの一つは[インデックスモデル](https://clickhouse.com/docs/guides/best-practices/sparse-primary-indexes)のシンプルさであり、これによりエンジニアが日々管理すべき事項が減ります。
+
+「これのおかげで、インデックスツリー構造を気にせずに非常に高速にソートできます」と彼は言います。「気にすべきはパーティションが正しいかどうかと、クエリ対象のデータがメモリに収まるかどうかだけです。収まらなければインスタンスをスケールするだけ。それくらいシンプルなんです。」
+
+この予測可能性は、ログ検索のような日常的なワークフローにも及びます。高度な全文検索機能に頼らずとも、単純な文字列クエリで数千万行を1秒未満でスキャンできます。Raymondは「これはかなり印象的です」と語ります。
+
+現在、ClickHouseはインジェストから顧客向け分析まで、Respanのオブザーバビリティスタック全体を支えています。最も重要なのは、利用量の増加に伴うアーキテクチャの度重なる見直しを強いることなく、製品とともにスケールできる堅固な基盤を提供してくれることです。
+
+「ClickHouseチームに大きな感謝を捧げます」とRaymondは語ります。「私たちはLLMオブザーバビリティ分野で最高の製品の一つを構築しました。これはClickHouseのサポートなしには実現できませんでした。」
+
+---
+
+## 今すぐ始める
+
+ClickHouseが皆さんのデータでどのように動作するか試してみませんか？ClickHouse Cloudなら数分で始められ、$300分の無料クレジットを受け取れます。
+
+[サインアップ](https://console.clickhouse.cloud/signUp?loc=blog-cta-762&utm_blogctaid=762)
+
+---
+
+---
+
+## MintlifyがClickHouse Cloudのリアルタイム分析でNPSを30%向上、コストを60%削減
+Published: 2026-06-02T02:41:14+00:00
+URL: https://clickhouse.com/blog/mintlify-jp
+
+---
+title: "MintlifyがClickHouse Cloudのリアルタイム分析でNPSを30%向上、コストを60%削減"
+date: "2026-06-02T02:41:14.407Z"
+author: "ClickHouse"
+category: "User stories"
+excerpt: "Mintlifyは PostHog を ClickHouse Cloud に置き換えることで、ダッシュボードの読み込み時間を数十秒から1秒未満に短縮し、レート制限エラーを解消、コストを60%削減しながら NPS を30%改善しました。"
+---
+
+# MintlifyがClickHouse Cloudのリアルタイム分析でNPSを30%向上、コストを60%削減
+
+## 概要
+
+- Mintlify は ClickHouse Cloud を活用して、数千万人の開発者が自社コンテンツとどのように関わっているかを、数万社の企業に対してリアルタイムで可視化しています。
+- PostHog を ClickHouse に置き換えた結果、ダッシュボードの読み込み時間は数十秒から 1 秒未満へと短縮され、NPS は推定 30% 改善しました。
+- ClickHouse Cloud は継続的なメンテナンスが一切不要で、PostHog と比べて 60% 低いコストで運用でき、Mintlify の現在の規模をはるかに超えてスケールできるアーキテクチャを備えています。
+
+[Mintlify](https://www.mintlify.com/) は、Anthropic、Microsoft、Coinbase、Perplexity といった企業のヘルプセンター、サポートセンター、開発者向けドキュメントサイトを支えるインテリジェントなナレッジプラットフォームで、毎月数千万人の開発者にサービスを提供しています。
+
+ここ1年で同社は、それらのドキュメントを「誰が」、あるいは「何が」読んでいるのかという点で、大きな変化を目の当たりにしてきました。かつては人間が90%、AIクローラーが10%だったトラフィックは現在では半々となっており、Mintlify は2026年末までに全トラフィックの90%をAIエージェントが占めるようになると予測しています。
+
+ChatGPT、Claude、Cursor といったツールがドキュメントへの依存を強めるなか、Mintlify の顧客は、人間とエージェントの双方が自社コンテンツとどのように関わっているかを高速かつ確実に把握し、何を改善すべきかについて十分な情報に基づいた意思決定を行う必要があります。しかし利用が増えるにつれ、そうしたデータを高速かつ確実に提供することは想像以上に難しいことが明らかになってきました。
+
+「ClickHouse を使う前は、Mintlify のダッシュボードのアナリティクスページを開くのに、読み込みが数十秒かかることもありました」とエンジニアリングマネージャーの Nicholas Khami は語ります。「ClickHouse を使うようになってから、そのレイテンシーは1秒未満にまで下がりました。ほぼ即時です」
+
+私たちは Nick に話を聞き、Mintlify が PostHog から移行した理由、[ClickHouse Cloud](https://clickhouse.com/cloud) を選んだ決め手、そしてそれが AI エージェントが支配する未来に向けたスケールにどう役立っているのかを伺いました。
+
+## PostHog からの卒業
+
+ClickHouse に移行する前、Mintlify は当初プロダクトアナリティクスに PostHog を使っており、顧客向けにダッシュボードへ組み込むことは比較的容易でした。最初はうまく機能していましたが、顧客基盤が拡大するにつれて、その限界が見え始めました。
+
+問題の核心はアーキテクチャにありました。「PostHog は素晴らしい製品です」と Nick は言います。「ただ、[インクリメンタル・マテリアライズドビュー](https://clickhouse.com/docs/materialized-view/incremental-materialized-view)をサポートしていないため、レイテンシーが非常に高くなっていました」。Mintlify のように何万社もの企業がそれぞれ自社トラフィックのアナリティクスを問い合わせるマルチテナント SaaS プラットフォームでは、これは深刻な問題を引き起こしました。
+
+インクリメンタル・マテリアライズドビューがないと、すべてのダッシュボードがデータセット全体に対する生クエリをトリガーしてしまい、読み込みが遅くなったり、レートリミットエラーが発生してダッシュボードが完全に表示できなくなったりしました。「とても遅く、レートリミットでエラーになっていました」と Nick は語ります。
+
+問題が深刻化するにつれ、既存のアナリティクス構成の限界はますます明らかになりました。ダッシュボードのパフォーマンスや信頼性の問題は顧客体験に大きな影響を及ぼし始め、エンジニアリングチームの継続的な対応を必要としました。チームはよりスケーラブルなソリューションへ移行する時が来たと判断しました。
+
+## ClickHouse Cloud を選んだ理由
+
+Nick にとって ClickHouse は初めてではありませんでした。Mintlify に入社する前、彼は検索 API スタートアップ [Trieve](https://www.trieve.ai/) を共同創業し、そこで検索アナリティクスのために ClickHouse を毎秒100リクエスト以上で利用していました。2025年に Mintlify が Trieve を買収した際、Nick と共に ClickHouse もやってきて、結果的に Mintlify 自身の検索アナリティクスを支えることになりました。チームが PostHog の代替を検討し始めたとき、そのポジティブな実体験が大きな出発点となりました。
+
+それでもチームはきちんと比較検討を行い、他に2つの選択肢を検討しました。「DuckDB は当社のニーズを満たしませんでした。当社のリアルタイムアナリティクスは、成長する顧客ベースに合わせて水平スケールする必要があったからです」と Nick は語ります。「BigQuery は非常に高価で、ClickHouse と比べて始めるのが難しかったのです」
+
+最終的に、Nick とチームの ClickHouse への精通、加えてその使いやすさ、強力なオープンソースコミュニティ、豊富な実例の存在によって、決断は容易になりました。
+
+次の問題は、セルフホストにするか [ClickHouse Cloud](https://clickhouse.com/cloud) を使うかでした。Nick は Trieve でセルフホストを経験していたため、それが何を意味するか分かっていました。Mintlify については、3つの要素がマネージドサービスの選択を後押ししました。第一に、ClickHouse Cloud の [Query Insights](https://clickhouse.com/docs/cloud/get-started/query-insights) ツールです。「ClickHouse Cloud にクエリを入れると、そのクエリが最適かどうかを教えてくれる。これは私たちのチームにとって本当に大きかったです」と Nick は言います。「私たちの負担をかなり減らしてくれます」
+
+第二に、チームはデータ取り込みに Amazon のマネージド Kafka サービスである MSK を使いたいと考えていました。Mintlify の規模では、「ClickHouse Cloud のおかげで、自前のインフラで行うよりもはるかに簡単に MSK を VPC ピアリングでセットアップできました」と Nick は語ります。
+
+第三に、Mintlify は Kubernetes ではなく ECS を主に使う組織であり、EKS でのセルフホストは独自デプロイメントの管理にかなりのオーバーヘッドを追加することになります。「結果として」と Nick は言います。「クラウド製品を使う方がはるかに理にかなっていました」
+
+## 2週間の移行
+
+移行は2025年の秋に約2週間かけて行われました。
+
+一気に切り替えるのではなく、チームはイベントを ClickHouse と PostHog の両方に同時に書き込み、両方を並列でクエリして結果を比較しました。混乱を最小限に抑えるため、PostHog のイベントスキーマを ClickHouse でそのまま再現し、同じハンドラ関数や API サーフェスを1対1でマッピングしました。「これによって移行は非常にスムーズになりました」と Nick は言います。「API サーフェスや統合をほとんど変更する必要がありませんでした」
+
+現在、Mintlify のすべてのイベントは MSK 経由でのみ、ClickHouse のネイティブ取り込みサービスである [ClickPipes](https://clickhouse.com/cloud/clickpipes) を通じて ClickHouse に流れています。PostHog では利用できなかった[インクリメンタル・マテリアライズドビュー](https://clickhouse.com/docs/materialized-view/incremental-materialized-view)は今や、Mintlify が顧客にアナリティクスデータを提供する仕組みの中核となっており、データセット全体に対する高コストな生クエリなしでリアルタイムダッシュボードを実現しています。
+
+顧客向けアナリティクスに加えて、データは社内の AI Slack ボットも支えており、Mintlify の go-to-market チームに顧客データへの読み取り専用アクセスを提供して、高成長アカウントの発見やより根拠に基づいたプロダクト判断を支援しています。「ClickHouse はそれに最適です」と Nick は言います。「以前のソリューションではレートリミットに引っかかっていましたが、これらのクエリは格段に高速になりました」
+
+## より速いアナリティクス、より満足する顧客
+
+Mintlify の顧客にとって、ClickHouse はすぐに効果をもたらしました。PostHog では数十秒かかっていたダッシュボードが、今では1秒未満で結果を返します。「ClickHouse への移行でレイテンシーが下がり、レートリミットの問題もすべて解消されました」と Nick は語ります。「今では顧客に対してアナリティクスが毎回確実に正しく表示され、しかも素早く表示されます。これは満足度向上にとって非常に大きなことです」
+
+その満足度は Mintlify の NPS スコアにも表れており、Nick の見積もりではおよそ30%向上しています。「毎週約10%の顧客からアナリティクスに関する問題が報告されていた状態から、アナリティクスのバグ報告がゼロ件になりました」と彼は言います。「動作しないという顧客サポートの問い合わせも一切なくなりました。これは最高の結果でした」
+
+運用面でおそらく同じくらい大きな影響をもたらしたのは、ClickHouse Cloud が Mintlify のエンジニアリングチームから継続的な保守作業をまったく必要としないことです。「セットアップしたらそのまま動きます」と Nick は言います。「フルタイムで管理している人は誰もいません。平均すると週0時間の作業です。これが ClickHouse Cloud を使うことの素晴らしさです」
+
+コストは嬉しいおまけとなりました。Nick の見積もりでは、ClickHouse Cloud は Mintlify が同じワークロードで PostHog に支払っていた金額より約60%安く済んでいますが、彼はコストは決して主たる決定要因ではなかったと強調します。「私たちは何よりも製品の品質を求めていました」と彼は語ります。「コスト削減はおまけにすぎませんでした」
+
+## 道のりで得た学び
+
+Trieve、そして今回 Mintlify と、ClickHouse を二度導入してきた Nick には、同様の移行を検討するチームへのいくつかの提案があります。
+
+第一に、イベント量が多い場合は MSK 用の [ClickPipes](https://clickhouse.com/cloud/clickpipes) を使うこと。「データを直接書き込むよりはるかに効率的で、ClickHouse Cloud と ClickPipes の組み合わせは非常にうまく機能し、よりスムーズにスケールできます」と Nick は言います。これは彼が苦労して学んだ教訓で、Trieve では MSK を使っていなかったため、Mintlify でまず変えたことの一つがこれでした。
+
+第二に、単一のイベントテーブルから始め、その上に[マテリアライズドビュー](https://clickhouse.com/docs/materialized-views)を構築すること。Nick が説明するように、マテリアライズドビューは ClickHouse におけるファーストクラスのプリミティブであり、本質的にはテーブルそのものです。そのため、別々のテーブルを散らかして管理するメリットはほとんどありません。「すべてのイベント用に1つの巨大なテーブルを作成し、その上にマテリアライズドビューを作成する方がはるかに楽です」と Nick は語ります。
+
+最後に、独自に構築するのではなく既存の移行ツールを使うことを推奨しています。「マイグレーションをコードとして持つことは重要です。ClickHouse は最近そのまわりのツーリングに投資していて、それが素晴らしいです」。ゼロから始めるのは、その労力に見合わないと彼は付け加えます。
+
+## エージェント時代に向けたスケーリング
+
+Nick とチームにとって、ClickHouse への移行は当初の目的をまさに達成しました。「数千社の企業が、毎月数千万人の開発者のトラフィック統計を見て、自社の製品のどこがうまく機能しているか、どこが分かりにくいか、どこを磨くべきか、あるいはドキュメント改善に時間を費やすべきかを把握できるようになりました」と彼は語ります。「開発者の一人として、私はそれをとても誇りに思っています」
+
+経営陣も同意見です。「当社の CTO と CEO は顧客体験を深く重視しています」と Nick は付け加えます。「彼らは非常に満足しており、私たちの成長を支えるものとして ClickHouse を信頼していると断言できます」
+
+先を見据えると、課題、そして機会はますます大きくなっています。AI エージェントのトラフィックが指数関数的に伸びるなか、Mintlify はエージェントにとっても人間にとっても同じくらい良い体験を提供できるよう大胆な投資を続けています。これはつまり、アナリティクスの重要性が今後さらに高まることを意味します。「Mintlify を使う企業は、エージェントが自社の製品をどのように使っているか、人間がどう使っているかについて、非常に高速で信頼できるアナリティクスを必要とするようになると思います」と Nick は語ります。「最良のインサイトが何かを見極めながら、それらを容易に利用できるようにするために、引き続き ClickHouse を使い続けます」
+
+ClickHouse Cloud によって、Mintlify のインフラは成長に対応できる構成になっています。「現在の地点を遥かに超えて、何年にもわたるスケーリングに耐えられるアーキテクチャに将来対応済みです」と Nick は語ります。「私たちは本当に急速に成長していますが、ClickHouse の限界には全く近づいていません」
+
+
+---
+
+## 今すぐ始める
+
+ClickHouseが自分のデータでどのように動作するかご興味はありませんか？ClickHouse Cloudなら数分で始められ、$300分の無料クレジットも受け取れます。
+
+[サインアップ](https://console.clickhouse.cloud/signUp?loc=blog-cta-760&utm_blogctaid=760)
+
+---
+
+---
+
+## 「世代を超えた飛躍」: Trio が ClickHouse Cloud で決済分析を統合し、ストレージを 88% 削減した方法
+Published: 2026-06-02T02:37:49+00:00
+URL: https://clickhouse.com/blog/trio-jp
+
+---
+title: "「世代を超えた飛躍」: Trio が ClickHouse Cloud で決済分析を統合し、ストレージを 88% 削減した方法"
+date: "2026-06-02T02:37:49.200Z"
+author: "ClickHouse"
+category: "User stories"
+excerpt: "ブラジルのフィンテック企業Trioは、ClickHouse Cloud上に統合決済分析プラットフォームを構築することで、ストレージを88%削減し、速度面で「世代を超えた飛躍」を実現しました。2億4,300万件超の決済と1日あたり10億件超のイベントを処理し、遅延データや重複データにはスライディングウィンドウ方式で対応しています。"
+---
+
+# 「世代を超えた飛躍」: Trio が ClickHouse Cloud で決済分析を統合し、ストレージを 88% 削減した方法
+
+## まとめ
+
+- Trioは、ClickHouseを決済分析の単一の信頼できる情報源(Single Source of Truth)として活用し、消込処理、コンプライアンスレポート、運用ダッシュボードおよび顧客向けダッシュボードを支えています。
+- 2025年上半期に2億4,300万件以上の決済を処理し、1日あたり10億件以上のイベントを扱う中で、ClickHouseは最小限のチューニングで「世代を超える」ほどの高速性を実現し、ストレージを88%削減しました。
+- Trioでは、リフレッシュ可能なマテリアライズドビューとReplacingMergeTreeを組み合わせたスライディングウィンドウ方式を採用し、遅延イベント、重複イベント、順序の乱れたイベントに対応しています。
+
+[Trio](https://www.trio.com.br/en) は、大量の電子決済を処理するブラジルのフィンテック企業です。事業が拡大し、2025年にゲーミング・宝くじ分野の有力決済処理事業者である PayBrokers を買収してポートフォリオを広げる中で、刻々と動き続ける決済アクティビティのストリームを、業務部門や財務部門が信頼して扱えるデータへと変換する必要に迫られました。
+
+2025年上半期だけで、Trio は2億4,300万件超の決済を処理しており、各決済はログやシステムイベントを含む数百もの下流シグナルを生成します。この規模になると、アナリティクスは決済機構そのものの一部となります。つまり、チームがパフォーマンスを監視し、トランザクションを照合し、自信を持って提示できる財務ビューを生成するための仕組みです。
+
+[2025年11月にサンパウロで開催された ClickHouse のミートアップ](https://clickhouse.com/videos/trio-meetup-brazil) において、Trio のメンバーである Fabricio Epaminondas 氏(Head of Engineering)、Eurico Nicacio 氏(Head of CloudOps and IT)、Filipe Coelho 氏(Data Specialist) が、[ClickHouse Cloud](https://clickhouse.com/cloud) 上でアナリティクスをどのようにスケールさせているか、なぜ特定のインジェスト方式を選んだのか、そしてその過程で得た学びについて語ってくれました。
+
+<iframe width="768" height="432" src="https://www.youtube.com/embed/WMvFPH8gtv8" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe>
+
+## 単一の信頼できる情報源(Single Source of Truth)の必要性
+
+決済の世界では、「アナリティクス」の意味が他のビジネスとは異なります。SaaS なら、トラフィックやエラー率が数イベントずれていても許容されます。グラフから依然として価値を引き出せるからです。しかし、財務はそうはいきません。「クライアントが R$101.94 を保有しているのに、R$101.95 だと伝えるわけにはいかない」と Fabricio 氏は語ります。
+
+なぜなら、アウトプットは社内ダッシュボードに留まらないからです。「データをどのように利用し、照合し、財務・会計サマリーを準備するか――そのすべてに法的な含意があります」と Fabricio 氏は説明します。「コンプライアンスが関わり、連邦法、マネーロンダリング対策規程、しっかり整備されるべき一連の規制メカニズムがあります。」
+
+つまり、数字は高速であると同時に、説明可能であり、ソースまで遡れ、チーム間・システム間で一貫している必要があります。
+
+Trio が成長するにつれて、その基準を満たすことは難しくなっていきました。Filipe 氏は、同社が単一のデータベースや単一の信頼できる情報源で運用していたわけではなかったと説明します。「停止済みのレガシーシステムと現役のレガシーシステムの両方を含む、ばらばらのシステムを単一の視点に集約する必要がありました」と彼は言います。「同時に、膨大な量の金融トランザクションから分析データと過去系列を生成する必要がありましたが、それらのトランザクションを保持していたシステムは、そのようなワークロード向けに設計されていませんでした。」
+
+Trio に必要だったのは、これらのソースを統合し、イベントの大流量に追従しつつ、ビジネスが報告の根拠に据えられるアウトプットを生み出せる分析基盤でした。「この問題を解決するソリューションとして [ClickHouse](https://clickhouse.com/cloud) にたどり着きました」と Filipe 氏は語ります。
+
+## Trio の ClickHouse ベースのアーキテクチャ
+
+Trio は ClickHouse を、社内業務やレポーティングから財務照合、コンプライアンス、顧客向けアナリティクスまで、さまざまな機能で利用しています。
+
+運用面では、テレメトリーを ClickHouse にパイプし、Grafana を用いてプラットフォームのアクティビティをリアルタイムに監視しています。Eurico 氏は、Trio が始まった頃には [ClickStack](https://clickhouse.com/clickstack) のような新しい ClickHouse のオブザーバビリティ機能はまだ存在しなかったため、すでに信頼していたツールを軸に独自のパターンを構築したと述べています。「Grafana は私たちの良き友です」と彼は言います。
+
+クラウドアプリケーション――主に Elixir で、追加のサービスは TypeScript――は AWS 上で動作し、Tiger Data、Postgres、MongoDB、Amazon S3 を含む複数のトランザクショナル/オペレーショナルなデータソースとやり取りします。そこからデータは2つの主経路で流れます。メッセージング駆動のイベントは Redpanda を介したストリーミング、スケジュールされたロードは Airflow を介したバッチです。ClickHouse は分析レイヤーとして中央に位置し、Grafana、Hex、Trio 独自のアプリケーションにデータを供給し、ビューは FinOps チーム、DevOps チーム、そして顧客によって利用されます。
+
+
+![ストリーミング、バッチ取り込み、分析ツールに対応した Trio の ClickHouse ベースアーキテクチャ](https://clickhouse.com/uploads/Trio_User_Story_Issue_1256_0_24fc643f0a.jpg)
+
+インジェストに関して、チームは ClickHouse のネイティブなインジェストサービスである [ClickPipes](https://clickhouse.com/cloud/clickpipes) と、カスタム ETL アプローチのどちらかを選ぶ必要がありました。Fabricio 氏は、「ClickPipes は物事を非常に簡単にしてくれます」、特にインジェストを素早く立ち上げて、データ整形の多くを下流の ClickHouse に任せたい場合には有用だと述べる一方で、Trio が選んだのはカスタムソリューションでした。Redpanda のトピックが専用の ETL サービスにデータを供給し、そこでイベントを前処理してペイロードを構造化したうえで、整形済みで型付けされたレコードを ClickHouse にインサートする方式です。
+
+その理由は、変化下での運用性に帰着します。スキーマドリフト、進化するイベントフォーマット、イベント間の依存関係がある中で、Trio はデータが着地する前にどのように整形されるかをより細かく制御したいと考えました。途中でパイプラインを停止して復旧させる必要が生じないようにするためです。「ここに優劣はありません」と Fabricio 氏は語ります。「ClickHouse はどちらの場合でも非常に優れています。」
+
+## スライディングウィンドウによる解決策
+
+金融システムには、きれいな図を複雑にしてしまう特性があります。決済イベントは遅れて到着します。一部は二重に到着します。下流システムが配信を再試行したり、上流の障害で生じた欠損が後から埋められたりするために、順不同で到着するものもあります。
+
+Trio はメッセージングフローの上に[リアルタイムメトリクス](https://clickhouse.com/resources/engineering/what-is-real-time-analytics)を構築する際にこの問題に直面しました。Pix 決済が最初のイベントの記録後に「完了」する場合や、以前のレコードがすでに集計された後で数秒、あるいは数分遅れて確認イベントが到着する場合があります。最初のイベントを最終とみなせば、後から合計値が遡って変動します。ソフトウェアでは「煩わしいが許容できる」程度のことが、金融では受け入れられません。
+
+チームが最初に思いついたのは、新しいイベントが到着するたびに集計を再実行する [refreshable materialized views](https://clickhouse.com/docs/materialized-view/refreshable-materialized-view) を使うことでした。問題は、遅延データが現れるたびにビュー全体を再計算すると、小さな修正のために大量の高コストな処理を行うことになる点です。「素のリフレッシャブルビューはすべてを再マテリアライズします」と Fabricio 氏は言います。「これは非常に重いです。」
+
+そこで Trio はアイデアを保ちつつ、対象範囲を狭めました。リフレッシュのたびに全データセットを完全に最新化するのではなく、直近の過去を修正することに注力したのです。このパターンはいわゆるスライディングウィンドウです。数分ごとに直近の時間範囲(例: 「直近4時間を5分ごと」)を再計算し、遅延イベントや重複が履歴の再構築なしに正しい合計に取り込まれるようにします。
+
+
+![スライディングウィンドウは直近のメトリクスを正しい状態に保ちつつ、古い時間バケットを不変にする](https://clickhouse.com/uploads/Trio_User_Story_Issue_1256_1_928ec0cb80.jpg)
+
+これらの定期的な再計算はリフレッシャブル・マテリアライズドビューが駆動し、リプレイによって同じ論理レコードが複数回挿入された場合の重複排除は [ReplacingMergeTree](https://clickhouse.com/docs/engines/table-engines/mergetree-family/replacingmergetree) が担当します。また、コストの高いグローバルマージを避けるために [パーティショニング](https://clickhouse.com/docs/partitions) にも細心の注意を払いました。
+
+その結果、財務が求める通りに振る舞うシステムが得られました。ストリームが遅れたり繰り返したりしても、直近のデータは正確に保たれます。古いバケットは安定すると実質的に不変になります。レポーティングは欠損や不整合から解放され、データセットが拡大してもパフォーマンスは維持されます。「これにより、台帳由来の10億件超のデータポイントを1日のうちにスムーズに扱い、大きな問題なく更新し続けられます」と Fabricio 氏は語ります。
+
+## 「世代を超える飛躍」
+
+Trio にとって、ClickHouse のメリットは複数の形で同時に現れました。
+
+ひとつは単純な統合です。個々のシステムに結びついた分離した分析の島を維持する代わりに、分析レイヤーを中央集約しました。「すべてのソースが1か所に集まります」と Filipe 氏は説明します。「クラウド内ですべてを管理します。会社のあらゆる分析課題に対する単一の信頼できる情報源となるのです。」
+
+ストレージも劇的に減少しました。ClickHouse の[カラムナーストレージ](https://clickhouse.com/docs/faq/general/columnar-database)と[圧縮](https://clickhouse.com/docs/data-compression/compression-in-clickhouse)のおかげで、以前の構成と比較して約88%削減されました。
+
+そして、スピード。これを Filipe 氏は最適化というより、真の段階的飛躍として描写しています。「スピードに関して言えば、ClickHouse は文字通り無敵です」と彼は語ります。「以前と比べて世代を超える飛躍で、最小限のチューニングでさえそれが実感できます。」
+
+そのスピードはチームの日々の働き方を変えました。回答を待ったり、どのクエリを実行する「価値」があるかを取捨選択したりする代わりに、アナリティクスはより緊密なフィードバックループの中で使えるものになりました。「壁に頭を打ち付けるのをやめて、実際にデータを分析することにより多くの時間を使うようになりました」と Filipe 氏は語ります。
+
+マイグレーションの負担も軽くなりました。「通常ならスキーマを整えるのに頭を悩ませて8時間かかるようなことを、ClickHouse の取り込みプロセスは数分で解決します」と Filipe 氏は言います。Trio がおよそ50億行――一部のテーブルは70列を超える――を移行した際にも、ClickHouse は怯みませんでした。「データを受け取って、基本的に文句ひとつ言いませんでした」と彼は語ります。「これは以前のデータベースを扱うときには毎回大問題でした。これは私たちの仕事を一変させる経験でしたし、今もそうです。」
+
+## Trio と ClickHouse の次なるステップ
+
+サンパウロでチームが説明したのはフェーズ1です。すなわち、ばらばらのソースを統合し、ストリーミング規模で取り込み、遅延や順序の乱れがあっても正しさを保てるアーキテクチャの上に、ステークスの高い財務アナリティクスを載せる、というものです。
+
+今や焦点は「動くようにする」ことから「より洗練させる」ことへとシフトしています。欠けているレイヤーを埋め、オーケストレーションを引き締め、Trio が取り組み始めて以降に ClickHouse へ追加された機能や改善を活用していくのです。これには [ClickPipes](https://clickhouse.com/cloud/clickpipes) や新しいテレメトリ向け機能の再検討も含まれます。さらにチームは、本番環境に適用する前にローカルモードのワークフローで取り込みや運用手順をリハーサルする試みも進めています。
+
+ボリュームが拡大しプラットフォームが広がる中での目標は、運用しやすく、変更しやすく、信頼しやすい分析基盤です。
+
+---
+
+## 今すぐ始める
+
+ClickHouseが自分のデータでどのように動作するか試してみませんか?数分でClickHouse Cloudを使い始められ、$300の無料クレジットがもらえます。
+
+
+[サインアップ](https://console.clickhouse.cloud/signUp?loc=blog-cta-758&utm_blogctaid=758)
+
+---
+
+---
+
+## Nava が Elasticsearch から ClickHouse への移行を支援し、ELO のインフラコストを 87% 削減した方法
+Published: 2026-06-02T02:35:01+00:00
+URL: https://clickhouse.com/blog/nava-jp
+
+---
+title: "Nava が Elasticsearch から ClickHouse への移行を支援し、ELO のインフラコストを 87% 削減した方法"
+date: "2026-06-02T02:35:01.462Z"
+author: "ClickHouse"
+category: "User stories"
+excerpt: "Navaが、ELOの決済モニタリングプラットフォームをElasticsearchからClickHouseへ移行し、ストレージを12TBから2TBに削減、年間インフラコストを87%カット、300のリアルタイムダッシュボード全体で2秒未満のエンドツーエンドレイテンシを実現した方法。"
+---
+
+# Nava が Elasticsearch から ClickHouse への移行を支援し、ELO のインフラコストを 87% 削減した方法
+
+## まとめ
+
+- Navaは、ブラジル最大級のカードネットワークの一つであるELO向けに、1日2,200万件のトランザクションを処理するリアルタイム決済モニタリングプラットフォームをClickHouseで構築しました
+- ElasticsearchからClickHouseへの移行により、ストレージは12 TBから2 TBへと削減され、インフラの年間コストはR$900,000からR$120,000へと87%削減されました。
+- ClickHouseは5倍高速な集計処理と2秒未満のエンドツーエンドのレイテンシーを実現し、5秒ごとに更新される300のリアルタイムダッシュボードを支えています。
+
+
+[Nava](https://nava.com.br/)は、大規模組織のデータセンターインフラの構築・管理を支援するため、1995年にブラジルで設立されました。しかし、可視性のないインフラは全体像の半分に過ぎません。やがて同社は、自ら構築する環境を補完するため、独自の監視・オブザーバビリティ製品を開発するようになりました。
+
+金融サービス分野への転換点が訪れたのは2012年のこと。ブラジル最大級の銀行グループの一つであるItaúが、Navaに対し、ネットワークを流れる決済の監視を依頼したのです。データエンジニア兼アーキテクトのLucas Souza氏は次のように振り返ります。「オブザーバビリティと監視に関する当社の専門知識と、彼らのドメイン知識を組み合わせ、私たちはこの課題を引き受けました。そして決済業界向けのリアルタイムビジネスモニタリングという、まったく新しいものを生み出すことに決めたのです」。
+
+これは大きな転換点でした。噂はブラジルの金融業界に瞬く間に広がり、決済・与信分野の他のプレイヤーたちも同様の機能を求めて訪れるようになりました。今日、Navaは決済分野で10社以上の取引を監視しており、ブラジルにおけるカード取引全体の約90%を占めています。
+
+[2025年11月にサンパウロで開催されたClickHouseミートアップ](https://clickhouse.com/videos/nava-elasticsearch-migration)で、Lucas氏はそのうちの1社、ブラジルの大手カードネットワークである[ELO](https://www.elo.com.br/)が、Navaの支援を受けて分析基盤をElasticsearchからClickHouseへ移行し、コストを87%削減し、1日2,200万件の取引監視のあり方を一変させた経緯について語りました。
+
+## Lucas氏とClickHouseとの出会い
+
+Lucas氏個人のClickHouseとの旅路は、ELOへの導入に至るほぼ10年前にさかのぼります。Microsoft SQL Serverのスペシャリストとして、ブラジル国内外のカンファレンスで長年講演してきた彼は、すべての基準としてSQL Serverを用いていました。
+
+しかし2014年から2016年ごろ、Navaが扱うインジェスト量はリレーショナルデータベースの限界を押し上げるレベルに達していました。「リレーショナルデータベースを扱う人なら誰でも分かることですが、毎秒8,000件や10,000件のレコードをインジェストすると、データページ競合が発生します」とLucas氏は述べます。
+
+インメモリソリューションは助けにはなりましたが、ライセンスコストの問題で、小規模顧客に競争力のある価格で提供することが難しかったのです。「自分のニッチのニーズを満たし、パフォーマンスを損なわず、SQL Serverと同等の効率性を持ち、リスクが低いかゼロのソリューションを見つける必要がありました」とLucas氏は語ります。
+
+彼はRocksDB、MariaDBなど複数のデータベースを評価しましたが、Perconaの知人がClickHouseを紹介してくれました。それは強い印象を残しました。「ClickHouseは別次元です」と彼は言います。「初めて触れた瞬間、そのパフォーマンスは常識を超えています」。
+
+SQL Server出身のLucas氏には、目にしたものを徹底的にストレステストするだけの技術的な深さがありました。ClickHouseは、圧縮率、クエリ速度、SQLサポートのいずれの観点でも期待に応えました。彼は自分自身にこう言い聞かせたといいます。「自分の問題の解決策を見つけた、と」。
+
+## Elasticsearchの限界
+
+それから数年間、Lucas氏とNavaのチームは社内でClickHouseの専門知識を蓄積し、本番環境への展開にふさわしい機会を待っていました。
+
+その機会はブラジルの主要決済ネットワークの一つであるELOという形で訪れました。同社は毎日約2,200万件、毎秒260件以上の金融取引を処理しており、年間80億件以上の取引レコードが蓄積されています。
+
+当時、Navaはこれらの取引の可視化を、Google Cloud Platform上にホストされたElasticsearchベースのプラットフォームを通じてELOに提供していました。しかし取引量が増加し、ELOがダッシュボードへの要求を高めるにつれて、その限界は無視できないものになっていきました。
+
+「最大の問題はコストでした」とLucas氏は言います。「ストレージ要件、インフラ費用の両面でです」。Elasticsearch構成では12TBのストレージを必要とし、年間のインフラコストはR$900,000(90万レアル)に膨らんでいました。
+
+パフォーマンスも信頼できないものでした。広い期間範囲にわたる複雑な集計は決まって極端に遅くなり、チームは需要に追いつくためだけに、週に何度もクラスタを再インデックスする状況に陥っていました。
+
+最後に、EQL構文の複雑さの問題がありました。「Elasticsearchのクエリ言語はユーザーフレンドリーではありません」とLucas氏は語ります。「冗長で、退屈な言語です」。新しいダッシュボードを作るたびに専門知識が必要となり、これがボトルネックとなって、ELOの運用チームは新しいデータビューが必要になるたびに開発者を待たなければならなかったのです。
+
+## ClickHouseへの移行
+
+社内での長年のテストでClickHouseへの信頼は培われていたものの、Navaは本番環境にデプロイした経験はありませんでした。Lucas氏は、これをELOの監視基盤の土台として提案するのは大きな一歩だと理解していました。それでも彼は決断しました。
+
+「私たちは常にリスクを取らなければなりません」と彼は言います。「リスクを取らず、自分のしていることを信じなければ、コンフォートゾーンから出ることはできず、どこにも辿り着けません」。
+
+移行はELOの既存データパイプラインの中核を維持しました。取引データは引き続きKafkaに流入し、Navaのカスタム ETLツールであるDataflowがデータ辞書とビジネスルールに基づいてエンリッチした後、クエリと可視化のためにClickHouseへロードされます。変わったのは、そのインジェスト層から下流のすべてです。
+
+ClickHouseクラスタはAltinityオペレータを使用してKubernetes上にデプロイされ、Navaは構成のきめ細かな制御とゼロダウンタイムでのアップデートを実現しました。クラスタは4つのノード(2シャード、2レプリカ)で構成され、サンパウロとリオデジャネイロにあるELOの2つの主要データセンターに分散配置されています。ClickHouseの[分散テーブルエンジン](https://clickhouse.com/docs/engines/table-engines/special/distributed)を使用し、取引はサイトIDに基づいて適切なシャードにルーティングされ、両拠点間でインジェスト負荷を分散させると同時に、ダッシュボードクエリで利用可能な読み取りキャパシティを2倍にしています。
+
+その上にいくつかの最適化が重ねられました。[ZSTDおよびLZ4圧縮コーデック](https://clickhouse.com/docs/data-compression/compression-in-clickhouse)によりストレージ要件は劇的に削減されました。[LowCardinality](https://clickhouse.com/docs/sql-reference/data-types/lowcardinality)データ型は、ユニーク値が10,000未満の文字列カラムに適用され、圧縮率とクエリ速度の両方が向上しました。[マテリアライズドビュー](https://clickhouse.com/docs/materialized-views)は一般的なクエリパターンを事前集計し、Elasticsearchでパフォーマンス問題を引き起こしていた日付範囲比較クエリ向けには、本質的に事前計算された実行計画である[プロジェクション](https://clickhouse.com/docs/data-modeling/projections)が追加されました。
+
+ELOのチームにとって、おそらく最も即座に体感できた変化は、標準SQLへの移行でした。EQLは専門知識を要求し、ダッシュボード開発を遅らせていましたが、ClickHouseの[ANSI SQLサポート](https://clickhouse.com/docs/sql-reference)により、あらゆるレベルのアナリストが急な学習曲線なしにデータをクエリし、可視化を構築できるようになりました。
+
+## より安く、より速く、より使いやすく
+
+移行前と移行後の違いはまさに昼と夜のような違いです。ストレージは12TBから2TBに減少し、ELOの年間インフラコストはR$900,000からR$120,000に下がり、87%の削減を実現しました。Lucas氏はこう表現します。「データが小さくなればなるほど、転送が速くなり、アクセスが速くなり、メモリに取り込めるデータ量が増え、使用されるインフラが少なくなります」。
+
+ClickHouseのクエリパフォーマンスも同様の物語を語っています。Elasticsearchでは数秒かかっていた集計が、今やミリ秒で完了します。全データセットの集計は5倍、フィルタリングされたクエリは6倍、事前集計されたデータでは9倍高速です。「パフォーマンスは、私たちが評価した他のどのデータベースよりも紛れもなく優れています」とLucas氏は語ります。
+
+ELOは現在、約300の運用ダッシュボードを24時間体制で稼働させており、それぞれが5秒ごとにリフレッシュされています。「Kafkaにデータが到着してから、そのデータが可視化に表示されるまでにかかる時間は2秒です」とLucas氏は語ります。
+
+その速度のビジネス価値は、可視性の遅れが実際にどれほどのコストになるかを考えれば明らかです。特定の地域で決済リンクがダウンし、ELOの優先ネットワークが処理を停止した場合、加盟店は自動的に手数料率の高いセカンダリネットワークにフェイルオーバーします。リアルタイム監視がなければ、その状況は何日も検出されないかもしれません。決済コストや加盟店との関係に影響を与えるには十分な時間です。ClickHouseを基盤としたダッシュボードがあれば、ELOの運用チームは特定の拠点での取引量低下を数秒以内に特定し、加盟店やカード保有者が問題に気づく前にエスカレーションすることができます。
+
+その結果、ELOはNavaの最も声高な擁護者の一つになりました。「今日、ELOはElasticsearchからの脱却で節約したコストのおかげで、私たちにレッドカーペットを敷くようなものです」とLucas氏は言います。「彼らが参加するイベントでは、ClickHouseを高く評価しています。なぜか?コストが下がり、アプリケーションのパフォーマンスが向上し、クエリ言語のおかげでダッシュボード作成の容易さが圧倒的に生産的になったからです」。
+
+## ブラジル全土の金融サービスを監視
+
+ELOの移行以来、Navaは増加し続ける金融サービス顧客にClickHouseを適用しており、その都度、プラットフォームに対するチームの知見が深まっています。
+
+最近で特に要求の厳しかったプロジェクトのひとつは、約200億件のレコードをMongoDBからClickHouseに移行する案件でした。「Mongoは抱えていた膨大なドキュメントデータのせいでオンラインを維持できませんでした」とLucas氏は説明します。「完全な置き換えを行わなくても、単にこのデータを統合し、集計し、最新の日付を使用するだけで、パフォーマンスはすでに10〜15倍向上していました」。
+
+Navaはまた、プラットフォームのパフォーマンスメリットを享受しながら、自身のクラスタ管理という運用負担を負いたくない顧客向けに、[ClickHouse Cloud](https://clickhouse.com/cloud)の活用も模索し始めています。現在大規模なSnowflake環境を運用しているある顧客は、分析ワークロードのClickHouse Cloudへの移行を評価中です。Lucas氏はこう述べます。「Snowflakeは優れた製品ですが、このデータを維持するコストはClickHouseと比較して非常に高いです」。
+
+Lucas氏にとって、ClickHouseの5年間の本番運用経験は、プラットフォームに対する信頼をさらに深めることになりました。「私たちがテストしたすべての機能は、いつでもどこかのシナリオで役立ってきました」と彼は言います。馴染みのないデータベースへの計算されたリスクとして始まったものは、今やNavaが大規模分析ワークロードに対して選ぶ第一のソリューションとなり、ブラジルのほぼすべてのカード取引に触れる監視能力の基盤となっています。
+
+---
+
+## 今すぐ始める
+
+ClickHouseが自分のデータでどのように動作するか試してみませんか？ClickHouse Cloudなら数分で始められ、$300分の無料クレジットも受け取れます。
+
+[サインアップ](https://console.clickhouse.cloud/signUp?loc=blog-cta-756&utm_blogctaid=756)
+
+---
+
+---
+
+## 制限よ、さようなら。データよ、こんにちは。Qontoが ClickHouse Cloud でオブザーバビリティを再構築する方法
+Published: 2026-06-02T02:29:11+00:00
+URL: https://clickhouse.com/blog/qonto-jp
+
+---
+title: "制限よ、さようなら。データよ、こんにちは。Qontoが ClickHouse Cloud でオブザーバビリティを再構築する方法"
+date: "2026-06-02T02:29:11.925Z"
+author: "ClickHouse"
+category: "User stories"
+excerpt: "Qontoが大規模なオブザーバビリティ基盤としてClickHouse Cloudを活用する方法 — サンプリングや1時間制限のクエリを廃し、2週間のクエリウィンドウ、高カーディナリティデータでの99.84%の圧縮率、そしてClickHouse MCPサーバー上に構築されたAIインシデントコンパニオンを実現。"
+---
+
+# 制限よ、さようなら。データよ、こんにちは。Qontoが ClickHouse Cloud でオブザーバビリティを再構築する方法
+
+## まとめ
+
+- Qontoは、ClickHouse Cloudを活用してバンキングプラットフォーム全体のオブザーバビリティを実現し、ヨーロッパ8市場からトレース、ログ、イベントを取り込んでいます。
+- トレーシングをGrafana TempoからClickHouse Cloudに移行したことで、サンプリングやカーディナリティ制約なしに、クエリの対象期間を2〜3時間から2週間にまで拡大できました。
+- ある事例では、ClickHouseが231 TBの高カーディナリティデータを376 GBにまで圧縮し（圧縮率99.84%）、年間7万ドルのS3ストレージコストを削減しました。
+- ClickHouse MCPサーバーを利用して、Qontoは誰でも自然な英語でインシデントを調査できるAIコンパニオンを構築し、SQLの知識は一切不要となりました。
+
+[Qonto](https://qonto.com/en) は、ヨーロッパ8か国で60万を超える中小企業やフリーランサーにサービスを提供するデジタルバンクです。決済の失敗、請求書が通らない、アカウントにアクセスできない――こうしたトラブルが起これば、その影響は即座に顧客に及びます。
+
+QontoのSRE Observability担当テックリードであるJavier Ortiz氏にとって、これこそがツール選定の判断を左右する重大な前提です。「一秒一秒が勝負です」と、[2026年2月にパリで開催されたClickHouseミートアップ](https://www.youtube.com/watch?v=TNitDSq4upc)で氏は語りました。「インシデントの原因により早くたどり着き、何が起きたのかを正確に理解して、学び、再発を防ぐ――そのために多大な労力を投じています」
+
+私たちはJavier氏に話を聞き、QontoのClickHouseへの道のり、つまりなぜ以前のシステムでは不十分だったのか、[ClickHouse Cloud](https://clickhouse.com/cloud) を選んだ決め手は何か、そしてそれがチーム全体のオブザーバビリティに対する考え方をどのように根本から変えたのかを掘り下げました。
+
+## より優れたデータベースの必要性
+
+ClickHouseを導入する前、Qontoのオブザーバビリティチームはログとメトリクスについてはしっかりとした基盤を持っていました。問題はトレースだったとJavier氏は言います。「トレースに大きな価値を見出していて、ファーストクラスの存在として扱いたかったのです」と振り返ります。「しかし、より負荷をかけたり、wide events（広い構造化イベント）に踏み込もうとしたとき、以前のシステムでは限界に突き当たりました」
+
+Grafana Tempoを中心とした構成では、集計やクエリが非常に遅く、システムから適切なインサイトを得られませんでした。トレースからオンザフライでメトリクスを生成することは苦痛であり、チームは事実上それを試みることすらしませんでした。「いつもこのゲームをしなければなりませんでした」とJavier氏は振り返ります。「データの取得は2〜3時間だけ。それより長くするとクラッシュしてしまう。常にシステムを守ろうとしていました。唯一の選択肢は積極的にサンプリングすることでしたが、それは多くの情報を失うことを意味しました」
+
+チームはサービス概要のダッシュボードが欲しかった。意味のある時間範囲でP95レイテンシをクエリしたかった。データを収集する前に捨ててしまうことをやめたかった。しかし、既存の構成では何ひとつ実現できませんでした。Javier氏の言葉を借りれば、「私たちが描いていた夢、トレースの上に積み上げたかったすべてのユースケース……どれも実現できなかったのです」
+
+そこでチームはより良い選択肢を探し始めました。Honeycombは理論的には魅力的でしたが、実運用ではコストが高くつきました。SigNoz（ClickHouseの上で動作する）は求めるものに近かったものの、チームは自分たちでスキーマを管理し、クエリインターフェースとしてGrafanaを使い続けたいと考えていました。
+
+その後Javier氏は、HoneycombのCo-founder兼CTOであるCharity Majors氏の投稿に興味を抱きました。彼女は、3本柱モデルを置き換え、ClickHouseのような[カラム型ストレージ](https://clickhouse.com/resources/engineering/what-is-columnar-database)エンジンに格納されたwide structured eventsを単一の真実の情報源とする、いわゆる [Observability 2.0](https://charity.wtf/tag/observability-2-0/) について書いていました。「あれが私たちの目を引きました」とJavier氏は語ります。
+
+チームはClickHouse Cloudにサインアップし、PoC（概念実証）を実施しました。Javier氏によれば、それは事実上止まることなく走り続けています。「クラウドをセットアップしたら、Kubernetesオペレーターや容量計画に対処する必要はありませんでした」と氏は言います。「すべてがただ動いていました」
+
+## メトリクスからClickHouseのwide eventsへ
+
+そこから始まったのは、戦略的な方向転換というよりは、徐々に開けていく気づきでした。チームは自問しました。「ClickHouseでまる1日分のトレースデータをクエリできるか?」できました。続いてウィンドウを2週間に拡大しました。そして、これまで構築できなかったサービス概要ダッシュボードを作り始めました。
+
+新しい機能が解放されるたびに、当初の要件リストには載っていなかったユースケースが新たに開かれ、そして新たなユースケースが増えるたびに、古いメンタルモデル（ログ、メトリクス、トレース）は外せる足場のように感じられるようになっていきました。Javier氏はこれを「好循環」だと表現します。「ClickHouseを掘り下げれば掘り下げるほど、これまで考慮していなかったユースケースが見つかり、それが要件になっていきました」
+
+最良の例がカーディナリティです。Prometheusの世界では、カーディナリティは慎重かつ防御的に管理すべき制約でした。ラベルは高コスト。チームは後で必要になるかもしれない次元すら、保存するコストに見合わないという理由でドロップするよう求められました。
+
+Javier氏はチームリードとして、これを取り締まることに少なからぬ時間を費やしてきました。エンジニアに対して特定のラベルを追加しないように伝える――もしインシデントで予期せぬ問いが浮上したとき、それに答えるデータが存在しないかもしれないと知りつつ。「インシデントが起きて、システムに対して投げかける必要があるとは思ってもみなかった問いを投げかける必要が出てくるんです」と氏は言います。「そして、データがそこにない」
+
+ClickHouseはカーディナリティを安価にしました。たとえばQontoのResourceAttributesとSpanAttributesのカラム（トレースを生成するすべてのサービス、Pod、クラスタ、ライブラリバージョン、デプロイメントに関するあらゆるメタデータ）は、231 TBの非圧縮データをわずか376 GBに格納しています。これは定義上ほぼ高カーディナリティであるデータに対して、99.84%の圧縮率です。S3ストレージの節約だけで年間およそ7万ドルの削減になります。
+
+「コスト削減だけではありません」とJavier氏は付け加えます。「オブザーバビリティの担当者にとって、カーディナリティは恐ろしい言葉でした。今では私が積極的に応援する対象になっています」。現在では、エンジニアがスパンにもっと属性を追加すべきか尋ねてきても、氏はためらいません。「はい、すべて追加してください」と伝えます。「コストはかかりませんし、システムは処理できます。そうすれば本当に賢い質問を投げかけ、本物の答えを得られるようになります」
+
+## QontoのClickHouseベースのアーキテクチャ
+
+新しい構成では、Qontoのスタック全体（アプリケーション、フロントエンド、Kubernetesインフラ、GitHub）から流れてくるデータはOpenTelemetryコレクターに集まり、コレクターはAWS PrivateLinkを介してすべてをClickHouse Cloudに送出します。コレクターの観点からはClickHouseはローカルに見えるため、大量のテレメトリデータをネットワーク境界をまたいで移動させる際のレイテンシや転送コストを排除できます。Grafanaはダッシュボードや従来型のオブザーバビリティワークフローのプライマリインターフェースとして使われています。
+
+![Qonto Customer Story.jpg](https://clickhouse.com/uploads/Qonto_Customer_Story_196df585c3.jpg)
+
+*アプリケーション、フロントエンド、Kubernetes、GitHubからのデータが、OpenTelemetryコレクターを経由してAWS PrivateLink経由でClickHouse Cloudへ流れ、Grafanaがダッシュボードと可視化を担う構成。*
+
+ClickHouseがQontoの新しいオブザーバビリティレシピの第一の材料（Javier氏言うところの「エンジン」）だったとすれば、第二の材料がOpenTelemetryで、これがセマンティクスを提供しました。OTelは広く採用された標準であるため、そのフィールド名や構造はLLMにとって馴染みのあるものです。つまり、エンジニアはAIに対してスキーマを説明したり、データディクショナリを保守するためにトークンを消費する必要がありません。データはすでに「読み取れる」状態になっているのです。
+
+## ClickHouse MCPによるAIパワード・オブザーバビリティ
+
+なんでも処理できるデータベースと、AIが理解できるセマンティック層が揃ったところで、第三のステップは、Javier氏が「インシデント・コンパニオン」と呼ぶものを構築することでした。これにより、Qontoの誰もが平易な英語でインシデントを調査したり質問したりして、データに裏付けられた本物の答えを得られるようになります。
+
+その中核にあるのが [ClickHouse MCPサーバー](https://clickhouse.com/blog/integrating-clickhouse-mcp) で、Qontoはこれに薄いセキュリティレイヤーを重ねて使っており、特定のインスタンスへの読み取り専用アクセスを強制しています。そのレイヤーはおよそ30行のPythonコードです。MCPはClaudeクライアントや会話型UIなど、さまざまなクライアントを通じてアクセスされます。Dust.ttを使った例では、画面を左右に分割し、左に自然言語の会話、右にはエージェントが何をしているかが完全に透過的に表示されます。推論、実行中のSQLクエリ、扱っている結果が見えます。エンジニアはどのクエリも検査でき、必要であれば手動で引き継ぐこともできます。エージェントは常にトレースIDを表示するため、調査結果はGrafanaで直接検証できます。
+
+![qonto_apr2026_image2.png](https://clickhouse.com/uploads/qonto_apr2026_image2_5768ca8de0.png)
+
+*Qontoが構築したAIインシデント・コンパニオンの実動の様子。左に平易な言葉での入力、右にエージェントの推論とClickHouse MCPクエリが表示される。*
+
+パリでのミートアップでJavier氏は、システムが動作する実例を示しました。わずか1分半足らずで、エージェントは短い自然言語の入力とタイムスタンプを解釈し、アプローチを計画し、ClickHouse MCPサーバー経由でクエリを実行し、リクエストのタイムアウトを根本原因として特定する構造化された調査サマリーを返したのです。
+
+インシデント対応が高速になっただけではありません。スコープを絞り込むプロセスもはるかに簡単になりました。以前はエンジニアリングの労力と専門知識を要した作業（どの顧客が影響を受けたか、どの国か、どのアカウントタイプか）が、今では誰もがタイプして尋ねられる質問になっています。Javier氏はある事例を振り返ります。チームは問題の影響を受けた顧客を正確に特定でき、全員に一斉通知するのではなく、対象者だけにターゲットを絞ったコミュニケーションを送ることができました。「このシステムが、SREの枠を超えるものをどう可能にしてくれるかが分かるでしょう」と氏は言います。
+
+![Qonto Customer Story (1).jpg](https://clickhouse.com/uploads/Qonto_Customer_Story_1_e8557bb676.jpg)
+
+*QontoのAIインシデント・コンパニオンが支える、リアクティブ・ビジネス・プロアクティブの各ユースケースの一部。*
+
+民主化という目標は当初から明確でした。あるコンポーネントを構築したエンジニア本人でなければ、それに関するインシデントを調査できない――そんな状況であってはならない、ということです。「誰もがどんなインシデントも解決できるべきです」とJavier氏は言います。Qontoにとって、現実は当初の目標すら超えるものになりました。プロダクトチームも同じデータをクエリして、機能の採用状況やユーザーの行動を理解しています。かつての障壁がクエリ構文やスキーマの知識だったとすれば、今やそれはただ「価値ある問いを持っているか」だけになりました。
+
+## QontoとClickHouseの次のステップ
+
+Qontoのオブザーバビリティの物語はまだ終わっていません。Javier氏にとって、それこそが要点です。「今はすべてが少し曖昧で、私たちはまさにそこにいたいのです」と氏は言います。オブザーバビリティをデータの問題として扱うことで、チームが今もくぐり抜けつつあるドアが開かれたのです。
+
+進行中の取り組みのひとつが、Qontoのデータエンジニアリングチームとのコラボレーションです。以前は、オブザーバビリティチームとデータチームは十分にサイロ化されており、データチームのApache Flinkに関する専門知識がオブザーバビリティの世界に渡ってくることはありませんでした。しかし、オブザーバビリティデータがClickHouseに住まうようになったことで、対話が可能になりました。両チームは今、リアルタイム事前集計のパイプラインを模索しており、Flinkでローリングウィンドウ上のP95メトリクスを計算し、結果をClickHouseに戻し入れることを試みています。「システムが『トレース、メトリクス、ログ』ではなく、ただの『データ』になったことで、データチームの同僚たちの専門知識を活用できるようになりました」とJavier氏は語ります。
+
+Qontoはまた、ログストレージの統合（現在は低コストストアとElasticsearchに分散）をClickHouseで進めることも検討しており、ClickHouseの統合オブザーバビリティスタックである [ClickStack](https://clickhouse.com/clickstack) も試行しています。「ClickHouseは非常に良いプレイグラウンドです。誰もが自由に試せるようにドアを開けっぱなしにしておけますから。以前のシステムでは、これを守る必要があり、長くて複雑なクエリは投げないでくれと頼まなければなりませんでした」とJavier氏は語ります。「これによって学習体験が完全に変わるのです」
+
+通底するテーマはシンプルです。インフラを「守る」ことをやめ、その上に「築く」ことを始める、ということです。データベースが制約でなくなった瞬間から、チームはその管理者であることをやめ、ユーザーとなり、ロードマップには絶対に載らなかったであろうユースケースを次々と発見するようになりました。
+
+「私が一番誇りに思っていることは、3本柱について考えるのをやめて、wide eventsについて考え始めるという決断です」とJavier氏は語ります。「そのためには、それを支える技術的基盤が必要で、オブザーバビリティのサイロを打ち破る必要があります。ClickHouseに出会えたこと、そしてまさに同じタイミングでAIが整っていたこと――私たちはとても幸運でした」
+
+---
+
+## Gala、AWS上のClickHouseで分析パフォーマンスを劇的に向上
+Published: 2026-06-02T02:22:35+00:00
+URL: https://clickhouse.com/blog/gala-jp
+
+---
+title: "Gala、AWS上のClickHouseで分析パフォーマンスを劇的に向上"
+date: "2026-06-02T02:22:35.745Z"
+author: "ClickHouse"
+category: "User stories"
+excerpt: "Gala が ClickHouse に移行して分析パフォーマンスを向上させ、コストを削減した方法をご紹介します"
+---
+
+# Gala、AWS上のClickHouseで分析パフォーマンスを劇的に向上
+
+## メリット
+
+* データ分析能力が3倍に向上
+* コストが30%削減
+* クエリ時間が数分からサブ秒に短縮
+
+[Gala](https://games.gala.com/) は、ユーザーがお気に入りのゲームやその他のメディアを楽しみ、さまざまな分散型金融商品にアクセスできる、ブロックチェーン基盤のプラットフォームを運営しています。同社は、ゲームのパフォーマンス向上、新たな開発機会の特定、マーケティング計画の策定にあたって、分析に大きく依存しています。しかし、既存のデータプラットフォームでは、取り込みと処理が必要なデータ量に対応しきれなくなっていました。市場のソリューションを評価した結果、Gala は AWS パートナーである [ClickHouse](https://clickhouse.com/) を選定し、必要とされる堅牢なデータインフラストラクチャを構築しました。Amazon Web Services (AWS) 上に構築されたこのプラットフォームは、より高速なデータ取り込みを実現し、Gala のエンジニアリングおよびマーケティングチームの生産性向上、プレイヤーへのゲーム体験の改善、そしてコスト削減につながる知見をもたらしました。
+
+## 増大し続けるデータ量へのスケーリング
+
+Gala は、Zynga の共同創業者である Eric Schiermeyer によって 2019 年に設立され、Spider Tanks や GRIT といった人気のマルチプレイヤーゲームに加え、音楽や動画コンテンツも提供しています。同社は、ユーザーに資産や購入物の透明な所有権を提供し、ゲームエコシステムへのより深い参加とエンゲージメントを促進するため、ブロックチェーンプラットフォーム上に構築されました。また、ユーザーが仲介者を介さずに互いに取引できる分散型取引所も開設しています。
+
+データは製品開発に不可欠です。同社のテンポの速いゲームは、ユーザーのインタラクションから膨大な量のテレメトリーデータを生み出しており、これはプレイヤーの行動を理解し、マネタイズを最適化し、実験を行い、全体的なゲーム体験を向上させるうえで極めて重要です。しかし、同社のゲームポートフォリオが拡大し、ユーザーベースが成長するにつれて、既存のデータインフラストラクチャはデータ量に苦戦するようになりました。
+
+製品開発に加え、マーケティングチームも効果的なキャンペーンと戦略を導くための分析データを必要としていました。一方で、エンジニアリングチームは、より戦略的な取り組みに集中するのではなく、データインフラストラクチャの管理にますます多くの時間を費やすようになっていました。ビジネスの成長を継続させるためには、この状況を変える必要がありました。Gala のリーダーシップチームは、既存の Databricks システムに代わる適切なソリューションを求めて、データプラットフォーム市場の調査を決定しました。
+
+## 「ロケットのように高速な」データプラットフォームへの迅速な移行
+
+主要なデータプラットフォームを調査した結果、同社は ClickHouse への移行を選択しました。スケーラビリティとパフォーマンスの向上、そしてコストの低さが選定の決め手となりました。
+
+最初のワークロードは、Kafka からブロックチェーンデータを取り込むことでしたが、チームはすぐに、AWS 上で分析ダッシュボードを稼働させることで得られるパフォーマンスとコストのメリットを認識しました。その後 Gala は、データソースを Airbyte、[Amazon S3](https://aws.amazon.com/s3)、Fivetran にも拡大し、継続的なデータ取り込みを行っています。
+
+複数のデータソースを ClickHouse に取り込み終えた後、次の段階は、コストのさらなる削減と効率向上に重点を置いた、クエリ、リソース、コネクタの最適化でした。「ClickHouse は、最速のデータベースシステムの 1 つとしてよく知られています」と、Gala のリードデータアナリストである Mike Rexford は語ります。「そして実際にそれが証明されました。特にその機能を最大限に活用すればなおさらです。まさにロケット並みに高速です。」
+
+変革のもう一つの初期の契機は、分析およびビジネスインテリジェンス (BI) 機能を社内のより広範な部門で利用できるようにし、関連する技術スキルを持たない従業員にとってもデータ製品をより身近なものにすることでした。同社はこのために、使いやすいオープンソースの BI およびデータ可視化ツールである Metabase の活用を望んでいましたが、以前のシステムでは必要な速度でデータを提供することができませんでした。ClickHouse は Metabase の展開をサポートし、社内のビジネスチームがツール上で独自のクエリや分析を実行できるようにしました。これは、クエリを保存し、保存したクエリに対して直接 API エンドポイントを実行できる ClickHouse の機能によって実現されました。この変化により、分析に対する技術的な障壁が取り除かれました。
+
+Gala は、ClickHouse のサポートが遠く離れたタイムゾーンにもかかわらず「非常に迅速」であると感じています。技術サポートは、初期のデータ取り込みの問題に関連するシステムベースの懸念事項で特に役立ちました。同社の少人数の内部技術チームは、批判や問題があった場合に ClickHouse が耳を傾け、問題を解決するか、次のリリースで取り除いてくれることを高く評価しました。
+
+## サブ秒のパフォーマンスと 30% のコスト削減
+
+パフォーマンスは大幅に向上しました。「以前のプラットフォームには最適化されていないテーブルがいくつかあり、苦労していました。クエリには数分かかっていました」と、Gala のデータエンジニアである Keith Cook は語ります。「ClickHouse に切り替えてからは、最初からインデックスを正しく設定でき、同じテーブルでサブ秒のクエリ時間を実現できました。」
+
+AWS 上での ClickHouse の活用により、同社は分析に利用可能なデータ量を増やすことができ、2024 年 2 月のプロジェクト開始時の 3 TB から、旧システムを廃止した 2024 年 12 月の移行完了時には 9 TB にまで拡大しました。ClickHouse での初期コストは、以前のデータプラットフォームより 30% 低くなりました。次のステップは、ClickHouse の ClickPipes データ処理パイプラインを使用して、さらに効率的な抽出・ロード・変換 (ELT) 機能を構築することです。
+
+より高速なパフォーマンスとスケーラビリティに加えて、ClickHouse は信頼性の向上ももたらしました。これにより、Gala のエンジニアがメンテナンスに費やす時間が削減されています。「データインフラストラクチャについて、以前ほど考えなくなりました」と Rexford は言います。「何かの動作が遅く、ボトルネックの原因が何かと考える時、それがデータベースではないことだけは確実にわかります。」
+
+---
+
+## ClickStack Cloud のご紹介:ClickHouse を基盤としたサーバーレスオブザーバビリティ
+Published: 2026-06-02T01:52:29+00:00
+URL: https://clickhouse.com/blog/clickstack-cloud-private-preview-jp
+
+---
+title: "ClickStack Cloud のご紹介:ClickHouse を基盤としたサーバーレスオブザーバビリティ"
+date: "2026-06-02T01:52:29.285Z"
+author: "Mike Shi"
+category: "Product"
+excerpt: "ClickStack Cloud をご紹介します。ClickHouse を基盤としたフルマネージドかつサーバーレスなオブザーバビリティプラットフォームで、マネージドエンドポイントに OpenTelemetry データを送るだけで、インフラを一切運用することなく、ログ・メトリクス・トレースをすぐに探索できます。"
+---
+
+# ClickStack Cloud のご紹介:ClickHouse を基盤としたサーバーレスオブザーバビリティ
+
+## まとめ
+
+- ClickStack Cloudは、ClickHouseを基盤として構築されたフルマネージドのオブザーバビリティサービスであり、基盤インフラを運用せずにClickHouseによるオブザーバビリティを活用したいチーム向けに設計されています。
+- チームはOpenTelemetry CollectorをマネージドOTLPエンドポイントに向けるだけで、ClickStack UI上でログ、メトリクス、トレースをすぐに探索できます。取り込み、バッファリング、スケーリング、ストレージはすべて自動的に処理されます。
+- プライベートプレビュー期間中は、クエリパターンに基づく自動スキーマチューニングを開発中であり、プレビュー終了後にはエージェンティックワークロード向けの専用クエリコンピュートの提供も予定しています。
+
+本日、ClickHouseを基盤に構築されたターンキー型のオブザーバビリティサービス、**ClickStack Cloud**のプライベートプレビューを発表します。
+
+ClickStack Cloudは、独自のオブザーバビリティ基盤を運用することなく、ClickHouseが持つパフォーマンス、スケーラビリティ、コスト効率をオブザーバビリティに活かしたいチーム向けに設計されています。
+
+マネージドOTLPエンドポイントにOpenTelemetryデータを送信すれば、ClickStack UIでログ、メトリクス、トレースを探索できます。コレクターの管理、インフラのサイジング、スケーリング判断、スキーマ設計、あるいはClickHouseの専門知識の習得といった作業を行う前から、チームはテレメトリの調査をすぐに始められます。
+
+ClickHouseをオブザーバビリティに使うなら、ClickStack Cloudをデフォルトの選択肢としてご利用ください。テレメトリデータを送って調査を始めれば、運用面の複雑さはプラットフォームが裏側で引き受けます。
+
+---
+
+## ClickStack Cloud を試してみませんか？
+
+ClickStack Cloud をお試しになりたい方は、プレビュープログラムにご登録ください。
+
+[Sign up](https://console.clickhouse.cloud/signUp?loc=blog-cta-754-clickstack-cloud-sign-up&utm_blogctaid=754)
+
+---
+
+## なぜ ClickStack Cloud なのか {#why-clickstack-cloud}
+
+オブザーバビリティデータは、ClickHouse にとってまさに最適な領域です。
+
+ログ、メトリクス、トレースは、大量・高カーディナリティで、時系列データの比重が大きいデータセットです。チームは生イベントを横断的に検索し、素早く集計を行い、より多くのデータをより長く保持し、インシデントをシステム全体やビジネス上の出来事と関連付ける必要があります。
+
+ClickHouse は、大量のテレメトリデータに対して従来手法のごく一部のコストで高速なクエリを実行できることから、すでに多くの最新オブザーバビリティアーキテクチャの基盤として採用されています。ClickStack は、OpenTelemetry ネイティブな取り込みと専用設計の UI によって、その性能を完全なオブザーバビリティ体験へと昇華させました。
+
+ClickStack Cloud は、その ClickStack を ClickHouse Cloud をバックエンドにフルマネージドで利用できるようにするものであり、取り込み・ストレージ・クエリの基盤を自分たちで運用する必要はありません。
+
+## OpenTelemetry データを送るだけで、すぐに観測を開始 {#send-opentelemetry-data-start-observing}
+
+ClickStack Cloud では、OpenTelemetry データをマネージドエンドポイントへ送信します。あとは ClickStack Cloud が、取り込み、バッファリング、スケーリング、ストレージ、クエリ処理までを裏側ですべて処理します。
+
+実際のセットアップは、新しい ClickStack Cloud サービスを起動したら、OpenTelemetry Collector を ClickStack Cloud の取り込みエンドポイントに向けるだけ、というシンプルさです:
+
+<pre><code type='click-ui' language='yaml'>
+exporters:
+  otlphttp:
+    endpoint: https://your_service.otel.us-east-2.aws.clickhouse.cloud:4318
+    headers:
+      authorization: Bearer ${CLICKSTACK_CLOUD_TOKEN}
+</code></pre>
+
+データが流れ始めれば、ユーザーは ClickStack UI からログ・メトリクス・トレースをまとめて探索できます。認証と RBAC も統合されています。
+
+チームは、テレメトリを保存・クエリするためのシステムを運用することではなく、本番システムを理解し運用することに専念できます。
+
+## OpenTelemetry のためのフルマネージドな取り込み層 {#a-fully-managed-ingestion-layer-for-opentelemetry}
+
+目指すのはシンプルなユーザー体験です。難しいのは、それを裏側でシームレスにスケールさせることです。
+
+オブザーバビリティのトラフィックは本質的にバースト性があります。インシデント、デプロイ、cron ジョブ、ユーザー行動、新しい計装などによって、テレメトリの量は急激に変動します。マネージドなオブザーバビリティサービスは、ユーザーがインフラのサイズ変更や取り込みボトルネックのデバッグをしなくて済むように、これらの変動を吸収する必要があります。
+
+そこで活躍するのが、ClickStack Cloud のマネージド取り込み層です。ユーザーはテレメトリをマネージドエンドポイントへ送るだけで、ClickStack Cloud がサービスの裏側で取り込みパスを処理します。バッファリング、スケーリング、ストレージ、ClickHouse への配信まで含めてです。
+
+内部では、テレメトリはオブジェクトストレージに支えられた永続的なイベントキューを通じてバッファリングされます。そしてスケーラブルな取り込み層が、流入するトラフィックパターンと取り込み負荷に応じてリソースを割り当てます。
+
+![ingestion_with_clickstack_cloud.png](https://clickhouse.com/uploads/ingestion_with_clickstack_cloud_d98564d804.png)
+
+ユーザーから見れば、体験はシンプルなままです。OpenTelemetry データを ClickStack Cloud に送信すれば、取り込みからクエリ可能なテレメトリに至るまでをプラットフォームが管理してくれます。
+
+## プライベートプレビュー期間中に取り組むこと {#what-we-are-building-during-private-preview}
+
+ClickStack Cloud は、マネージドな取り込み、サーバーレスのクエリ体験、そしてログ・メトリクス・トレース向けの ClickStack UI を備えてプライベートプレビューを開始します。
+
+プライベートプレビュー期間中、私たちは大量のオブザーバビリティワークロードにとって重要な 2 つの領域に注力しています。それは、取り込みリソースとクエリリソースの分離、そして、チームの実際の利用状況に基づいて、基盤となるデータストアである ClickHouse を自動チューニングすることです。
+
+オブザーバビリティシステムには、まったく性質の異なる 2 つの役割があります。大量のテレメトリデータを継続的に取り込みつつ、ダッシュボード、調査、アドホック分析のために高速でインタラクティブなクエリを提供する必要があります。これらのワークロードは同じようにはスケールしません。
+
+ClickStack Cloud は、コンピュートとストレージを分離する ClickHouse Cloud のアーキテクチャをベースとしており、書き込みインフラとクエリインフラを独立してスケールさせることができます。プライベートプレビュー期間中は、取り込み負荷、クエリの同時実行数、データ密度など、各ユーザーのワークロード特性にシステムが動的に応答する仕組みを磨いていきます。
+
+目指すのは、チームがクラスタのサイジング、サービス分割、インフラのチューニングを自分たちで行うことなく、オブザーバビリティワークロードを成長させられるようにすることです。
+
+## オブザーバビリティワークロードの自動チューニング {#automatic-tuning-for-observability-workloads}
+
+オブザーバビリティワークロードは、システムやチームの変化に応じて進化するため、重要なデータの形は素早く移り変わります。先月はほとんど使われなかったフィールドが、今月にはすべてのダッシュボードの中心になっているかもしれません。一方で、新しいサービスが追加した属性が、日常的な調査でチームが頼りにする存在になることもあります。
+
+プライベートプレビュー期間中、私たちは、よくあるクエリパターンから学習し、時間の経過とともにテレメトリデータを自動的に最適化するシステムに取り組んでいます。自動チューニングの計画領域には、以下が含まれます:
+
+* 頻繁にクエリされるフィールドのマテリアライズ
+* よく使われるフィルタに基づくプライマリキーの調整
+* 頻出アクセスパターンに対するマテリアライズドビューの追加
+* よく使われるダッシュボードや調査向けのインデックス追加
+
+プライベートプレビュー期間中は、デザインパートナーやアーリーアダプターと連携し、現実のフィードバックと利用状況に基づいてこれらの仕組みを磨いていきます。
+
+![](https://clickhouse.com/uploads/clickstack_cloud_intro_may2026_image5_2d229af760.png)
+
+意図はシンプルです。スキーマ設計、インデックスチューニング、ClickHouse の内部理解を各チームに求めることなく、ClickHouse レベルのパフォーマンスをオブザーバビリティユーザーに届けることです。
+
+## エージェント型オブザーバビリティワークロードに対応する設計 {#built-for-agentic-observability-workloads}
+
+デバッグ、信頼性、運用分析に AI エージェントを採用するチームが増えるにつれて、オブザーバビリティシステムは従来のダッシュボードとは大きく異なるワークロードを支える必要が出てきます。
+
+ダッシュボードは通常、既知のクエリセットを予測可能なペースで実行します。エージェントの挙動はそれとは異なります。多くの探索的クエリを発行し、ログ・メトリクス・トレースをまたいで仮説を検証し、生イベントと集計ビューの間を行き来し、問題の原因を見つけるまで検索を続けることもあります。
+
+このようなワークロードは、コスト管理のためにアプリケーションレベルのクエリ上限、事前集計、レートリミット、固定の同時実行制限に依存するオブザーバビリティプラットフォームには、あまり適しません。
+
+こうした探索的ワークロードをサポートするため、私たちはユーザーが自分のテレメトリデータに対して、エージェント型および大量分析ワークロード向けの専用クエリコンピュートをアタッチできるようにする予定です。共有のクエリキャパシティに制約されることなく、チームは必要なコンピュートをプロビジョニングし、テレメトリデータに対して直接、集中的な分析を実行できるようになります。
+
+![clickstack_cloud_intro_may2026_image3.png](https://clickhouse.com/uploads/clickstack_cloud_intro_may2026_image3_8b7b2de915.png)
+
+これにより、チームはより強いコントロールを得られます。必要なときに多くのコンピュートを使え、主要なインタラクティブなオブザーバビリティ体験から強く隔離され、クエリ負荷の高いエージェント型ワークロードと、それを支えるインフラとの関係がより明確になります。
+
+この機能は現在積極的に開発中で、プライベートプレビュー終了後に提供開始される予定です。
+
+## ClickStack Cloud が想定するユーザー {#who-clickstack-cloud-is-for}
+
+ClickStack Cloud は、オブザーバビリティ基盤を自ら運用することなく、ClickHouse を活用したオブザーバビリティを利用したいチーム向けです。
+
+既存の Managed ClickStack は、スキーマ、取り込みパイプライン、ワークロードの分離、スキーマチューニング、コンピュートサイジングなどを直接コントロール・管理したいチームに引き続き適しています。大規模ユーザーの多くにとって、こうしたコントロールは不可欠であり、それによって市場最高水準のコスト効率を実現できます。
+
+ClickStack Cloud は、よりターンキーなパスを望むチーム向けに設計されています:
+
+- OpenTelemetry データをマネージドなオブザーバビリティサービスに送る
+- ClickHouse の基盤を運用することなく、ログ・メトリクス・トレースを調査する
+- 取り込み、ストレージ、クエリの各コンポーネントを自分でサイジングしない
+- ClickHouse 上で実行している幅広い分析ワークロードの近くにテレメトリデータを置いておく
+- ClickHouse の運用者になることなく、ClickHouse をオブザーバビリティバックエンドとして利用する
+
+ログ、メトリクス、トレースに ClickHouse の速度と効率を求めつつ、その下回りのインフラ管理はしたくない、というチームのために、ClickStack Cloud は作られています。
+
+![clickstack_cloud_intro_may2026_image1.png](https://clickhouse.com/uploads/clickstack_cloud_intro_may2026_image1_9f330af200.png)
+
+> ClickStack Cloud の価格はまだ確定していませんが、私たちの方針は明確です。シンプルで、予測可能で、スケールしてもコスト効率がよいこと。価格はプライベートプレビューの段階で今後数か月のうちに確定させる予定です。
+
+## プライベートプレビューに参加する {#join-the-private-preview}
+
+ClickStack Cloud は本日よりプライベートプレビューでご利用いただけます。
+
+プライベートプレビューの枠には限りがあります。ClickStack Cloud の利用にご興味のある方は、[プレビュープログラム](https://clickhouse.com/cloud/clickstack-cloud-waitlist) にお申し込みのうえ、皆さんのオブザーバビリティワークロードについて教えてください。
+
+OpenTelemetry データを送信し、ClickStack でログ・メトリクス・トレースを探索し、マネージドな ClickStack Cloud 体験に対してフィードバックをいただけるチームを募集しています。
+
+---
+
+## ClickHouse Release 26.5
+Published: 2026-06-01T19:11:30+00:00
+URL: https://clickhouse.com/blog/clickhouse-release-26-05
+
+---
+title: "ClickHouse Release 26.5"
+date: "2026-06-01T19:11:30.150Z"
+category: "Engineering"
+excerpt: "ClickHouse 26.5 is here! In this release, we have a record number of performance optimizations, a new `filesystem` table function for querying your local file system with SQL, and more!"
+---
+
+# ClickHouse Release 26.5
+
+
+Another month goes by, which means it’s time for another release! 
+
+<p>The ClickHouse 26.5 release contains 38 new features &#127801; 51 performance optimizations &#129419; 224 bug fixes &#128030;</p>
+
+This release sees a record number of performance optimizations, with highlights including ORDER BY … LIMIT pushdown through joins (up to 20× faster), a new GROUP BY … LIMIT shortcut that avoids building unnecessary groups, a new `filesystem` table function for running SQL directly against your local file system, and more!
+
+## New contributors {#new_contributors}
+
+A special welcome to all the new contributors in 26.5! The growth of ClickHouse's community is humbling, and we are always grateful for the contributions that have made ClickHouse so popular.
+
+Below are the names of the new contributors:
+
+*Abhinav Agarwal, Ahaan, Alex Kuleshov, Ashrith Bandla, Asish Kumar, Callum C, Felix Bernhard, Flavio Malavazi, Ian Rakhmatullin, Ilya Perstenev, JackFielding, Joe Redfern, Larry Snizek, Luc Leray, Rahul Nair, Roy Sindre Norangshol, Venkata  Vineel, Vincent Voyer, Yue, Yue Ni, functioncrafter, ibrahim karimeddin, mohaidoss, perst20, peter15914, sayondeep, zhangzhibiao, zxuhan7*
+
+Hint: if you’re curious how we generate this list… [here](https://gist.github.com/gingerwizard/5a9a87a39ba93b422d8640d811e269e9).
+
+<iframe width="768" height="432" src="https://www.youtube.com/embed/P1IDAvsi7p8?si=FjyPnq2RFlmo5U95" title="YouTube video player" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" referrerpolicy="strict-origin-when-cross-origin" allowfullscreen></iframe>
+
+You can also [view the slides from the presentation](https://presentations.clickhouse.com/2026-release-26.5).
+
+## Push ORDER BY … LIMIT through JOIN {#push_order_by_limit_through_join}
+
+### Contributed by Alexey Milovidov
+
+> “We optimize ClickHouse in every version, we optimize it more, and there is no end in optimizations” – Alexey Milovidov [during the ClickHouse release 26.5 webinar](https://www.youtube.com/live/P1IDAvsi7p8?si=5A3vFFIlNg51spxh&t=1512) 
+
+### Moving more work before joins
+
+In recent releases, ClickHouse has been steadily moving more work before joins, so less data has to pass through them. For example, ClickHouse already [pushes down complex OR conditions in JOIN queries](https://clickhouse.com/blog/clickhouse-release-25-10#push-down-of-complex-conditions-in-joins) to filter each table earlier, before the join happens. It also supports [runtime filters](https://clickhouse.com/blog/clickhouse-release-25-10#bloom-filters-in-joins), which are created from the right-hand side of a join and applied to the left-hand side before the join runs.
+
+This release continues that theme, but pushes down a different kind of work: not a WHERE predicate, but the ORDER BY … LIMIT clause, a pattern that appears frequently in analytical workloads.
+
+### From “join then limit” to “limit then join”
+
+If the outermost SELECT of a LEFT JOIN query ends with ORDER BY … LIMIT, and the sort key depends only on columns from the left table, ClickHouse can push that ORDER BY … LIMIT below the join.
+
+The same applies to `RIGHT JOIN` queries when the sort key depends only on columns from the **right table**.
+
+For example, this query running over TPC-H tables asks for the 100 most recent orders, enriched with customer information:
+
+<pre><code type='click-ui' language='sql'>
+SELECT
+    o_orderkey,
+    o_orderdate,
+    o_totalprice,
+    c_name,
+    c_mktsegment
+FROM orders
+LEFT JOIN customer ON o_custkey = c_custkey
+ORDER BY
+    o_orderdate DESC,
+    o_orderkey DESC
+LIMIT 100;
+</code></pre>
+
+Here, the `ORDER BY` uses only columns from `orders`, the preserved side of the `LEFT JOIN`. That means ClickHouse does not need to join every order with its customer before applying the limit. 
+
+Without the optimization, the plan is forced to do the expensive join first:
+
+![Blog-release-26.05.001.png](https://clickhouse.com/uploads/Blog_release_26_05_001_5feb2264fa.png)
+
+With the new optimization, ClickHouse can flip the work around: it can first find the top 100 rows from `orders`, and then join only those few rows with `customer`.
+
+![Blog-release-26.05.002.png](https://clickhouse.com/uploads/Blog_release_26_05_002_abd55ce8d9.png)
+
+
+You can also see the change in the query plan obtained via [EXPLAIN](https://clickhouse.com/docs/sql-reference/statements/explain). With the optimization enabled, the plan contains a Limit and Sorting step on the orders table side, before the join with the customer table:
+
+```shell
+Join
+
+  ...
+
+    Limit
+
+      Sorting
+
+        ReadFromMergeTree (sf100.orders)
+
+  ...
+
+ReadFromMergeTree (sf100.customer)
+```
+
+A nice side effect is that ClickHouse already treats the pushed-down `ORDER BY … LIMIT` part as a first-class query pattern. As covered in our [dedicated Top-N optimization post](https://clickhouse.com/blog/clickhouse-top-n-queries-granule-level-data-skipping), ClickHouse has accumulated several engine-level optimizations for this pattern. 
+
+This optimization is controlled by the new [query_plan_top_k_through_join](https://clickhouse.com/docs/operations/settings/settings#query_plan_top_k_through_join) setting, which is enabled by default.
+
+### Benchmark: 20× faster and 175× less memory
+
+To evaluate the impact, we created and loaded the [TPC-H schema with a scale factor of 100](https://clickhouse.com/docs/getting-started/example-datasets/tpch) on an AWS EC2 `m6i.8xlarge` instance with 32 vCPUs and 128 GiB of RAM.
+
+First, we ran the query with the new `ORDER BY … LIMIT` pushdown disabled by setting `query_plan_top_k_through_join = 0`. We executed the query three times and used the fastest run as the baseline:
+
+```shell
+Elapsed: 2.153 sec. Processed 165.00 million rows, 3.23 GB (76.65 million rows/s., 1.50 GB/s.)
+Peak memory usage: 1.87 GiB.
+
+Elapsed: 1.878 sec. Processed 165.00 million rows, 3.23 GB (87.87 million rows/s., 1.72 GB/s.)
+Peak memory usage: 1.88 GiB.
+
+Elapsed: 2.197 sec. Processed 165.00 million rows, 3.23 GB (75.10 million rows/s., 1.47 GB/s.)
+Peak memory usage: 1.87 GiB.
+```
+
+Then we ran the same query with the optimization enabled by setting `query_plan_top_k_through_join = 1`:
+
+```shell
+Elapsed: 0.093 sec. Processed 165.22 million rows, 2.18 GB (1.78 billion rows/s., 23.45 GB/s.)
+Peak memory usage: 11.46 MiB.
+
+Elapsed: 0.092 sec. Processed 165.22 million rows, 2.18 GB (1.80 billion rows/s., 23.70 GB/s.)
+Peak memory usage: 13.72 MiB.
+
+
+Elapsed: 0.092 sec. Processed 165.22 million rows, 2.18 GB (1.79 billion rows/s., 23.53 GB/s.)
+Peak memory usage: 10.98 MiB.
+```
+
+Using the fastest run from each configuration, the difference is significant:
+
+| Setting | Fastest runtime | Peak memory | Data read |
+|---|---|---|---|
+| Pushdown disabled | 1.878 sec | 1.88 GiB | 3.23 GB |
+| Pushdown enabled | 0.092 sec | 10.98 MiB | 2.18 GB |
+| Improvement | **20.4× faster** | **~175× less memory** | **1.5× less data read** |
+
+> This benchmark already shows a **20.4× runtime improvement** and around **175× lower peak memory usage**.
+
+These numbers are not a fixed ceiling. The benefit depends on the size of the input tables, the width of the joined rows, the selected columns, and the LIMIT value.
+
+## GROUP BY … LIMIT with no ORDER BY {#group_by_limit_no_order_by}
+
+### Contributed by Amos Bird
+
+### Extending Top-N optimizations to GROUP BY
+
+ClickHouse already treats Top-N queries as a first-class query pattern. As covered in our dedicated [Top-N optimization post](https://clickhouse.com/blog/clickhouse-top-n-queries-granule-level-data-skipping), ClickHouse has accumulated several engine-level optimizations for queries with ORDER BY … LIMIT, including streaming execution, read-in-order, lazy reading, and data-skipping-based Top-N pruning.
+
+This release extends the same idea to another shape: GROUP BY … LIMIT queries without ORDER BY.
+
+Consider a query that groups by a key and then applies `LIMIT`, but has no `ORDER BY`, no `HAVING` clause, and no window function. In that case, the query does not ask for the smallest keys, the largest keys, the most frequent keys, or keys in any particular order. It only asks for **any N distinct grouping keys**.
+
+For example, because we already had the TPC-H dataset loaded for the previous section’s benchmark, we can reuse it here. This query asks for any 100 distinct order keys from the `lineitem` table:
+
+<pre><code type='click-ui' language='sql'>
+SELECT l_orderkey
+FROM lineitem
+GROUP BY l_orderkey
+LIMIT 100;
+</code></pre>
+
+### From “group everything, then limit” to “keep only N groups”
+
+In TPC-H scale factor 100, `lineitem` contains 600 million rows and 150 million distinct `l_orderkey` values.
+
+Without the new optimization, ClickHouse treats the query like a regular `GROUP BY`: as it scans the input, every new `l_orderkey` creates a new entry in the [aggregation hash table](https://clickhouse.com/blog/clickhouse-parallel-replicas#how-clickhouse-makes-group-by-fast). Only after the aggregation result has been built does `LIMIT 100` reduce the output to 100 rows.
+
+![Blog-release-26.05.003.png](https://clickhouse.com/uploads/Blog_release_26_05_003_03f393fa9d.png)
+
+With this release, ClickHouse recognizes this special pattern and avoids building groups that cannot affect the result. The optimization is controlled by the new [`optimize_trivial_group_by_limit_query`](https://clickhouse.com/docs/operations/settings/settings#optimize_trivial_group_by_limit_query) setting, which is enabled by default.
+
+For eligible queries, ClickHouse internally sets the [aggregation limit](https://clickhouse.com/docs/operations/settings/settings#max_rows_to_group_by) to `LIMIT + OFFSET` and uses [`group_by_overflow_mode`](https://clickhouse.com/docs/operations/settings/settings#group_by_overflow_mode) `= 'any'`. In practice, this means that once the aggregation hash table contains the first 100 distinct `l_orderkey` values, new keys are ignored instead of being added as new groups.
+
+![Blog-release-26.05.004.png](https://clickhouse.com/uploads/Blog_release_26_05_004_0dabca7c6d.png)
+
+The scan still processes the input, but the aggregation state in main memory stays tiny: 100 groups instead of growing toward 150 million.
+
+### Benchmark: 11.9× faster and 185× less memory
+
+To evaluate the impact, we ran the query again on an AWS EC2 m6i.8xlarge instance with 32 vCPUs and 128 GiB RAM. First, we disabled the optimization by setting `optimize_trivial_group_by_limit_query = 0` and used the fastest of three runs as the baseline:
+
+```shell
+Elapsed: 0.853 sec. Processed 600.04 million rows, 2.40 GB (703.29 million rows/s., 2.81 GB/s.)
+Peak memory usage: 8.60 GiB.
+
+Elapsed: 0.806 sec. Processed 600.04 million rows, 2.40 GB (744.07 million rows/s., 2.98 GB/s.)
+Peak memory usage: 8.58 GiB.
+
+Elapsed: 0.809 sec. Processed 600.04 million rows, 2.40 GB (742.06 million rows/s., 2.97 GB/s.)
+Peak memory usage: 8.57 GiB.
+```
+
+Then we ran the same query with the optimization enabled by setting `optimize_trivial_group_by_limit_query = 1`:
+
+```shell
+Elapsed: 0.069 sec. Processed 600.04 million rows, 2.40 GB (8.76 billion rows/s., 35.03 GB/s.)
+Peak memory usage: 47.54 MiB.
+
+Elapsed: 0.070 sec. Processed 600.04 million rows, 2.40 GB (8.54 billion rows/s., 34.16 GB/s.)
+Peak memory usage: 47.54 MiB.
+
+Elapsed: 0.068 sec. Processed 600.04 million rows, 2.40 GB (8.79 billion rows/s., 35.17 GB/s.)
+Peak memory usage: 47.55 MiB.
+```
+
+Using the fastest run from each configuration:
+
+| Setting | Fastest runtime | Rows processed | Data read | Peak memory |
+|---|---|---|---|---|
+| Optimization disabled | 0.806 sec | 600.04 million | 2.40 GB | 8.58 GiB |
+| Optimization enabled | 0.068 sec | 600.04 million | 2.40 GB | 47.55 MiB |
+| Improvement | **11.9× faster** | same | same | **~185× less memory** |
+
+> The optimized query is **11.9× faster** and uses about **185× less peak memory**.
+
+## The filesystem table function {#filesystem_table_function}
+
+### Contributed by Ilya Perstenev, Ilya Yatsishin, Alexey Milovidov
+
+ClickHouse 25.6 also introduces the `filesystem` table function, which lets us list and analyze a directory as a queryable table.
+
+<iframe width="768" height="432" src="https://www.youtube.com/embed/e4l3XwpgXmE?si=77rFpPYWH3CeCQO7" title="YouTube video player" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" referrerpolicy="strict-origin-when-cross-origin" allowfullscreen></iframe>
+
+The full schema exposed by `filesystem` covers everything you'd expect for filesystem introspection:
+
+<pre><code type='click-ui' language='sql'>
+DESCRIBE filesystem();
+</code></pre>
+
+```shell
+┌─name──────────────┬─type───────────────────────────────────────────────┐
+│ path              │ String                                             │
+│ name              │ String                                             │
+│ type              │ Enum8('none' = 0, 'not_found' = 1, 'regular' = 2, ⋯│
+│ size              │ Nullable(UInt64)                                   │
+│ depth             │ UInt16                                             │
+│ modification_time │ Nullable(DateTime64(6))                            │
+│ is_symlink        │ Bool                                               │
+│ content           │ Nullable(String)                                   │
+│ owner_read        │ Bool                                               │
+│ owner_write       │ Bool                                               │
+│ owner_exec        │ Bool                                               │
+│ group_read        │ Bool                                               │
+│ group_write       │ Bool                                               │
+│ group_exec        │ Bool                                               │
+│ others_read       │ Bool                                               │
+│ others_write      │ Bool                                               │
+│ others_exec       │ Bool                                               │
+│ set_gid           │ Bool                                               │
+│ set_uid           │ Bool                                               │
+│ sticky_bit        │ Bool                                               │
+│ file              │ String                                             │
+└───────────────────┴────────────────────────────────────────────────────┘
+```
+
+If we call it with no arguments, using clickhouse-local, it will list files in the current directory:
+
+<pre><code type='click-ui' language='sql'>
+SELECT path, name FROM filesystem();
+</code></pre>
+
+```shell
+┌─path──────────────────────────────────────────────┬─name──────────────────────┐
+│ /Users/markhneedham/projects/release-posts/26.5   │ clickhouse                │
+│ /Users/markhneedham/projects/release-posts/26.5   │ .claude                   │
+└───────────────────────────────────────────────────┴───────────────────────────┘
+```
+
+</code></pre>
+
+It has access to the same parts of the file system as the user who launched ClickHouse. If you call it via ClickHouse Server, it will list the files in the `user_files` directory.
+
+I have a lot of large video files on my machine, and I (or rather Claude!) usually have to run a bunch of Unix commands to find them. With this new function, it’s as simple as the following query:
+
+<pre><code type='click-ui' language='sql'>
+SELECT path, name, formatReadableSize(size), modification_time
+FROM filesystem('/Users/markhneedham/projects/videos')
+WHERE type = 'regular' AND name LIKE '%.braw'
+ORDER BY size DESC
+LIMIT 3
+FORMAT Vertical;
+</code></pre>
+
+```shell
+Row 1:
+──────
+path:                     /Users/markhneedham/projects/videos/20260212-Sample
+name:                     A001_10150625_C183 2.braw
+formatReadableSize(size): 26.75 GiB
+modification_time:        2025-10-15 06:25:08.529999
+
+Row 2:
+──────
+path:                     /Users/markhneedham/projects/videos/20260217-AsyncInserts
+name:                     A001_09290151_C176.braw
+formatReadableSize(size): 21.70 GiB
+modification_time:        2025-09-29 01:51:47.820000
+
+Row 3:
+──────
+path:                     /Users/markhneedham/projects/videos/20260123-PGCHStack
+name:                     A001_08021314_C119.braw
+formatReadableSize(size): 21.54 GiB
+modification_time:        2025-08-02 13:14:33.260000
+```
+
+   
+And I’ve wrapped this query up into a skill that Claude can use to more quickly find files to delete to free up space.
+
+## url_base for the url table function {#url_base}
+
+### Contributed by Alexey Milovidov
+
+If you use the `url` table function regularly, you've probably typed the same base URL dozens of times. The new `url_base` setting lets you set it once and use relative paths everywhere instead.
+
+Working with the [Amazon customer review dataset](https://clickhouse.com/docs/getting-started/example-datasets/amazon-reviews), we could set the URL base like this:
+
+<pre><code type='click-ui' language='bash'>
+SET url_base = 'https://datasets-documentation.s3.eu-west-3.amazonaws.com/amazon_reviews/';
+</code></pre>
+
+We could then query the 2014 reviews like this:
+
+<pre><code type='click-ui' language='sql'>
+SELECT
+    count(),
+    round(avg(star_rating), 2) AS stars,
+    round(avg(helpful_votes), 2) AS votes
+FROM url('amazon_reviews_2014.snappy.parquet')
+</code></pre>
+
+```shell
+┌──count()─┬─stars─┬─votes─┐
+│ 44127569 │  4.23 │  0.96 │
+└──────────┴───────┴───────┘
+```
+
+And if we want to query 2015:
+
+<pre><code type='click-ui' language='sql'>
+SELECT
+    count(),
+    round(avg(star_rating), 2) AS stars,
+    round(avg(helpful_votes), 2) AS votes
+FROM url('amazon_reviews_2015.snappy.parquet')
+</code></pre>
+
+```shell
+┌──count()─┬─stars─┬─votes─┐
+│ 41905631 │  4.25 │  0.74 │
+└──────────┴───────┴───────┘
+```
+
+## Negative LIMIT BY {#negative_limit_by}
+
+### Contributed by Nihal Z. Miaji
+
+The 26.5 release also adds negative limit by, which lets us pick rows from the end of each group, rather than the beginning.
+
+We’ll use my favorite [UK property prices dataset](https://clickhouse.com/docs/getting-started/example-datasets/uk-price-paid) to demonstrate how it works, starting with the following query that finds the median price by district for all the counties that contain the term `Yorkshire`:
+
+<pre><code type='click-ui' language='sql'>
+SELECT county, district, median(price)
+FROM uk_price_paid
+WHERE county ILIKE '%Yorkshire%'
+GROUP BY ALL
+ORDER BY median(price) DESC;
+</code></pre>
+
+```shell
+┌─county───────────────────┬─district─────────────────┬─median(price)─┐
+│ NORTH YORKSHIRE          │ NORTH YORKSHIRE          │        263000 │
+│ NORTH YORKSHIRE          │ HARROGATE                │        185000 │
+│ NORTH YORKSHIRE          │ HAMBLETON                │        170000 │
+│ NORTH YORKSHIRE          │ RYEDALE                  │        160000 │
+│ NORTH YORKSHIRE          │ RICHMONDSHIRE            │        150000 │
+│ NORTH YORKSHIRE          │ CRAVEN                   │        149250 │
+│ NORTH YORKSHIRE          │ SELBY                    │        144995 │
+│ EAST RIDING OF YORKSHIRE │ EAST RIDING OF YORKSHIRE │        132000 │
+│ WEST YORKSHIRE           │ LEEDS                    │        129997 │
+│ NORTH YORKSHIRE          │ SCARBOROUGH              │        120000 │
+│ SOUTH YORKSHIRE          │ SHEFFIELD                │        115000 │
+│ WEST YORKSHIRE           │ KIRKLEES                 │        114950 │
+│ WEST YORKSHIRE           │ WAKEFIELD                │      112997.5 │
+│ SOUTH YORKSHIRE          │ ROTHERHAM                │        102500 │
+│ WEST YORKSHIRE           │ CALDERDALE               │        101000 │
+│ WEST YORKSHIRE           │ BRADFORD                 │        100000 │
+│ SOUTH YORKSHIRE          │ DONCASTER                │         98500 │
+│ SOUTH YORKSHIRE          │ BARNSLEY                 │         95000 │
+│ WEST YORKSHIRE           │ EAST YORKSHIRE           │         94950 │
+└──────────────────────────┴──────────────────────────┴───────────────┘
+```
+
+We could already select the first two rows per county group, i.e., the two districts with the highest median price per county:
+
+<pre><code type='click-ui' language='sql'>
+SELECT county, district, median(price)
+FROM uk_price_paid
+WHERE county ILIKE '%Yorkshire%'
+GROUP BY ALL
+ORDER BY median(price) DESC
+LIMIT 2 BY county
+</code></pre>
+
+```shell
+┌─county───────────────────┬─district─────────────────┬─median(price)─┐
+│ NORTH YORKSHIRE          │ NORTH YORKSHIRE          │        262000 │
+│ NORTH YORKSHIRE          │ HARROGATE                │        185000 │
+│ EAST RIDING OF YORKSHIRE │ EAST RIDING OF YORKSHIRE │      130972.5 │
+│ WEST YORKSHIRE           │ LEEDS                    │        130000 │
+│ WEST YORKSHIRE           │ KIRKLEES                 │        115000 │
+│ SOUTH YORKSHIRE          │ SHEFFIELD                │        115000 │
+│ SOUTH YORKSHIRE          │ ROTHERHAM                │        105000 │
+└──────────────────────────┴──────────────────────────┴───────────────┘
+```
+
+But with negative limit by, we can also select the last two rows per county group, i.e., the two districts with the lowest median price per county.
+
+<pre><code type='click-ui' language='sql'>
+SELECT county, district, median(price)
+FROM uk_price_paid
+WHERE county ILIKE '%Yorkshire%'
+GROUP BY ALL
+ORDER BY median(price) DESC
+LIMIT -2 BY county;
+</code></pre>
+
+```shell
+┌─county───────────────────┬─district─────────────────┬─median(price)─┐
+│ NORTH YORKSHIRE          │ SELBY                    │        145000 │
+│ EAST RIDING OF YORKSHIRE │ EAST RIDING OF YORKSHIRE │        132500 │
+│ NORTH YORKSHIRE          │ SCARBOROUGH              │        122000 │
+│ SOUTH YORKSHIRE          │ DONCASTER                │         99000 │
+│ WEST YORKSHIRE           │ BRADFORD                 │         97500 │
+│ SOUTH YORKSHIRE          │ BARNSLEY                 │         94950 │
+│ WEST YORKSHIRE           │ EAST YORKSHIRE           │         94950 │
+└──────────────────────────┴──────────────────────────┴───────────────┘
+```
+
+## Multi-path SQL/JSON {#multi_path_sql_json}
+
+### Contributed by Kevinyhzou, Alexey Milovidov
+
+When using the `JSON_VALUE` and `JSON_QUERY` functions, we can now pass a tuple or array of paths and receive a tuple or array of strings, with JSON parsed only once.
+
+We’re going to work with a JSON string representing the Open House conference, printed out using the new `prettyPrintJSON` function:
+
+<pre><code type='click-ui' language='sql'>
+WITH '{
+  "name": "Open House 2026",
+  "tagline": "The real-time database for AI conference",
+  "dates": {
+    "workshops": "2026-05-26",
+    "conference": ["2026-05-27", "2026-05-28"]
+  },
+  "venue": {
+    "name": "Convene 100 Stockton",
+    "address": "40 O''Farrell St, San Francisco, CA 94108"
+  }
+}' AS conf
+SELECT prettyPrintJSON(conf)FORMAT Raw;
+</code></pre>
+
+```shell
+{
+    "name": "Open House 2026",
+    "tagline": "The real-time database for AI conference",
+    "dates": {
+        "workshops": "2026-05-26",
+        "conference": [
+            "2026-05-27",
+            "2026-05-28"
+        ]
+    },
+    "venue": {
+        "name": "Convene 100 Stockton",
+        "address": "40 O'Farrell St, San Francisco, CA 94108"
+    }
+}
+
+1 row in set. Elapsed: 0.003 sec.
+```
+
+To return strings, for example, if we want to return a tuple containing the name and venue, we use the `JSON_VALUE` function:
+
+<pre><code type='click-ui' language='sql'>
+WITH '{
+  "name": "Open House 2026",
+  "tagline": "The real-time database for AI conference",
+  "dates": {
+    "workshops": "2026-05-26",
+    "conference": ["2026-05-27", "2026-05-28"]
+  },
+  "venue": {
+    "name": "Convene 100 Stockton",
+    "address": "40 O''Farrell St, San Francisco, CA 94108"
+  }
+}' AS conf
+SELECT JSON_VALUE(conf, ('$.name', '$.venue.name'));
+</code></pre>
+
+```shell
+┌─JSON_VALUE(conf, ('$.name', '$.venue.name'))─┐
+│ ('Open House 2026','Convene 100 Stockton')   │
+└──────────────────────────────────────────────┘
+```
+
+We can also pass in the JSON paths as an array rather than a tuple:
+
+<pre><code type='click-ui' language='sql'>
+WITH '{
+  "name": "Open House 2026",
+  "tagline": "The real-time database for AI conference",
+  "dates": {
+    "workshops": "2026-05-26",
+    "conference": ["2026-05-27", "2026-05-28"]
+  },
+  "venue": {
+    "name": "Convene 100 Stockton",
+    "address": "40 O''Farrell St, San Francisco, CA 94108"
+  }
+}' AS conf
+SELECT JSON_VALUE(conf, ['$.name', '$.venue.name']);
+</code></pre>
+
+```shell
+┌─JSON_VALUE(conf, ['$.name', '$.venue.name'])─┐
+│ ['Open House 2026','Convene 100 Stockton']   │
+└──────────────────────────────────────────────┘
+```
+
+But `dates.conference` is an array, so if we try to retrieve that using `JSON_VALUE`, we’ll return an empty string:
+
+<pre><code type='click-ui' language='sql'>
+WITH '{
+  "name": "Open House 2026",
+  "tagline": "The real-time database for AI conference",
+  "dates": {
+    "workshops": "2026-05-26",
+    "conference": ["2026-05-27", "2026-05-28"]
+  },
+  "venue": {
+    "name": "Convene 100 Stockton",
+    "address": "40 O''Farrell St, San Francisco, CA 94108"
+  }
+}' AS conf
+SELECT JSON_VALUE(conf, ('$.name', '$.dates.conference'));
+</code></pre>
+
+```shell
+┌─JSON_VALUE(c⋯nference'))─┐
+│ ('Open House 2026','')   │
+└──────────────────────────┘
+```
+
+We can read the individual values from that array using zero-based array indexing:
+
+<pre><code type='click-ui' language='sql'>
+WITH '{
+  "name": "Open House 2026",
+  "tagline": "The real-time database for AI conference",
+  "dates": {
+    "workshops": "2026-05-26",
+    "conference": ["2026-05-27", "2026-05-28"]
+  },
+  "venue": {
+    "name": "Convene 100 Stockton",
+    "address": "40 O''Farrell St, San Francisco, CA 94108"
+  }
+}' AS conf
+SELECT JSON_VALUE(conf, ('$.dates.conference[0]', '$.dates.conference[1]'));
+</code></pre>
+
+```shell
+┌─JSON_VALUE(co⋯ference[1]'))─┐
+│ ('2026-05-27','2026-05-28') │
+└─────────────────────────────┘
+```
+
+Alternatively, if we want to return the dates as an array and the whole venue object, we should rather use `JSON_QUERY`:
+
+<pre><code type='click-ui' language='sql'>
+WITH '{
+  "name": "Open House 2026",
+  "tagline": "The real-time database for AI conference",
+  "dates": {
+    "workshops": "2026-05-26",
+    "conference": ["2026-05-27", "2026-05-28"]
+  },
+  "venue": {
+    "name": "Convene 100 Stockton",
+    "address": "40 O''Farrell St, San Francisco, CA 94108"
+  }
+}' AS conf
+SELECT JSON_QUERY(conf, ('$.dates.conference', '$.venue'))
+FORMAT Raw;
+</code></pre>
+
+The output, formatted for readability, is shown below:
+
+```shell
+(
+  '[["2026-05-27","2026-05-28"]]',
+  '[{"name":"Convene 100 Stockton","address":"40 O\'Farrell St, San Francisco, CA 94108"}]'
+)
+```
+
+Note that `JSON_QUERY` always wraps its result in `[]`, so an array value gets double-wrapped.
+
+## Web Terminal {#web-terminal}
+
+### Contributed by Alexey Milovidov
+
+The 26.5 release also sees the introduction of an experimental in-browser clickhouse-client. You can enabled it by adding the following to a config file:
+
+*config.d/webterminal.yaml*
+<pre><code type='click-ui' language='yaml'>
+allow_experimental_webterminal: true
+</code></pre>
+
+You can then navigate to [http://localhost:8123/webterminal](https://play.clickhouse.com/webterminal?user=play), where you'll see something like this:
+
+![Screenshot 2026-06-01 at 11.06.21.png](https://clickhouse.com/uploads/Screenshot_2026_06_01_at_11_06_21_c593922553.png)
+
+## Query cache for subqueries
+
+### Contributed by Nikita Barannik, Vincent Voyer
+
+It's now possible to control query caching on a per-subquery basis. 
+
+It's also been possible to enabled the query cache fo the outmost query, using the `use_query_cache` setting like this:
+
+
+<pre><code type='click-ui' language='sql'>
+SELECT * FROM (SELECT * FROM table) 
+SETTINGS use_query_cache = 1;
+</code></pre>
+
+If we want to to enable query cache for subquery, from 26.5, we can use that setting as a suffix to the subquery:
+
+<pre><code type='click-ui' language='sql'>
+SELECT * 
+FROM (
+  SELECT * 
+  FROM table 
+  SETTINGS use_query_cache = 1
+);
+</code></pre>
+
+We can also enable propagation of the query cache into all subqueries using the `use_query_cache_for_subqueries` setting:
+
+<pre><code type='click-ui' language='sql'>
+SELECT * FROM (SELECT * FROM table)
+SETTINGS use_query_cache_for_subqueries = 1;
+</code></pre>
+
+Or, we could enable propagation of query cache into all subqueries but disable it in one of them:
+
+<pre><code type='click-ui' language='sql'>
+SELECT * 
+FROM (SELECT * FROM table1) t1
+NATURAL JOIN (SELECT * FROM table2 SETTINGS use_query_cache = 0) t2
+SETTINGS use_query_cache_for_subqueries = 1;
+</code></pre>
+
+---
+
+## Get started today
+
+Interested in seeing how ClickHouse works on your data? Get started with ClickHouse Cloud in minutes and receive $300 in free credits.
+
+[Sign up](https://console.clickhouse.cloud/signUp?loc=blog-cta-752-get-started-today-sign-up&utm_blogctaid=752)
+
+---
+
+<style>
+pre code { white-space: pre !important; }
+</style>
+
+---
+
+## Executable UDFs are now in public beta on ClickHouse Cloud
+Published: 2026-06-01T14:08:38+00:00
+URL: https://clickhouse.com/blog/executable-udfs-clickhouse-cloud-beta
+
+---
+title: "Executable UDFs are now in public beta on ClickHouse Cloud"
+date: "2026-06-01T14:08:38.419Z"
+author: "San Tran, Jia Xu, Zach Naimon, Ilya Andreev, Hanzi Jiang and Kevin Zhang"
+category: "Product"
+excerpt: "Today we're excited to announce that executable UDFs are now available in public beta on ClickHouse Cloud. You can write a function in Python, upload it as a zip to your cluster, and call it from SQL like any built-in. ClickHouse manages a pool of long-li"
+---
+
+# Executable UDFs are now in public beta on ClickHouse Cloud
+
+Today we're excited to announce that **executable UDFs are now available
+in public beta on ClickHouse Cloud**. You can write a function in Python, upload it as a zip to your cluster, and call it from
+SQL like any built-in. ClickHouse manages a pool of long-lived sandboxed
+processes and routes rows through them at query speed. The function is
+callable anywhere SQL is: ad-hoc queries, joins, even materialized views
+that fire on every insert.
+
+This isn't a brand-new idea. We've shipped executable UDFs in self-hosted
+ClickHouse for a while. [Our 2023 post on calling OpenAI from
+SQL](https://clickhouse.com/blog/clickhouse-open-ai-user-defined-functions-udfs)
+walked through the same mechanism. What's new today is that you don't
+need to run your own server to use it. The model code lives where the
+data is, runs in a managed sandbox, and the deployment surface is one
+upload screen in the Cloud console.
+
+To show what this unlocks, we built a demo. A small PyTorch autoencoder
+scores ~6 billion equity trade ticks for anomalousness, inline with
+ingest. A Next.js front-end consumes the embeddings. Full source for the
+notebook, UDF bundle, SQL, and webapp is in [this repo](https://github.com/ClickHouse/stock-anomaly-udf).
+
+![Anomaly dashboard with packedbubble chart and S&P 500 leaderboard](https://clickhouse.com/uploads/hero_dashboard_5c8d3ce323.png)
+
+## The problem this solves
+
+You have a trained model. You have a stream of data in ClickHouse.
+Getting them into the same room used to mean one of three options.
+
+1. **Stand up a separate scoring service.** Now you maintain a model
+   server, an ingest pipeline that routes rows to it, and a way to write
+   the scores back into ClickHouse. The model is no longer near the data
+   in any meaningful sense.
+
+2. **Translate the model into pure SQL.** Workable for some tree-based
+   models. Painful for anything with embeddings. Every retrain means
+   regenerating thousands of lines of SQL by hand.
+
+3. **Batch score offline and join later.** Loses freshness. The "anomaly"
+   on a trade that just hit is only useful if you can react to it now.
+
+Executable UDFs collapse all three into one. Write the inference code as
+a normal Python file. Point ClickHouse at it. Call it from SQL. The
+function runs inline with whatever query needs it, including inside a
+materialized view, which is exactly what we do here.
+
+## What we built
+
+Last year we wrote ["Building StockHouse"](https://clickhouse.com/blog/building-stockhouse),
+showing how ClickHouse handles a continuous firehose of stock trade ticks
+in real time. That post stopped at the ingest and query layer. The
+natural next question is: what if you wanted to apply a learned model to
+every trade as it lands?
+
+We picked an unsupervised anomaly-detection setup because it shows off
+the shape of the problem cleanly.
+
+- A small autoencoder (~270K parameters) is trained on 50M historical
+  trade ticks. Its inputs: a hashed ticker, 7 numeric features (price,
+  size, exchange, etc.), and 6 cyclical-encoded temporal features.
+- For each trade, the model produces a **32-dim embedding** and a
+  **reconstruction error**. High error means the model wasn't trained on
+  patterns like this trade. It's *anomalous in shape* compared to what's
+  normal for that symbol's history.
+- The UDF that wraps this model is `embed_trade`. It's the only
+  ML-specific piece in the system. Everything else is plain SQL: the
+  score aggregation, the per-symbol baselines, the views.
+
+Here's the data flow:
+
+```
+            ┌───────────────────────────┐
+            │  default.trades           │     ← upstream feed (e.g. Polygon)
+            └──────────────┬────────────┘
+                           │ INSERT
+                           ▼
+            ┌───────────────────────────┐
+            │  trades_embeddings_mv     │     ← fires on every INSERT
+            │  (calls embed_trade UDF)  │
+            └──────────────┬────────────┘
+                           │
+                           ▼
+            ┌───────────────────────────┐
+            │  default.trades_embeddings│     ← same trade + 32-dim
+            │                           │       embedding + recon_score
+            └──────────────┬────────────┘
+              ▲            │
+              │            │ refresh hourly
+              │            ▼
+              │  ┌──────────────────────┐
+              │  │ trades_baselines     │     ← per-symbol score
+              │  │ trades_dim_baselines │       distribution stats
+              │  └──────────────────────┘
+              │
+              └──── consumed by webapp queries
+                    (anomalies are defined relative
+                     to each symbol's own baselines)
+```
+
+Every `INSERT INTO trades` flows through the materialized view, gets
+scored, and lands in `trades_embeddings`. The webapp never re-runs the
+model. It only reads `trades_embeddings` and two cheap baseline tables.
+The expensive inference happens exactly once per trade, inline with
+ingest, and every downstream query is a normal aggregation.
+
+## Training the autoencoder
+
+The model itself is small and unremarkable as ML goes, but the training
+pipeline is worth a quick look because it has to produce artifacts the
+UDF can load at runtime. The full walkthrough lives in
+[`notebook/train_and_deploy_udf.ipynb`](https://github.com/ClickHouse/stock-anomaly-udf/blob/main/notebook/train_and_deploy_udf.ipynb).
+A summary:
+
+1. **Stream training data into Parquet chunks.** A SELECT against
+   `default.trades` derives the 14 input features server-side (price,
+   size, exchange, condition-code count, hashed ticker, and cyclical
+   encodings of hour and day of week). The notebook pulls the result via
+   `query_arrow_stream` and writes 5M-row Parquet chunks to local disk.
+   Nothing is held in memory.
+
+2. **Fit a `StandardScaler` incrementally.** Welford's algorithm via
+   `partial_fit` gives the same mean and variance as a single
+   `scaler.fit()` over the full dataset, with bounded memory. We fit on
+   the 7 base numeric features only. The hashed ticker is an integer key
+   and the cyclical features are already on a sensible scale.
+
+3. **Train the autoencoder.** `TradeAutoencoderV2` is a 4-layer encoder
+   into a 32-dim latent, with a symmetric decoder back to the numeric
+   feature space. The sym embedding lookup happens at the input layer,
+   `sym_idx = xxHash32(sym) % NUM_HASH_BUCKETS`. Loss is MSE on the
+   reconstructed numeric features. Training streams rows out of the
+   Parquet chunks via an `IterableDataset` and stops when a 200-batch
+   moving-average loss fails to improve for 5 windows.
+
+4. **Save two artifacts.** `scaler_params.pt` holds `mean_` and `scale_`
+   as Float32 tensors. `trade_autoencoder_v2.pt` holds the model
+   `state_dict` plus a `config` dict with the constructor kwargs. The
+   UDF's `main.py` reads these at startup and reconstructs the model.
+
+5. **Package the bundle.** A final notebook cell zips `main.py`,
+   `requirements.txt`, and the two `.pt` files into `embed_trade.zip`,
+   ready to upload.
+
+## Deploying the UDF on Cloud
+
+The deployment surface is a single upload screen in the Cloud console.
+You give it a name, a zip containing your code and model files, and a
+few runtime parameters.
+
+![ClickHouse Cloud UDF deployment page with argument list and runtime settings](https://clickhouse.com/uploads/cloud_udf_deployment_95cd9b3a7d.png)
+
+For `embed_trade` we use:
+
+- **Type:** `executable_pool`. Long-lived processes, hot model in memory.
+- **Pool size:** `10` per replica. Each process loads the 2MB model at
+  startup (~1.5s) and reuses it for every subsequent call.
+- **Runtime:** `python3.11`. Dependencies (`torch==2.4.1`,
+  `numpy==1.26.4`) come from the `requirements.txt` in the zip.
+- **Format:** `TabSeparated`. The UDF reads one TSV line per input row
+  on stdin and prints `(embedding, recon_score)` on stdout.
+- **14 arguments**, each with an explicit ClickHouse type. The signature
+  matches the autoencoder's training schema exactly. See
+  [`udf/cloud-deployment.md`](udf/cloud-deployment.md) for the full
+  table.
+
+The function is then callable from SQL like any built-in:
+
+
+```sql
+WITH
+    fromUnixTimestamp64Milli(t, 'America/New_York') AS ts,
+    embed_trade(
+        xxHash32(sym), p, s, x, z, toUInt64(length(c)), trfi, trft,
+        toUInt8(toHour(ts)), toUInt8(toDayOfWeek(ts, 1)),
+        sin((toHour(ts) * 2 * pi()) / 24),
+        cos((toHour(ts) * 2 * pi()) / 24),
+        sin((toDayOfWeek(ts, 1) * 2 * pi()) / 7),
+        cos((toDayOfWeek(ts, 1) * 2 * pi()) / 7)
+    ) AS result
+SELECT
+    sym, i, x, p, s, c, t, q, z, trfi, trft, inserted_at,
+    result.2 AS recon_score,
+    result.1 AS embedding
+FROM stockhouse.trades limit 10;
+```
+
+[Run code block](null)
+
+The interesting part isn't *that* you can do this. It's *where* you can
+put the call.
+
+## Scoring every trade, inline with ingest
+
+We wire `embed_trade` into a materialized view:
+
+
+
+```sql
+CREATE MATERIALIZED VIEW trades_embeddings_mv
+TO trades_embeddings
+AS
+WITH
+    fromUnixTimestamp64Milli(t, 'America/New_York') AS ts,
+    embed_trade(
+        xxHash32(sym), p, s, x, z, toUInt64(length(c)), trfi, trft,
+        toUInt8(toHour(ts)), toUInt8(toDayOfWeek(ts, 1)),
+        sin((toHour(ts) * 2 * pi()) / 24),
+        cos((toHour(ts) * 2 * pi()) / 24),
+        sin((toDayOfWeek(ts, 1) * 2 * pi()) / 7),
+        cos((toDayOfWeek(ts, 1) * 2 * pi()) / 7)
+    ) AS result
+SELECT
+    sym, i, x, p, s, c, t, q, z, trfi, trft, inserted_at,
+    result.2 AS recon_score,
+    result.1 AS embedding
+FROM trades;
+```
+
+[Run code block](null)
+
+Every `INSERT INTO trades` fires this MV. The Python pool scores
+the batch and lands the result in `trades_embeddings`. There's no other
+mover, no other service, no separate scheduler. Just SQL.
+
+This is the part that wasn't possible before executable UDFs landed in
+Cloud. The equivalent service architecture would be a Kafka consumer
+reading from `trades`, batching rows, posting to a model server, writing
+the results back. Same end state, several more moving parts. Here it's
+one DDL statement.
+
+The performance shape is unsurprising. Cost per row is the model forward
+pass (a few milliseconds on a warm pool) plus the TSV serialization.
+ClickHouse batches rows into the UDF in chunks. The pool runs a handful
+of in-flight invocations in parallel. We backfilled ~6B historical rows
+at ~35K rows/sec sustained over several hours on a 3-replica cluster
+with no manual scaling. Same UDF, same MV, same SQL.
+
+## Making "anomalous" mean something
+
+The autoencoder gives us a raw `recon_score` per trade. That's a number
+between roughly 0.00002 and 1,000,000+ across the dataset. A naive
+"trades above 0.062 are anomalous" filter (using the global 99th
+percentile from the model's training distribution) sounds reasonable
+until you actually look at the data.
+
+A handful of symbols, like BRK.A and LLY, score every single trade above
+that threshold because their share prices are unusually high. Their
+entire distribution sits in the right tail of the global one. A "100%
+anomalous" stat for those symbols is technically correct and practically
+useless.
+
+So we redefine "anomaly" relative to each symbol's own history. For
+every symbol, we maintain its **lifetime p95 of `recon_score`**. A trade
+is anomalous *for that symbol* if it exceeds the symbol's own p95. About
+5% of trades qualify in a typical window, by construction. When that
+fraction spikes well above 5%, the symbol is having a genuinely unusual
+window.
+
+The per-symbol baseline lives in another ClickHouse table:
+
+
+
+```sql
+CREATE TABLE trades_baselines (
+    sym         LowCardinality(String),
+    p50         Float32,
+    p95         Float32,
+    p99         Float32,
+    -- ...
+    computed_at DateTime
+)
+ENGINE = MergeTree
+ORDER BY sym;
+```
+
+[Run code block](null)
+
+A **refreshable materialized view** repopulates it every hour:
+
+```sql
+CREATE MATERIALIZED VIEW trades_baselines_mv
+REFRESH EVERY 1 HOUR
+TO trades_baselines
+AS
+SELECT
+    sym,
+    quantiles(0.5, 0.95, 0.99)(recon_score) AS qs,
+    qs[1] AS p50, qs[2] AS p95, qs[3] AS p99,
+    -- ...
+FROM trades_embeddings
+WHERE NOT has(c, 15) AND NOT has(c, 12)   -- exclude auction prints
+GROUP BY sym;
+```
+
+[Run code block](null)
+
+Refreshable MVs atomically truncate and replace the target table on each
+refresh. Plain `MergeTree` is the right engine: no `FINAL`, no dedup
+logic, no read-time overhead.
+
+The leaderboard query then **joins live trades against the baselines
+table** to count anomalies per symbol relative to their own baseline:
+
+```sql
+SELECT
+    e.sym,
+    countIf(e.recon_score > b.p95) AS anomaly_count,
+    round(sumIf(e.s, e.recon_score > b.p95) * 100.0 / sum(e.s), 2) AS pct_of_volume
+FROM stockhouse.trades_embeddings AS e
+INNER JOIN stockhouse.trades_baselines AS b ON e.sym = b.sym
+WHERE e.t >= now() - INTERVAL 1 HOUR
+GROUP BY e.sym
+ORDER BY pct_of_volume DESC
+LIMIT 50;
+```
+
+[Run code block](null)
+
+This query goes from ~1.7s (recomputing baselines inline as a CTE) to
+~0.27s (joining against the pre-computed table). Same answer, roughly 6x
+faster. The expensive part is materialized exactly once an hour instead
+of on every page load.
+
+## The webapp
+
+The webapp is a Next.js + Click UI + Highcharts demo. It consumes
+`trades_embeddings` and the baseline tables. 
+
+**The anomaly dashboard** ranks S&P 500 symbols by share of trading
+volume that exceeds their own baseline.
+
+![Dashboard with bubble chart and detailed table](https://clickhouse.com/uploads/hero_dashboard_5c8d3ce323.png)
+
+The packed-bubble chart sizes and colors each symbol by `pct_of_volume`,
+the share of total trading volume in the window that came from trades
+above the symbol's lifetime p95. Symbols with redder, larger bubbles had
+unusually anomaly-heavy windows. The table on the left carries the same
+sort, with OHLC, max score, and the per-symbol baseline alongside.
+
+**The symbol drilldown** zooms in on one ticker.
+
+![Symbol drilldown showing candlesticks with volume bars and a table of anomalous trades](https://clickhouse.com/uploads/symbol_drilldown_2844f51814.png)
+
+A candlestick and volume pane sits on top. Both axes overlap a single
+plot area, with the price axis stretched downward to push candles into
+the top 65% and volume bars into the bottom 30%. Hover any row in the
+anomalous-trades table and the corresponding candle's volume bar fills
+yellow, sized to that trade's share of the bucket's total volume.
+Crosshairs snap to the candle center.
+
+**The similarity search** opens as a modal over the drilldown when you
+click a trade.
+
+![Similarity modal with radar chart and similar-trades table](https://clickhouse.com/uploads/similarity_modal_80d0258023.gif)
+
+The radar chart plots each trade's 13 input dimensions, normalized
+against the symbol's lifetime min, max, and avg per dim. Because the avg
+always maps to `0.5`, the baseline series renders as a perfect 13-sided
+polygon at the chart's midpoint. Easy to spot deviations from. Hover a
+similar-trade row to overlay it. The 50 most-similar trades come from
+`cosineDistance(embedding, target_embedding)` over the same symbol's
+embedding column.
+
+**The model drift monitor** tracks the score distribution over time.
+
+![Model drift weekly p50/p95/p99/max chart and per-symbol drift lines](https://clickhouse.com/uploads/drift_monitor_f552fa5951.png)
+
+Weekly p50, p95, p99, and max of `recon_score`, with horizontal
+reference lines at the static thresholds the model was originally
+calibrated against. If the p99 line starts climbing week over week, the
+market has drifted from the model's training distribution and it's time
+to retrain.
+
+**The auction print monitor** is the home for the extreme tail. Opening
+(c=12) and closing (c=15) auction prints score in the thousands to
+millions because of their massive share sizes.
+
+![Auction print monitor with top auctions table and daily counts chart](https://clickhouse.com/uploads/auction_monitor_39b129720c.png)
+
+They'd dominate every other view if we didn't filter them out everywhere
+else. Here they get their own page.
+
+## One more thing: network-access UDFs (private beta)
+
+Everything you've seen so far runs on the deterministic path. `embed_trade`
+scores rows at ingest, baselines refresh hourly, the webapp reads
+pre-computed tables. No external calls anywhere on the read path. That's
+the shape you want for the load-bearing pieces: cheap, predictable, no
+upstream that can disappear on you.
+
+But once a trade has been flagged as anomalous, the obvious next
+question is *why*. That answer lives outside ClickHouse — in news APIs,
+SEC filings, halt notices, social signals. To pull those in we need
+network access from the UDF.
+
+**Network-access executable UDFs are in private beta on ClickHouse
+Cloud.** Once enabled, the UDF runtime can make outbound HTTPS calls to
+any allowed host. We added two new UDFs in this repo to use it:
+
+### `nearby_events`
+
+Given `(sym, t, window_min)`, calls two external sources and returns a
+JSON array of events near that trade time:
+
+1. **Massive News API** (Polygon recently rebranded as **Massive**;
+   `api.polygon.io` endpoints still respond as before).
+2. **SEC EDGAR** (free, public, no API key).
+
+
+```sql
+SELECT
+    sym,
+    JSONLength(nearby_events(sym, t, 120)) AS n_events
+FROM stockhouse.trades_embeddings
+WHERE recon_score > 1.0
+LIMIT 5;
+```
+
+[Run code block](null)
+
+You could *almost* do this with `url()`. The differences that make it a
+UDF:
+
+- **In-process composition.** Polygon's results and EDGAR's filings get
+  deduped, sorted, and capped in a single Python call. Chaining two
+  `url()` calls in SQL would force the same logic into a `UNION ALL`
+  with downstream `arrayJoin`/`groupArray` plumbing — workable, but
+  uglier.
+- **Auth in env.** The Polygon API key is read from
+  `POLYGON_API_KEY` at pool-process startup. It never appears in SQL.
+- **Per-process LRU cache.** Each pool worker keeps recent results
+  keyed by `(sym, minute, window)`. The same trade hovered twice in the
+  UI costs one API call, not two.
+- **Connection reuse.** A long-lived `requests.Session()` per process
+  keeps HTTP connections alive for the duration of that worker, which
+  is hours.
+
+### `classify_trade`
+
+Given `(sym, t)`, fetches context via `nearby_events`'s internals, then
+asks **Anthropic Claude** to classify the most likely cause of the
+anomalous trade. Returns a typed tuple:
+
+```sql
+WITH classify_trade('LLY', 1778777944818) AS c
+SELECT c.1 AS cause, c.2 AS confidence, c.3 AS summary;
+```
+
+[Run code block](null)
+
+The cause is constrained to a fixed taxonomy: `earnings`, `m_and_a`,
+`halt`, `rumor`, `sector_move`, `block_trade`, `no_news_found`. We
+enforce this via Anthropic's **tool-use** mechanism. The model is
+required to call a tool whose `input_schema` includes an `enum` on the
+`cause` field, so the response is guaranteed to be parseable and the
+cause is guaranteed to be one of the known values. No regex parsing of
+free-form prose, no "the model returned something close to 'earnings'
+but with extra words" follow-up logic.
+
+Remember the similarity modal from the webapp? `classify_trade` and
+`nearby_events` drive a **"Why anomalous?"** panel pinned to the top of
+that modal. When you open a trade, the panel hits both UDFs in parallel
+and shows:
+
+- A badge with the classified cause and a confidence number
+- A 1–2 sentence summary written by the model
+- A short list of the news headlines and filings that drove the call
+
+![Similarity modal showing the Why-anomalous panel with cause badge, summary, and event list](https://clickhouse.com/uploads/why_anomalous_ef01e5439a.png)
+
+### Why this matters
+
+`url()` has been in ClickHouse for years and it's good for ad-hoc
+fetches. What network-access UDFs add is the rest of the picture:
+stateful clients, auth lifecycle, multi-step pipelines, structured
+LLM output, and per-process caching. The boundary between "code that
+needs to run" and "data that needs to be queried" gets thinner.
+
+You can put a 200-line Python function with three API calls and an LLM
+prompt into a `SELECT`. Nobody else has to learn it exists.
+
+**Want to try it on your cluster?** Network-access UDFs are in private
+beta — reach out to ClickHouse Cloud support to get it enabled!
+
+## What's interesting about this
+
+Most ML-on-streaming-data architectures pay an integration tax. The
+model lives somewhere. The data lives somewhere else. The glue between
+them is its own system. The setup in this repo flattens that. There's a
+ClickHouse Cloud cluster, a 2MB Python file, and one DDL statement that
+binds them together.
+
+Every piece of UI logic in the webapp is a SQL query. Anomaly detection
+is the only ML in the system, and even that's not "ML in the webapp",
+it's a column in a table. The "how anomalous is this symbol's last
+hour" calculation, the "find me similar trades by cosine distance"
+query, the per-symbol p95 baseline, the materialized views that keep it
+all fresh: standard SQL features, running against standard ClickHouse
+tables.
+
+Executable UDFs in Cloud don't add new abstractions on top of
+ClickHouse. They give you a way to make Python part of your SQL.
+
+## Reproduce it
+
+The full project is at <https://github.com/clickhouse/stock-anomaly-udf>.
+
+```
+stock-anomaly-udf/
+├── notebook/   # Train the autoencoder, export weights, package the UDF zip
+├── udf/        # The deployable bundle: main.py, model weights, deployment notes
+├── sql/        # Source schema, the auto-embed MV, two refreshable baseline MVs
+└── web/        # Next.js demo app
+```
+
+### Quickstart
+
+1. **Get the UDF onto your cluster.**
+   - Zip the contents of `udf/embed_trade/`:
+     ```bash
+     cd udf/embed_trade && zip embed_trade.zip main.py requirements.txt *.pt
+     ```
+   - Upload via the Cloud UDF deployment UI. Configure per
+     [`udf/cloud-deployment.md`](https://github.com/ClickHouse/stock-anomaly-udf/blob/main/udf/cloud-deployment.md).
+
+2. **Run the SQL files in order:**
+   ```sql
+   :run sql/01_source_schema.sql
+   :run sql/02_embeddings_mv.sql
+   :run sql/03_score_baselines.sql
+   :run sql/04_dim_baselines.sql
+   ```
+
+3. **Backfill historical data** (optional). Bulk INSERT into
+   `trades_embeddings` using the same SELECT pattern as the MV, scoped to
+   any time range. The MV in step 2 will catch every subsequent INSERT
+   into `default.trades` automatically.
+
+4. **Start the webapp:**
+   ```bash
+   cd web
+   cp .env.example .env.local   # fill in CH_HOST/PORT/USER/PASS/DB
+   npm install
+   npm run dev
+   ```
+   Open <http://localhost:3000>.
+
+The notebook in `notebook/` walks through training your own autoencoder
+end to end. It streams training data from `default.trades` into Parquet
+chunks, fits a `StandardScaler` incrementally, trains with early
+stopping, and zips the artifacts into a deployable bundle.
+
+## Try executable UDFs
+
+Public beta is live in ClickHouse Cloud today. Drop us a note if you put
+something interesting together with it!
+
+---
+
+## Get started today
+
+Interested in seeing how ClickHouse works on your data? Get started with ClickHouse Cloud in minutes and receive $300 in free credits.
+
+[Sign up](https://console.clickhouse.cloud/signUp?loc=blog-cta-749-get-started-today-sign-up&utm_blogctaid=749)
+
+---
+
+# 
+
+---
+
+## ClickHouseが管理するPostgresがベータ版で提供開始
+Published: 2026-06-01T06:26:19+00:00
+URL: https://clickhouse.com/blog/postgres-managed-by-clickhouse-beta-jp
+
+---
+title: "ClickHouseが管理するPostgresがベータ版で提供開始"
+date: "2026-06-01T06:26:19.804Z"
+author: "Sai Srirampur"
+category: "Product"
+excerpt: "ClickHouseが管理するPostgresがパブリックベータとして利用可能になりました。NVMeバックエンドのフルマネージドPostgresサービスで、ClickHouseへのネイティブCDCとpg_clickhouseによる統合クエリレイヤーを備えています。"
+---
+
+# ClickHouseが管理するPostgresがベータ版で提供開始
+
+**TL;DR:** ClickHouse Cloud ユーザーは、ローカル NVMe を活用してトランザクションを最大 10 倍高速化するフルマネージドの Postgres サービスを利用できるようになりました。リアルタイム分析向けに ClickHouse へのネイティブ CDC、さらに pg_clickhouse による統一クエリレイヤーも備えています。2026 年 6 月 15 日まで無料で、それ以降はベータ期間中 50% 割引でご利用いただけます。CDC と pg_clickhouse は追加料金なしで含まれます。
+
+ClickHouse Cloud ユーザーは、ローカル NVMe ストレージを活用したフルマネージドの Postgres サービスを、ClickHouse とネイティブに統合された形でプロビジョニングできるようになりました。すべての ClickHouse Cloud ユーザーが、ローカル NVMe ストレージを基盤とし、ClickHouse とネイティブに統合されたエンタープライズグレードのフルマネージド Postgres サービスを利用できます。私たちは、トランザクション (OLTP) ワークロード向けの Postgres と、分析 (OLAP) ワークロード向けの ClickHouse を組み合わせた **ベスト・オブ・ブリードのデータスタック** を提供します。これにより、別々のシステムを組み合わせる従来の複雑さを排除し、リアルタイムおよび AI ネイティブなアプリケーションに不可欠な基盤を提供します。
+
+> [今すぐ ClickHouse Cloud にサインアップして、ClickHouse 管理の Postgres を始めましょう](https://console.clickhouse.cloud/signUp?intent=PG)
+
+ローカル NVMe を活用した高性能な Postgres サービスにより、トランザクション性能が最大 [10 倍高速]() になります。ネイティブ CDC を使えば、わずか数クリックで Postgres から ClickHouse にデータを同期し、[100 倍高速な分析](https://benchmark.clickhouse.com/) を実現できます。[pg_clickhouse](https://clickhouse.com/blog/introducing-pg_clickhouse) 拡張による統一クエリレイヤーを使えば、別々のシステムを管理することなく、トランザクションと分析を組み合わせたアプリケーションを構築できます。そしてこれらすべてが費用対効果の高い価格で提供されるため、アプリ構築のための高速かつ信頼性の高いデータ基盤について妥協する必要はありません。
+
+## AI には「ベスト・オブ・ブリード」なデータスタックが必要 {#ai-needs-the-best-of-breed-data-stack}
+
+[AI ワークロードは、トランザクションデータベースと分析データベースの伝統的な境界を崩しつつあります。](https://clickhouse.com/blog/ai-redrawing-database-market#real-time_analytics) かつて予測可能でハードコーディングされたクエリを実行していたアプリケーションは、今やスタックの両側から回答を必要とする、エージェント駆動の予測不可能なリクエストのバーストを生成しています。同時に、データ量、同時実行性、パフォーマンスへの期待は指数関数的に増大しており、セキュリティと信頼性はかつてないほど重要になっています。
+
+だからこそ、ベスト・オブ・ブリードがこれまで以上に重要なのです。OLTP には Postgres、OLAP には ClickHouse。何千もの AI ネイティブ企業がすでにこのアーキテクチャに集約している理由もここにあります。
+
+![postgres_beta_may2026_image1.png](https://clickhouse.com/uploads/postgres_beta_may2026_image1_4ffdd4d2c0.png)
+
+ClickHouse 管理の Postgres に対する私たちのビジョンはシンプルです。Postgres と ClickHouse を外部パイプライン、カスタムアプリケーションロジック、運用上の複雑さで繋ぎ合わせるオーバーヘッドを排除し、開発者が統一されたデータスタック上で AI ネイティブなアプリケーションを簡単に構築できるようにすることです。
+
+## お客様 {#customers}
+
+今年初めに ClickHouse 管理の Postgres のプライベートプレビューを発表したところ、すでに数千社がウェイトリストに登録し、多くがマルチテラバイト規模のミッションクリティカルな本番ワークロードを稼働させています。
+
+お客様は RDS、Aurora、CloudSQL、Neon、PlanetScale Postgres などから移行しており、また AI ネイティブな新しいアプリケーションを一から構築している企業もあります。これらのワークロードは、サイバーセキュリティ、フィンテック、リテール、不動産、ソーシャルメディアなど多岐にわたり、いずれも Postgres と ClickHouse によって OLTP と OLAP を統合した、深く統合されたプラットフォームを基盤としています。
+
+以下は、リファレンスカスタマーから寄せられた率直な声の一部です。
+
+### **Physical Intelligence** {#physical-intelligence}
+
+*AI ワークロードとアノテーションパイプラインのスケーリング、RDS から移行*
+
+「ClickHouse は、私たちが RDS から脱却し、成長する AI ワークロードを支えるデータプラットフォームを構築するのに役立ちました。ClickHouse Cloud プラットフォーム内で OLTP には Postgres、OLAP には ClickHouse を使用しており、研究者、トレーニングパイプライン、エージェントが同じデータ基盤に高速にアクセスできるようになっています…アノテーション量が 10 倍に増加し、数十億件のアノテーションへと向かう中、ClickHouse はスケーリングを続けるためのプラットフォーム上の余裕を提供してくれます…」
+
+### **Sterling Labs** {#sterling-labs}
+
+*Aurora から移行し、NVMe 上で 8.5 TB のホットな Postgres データを運用*
+
+「ClickHouse 管理の Postgres は、Aurora から移行し本番ワークロードをスケールする上で、私たちにとって素晴らしくフィットしました…現在、Postgres で約 8.5 TB のホットデータを実行しており、NVMe ドライブが提供する超低レイテンシを享受しています…パフォーマンスはまさに圧巻です…」
+
+### **Quinto Andar** {#quinto-andar}
+
+*分析のための汎用インターフェースとして Postgres を活用*
+
+「pg_clickhouse があれば、ClickHouse は事実上あらゆるサードパーティツールにとってのプラグアンドプレイなデータベースになります…Hightouch のような統合のためだけに BigQuery や Snowflake のオーバーヘッドを強いられる代わりに、主要なデータセットを Postgres 経由で直接公開できるようになりました…ClickHouse の生のパフォーマンスと Postgres の遍在する互換性の両方を備えた、両方の世界の良いとこ取りです。」
+
+### **DoControl** {#docontrol}
+
+*大規模なサイバーセキュリティデータパイプラインの簡素化*
+
+「ClickHouse チームの手厚いサポートを受けて、複数のマルチテラバイト規模のワークロードを RDS と Aurora から ClickHouse 管理の Postgres へ移行しました。私たちのサイバーセキュリティデータソースの規模と複雑さを考えると、信頼性とコストパフォーマンスは極めて重要でした…ClickHouse 管理の Postgres により、Postgres ワークロードをより簡単に移行し、ClickPipes を活用し、当初予想していた運用上の複雑さなしでデータを ClickHouse に取り込めるようになりました。」
+
+その他のリファレンスカスタマーとして特筆したいのは、Trainy.ai や EndClose といった Y Combinator 企業、Mpathic のような AI セーフティ企業、Prediko のような AI ネイティブな在庫管理企業など、ClickHouse 管理の Postgres 上で次世代の AI ネイティブアプリケーションを支える数多くの企業です。
+
+## **製品** {#product}
+
+ClickHouse 管理の Postgres は、高性能な OLTP とリアルタイム OLAP を、深く統合された単一のプラットフォームに統合します。プラットフォームの中核には、3 つの基盤的な機能があります:
+
+* **NVMe 基盤の Postgres** によりトランザクション性能を最大 10 倍高速化
+* **ClickHouse へのネイティブ CDC** により外部パイプラインなしでリアルタイム分析を実現
+* **pg_clickhouse**、アプリケーションがトランザクションと分析にまたがれる統一クエリレイヤー
+
+これらの機能が組み合わさることで、Postgres と分析インフラを手作業で繋ぎ合わせる運用上の複雑さが解消され、リアルタイムおよび AI ネイティブなアプリケーションをよりシンプルに構築できるようになります。
+
+<video autoplay="1" muted="1" loop="1" controls="0">
+  <source src="https://clickhouse.com/uploads/open2_compressed_5863ec1cce.mp4" type="video/mp4" />
+</video>
+
+### **ClickPipesによるフルマネージドな移行** {#fully-managed-migrations-with-clickpipes}
+
+本番環境のPostgresワークロードを移行することは、新しいプラットフォームを導入するうえで最も困難な作業の1つです。[ClickPipes](https://clickhouse.com/docs/cloud/managed-postgres/migrations/clickpipes)を活用したフルマネージドの移行ワークフローにより、お客様はRDS、Aurora、CloudSQL、Neonなどの各種プロバイダーから、最小限のダウンタイムと運用負荷でワークロードを移行できます。
+
+リアルタイムでデータを継続的にレプリケーションし、カットオーバーをシンプル化し、独自の移行インフラを構築する必要をなくすことができます。これは、本番ワークロードを運用しているお客様の間で、すでに最も支持されている機能の1つとなっています。
+
+### **本番ワークロード向けのエンタープライズグレードPostgres** {#enterprise-grade-postgres-for-production-workloads}
+
+ClickHouseが管理するPostgresには、ミッションクリティカルなアプリケーションを大規模に運用するためにお客様が期待する運用機能が含まれています。たとえば次のようなものです。
+
+* 最大2つのスタンバイによる高可用性
+* ポイントインタイムリカバリとデータベースブランチング
+* 読み取り負荷の高いワークロードをスケールさせるリードレプリカ
+* 90以上のPostgreSQL拡張機能
+* Private Linkによるエンタープライズグレードのセキュリティ
+* 統合されたモニタリング、ログ、および[Query Insights](https://clickhouse.com/blog/postgres-query-insights-clickhouse-cloud)
+* Prometheus互換のメトリクス
+* `clickhousectl`によるエージェントベースのアクセス
+* OpenAPIによるInfrastructure as Code
+* その他多数!
+
+そして、これはまだ始まりに過ぎません。私たちは、リアルタイムおよびAIネイティブのアプリケーション向けに、運用系と分析系を完全に統合したデータプラットフォームの構築を目指しています。
+
+上記の機能に関する詳細なドキュメントは、[こちら](https://clickhouse.com/docs/cloud/managed-postgres)の公式ドキュメントをご参照ください。
+
+## 料金 {#pricing}
+
+ClickHouseが管理するPostgresは、コスト効率を重視して設計されており、開発者はPostgresとClickHouseによる高速で信頼性の高いデータ基盤を妥協なく利用できます。本サービスは、他のマネージドPostgresサービスと比較しても非常に競争力のある価格設定となっています。これには、ローカルNVMeストレージによる価格性能上のメリットは含まれていません。
+
+本サービスは、2026年6月15日に利用量メータリングが開始されるまで無料です。Beta期間中は、早期にご利用いただくお客様への感謝の意を込めて、すべてのプランで50%の割引が適用されます。
+
+> 正確な料金については、[料金計算ツール](https://clickhouse.com/pricing?service=postgres#pricing-calculator)にアクセスして、ワークロードに最適な構成と料金をご確認ください。
+
+ClickPipesによるネイティブCDCおよびpg_clickhouse拡張機能は追加料金なしで提供され、PostgresとClickHouseによる統合OLTP + OLAPプラットフォームというビジョンに沿ったものとなっています。
+
+本プラットフォームは、1 vCPU / 8 GB RAM / 59 GB NVMe(月額約32ドルから)の構成から、96 vCPU / 768 GB RAM / 60 TB NVMeストレージのクラスタまで、50を超えるローカルNVMeバックアップ型のVM構成をサポートします。これにより、軽量な開発者向けワークロードから、コンピューティング集約型およびストレージ集約型の本番デプロイメントまで、柔軟に対応できます。
+
+Beta期間中は、バックアップとネットワーク送信(egress)も追加料金なしで提供されます。
+
+一般提供(General Availability)に向けて、料金やパッケージは変更される可能性があります。詳細および免責事項については、料金[ドキュメント](https://clickhouse.com/docs/cloud/managed-postgres/pricing)をご参照ください。
+
+## はじめる {#get-started}
+
+ClickHouseが管理するPostgresは、本日よりClickHouse CloudでBeta提供を開始しました!
+
+---
+
+## 今すぐ始める
+
+ClickHouse Cloud にサインアップして、最初の NVMe ベース Postgres サービスをプロビジョニングし、ClickHouse へのネイティブ CDC をセットアップして、pg_clickhouse で両者をまたいだクエリを開始しましょう。
+
+新規アカウントにはすべて $300 分の無料クレジットが含まれます。
+
+[Sign up](https://console.clickhouse.cloud/signUp?loc=blog-cta-736-sign-up&utm_blogctaid=736)
+
+---
+
+詳細については [ClickHouse によるマネージド Postgres ページ](https://clickhouse.com/cloud/postgres) をご覧いただくか、[ドキュメント](https://clickhouse.com/docs/cloud/managed-postgres) を参照して構築を始めてください。
 
 ---
 

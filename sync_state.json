@@ -1,5 +1,5 @@
 {
-  "last_sync": "2026-06-02T07:45:36.280961Z",
+  "last_sync": "2026-06-03T07:49:38.425811Z",
   "processed_blogs": {
     "https://clickhouse.com/blog/clickhouse-raises-400-million-series-d-acquires-langfuse-launches-postgres": {
       "title": "ClickHouse raises $400M Series D led by Dragoneer to accelerate expansion across analytics and AI infrastructure",
@@ -4830,9 +4830,135 @@
       "pub_date": "2026-05-28T22:21:47+00:00",
       "file_path": "blogs/2026-05-28-open-house-2026-day-2-10-years-of-open-source-and.md",
       "processed_at": "2026-05-30T07:06:40.099004Z"
+    },
+    "https://clickhouse.com/blog/tpc-h-clickhouse-cloud-vs-snowflake-databricks-bigquery-redshift": {
+      "title": "TPC-H for less than a cent: ClickHouse Cloud vs. Snowflake, Databricks, BigQuery, and Redshift",
+      "pub_date": "2026-06-02T08:48:01+00:00",
+      "file_path": "blogs/2026-06-02-tpc-h-for-less-than-a-cent-clickhouse-cloud-vs.md",
+      "processed_at": "2026-06-03T07:49:28.945466Z"
+    },
+    "https://clickhouse.com/blog/clickhouse-release-26-05": {
+      "title": "ClickHouse Release 26.5",
+      "pub_date": "2026-06-01T19:11:30+00:00",
+      "file_path": "blogs/2026-06-01-clickhouse-release-26-5.md",
+      "processed_at": "2026-06-03T07:49:29.282710Z"
+    },
+    "https://clickhouse.com/blog/executable-udfs-clickhouse-cloud-beta": {
+      "title": "Executable UDFs are now in public beta on ClickHouse Cloud",
+      "pub_date": "2026-06-01T14:08:38+00:00",
+      "file_path": "blogs/2026-06-01-executable-udfs-are-now-in-public-beta-on.md",
+      "processed_at": "2026-06-03T07:49:29.688789Z"
+    },
+    "https://clickhouse.com/blog/clickstack-cloud-private-preview-jp": {
+      "title": "ClickStack Cloud のご紹介:ClickHouse を基盤としたサーバーレスオブザーバビリティ",
+      "pub_date": "2026-06-02T01:52:29+00:00",
+      "file_path": "blogs/2026-06-02-clickstack-cloud-clickhouse.md",
+      "processed_at": "2026-06-03T07:49:29.997801Z"
+    },
+    "https://clickhouse.com/blog/postgres-managed-by-clickhouse-beta-jp": {
+      "title": "ClickHouseが管理するPostgresがベータ版で提供開始",
+      "pub_date": "2026-06-01T06:26:19+00:00",
+      "file_path": "blogs/2026-06-01-clickhouse-postgres.md",
+      "processed_at": "2026-06-03T07:49:30.284643Z"
+    },
+    "https://clickhouse.com/blog/gala-jp": {
+      "title": "Gala、AWS上のClickHouseで分析パフォーマンスを劇的に向上",
+      "pub_date": "2026-06-02T02:22:35+00:00",
+      "file_path": "blogs/2026-06-02-gala-aws-clickhouse.md",
+      "processed_at": "2026-06-03T07:49:30.575802Z"
+    },
+    "https://clickhouse.com/blog/qonto-jp": {
+      "title": "制限よ、さようなら。データよ、こんにちは。Qontoが ClickHouse Cloud でオブザーバビリティを再構築する方法",
+      "pub_date": "2026-06-02T02:29:11+00:00",
+      "file_path": "blogs/2026-06-02-qonto-clickhouse-cloud.md",
+      "processed_at": "2026-06-03T07:49:30.877510Z"
+    },
+    "https://clickhouse.com/blog/nava-jp": {
+      "title": "Nava が Elasticsearch から ClickHouse への移行を支援し、ELO のインフラコストを 87% 削減した方法",
+      "pub_date": "2026-06-02T02:35:01+00:00",
+      "file_path": "blogs/2026-06-02-nava-elasticsearch-clickhouse-elo-87.md",
+      "processed_at": "2026-06-03T07:49:31.178215Z"
+    },
+    "https://clickhouse.com/blog/trio-jp": {
+      "title": "「世代を超えた飛躍」: Trio が ClickHouse Cloud で決済分析を統合し、ストレージを 88% 削減した方法",
+      "pub_date": "2026-06-02T02:37:49+00:00",
+      "file_path": "blogs/2026-06-02-trio-clickhouse-cloud-88.md",
+      "processed_at": "2026-06-03T07:49:31.475048Z"
+    },
+    "https://clickhouse.com/blog/mintlify-jp": {
+      "title": "MintlifyがClickHouse Cloudのリアルタイム分析でNPSを30%向上、コストを60%削減",
+      "pub_date": "2026-06-02T02:41:14+00:00",
+      "file_path": "blogs/2026-06-02-mintlify-clickhouse-cloud-nps-30-60.md",
+      "processed_at": "2026-06-03T07:49:34.840857Z"
+    },
+    "https://clickhouse.com/blog/respan-ai-llm-observability-jp": {
+      "title": "RespanがClickHouse CloudでLLMオブザーバビリティをスケールさせる方法",
+      "pub_date": "2026-06-02T02:44:42+00:00",
+      "file_path": "blogs/2026-06-02-respan-clickhouse-cloud-llm.md",
+      "processed_at": "2026-06-03T07:49:35.136778Z"
+    },
+    "https://clickhouse.com/blog/rill-jp": {
+      "title": "Rill と ClickHouse: メータリング時代のリアルタイム運用 BI",
+      "pub_date": "2026-06-02T02:51:26+00:00",
+      "file_path": "blogs/2026-06-02-rill-clickhouse-bi.md",
+      "processed_at": "2026-06-03T07:49:35.441799Z"
+    },
+    "https://clickhouse.com/blog/padlet-jp": {
+      "title": "PadletがClickHouse Cloudを活用してリアルタイムの教室分析を実現する方法",
+      "pub_date": "2026-06-02T02:59:11+00:00",
+      "file_path": "blogs/2026-06-02-padlet-clickhouse-cloud.md",
+      "processed_at": "2026-06-03T07:49:35.752234Z"
+    },
+    "https://clickhouse.com/blog/cogent-security-jp": {
+      "title": "ClickHouseの速度で実現するインテリジェントセキュリティ:Cogent SecurityがAIネイティブな脆弱性管理プラットフォームを構築した方法",
+      "pub_date": "2026-06-02T03:01:52+00:00",
+      "file_path": "blogs/2026-06-02-clickhouse-cogent-security-ai.md",
+      "processed_at": "2026-06-03T07:49:36.143727Z"
+    },
+    "https://clickhouse.com/blog/socialpruf-jp": {
+      "title": "SocialprufがNeonをClickHouse管理のPostgresに置き換えて、より高速で信頼性の高いデータスタックを構築した方法",
+      "pub_date": "2026-06-02T03:05:36+00:00",
+      "file_path": "blogs/2026-06-02-socialpruf-neon-clickhouse-postgres.md",
+      "processed_at": "2026-06-03T07:49:36.456212Z"
+    },
+    "https://clickhouse.com/blog/criticial-manufacturing-jp": {
+      "title": "Critical ManufacturingがClickHouseを活用して工場現場にリアルタイムインテリジェンスをもたらす方法",
+      "pub_date": "2026-06-02T03:08:55+00:00",
+      "file_path": "blogs/2026-06-02-critical-manufacturing-clickhouse.md",
+      "processed_at": "2026-06-03T07:49:36.751414Z"
+    },
+    "https://clickhouse.com/blog/replo-jp": {
+      "title": "ReploがClickHouseで1,000億件以上のイベントを最適化して学んだこと",
+      "pub_date": "2026-06-02T03:11:36+00:00",
+      "file_path": "blogs/2026-06-02-replo-clickhouse-1-000.md",
+      "processed_at": "2026-06-03T07:49:37.058539Z"
+    },
+    "https://clickhouse.com/blog/lago-jp": {
+      "title": "毎秒100万イベント: LagoがClickHouse Cloudで使用量ベースの課金をスケールさせる方法",
+      "pub_date": "2026-06-02T03:14:51+00:00",
+      "file_path": "blogs/2026-06-02-100-lago-clickhouse-cloud.md",
+      "processed_at": "2026-06-03T07:49:37.355240Z"
+    },
+    "https://clickhouse.com/blog/inmobi-jp": {
+      "title": "InMobi が ClickHouse で実現したクエリ20倍高速化と80%のコスト削減",
+      "pub_date": "2026-06-02T03:17:41+00:00",
+      "file_path": "blogs/2026-06-02-inmobi-clickhouse-20-80.md",
+      "processed_at": "2026-06-03T07:49:37.719370Z"
+    },
+    "https://clickhouse.com/blog/luzmo-jp": {
+      "title": "Luzmo が ClickHouse Cloud を活用して高速なエンドユーザー分析を実現する方法",
+      "pub_date": "2026-06-02T03:20:20+00:00",
+      "file_path": "blogs/2026-06-02-luzmo-clickhouse-cloud.md",
+      "processed_at": "2026-06-03T07:49:38.038096Z"
+    },
+    "https://clickhouse.com/blog/cloudflare-jp": {
+      "title": "トラブルは向こうからやってくる: Cloudflareがクアドリリオン(千兆)行規模の分析をスケールするためにClickHouseをどう活用しているか",
+      "pub_date": "2026-06-02T03:23:28+00:00",
+      "file_path": "blogs/2026-06-02-cloudflare-clickhouse.md",
+      "processed_at": "2026-06-03T07:49:38.333226Z"
     }
   },
-  "total_blogs": 805,
+  "total_blogs": 826,
   "failed_blogs": [
     {
       "url": "https://clickhouse.com/jp/blog/clickhouse-gcp-japan-availability",
