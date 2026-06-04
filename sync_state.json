@@ -1,5 +1,5 @@
 {
-  "last_sync": "2026-06-03T07:49:38.425811Z",
+  "last_sync": "2026-06-04T07:44:41.681417Z",
   "processed_blogs": {
     "https://clickhouse.com/blog/clickhouse-raises-400-million-series-d-acquires-langfuse-launches-postgres": {
       "title": "ClickHouse raises $400M Series D led by Dragoneer to accelerate expansion across analytics and AI infrastructure",
@@ -4956,9 +4956,33 @@
       "pub_date": "2026-06-02T03:23:28+00:00",
       "file_path": "blogs/2026-06-02-cloudflare-clickhouse.md",
       "processed_at": "2026-06-03T07:49:38.333226Z"
+    },
+    "https://clickhouse.com/blog/logging-metrics-distributed-tracing-dotnet-otel-clickstack": {
+      "title": "Logging, Metrics, and Distributed Tracing in .NET with OpenTelemetry and ClickStack",
+      "pub_date": "2026-06-03T09:21:38+00:00",
+      "file_path": "blogs/2026-06-03-logging-metrics-and-distributed-tracing-in-net.md",
+      "processed_at": "2026-06-04T07:44:40.409417Z"
+    },
+    "https://clickhouse.com/blog/clickhouse-fast-joins": {
+      "title": "How ClickHouse became fast at joins",
+      "pub_date": "2026-06-03T06:41:15+00:00",
+      "file_path": "blogs/2026-06-03-how-clickhouse-became-fast-at-joins.md",
+      "processed_at": "2026-06-04T07:44:40.902302Z"
+    },
+    "https://clickhouse.com/blog/dotnet-api-gateway-aspire": {
+      "title": "Building a .NET API Gateway with ClickHouse and Aspire",
+      "pub_date": "2026-06-03T09:21:52+00:00",
+      "file_path": "blogs/2026-06-03-building-a-net-api-gateway-with-clickhouse-and.md",
+      "processed_at": "2026-06-04T07:44:41.297095Z"
+    },
+    "https://clickhouse.com/blog/observability-mcp-server-ai-notebooks-jp": {
+      "title": "Open Houseで発表されたオブザーバビリティ関連の新機能：MCPサーバー、AI Notebooks、ClickStack Cloud",
+      "pub_date": "2026-06-03T00:52:34+00:00",
+      "file_path": "blogs/2026-06-03-open-house-mcp-ai-notebooks-clickstack-cloud.md",
+      "processed_at": "2026-06-04T07:44:41.592054Z"
     }
   },
-  "total_blogs": 826,
+  "total_blogs": 830,
   "failed_blogs": [
     {
       "url": "https://clickhouse.com/jp/blog/clickhouse-gcp-japan-availability",

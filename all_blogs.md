@@ -1,6 +1,1553 @@
 # ClickHouse Blogs
-Last updated: 2026-06-03 07:49:38 UTC
-Total blogs: 826
+Last updated: 2026-06-04 07:44:41 UTC
+Total blogs: 830
+
+---
+
+## Building a .NET API Gateway with ClickHouse and Aspire
+Published: 2026-06-03T09:21:52+00:00
+URL: https://clickhouse.com/blog/dotnet-api-gateway-aspire
+
+---
+title: "Building a .NET API Gateway with ClickHouse and Aspire"
+date: "2026-06-03T09:21:52.771Z"
+author: "Alex Soffronow Pagonidis"
+category: "Engineering"
+excerpt: "A walkthrough of building a .NET API gateway with YARP and Aspire that logs every proxied request to ClickHouse for aggregate analytics, with a materialized view keeping dashboard queries fast as traffic grows."
+---
+
+# Building a .NET API Gateway with ClickHouse and Aspire
+
+## Why ClickHouse and Aspire {#why-clickhouse-and-aspire}
+
+If you spend most of your time in ASP.NET Core, two pieces of this demo may be new: ClickHouse and Aspire. A quick intro before we dive in:
+
+**Aspire** is Microsoft's .NET stack for coordinating distributed services. You write an `AppHost` project, a small C# program that describes your services, databases, containers, and how they connect, and `dotnet run` brings the whole graph up locally. Aspire also includes a web UI that shows every resource, streams logs, and renders OpenTelemetry traces and metrics emitted by your services. Once you have used it, going back to juggling launch profiles and a `docker-compose.yml` feels archaic.
+
+**ClickHouse** is an extremely fast, open-source, columnar database built for analytical queries over large volumes of data. It is the database you reach for when you want to ask questions like "what was p95 latency by route over the last hour?" across very large request histories and get an answer quickly. Unlike transactional databases like SQL Server or Postgres, ClickHouse is tuned for aggregates over append-mostly data. The mental model worth carrying into the rest of this post: ClickHouse is to analytical SQL what Redis is to caching: purpose-built for one job and very fast at it.
+
+We ship two ClickHouse integrations for Aspire which let you set up a database and a client that talks to it with just a few lines of code. That is the foundation the rest of this sample builds on.
+
+### The Demo {#the-demo}
+
+In this post we will build an application that uses Aspire to orchestrate:
+
+- A ClickHouse container
+- A YARP API gateway
+- Two backend APIs for `Products` and `Orders`
+- A background load generator that calls our backend APIs
+- An analytics API
+- A Blazor dashboard
+
+The gateway is the center of the demo. It does two things:
+
+1. Routes traffic to backend services with YARP.
+2. Records each proxied request into ClickHouse.
+
+At the same time, the gateway emits custom OpenTelemetry metrics that show up in Aspire:
+
+- Request count
+- Duration histogram
+- Backend failure count
+
+That gives us a useful split:
+
+- Aspire shows live operational telemetry.
+- ClickHouse stores the full request history for aggregate analytics.
+
+### Try It Yourself {#try-it-yourself}
+
+The full source is in the [companion repository](https://github.com/ClickHouse/aspire-clickhouse-gateway-analytics-demo). You need the .NET 10 SDK and Docker, then:
+
+<pre><code type='click-ui' language='bash'>
+dotnet run --project src/AppHost/AppHost.csproj --launch-profile http
+</code></pre>
+
+The AppHost console will print a login URL for the Aspire dashboard at `http://localhost:15000`. Open it and watch all the services launch.
+
+![](https://clickhouse.com/uploads/dotnet_aspire_jun2026_image1_cb6d4cd7b2.png)
+
+Aspire also generates a service map that shows how the services relate to each other.
+
+![](https://clickhouse.com/uploads/dotnet_aspire_jun2026_image2_f4721063c6.png)
+
+You can also explore structured logs, traces, and metrics through the Aspire dashboard. We will examine those in more detail later.
+
+A background load generator starts automatically once the gateway is ready. It sends a mix of product and order requests, including a small percentage of intentionally degraded checkout calls. Give it a minute to run, then open the analytics dashboard at `http://localhost:5100`.
+
+Now let's look at the code behind the services and how Aspire orchestrates them.
+
+## Adding ClickHouse to AppHost {#adding-clickhouse-to-apphost}
+
+The AppHost wiring is intentionally small:
+
+<pre><code type='click-ui' language='csharp'>
+var clickhouse = builder.AddClickHouse("clickhouse")
+    .WithDataVolume();
+
+var analyticsDb = clickhouse.AddDatabase("gatewayanalytics");
+
+builder.AddProject<Projects.Gateway>("gateway")
+    .WithReference(analyticsDb);
+</code></pre>
+
+Here's what this does:
+
+- `AddClickHouse("clickhouse")` runs the official `clickhouse/clickhouse-server` container and registers it as a resource. Aspire allocates the port and builds the connection string.
+- `.WithDataVolume()` attaches a named Docker volume so data survives after the application is shut down.
+- `AddDatabase("gatewayanalytics")` creates a logical database inside the server and exposes it as its own resource, separately injectable and health-checkable.
+- `WithReference(analyticsDb)` injects that database's connection string into the gateway process. The gateway picks it up later with `AddClickHouseDataSource("gatewayanalytics")`, no `appsettings.json` plumbing needed.
+
+`Projects.Gateway` is a strongly typed handle generated by the Aspire AppHost SDK from the `<ProjectReference>` entries in `AppHost.csproj`, so the wiring stays compile-time-checked.
+
+In a real production deployment you would usually point at an existing ClickHouse instance rather than run one directly in a local container. The same AppHost can declare an existing instance, whether ClickHouse Cloud, a self-hosted cluster, or anything reachable by a connection string, with `builder.AddConnectionString("gatewayanalytics")`. The rest stays the same.
+
+## Wiring the Rest of the Graph {#wiring-the-rest-of-the-graph}
+
+The full `AppHost/Program.cs` follows a similar pattern for the rest of the services:
+
+<pre><code type='click-ui' language='csharp'>
+var products = builder.AddProject<Projects.Products_Api>("products");
+var orders   = builder.AddProject<Projects.Orders_Api>("orders");
+
+var analytics = builder.AddProject<Projects.Analytics_Api>("analytics")
+    .WithReference(analyticsDb)
+    .WaitFor(analyticsDb);
+
+var gateway = builder.AddProject<Projects.Gateway>("gateway")
+    .WithExternalHttpEndpoints()
+    .WithReference(analyticsDb)
+    .WithEnvironment("Services__ProductsUrl", products.GetEndpoint("http"))
+    .WithEnvironment("Services__OrdersUrl",   orders.GetEndpoint("http"))
+    .WaitFor(analyticsDb)
+    .WaitFor(products)
+    .WaitFor(orders);
+
+var dashboard = builder.AddProject<Projects.Dashboard>("dashboard")
+    .WithHttpEndpoint(port: 5100, name: "http")
+    .WithExternalHttpEndpoints()
+    .WithEnvironment("Analytics__BaseUrl", analytics.GetEndpoint("http"))
+    .WaitFor(analytics);
+
+builder.AddProject<Projects.LoadGenerator>("traffic")
+    .WithEnvironment("Gateway__BaseUrl", gateway.GetEndpoint("http"))
+    .WaitFor(gateway);
+
+builder.Build().Run();
+</code></pre>
+
+It's worth taking a deeper look into some of the calls to understand what is happening under the hood:
+
+- `WaitFor(...)` gates each service's startup on its dependencies. Analytics doesn't start until the ClickHouse database resource reports healthy; the gateway doesn't start until the database, products, and orders are all up. This ensures an orderly boot process for all our services.
+- `GetEndpoint("http")` is Aspire's service discovery. It returns a handle to the named endpoint on another resource, and at runtime Aspire resolves it to whatever address that resource ended up on. There is no hard-coded URL anywhere.
+- `WithEnvironment(key, endpoint)` plumbs that resolved URL into the consuming process as a configuration entry, which the service then reads through the normal `IConfiguration` pipeline.
+- `WithExternalHttpEndpoints()` makes a resource reachable from outside Aspire's internal network, which is what lets you open the gateway or the Blazor dashboard in a browser. Backend APIs like `products` and `orders` deliberately do not get this, so they are only reachable via the gateway.
+- `WithHttpEndpoint(port: 5100, name: "http")` on the dashboard pins a stable port. Aspire normally allocates a fresh port every run, which is fine for backend services but inconvenient if you want to bookmark the analytics dashboard URL. The named endpoint also gives the other services a stable handle to call.
+
+In the services themselves, everything is read from configuration. No service contains a hard-coded URL for a peer, and no service has to know whether ClickHouse is a local container, a cloud instance, or a managed cluster.
+
+## Using the Driver Client in Services {#using-the-driver-client-in-services}
+
+On the client side, we use the `Aspire.ClickHouse.Driver` package:
+
+<pre><code type='click-ui' language='csharp'>
+builder.AddClickHouseDataSource("gatewayanalytics");
+</code></pre>
+
+The name matches the database resource declared back in the AppHost. At service startup the integration reads the injected connection string, registers an `IClickHouseClient` singleton in DI, and adds a health check and OpenTelemetry tracing for queries, all from this one line.
+
+## The Gateway Logging Layer {#the-gateway-logging-layer}
+
+The core middleware pattern is straightforward:
+
+- Start a stopwatch
+- Call the next delegate
+- Normalize the route
+- Capture the current trace id
+- Emit gateway metrics
+- Enqueue a row for background ingestion
+
+That last step is worth dwelling on. The proxied request must not wait on ClickHouse; if the database is slow or briefly unavailable, we want the gateway to keep serving traffic. So the middleware does not insert anything itself, it simply hands off the row to a bounded in-memory queue:
+
+<pre><code type='click-ui' language='csharp'>
+if (!requestLogQueue.TryEnqueue(logEntry))
+{
+    GatewayMetrics.LogDrops.Add(1, tags);
+}
+</code></pre>
+
+The queue uses a bounded `System.Threading.Channels` channel with `FullMode = DropWrite`:
+
+<pre><code type='click-ui' language='csharp'>
+Channel.CreateBounded<RequestLogRow>(new BoundedChannelOptions(Capacity)
+{
+    FullMode = BoundedChannelFullMode.DropWrite,
+    SingleReader = true,
+    SingleWriter = false,
+});
+</code></pre>
+
+`DropWrite` is the part that keeps the request path safe. If the queue fills up, `TryEnqueue` returns `false` immediately. The middleware increments a `gateway.log_drops` counter (tagged the same way as the rest of the gateway metrics) and moves on. The proxied request never waits on the database, and the dropped-row counter becomes a first-class signal you can alert on.
+
+A background `IHostedService` drains the channel. Its loop is small: wait for one row, drain whatever else is immediately available into a capped batch, bulk-insert, repeat:
+
+<pre><code type='click-ui' language='csharp'>
+while (!stoppingToken.IsCancellationRequested)
+{
+    batch.Add(await queue.Reader.ReadAsync(stoppingToken));
+
+    while (batch.Count < MaxBatchSize && queue.Reader.TryRead(out var more))
+    {
+        batch.Add(more);
+    }
+
+    try
+    {
+        await client.InsertBinaryAsync("request_logs", batch, InsertOptions, stoppingToken);
+    }
+    catch (Exception ex)
+    {
+        logger.LogError(ex, "Failed to write {Count} request log rows to ClickHouse.", batch.Count);
+    }
+    finally
+    {
+        batch.Clear();
+    }
+}
+</code></pre>
+
+Each `InsertBinaryAsync` call takes a list of POCOs and the driver streams them in ClickHouse's native `RowBinary` format. Values like `Guid`, `DateTime`, and `uint` round-trip in their native binary representation with no string conversions.
+
+The mapping from .NET property names to snake_case column names is declared on the record itself:
+
+<pre><code type='click-ui' language='csharp'>
+internal sealed record RequestLogRow(
+    [property: ClickHouseColumn(Name = "request_id")] Guid RequestId,
+    [property: ClickHouseColumn(Name = "trace_id")] string TraceId,
+    [property: ClickHouseColumn(Name = "timestamp")] DateTime Timestamp,
+    // ... remaining columns
+    [property: ClickHouseColumn(Name = "error_message")] string? ErrorMessage);
+</code></pre>
+
+The POCO has to be registered with the client once so the driver can build its column writer for the type. The pump does it at startup, right after creating the schema:
+
+<pre><code type='click-ui' language='csharp'>
+client.RegisterBinaryInsertType<RequestLogRow>();
+</code></pre>
+
+The insert runs with two ClickHouse-side settings:
+
+```csharp
+private static readonly InsertOptions InsertOptions = new()
+{
+    CustomSettings = new Dictionary<string, object>
+    {
+        ["async_insert"] = 1,
+        ["wait_for_async_insert"] = 1,
+    },
+};
+```
+
+`async_insert = 1` tells ClickHouse to batch incoming inserts instead of creating a part per insert call. ClickHouse works best with small numbers of large inserts; async inserts let the server batch incoming data to avoid creating too many new parts.
+
+`wait_for_async_insert = 1` means the background writer waits until the insert has been flushed to disk. Without it, ClickHouse would acknowledge the insert before the data is durable, and any crash or restart between acknowledgement and flush could lose rows silently. In a production gateway you might flip `wait_for_async_insert` to `0` if you can tolerate that small data-loss window, but this sample keeps the safer default.
+
+## Schema {#schema}
+
+The raw table is focused on request analytics:
+
+<pre><code type='click-ui' language='sql'>
+CREATE TABLE IF NOT EXISTS request_logs (
+    request_id UUID,
+    trace_id String,
+    timestamp DateTime64(6, 'UTC'),
+    method LowCardinality(String),
+    route_pattern LowCardinality(String),
+    path String,
+    upstream_service LowCardinality(String),
+    status_code UInt16,
+    duration_ms Float64,
+    request_size UInt32,
+    response_size UInt32,
+    error_message Nullable(String)
+)
+ENGINE = MergeTree()
+PARTITION BY toYYYYMMDD(timestamp)
+ORDER BY (upstream_service, route_pattern, timestamp)
+TTL timestamp + INTERVAL 30 DAY;
+</code></pre>
+
+A few of the type choices are worth calling out because they have no direct equivalent in SQL Server or Postgres:
+
+- `LowCardinality(String)` on `method`, `route_pattern`, and `upstream_service` dictionary-encodes the column. ClickHouse stores a small dictionary of unique values plus integer indexes per row, which collapses storage and speeds up `GROUP BY` / `WHERE` filters dramatically for low-cardinality columns.
+- `DateTime64(6, 'UTC')` is microsecond-precision and bakes the timezone into the column metadata, eliminating the usual UTC-vs-local confusion at query time.
+- `UInt16` for `status_code` halves the column footprint vs. a 32-bit default. ClickHouse rewards picking the tightest integer type that fits.
+- `Nullable(String)` is opt-in: columns are NOT NULL by default and `Nullable` carries a per-row null bitmap, so it is reserved for fields where null is genuinely meaningful.
+
+The engine clauses carry most of the query performance and retention story:
+
+- `PARTITION BY toYYYYMMDD(timestamp)` splits the table into daily partitions. Time-range queries skip every partition outside the window.
+- `ORDER BY (upstream_service, route_pattern, timestamp)` is the sorting key. It controls on-disk layout and the sparse primary index. Filters on the leading key columns are fast; filters on `path` are not.
+- `TTL timestamp + INTERVAL 30 DAY` drops old partitions automatically during background merges. No cleanup job required.
+
+The sample also creates a materialized view called `request_stats_mv`. If you have not used ClickHouse materialized views before, this is where the schema gets interesting.
+
+A materialized view in ClickHouse is not a cached query. It is a separate table that ClickHouse populates automatically as rows land in the source table. Every insert into `request_logs` triggers the view's `SELECT` statement and the result is written into the view's own storage. The view uses `AggregatingMergeTree`, which means the stored rows are partial aggregation states, not final values.
+
+The key to reading the DDL is the `-State` / `-Merge` suffix convention. In the view definition:
+
+<pre><code type='click-ui' language='sql'>
+countState() AS request_count,
+avgState(duration_ms) AS avg_duration,
+quantilesTDigestState(0.5, 0.95, 0.99)(duration_ms) AS duration_quantiles
+</code></pre>
+
+`countState()` does not store a finished count. It stores an intermediate aggregation state that ClickHouse can merge with other states later. When the dashboard queries the view, it uses the corresponding `-Merge` combinators:
+
+<pre><code type='click-ui' language='sql'>
+countMerge(request_count) AS request_count,
+avgMerge(avg_duration) AS avg_latency_ms,
+quantilesTDigestMerge(0.5, 0.95, 0.99)(duration_quantiles) AS percentiles
+</code></pre>
+
+This is what makes the pattern efficient. The raw `request_logs` table may have millions of rows, but the materialized view has already reduced them to one partial-aggregate row per service, route, status code, and minute. The dashboard query merges those small intermediate states instead of scanning the full log. The result is that percentile and error-rate panels stay fast regardless of how much traffic the gateway has handled.
+
+## The Observability Story {#the-observability-story}
+
+The Aspire dashboard renders traces, metrics, and structured logs from the OTLP feed that every service publishes. Wiring this up through `builder.AddServiceDefaults()` in each service's `Program.cs` is straightforward:
+
+```csharp
+builder.Logging.AddOpenTelemetry(logging =>
+{
+    logging.IncludeFormattedMessage = true;
+    logging.IncludeScopes = true;
+    logging.AddOtlpExporter();
+});
+
+builder.Services.AddOpenTelemetry()
+    .ConfigureResource(resource => resource.AddService(builder.Environment.ApplicationName))
+    .WithTracing(tracing =>
+    {
+        tracing.AddAspNetCoreInstrumentation();
+        tracing.AddHttpClientInstrumentation();
+        tracing.AddOtlpExporter();
+    })
+    .WithMetrics(metrics =>
+    {
+        metrics.AddAspNetCoreInstrumentation();
+        metrics.AddHttpClientInstrumentation();
+        metrics.AddRuntimeInstrumentation();
+        metrics.AddOtlpExporter();
+    });
+```
+
+The `AddOtlpExporter()` calls do not need an explicit URL because Aspire sets `OTEL_EXPORTER_OTLP_ENDPOINT` on each child process to point at the dashboard's collector. The `AspNetCore`, `HttpClient`, and `Runtime` instrumentations cover incoming requests, outgoing HTTP calls, and process-level metrics.
+
+We also declare some custom metrics, which piggyback on the same pipeline without any extra plumbing:
+
+<pre><code type='click-ui' language='csharp'>
+private static readonly Meter Meter = new("Gateway.Telemetry");
+
+public static readonly Counter<long> Requests =
+    Meter.CreateCounter<long>("gateway.requests", unit: "{request}");
+
+public static readonly Histogram<double> DurationMs =
+    Meter.CreateHistogram<double>("gateway.duration", unit: "ms");
+
+public static readonly Counter<long> BackendFailures =
+    Meter.CreateCounter<long>("gateway.backend_failures", unit: "{request}");
+</code></pre>
+
+Each middleware layer tags those instruments with the normalized route, the upstream service, and HTTP status class (`2xx`, `4xx`, `5xx`), so users can filter the metrics in the dashboard.
+
+### In Aspire {#in-aspire}
+
+Let's take a look at our custom metrics in the Aspire dashboard. Here we can see the API call duration metric we registered earlier, and we can use the custom tags to filter the data.
+
+![](https://clickhouse.com/uploads/dotnet_aspire_jun2026_image3_942e068a37.png)
+
+Logs, metrics, and traces are connected. Clicking on one of the exemplars in the metrics chart (or on the trace id of a log) will take you to the corresponding trace, showing all the related spans:
+
+![](https://clickhouse.com/uploads/dotnet_aspire_jun2026_image4_0b98b44761.png)
+
+#### Persistence {#persistence}
+
+One thing worth knowing before you point any of this at production: the Aspire dashboard does not persist what it receives. The logs, traces, and metrics in the dashboard's views are purely in-memory. When the AppHost stops, the history is gone. It's a system designed for the inner dev loop, but it is not a production observability stack.
+
+The good news is that the wiring above does not change when you move beyond development. The services emit standard OTLP, so swapping the dashboard endpoint for a production observability backend is a configuration change. [ClickStack](https://clickhouse.com/use-cases/observability), the ClickHouse- and OpenTelemetry-native stack for logs, metrics, and traces, is a natural place to store and query that data with strong performance and compression.
+
+### In ClickHouse {#in-clickhouse}
+
+Finally, let's look at the dashboard backed by ClickHouse. This view is intentionally different from the Aspire dashboard. It is not trying to show every span or every live process. It asks analytical questions over the request history: request volume, p95 latency, error rate by service, route-level tail latency, and the slowest recent requests with their trace ids.
+
+The materialized view is what keeps those queries cheap as the raw table grows. Instead of scanning every request for every dashboard refresh, ClickHouse has already reduced the stream into minute-level aggregate states. The dashboard query only merges those states, while the raw `request_logs` table is still there when we need to drill into individual slow requests or copy a `trace_id` back into the Aspire traces view.
+
+![](https://clickhouse.com/uploads/dotnet_aspire_jun2026_image5_a9f49c8610.png)
+
+## Summary {#summary}
+
+Building this demo, we have seen:
+
+- How Aspire can manage ClickHouse as a first-class application resource.
+- How AppHost wiring gives us service discovery, dependency ordering, and stable external endpoints without hard-coded URLs.
+- How `Aspire.ClickHouse.Driver` makes it easy to build .NET services that query and write to ClickHouse.
+- How to keep gateway request logging off the hot path with a bounded queue and background ingestion.
+- How to store request telemetry in ClickHouse with an efficient schema and a materialized view that precomputes common statistics.
+
+You can explore the full sample, run it locally, and adapt the pieces you need from the [companion repo](https://github.com/ClickHouse/aspire-clickhouse-gateway-analytics-demo).
+
+## Closing {#closing}
+
+Aspire and ClickHouse fit together naturally for a common .NET problem: understanding distributed systems both while they are running and after enough traffic has accumulated to see patterns.
+
+Start with Aspire for the inner development loop. Add a ClickHouse table when you need history, percentiles, and route-level comparisons. Keep the schema narrow, use low-cardinality dimensions deliberately, and pre-aggregate the views your dashboard will query repeatedly.
+
+From there, the same shape scales easily to production: point Aspire at an existing ClickHouse instance, move gateway writes into a background pipeline, and export OTLP to ClickStack when you are ready.
+
+
+---
+
+## Get started today
+
+Interested in seeing how ClickHouse works on your data? Get started with ClickHouse Cloud in minutes and receive $300 in free credits.
+
+[Sign up](https://console.clickhouse.cloud/signUp?loc=blog-cta-802-get-started-today-sign-up&utm_blogctaid=802)
+
+---
+
+---
+
+## Logging, Metrics, and Distributed Tracing in .NET with OpenTelemetry and ClickStack
+Published: 2026-06-03T09:21:38+00:00
+URL: https://clickhouse.com/blog/logging-metrics-distributed-tracing-dotnet-otel-clickstack
+
+---
+title: "Logging, Metrics, and Distributed Tracing in .NET with OpenTelemetry and ClickStack"
+date: "2026-06-03T09:21:38.920Z"
+author: "Alex Soffronow Pagonidis"
+category: "Engineering"
+excerpt: "A walkthrough of adding OpenTelemetry instrumentation to two ASP.NET services — an Order API and a Payment Service — and shipping traces, logs, and metrics to ClickStack, with auto-correlated signals and cross-service trace waterfalls out of the box."
+---
+
+# Logging, Metrics, and Distributed Tracing in .NET with OpenTelemetry and ClickStack
+
+You're staring at a log line: `Order abc123 failed: error:timeout`. Which service timed out? Payment? Database? Network? You open ClickStack, click the trace ID, and instantly see the full request timeline: the Order API waited 3 seconds for the Payment Service, which was still running a fraud check when the connection was killed. Root cause identified in two clicks.
+
+That's the power of distributed tracing. With minimal OpenTelemetry setup in ASP.NET, you can move from isolated log lines to a full cross-service execution view in ClickStack, seeing exactly where time was spent and where things broke across service boundaries.
+
+In this post, we'll build two ASP.NET services instrumented with OpenTelemetry, persist data to SQLite, and ship traces, logs, and metrics to [ClickStack](https://clickhouse.com/clickstack).
+
+## What we're building {#what-were-building}
+
+![](https://clickhouse.com/uploads/Real_time_Analytical_Database_Selection_185fe79762.png)
+
+ClickStack is an open-source, all-in-one observability stack for OpenTelemetry. It accepts standard OTel data, stores it in ClickHouse, lets you explore it in a UI, and still gives you direct SQL access to the underlying telemetry.
+
+In this post, we will build two ASP.NET services that talk to each other and persist data to SQLite:
+
+- **Order API:** accepts orders, validates inventory, calls Payment Service, saves completed orders to SQLite
+- **Payment Service:** simulates payment processing with configurable failure modes, saves payment results to SQLite
+
+Both services are instrumented with OpenTelemetry and export all three signals (traces, logs, metrics) via OTLP/gRPC to ClickStack. We're using SQLite simply to keep the demo self-contained, while still showing how database spans appear automatically through EF Core instrumentation. The SQLite layer is auto-instrumented via the EF Core instrumentation package, which means database operations show up in ClickStack with zero manual span creation.
+
+The flow for a single order:
+
+1. Client POSTs to Order API
+2. Order API validates inventory (product catalog in SQLite)
+3. Order API calls Payment Service over HTTP
+4. Payment Service runs a fraud check, processes the charge, saves the result to SQLite
+5. Order API receives the payment result, then saves the order to SQLite
+
+When we're done, we will be able to use ClickStack to follow a single request across multiple services and database calls: the Order API validating the request, an HTTP call crossing into the Payment Service for fraud checking and charge processing, with database writes on both sides, all nested under one trace ID.
+
+![](https://clickhouse.com/uploads/dotnet_otel_clickstack_jun2026_image1_960a6270b9.png)
+
+## Why ClickStack? {#why-clickstack}
+
+- **Works out of the box with OpenTelemetry.** ClickStack exposes an OTLP/gRPC endpoint out of the box. Point your OTel SDK at it and traces, logs, and metrics start flowing. No custom exporters, no schema setup, no intermediate pipeline to manage.
+- **ClickHouse under the hood.** ClickHouse is an open-source columnar database built for real-time analytics over large datasets. All telemetry data lands in ClickHouse tables, which means columnar compression (10–20x is typical), sub-second analytical queries over billions of spans, and [full-text search](https://clickhouse.com/blog/full-text-search-ga-release) via inverted indexes. You get the power of a real database, not a purpose-limited query language. And all of this comes at a fraction of the cost compared to traditional observability solutions.
+- **Correlated signals.** Because ClickStack receives traces, logs, and metrics together, it can automatically link them: click a log line to jump to its parent trace, view logs scoped to a specific trace's time window, or drill from a latency spike in metrics down to the individual spans that caused it.
+- **SQL access to everything.** Your telemetry is stored in standard ClickHouse tables. Query them directly with SQL, build [materialized views](https://clickhouse.com/docs/use-cases/observability/clickstack/materialized_views) for real-time aggregations, or connect tools like [Grafana](https://clickhouse.com/docs/integrations/grafana) alongside the built-in UI.
+
+Compared to ElasticSearch, [ClickHouse achieves ~5x better compression and 4x+ faster queries in realistic benchmarks.](https://clickhouse.com/blog/elasticsearch-log-analytics-clickhouse) [Trip.com migrated from Elasticsearch to ClickHouse](https://clickhouse.com/blog/how-trip.com-migrated-from-elasticsearch-and-built-a-50pb-logging-solution-with-clickhouse) and built a 50PB logging platform with 4x the data capacity on the same hardware.
+
+## Setting up the infrastructure {#setting-up-the-infrastructure}
+
+The entire stack runs in Docker Compose. ClickStack handles everything on the observability side: the image bundles ClickHouse for storage, an OTLP/gRPC collector for ingestion, and an observability UI for exploration.
+
+<pre><code type='click-ui' language='yaml'>
+services:
+  clickstack:
+    image: docker.io/clickhouse/clickstack-all-in-one:2.21.0
+    ports:
+      - "8080:8080"   # ClickStack UI
+      - "18123:8123"  # ClickHouse HTTP (Play UI)
+    volumes:
+      - ./clickstack/entry.sh:/etc/local/entry.sh:ro
+      - clickhouse_data:/var/lib/clickhouse
+      - clickhouse_logs:/var/log/clickhouse-server
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO /dev/null http://127.0.0.1:8123/ping || exit 1"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 10s
+</code></pre>
+
+Then we add our two ASP services, which depend on ClickStack being healthy before starting, and a `seed-data` container that automatically generates traffic once everything is up:
+
+<pre><code type='click-ui' language='yaml'>
+  order-api:
+    build:
+      context: .
+      dockerfile: src/OrderApi/Dockerfile
+    ports:
+      - "5000:8080"
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Development
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://clickstack:4317
+      - PaymentService__BaseUrl=http://payment-service:8080
+    depends_on:
+      clickstack:
+        condition: service_healthy
+</code></pre>
+
+That `OTEL_EXPORTER_OTLP_ENDPOINT` environment variable is all the OTel SDK needs to know where to send data. ClickStack exposes an OTLP/gRPC receiver on port 4317 by default.
+
+Start everything:
+
+<pre><code type='click-ui' language='bash'>
+docker compose up -d
+</code></pre>
+
+![](https://clickhouse.com/uploads/dotnet_otel_clickstack_jun2026_image2_909489b9cd.png)
+
+## Building the Payment Service and Order API {#building-the-payment-service-and-order-api}
+
+### OpenTelemetry setup {#opentelemetry-setup}
+
+The OTel configuration in `Program.cs` sets up traces, metrics, and logs:
+
+```csharp
+builder.Services.AddOpenTelemetry()
+    .ConfigureResource(resource => resource.AddService(DiagnosticConfig.ServiceName))
+    .WithTracing(tracing => tracing
+        .AddAspNetCoreInstrumentation()
+        .AddHttpClientInstrumentation()
+        .AddEntityFrameworkCoreInstrumentation()
+        .AddSource(DiagnosticConfig.ActivitySourceName)
+        .AddOtlpExporter())
+    .WithMetrics(metrics => metrics
+        .AddAspNetCoreInstrumentation()
+        .AddHttpClientInstrumentation()
+        .AddMeter(DiagnosticConfig.MeterName)
+        .AddOtlpExporter());
+
+builder.Logging.AddOpenTelemetry(options =>
+{
+    options.IncludeFormattedMessage = true;
+    options.IncludeScopes = true;
+    options.AddOtlpExporter();
+});
+```
+
+A few things to note:
+
+- **Three instrumentation libraries** cover the common cases: `AddAspNetCoreInstrumentation()` captures incoming HTTP requests, `AddHttpClientInstrumentation()` captures outgoing HTTP calls, and `AddEntityFrameworkCoreInstrumentation()` captures database operations.
+- `ConfigureResource(resource => resource.AddService(DiagnosticConfig.ServiceName))`: this is how our service name appears in ClickStack.
+- **`AddSource(DiagnosticConfig.ActivitySourceName)`** tells the tracer to listen for our custom spans (more on this below).
+- **`AddOtlpExporter()`** on each signal sends data via OTLP/gRPC to whatever `OTEL_EXPORTER_OTLP_ENDPOINT` points to (in our case, ClickStack).
+- **Logs** are configured separately via `builder.Logging.AddOpenTelemetry()`. The `IncludeFormattedMessage` and `IncludeScopes` options ensure log messages are human-readable and include scope context.
+
+### Custom spans and metrics {#custom-spans-and-metrics}
+
+The `DiagnosticConfig` class centralizes all telemetry definitions:
+
+<pre><code type='click-ui' language='csharp'>
+public static class DiagnosticConfig
+{
+    public const string ServiceName = "payment-service";
+    public const string ActivitySourceName = "PaymentService.Payments";
+    public const string MeterName = "PaymentService.Metrics";
+
+    public static readonly ActivitySource ActivitySource = new(ActivitySourceName);
+    public static readonly Meter Meter = new(MeterName);
+
+    public static readonly Counter&lt;long&gt; PaymentsProcessed = Meter.CreateCounter&lt;long&gt;(
+        "payments.processed",
+        description: "Number of payments processed");
+
+    public static readonly Histogram&lt;double&gt; FraudCheckDuration = Meter.CreateHistogram&lt;double&gt;(
+        "fraud_check.duration",
+        unit: "ms",
+        description: "Duration of fraud check processing");
+}
+</code></pre>
+
+In .NET, OpenTelemetry builds on `System.Diagnostics`, so `ActivitySource` and `Meter` are the native primitives you use to create spans and metrics.
+
+This is what it looks like in practice: the `PaymentProcessor` class creates child spans for each processing step:
+
+```csharp
+public async Task<PaymentResult> ProcessPaymentAsync(PaymentRequest request)
+{
+    var paymentId = Guid.NewGuid().ToString("N")[..12];
+		
+		// Start Activity for trace and enrich it with tags
+    using var activity = DiagnosticConfig.ActivitySource.StartActivity("process-payment");
+    activity?.SetTag("payment.id", paymentId);
+    activity?.SetTag("payment.order_id", request.OrderId);
+    activity?.SetTag("payment.amount", request.Amount);
+
+    // Step 1: Fraud check (creates its own child span)
+    var fraudScore = await RunFraudCheckAsync(paymentId, request);
+
+    // Step 2: Determine outcome based on configured rates
+    var outcome = DetermineOutcome();
+
+    // Step 3: Process the charge (creates its own child span)
+    var result = await ProcessChargeAsync(paymentId, request, outcome, fraudScore);
+
+    // Persist to SQLite (auto-instrumented by EF Core)
+    await using var db = await _dbFactory.CreateDbContextAsync();
+    db.Payments.Add(result);
+    await db.SaveChangesAsync();
+
+    // Record metrics
+    DiagnosticConfig.PaymentsProcessed.Add(1,
+        new KeyValuePair<string, object?>("status", result.Status),
+        new KeyValuePair<string, object?>("payment_method", request.PaymentMethod));
+
+    return result;
+}
+```
+
+The fraud check span includes an event when the score is suspicious. All of these will show up in ClickStack's trace waterfall:
+
+<pre><code type='click-ui' language='csharp'>
+private async Task&lt;int&gt; RunFraudCheckAsync(string paymentId, PaymentRequest request)
+{
+    using var activity = DiagnosticConfig.ActivitySource.StartActivity("fraud-check");
+    var sw = Stopwatch.StartNew();
+
+    // Simulate fraud check latency (10-50ms)
+    var delay = Random.Shared.Next(10, 51);
+    await Task.Delay(delay);
+
+    var fraudScore = Random.Shared.Next(0, 101);
+    activity?.SetTag("fraud.score", fraudScore);
+    activity?.SetTag("fraud.delay_ms", delay);
+
+    if (fraudScore &gt; 70)
+    {
+        activity?.AddEvent(new ActivityEvent("suspicious-activity", tags: new ActivityTagsCollection
+        {
+            { "fraud.score", fraudScore },
+            { "payment.amount", request.Amount },
+        }));
+    }
+
+    sw.Stop();
+    DiagnosticConfig.FraudCheckDuration.Record(sw.Elapsed.TotalMilliseconds);
+
+    return fraudScore;
+}
+</code></pre>
+
+### Configurable failure modes {#configurable-failure-modes}
+
+The Payment Service doesn't just approve everything; it simulates realistic failure modes so that we get a wide variety of logs and traces in the demo (the rates can be configured in `PaymentConfiguration.cs`).
+
+The timeout case is particularly interesting for tracing: the Payment Service sleeps for 3-8 seconds, but the Order API has a 3-second HTTP client timeout. This creates a scenario where the Order API sees a `TaskCanceledException` while the Payment Service is still happily processing. Both sides of that will show up in our traces in ClickStack.
+
+### Distributed tracing across services {#distributed-tracing-across-services}
+
+When the Order API calls the Payment Service, the trace context is automatically propagated via HTTP headers. This happens because `AddHttpClientInstrumentation()` injects `traceparent` headers into outgoing requests, and `AddAspNetCoreInstrumentation()` on the Payment Service side extracts them. No manual correlation needed.
+
+The `OrderService` creates spans for each step of order processing, in the same way we did it above for the payment service. The resulting trace waterfall shows the complete journey: `place-order` → `validate-order` → `call-payment-service` → `HTTP POST /payments` → (Payment Service spans) → `SaveChanges` (EF Core/SQLite).
+
+## Database layer with SQLite and Entity Framework Core {#database-layer-with-sqlite-and-entity-framework-core}
+
+Both services persist data to SQLite using Entity Framework Core.
+
+### Auto-instrumented database spans {#auto-instrumented-database-spans}
+
+The `OpenTelemetry.Instrumentation.EntityFrameworkCore` package hooks into EF Core's internal `DiagnosticSource` events. Every `SaveChangesAsync()`, `FirstOrDefaultAsync()`, and other EF Core operations automatically produce spans with the standard [OTel database semantic conventions](https://opentelemetry.io/docs/specs/semconv/database/database-spans/). Setting it up is a one-liner in our startup config:
+
+```csharp
+.WithTracing(tracing => tracing
+    .AddAspNetCoreInstrumentation()
+    .AddHttpClientInstrumentation()
+    .AddEntityFrameworkCoreInstrumentation()  // <-- instruments database calls
+    .AddSource(DiagnosticConfig.ActivitySourceName)
+    .AddOtlpExporter())
+```
+
+## Generating test traffic {#generating-test-traffic}
+
+The Order API includes a `/generate-traffic` endpoint that creates realistic load, and the `seed-data` container in Docker Compose calls this endpoint automatically on startup. To get more data in there, you can simply run:
+
+<pre><code type='click-ui' language='bash'>
+curl -X POST http://localhost:5000/generate-traffic
+</code></pre>
+
+## Exploring telemetry in ClickStack {#exploring-telemetry-in-clickstack}
+
+Once traffic is flowing, open ClickStack at `http://localhost:8080`.
+
+Because the OTel pipeline sends all three signals to ClickStack, you get capabilities that aren't possible with logs alone: auto-discovered service maps, distributed trace waterfalls, correlated log-to-trace views, and database operation breakdowns. The ClickStack UI provides an easy way to explore this data: you can search through all types of signals, filter, and use log clustering to group similar patterns and accelerate root cause analysis. ClickStack also supports [full-text search](https://clickhouse.com/blog/full-text-search-ga-release) via ClickHouse's lightning-fast inverted indexes, and recent releases have added [text index support](https://clickhouse.com/blog/whats-new-in-clickstack-january-2026#supporting-text-indices) directly in the ClickStack UI.
+
+### Distributed traces and logs {#distributed-traces-and-logs}
+
+![](https://clickhouse.com/uploads/dotnet_otel_clickstack_jun2026_image3_7db5a5a6b9.png)
+
+A successful order trace shows the full waterfall:
+
+1. `place-order` (Order API)
+2. `validate-order` (Order API)
+3. `call-payment-service` (Order API)
+4. `HTTP POST /payments` (auto-instrumented by `HttpClientInstrumentation`)
+5. `process-payment` (Payment Service)
+6. `fraud-check` (Payment Service)
+7. `process-charge` (Payment Service)
+8. EF Core `SaveChanges` spans on both sides (auto-instrumented)
+
+You can drill down into any span or log in the waterfall to see all of their properties.
+
+### Tracking down errors {#tracking-down-errors}
+
+Event patterns in ClickStack allow you to quickly identify patterns in your errors by automatically clustering similar messages together. Then you only need to review a small number of groups instead of going through millions of messages.
+
+![](https://clickhouse.com/uploads/dotnet_otel_clickstack_jun2026_image4_d50ce7210a.png)
+
+Click through to a group to see individual messages:
+
+![](https://clickhouse.com/uploads/dotnet_otel_clickstack_jun2026_image5_95764f6adb.png)
+
+Then click on any of those to see the message properties, the trace waterfall, log context, as well as a map of the relevant services.
+
+**Log-to-Trace Correlation**
+
+Every log line emitted during a traced request automatically carries the trace ID and span ID. In ClickStack, you can click any log line and jump directly to the parent trace, no manual correlation needed. The OTel log exporter handles this automatically.
+
+That also works the other way around: when you're viewing a trace, ClickStack automatically surfaces the logs that were emitted during that trace's execution. And since our db calls are instrumented, that means we also get every database operation in the waterfall as well. This means you don't have to manually search for logs matching a trace ID; they're right there in context. This automatic correlation is one of the biggest advantages of the OTel + ClickStack pipeline — you get the full picture without any manual plumbing.
+
+![](https://clickhouse.com/uploads/dotnet_otel_clickstack_jun2026_image6_5ae8ddf1bb.png)
+
+### Metrics {#metrics}
+
+You can build custom dashboards based on your metrics in ClickStack. The demo comes pre-loaded with a dashboard allowing us to monitor our order processing service and providing easy access to warning and error logs.
+
+![](https://clickhouse.com/uploads/dotnet_otel_clickstack_jun2026_image7_c3dfddfd85.png)
+
+You can also define alerts based on these metrics. ClickStack supports [alerting integrations](https://clickhouse.com/docs/use-cases/observability/clickstack/alerts) with Slack, PagerDuty, or by generic webhook.
+
+### Built-in dashboards {#built-in-dashboards}
+
+ClickStack also comes with a number of dashboards out of the box. These allow you to monitor ClickHouse, surface the most relevant metrics for your services (auto-discovered) and database calls, and let you explore Kubernetes events.
+
+The service dashboard highlights your top endpoints, latency, and errors. The data here can be filtered using SQL or Lucene. The service map also automatically discovers the relationship between `order-api` and `payment-service` from the distributed traces. No manual configuration needed.
+
+![](https://clickhouse.com/uploads/dotnet_otel_clickstack_jun2026_image8_11e73e4068.png)
+
+Finally, the database tab shows stats for the database operations in our services. Because we're using the EF Core auto-instrumentation, every query and save operation is captured with standard `db.*` attributes. You can see operation latencies, throughput, and error rates at a glance.
+
+![](https://clickhouse.com/uploads/dotnet_otel_clickstack_jun2026_image9_aac1cc77fe.png)
+
+## Production considerations {#production-considerations}
+
+This demo prioritizes simplicity and clarity. For a comprehensive guide to optimizing ClickStack for large-scale production workloads, see the [ClickStack Performance Tuning](https://clickhouse.com/docs/use-cases/observability/clickstack/performance_tuning) documentation. A few things you'd want to add:
+
+- **Resource attributes**: Add `deployment.environment`, `service.version`, and `service.instance.id` to help filter data in production. In Kubernetes, the [OTel Operator](https://opentelemetry.io/docs/platforms/kubernetes/operator/) or the `OTEL_RESOURCE_ATTRIBUTES` env var can automatically inject `k8s.namespace.name`, `k8s.pod.name`, `k8s.deployment.name`, and other cluster metadata. ClickStack's [default table schema](https://clickhouse.com/docs/use-cases/observability/clickstack/ingesting-data/schemas) already materializes these Kubernetes attributes into dedicated columns for fast filtering; you just need to make sure they're present in your OTel resource.
+- **Batch exporter tuning**: The default batch exporter settings (512 batch size, 5s export interval) are reasonable, but you may want to tune them based on your throughput.
+- **Security**: Enable TLS for the OTLP endpoint and add authentication headers. ClickStack supports API keys for OTLP ingestion.
+- **Materialized views**: As data volumes grow, ClickStack can automatically exploit [incremental materialized views](https://clickhouse.com/docs/use-cases/observability/clickstack/materialized_views) to accelerate dashboards and alerts. You define a view that pre-aggregates data at insert time (e.g. average request duration per service per minute) and ClickStack transparently uses it for any matching visualization. No dashboard changes required.
+- **Alerting**: Set up [alerts](https://clickhouse.com/docs/use-cases/observability/clickstack/alerts) on saved searches (e.g., error rate spikes) or dashboard charts (e.g., p99 latency crossing a threshold). ClickStack evaluates them on a recurring interval and notifies via Slack, PagerDuty, or a generic webhook.
+
+## Conclusion {#conclusion}
+
+With a small amount of OpenTelemetry setup in ASP.NET, we went from a single timeout log line to a complete, cross-service view of what actually happened, spanning HTTP calls, application code, and database operations. Instead of guessing which service failed or stitching together logs, we can follow a request end-to-end: see where time was spent, where errors occurred, what logs were emitted, and which database calls were involved.
+
+ClickStack makes this straightforward by accepting standard OpenTelemetry data, correlating all signals automatically, and storing everything in ClickHouse. You get a fast, flexible backend with a UI for exploration, and SQL access when you need to go deeper.
+
+Clone the demo, run `docker compose up -d`, and try it yourself. Trigger a few failures, open a trace, and follow the request.
+
+## Resources {#resources}
+
+- [Demo source code](https://www.github.com/ClickHouse/dotnet-otel-clickstack-demo)
+- [ClickStack documentation](https://clickhouse.com/docs/en/observability)
+- [ClickStack Performance Tuning](https://clickhouse.com/docs/use-cases/observability/clickstack/performance_tuning)
+- [Full-Text Search in ClickHouse — Now GA](https://clickhouse.com/blog/full-text-search-ga-release)
+- [OpenTelemetry .NET documentation](https://opentelemetry.io/docs/languages/dotnet/)
+- [OTel database semantic conventions](https://opentelemetry.io/docs/specs/semconv/database/database-spans/)
+
+
+---
+
+## Get started today
+
+Interested in seeing how ClickHouse works on your data? Get started with ClickHouse Cloud in minutes and receive $300 in free credits.
+
+[Sign up](https://console.clickhouse.cloud/signUp?loc=blog-cta-801-get-started-today-sign-up&utm_blogctaid=801)
+
+---
+
+---
+
+## How ClickHouse became fast at joins
+Published: 2026-06-03T06:41:15+00:00
+URL: https://clickhouse.com/blog/clickhouse-fast-joins
+
+---
+title: "How ClickHouse became fast at joins"
+date: "2026-06-03T06:41:15.157Z"
+author: "Tom Schreiber"
+category: "Engineering"
+excerpt: "Over two years of focused join engineering, ClickHouse became 26× faster on the TPC-H SF100 join-heavy workload. Here’s how parallel hash joins, runtime filters, lazy column replication, and smarter join planning got us there."
+---
+
+# How ClickHouse became fast at joins
+
+> **TL;DR**<br/>
+Over two years, ClickHouse became **26× faster** on join-heavy analytical workloads. This post explains the engineering that made joins a first-class strength.
+
+ 
+<br/>
+
+## Two years of focused join engineering
+
+ClickHouse is known for fast analytical queries, high compression, and real-time performance at scale.
+
+Over the last two years, one major engineering focus has been bringing that same performance profile to join-heavy SQL queries.
+
+At the [ClickHouse 24.5 release webinar](https://www.youtube.com/live/dURnKjLuZLg?si=1Bx618RgGfAwN4iP&t=2216), Alexey Milovidov, inventor of ClickHouse, described the direction clearly:
+
+> “From now on, you will see JOIN improvements in every ClickHouse release.”
+
+The chart below shows what that looked like in practice.
+
+![Blog-JOINS-improvements.001.png](https://clickhouse.com/uploads/Blog_JOINS_improvements_001_be4d4145a8.png)
+
+The first year laid the foundation: faster parallel hash join, smarter planning, aggressive filter pushdown, and local join reordering.
+
+> By 25.4, the same [TPC-H](https://clickhouse.com/docs/getting-started/example-datasets/tpch) SF100 join-heavy workload was already **4.4× faster** than in 22.4.
+
+The second year pushed much further. Between 25.4 and 26.4, a new wave of optimizer and execution improvements made the same workload another 6× faster with default settings. 
+
+> End to end, ClickHouse is now **26× faster** on TPC-H SF100 than it was in 22.4.
+
+This post explains how we got there. The [companion post](/blog/tpc-h-clickhouse-cloud-vs-snowflake-databricks-bigquery-redshift) shows what it unlocked: **ClickHouse Cloud now runs TPC-H for less than a cent**, and competes head-to-head with Snowflake, Databricks, BigQuery, and Redshift on SF100.
+
+
+## Year one: building the foundation
+
+A year ago, at [our first Open House user conference in San Francisco](https://clickhouse.com/blog/highlights-from-open-house-our-first-user-conference), ClickHouse join engineering lead, Robert Schulze, presented the first year of major join-performance work.
+
+<iframe width="768" height="432" src="https://www.youtube.com/embed/gd3OyQzB_Fc?si=AQBytxlDmL8EjmoS" title="YouTube video player" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" referrerpolicy="strict-origin-when-cross-origin" allowfullscreen></iframe>
+
+<br/>
+
+That first year was about building the foundation. ClickHouse made parallel hash join the default in 24.12, added local automatic join reordering for two-table joins, and delivered a steady stream of low-level execution improvements.
+
+Several of those changes landed across consecutive releases:
+
+
+* **24.7:** [improved hash table allocation for faster parallel hash joins](https://clickhouse.com/blog/clickhouse-release-24-07#faster-parallel-hash-join)
+* **24.12:** made [parallel hash join](https://clickhouse.com/blog/clickhouse-fully-supports-joins-hash-joins-part2#parallel-hash-join) the default strategy and introduced [local automatic join reordering](https://clickhouse.com/blog/clickhouse-release-24-12#automatic-join-reordering)
+* **25.1:** [sped up the hash join probe phase](https://clickhouse.com/blog/clickhouse-release-25-01#faster-parallel-hash-join)
+* **25.2:** [removed thread contention in the hash join build phase](https://clickhouse.com/blog/clickhouse-release-25-02#faster-parallel-hash-join)
+
+Together, those improvements made the same TPC-H SF100 join-heavy workload **4.4× faster by 25.4** compared with 22.4.
+
+But year one was only the foundation. The second year is where joins became dramatically better with default settings.
+
+## Year two: making joins competitive by default
+
+This year at Open House, Robert [is back](/uploads/image_cc8a4cd7f3.png) with the second chapter of the join-performance story.
+
+
+Year one built the foundation. Year two made joins competitive with default settings.
+
+The goal was simple: users should not have to rewrite queries, tune join orders by hand, or know which internal optimization to enable. ClickHouse should recognize more join-heavy SQL, automatically choose better plans, and avoid unnecessary work during execution.
+
+The chart below shows the four main improvements that became effective by default between 25.4 and 26.4. Together, they made the same TPC-H SF100 join-heavy workload another 6× faster.
+
+![Blog-JOINS-improvements.002.png](https://clickhouse.com/uploads/Blog_JOINS_improvements_002_0f8d32bb46.png)
+
+The rest of this post walks through those four improvements:
+
+① **Correlated subqueries in JOINs** — support more real-world SQL directly.
+
+② **Lazy column replication** — avoid copying repeated values produced by joins.
+
+③ **Runtime filters** — skip probe-side rows before expensive hash-table lookups.
+
+④ **Statistics-based join reordering** — choose better join plans automatically.
+
+All examples use [TPC-H SF100](https://clickhouse.com/docs/getting-started/example-datasets/tpch) on the same hardware, an AWS EC2 m6i.8xlarge instance (32 vCPUs, 128 GiB RAM), so the improvements are easy to compare.
+
+
+### ① Correlated  subqueries in JOINs
+
+Two years ago, the problem was not just that some joins were slower than we wanted them to be. Some important join-heavy queries could not run at all.
+
+
+#### Why this mattered
+
+In the TPC-H benchmark section of our [first research paper](https://www.vldb.org/pvldb/vol17/p3731-schulze.pdf), presented at VLDB 2024, we had to exclude seven queries: Q2, Q4, Q13, Q17, and Q20–Q22. Because they used correlated subqueries, which ClickHouse did not fully support at the time.
+
+
+#### A correlated TPC-H query
+
+TPC-H Q4 is a good example. It contains an inner query over `lineitem` that references `orders`, the table from the outer query:
+
+![Blog-JOINS-improvements.001.png](https://clickhouse.com/uploads/Blog_JOINS_improvements_001_d351241bde.png)
+
+This is what makes it a **correlated subquery**: the inner query cannot be understood in isolation, because it depends on values from the outer query.
+
+
+#### From row-by-row execution to set-oriented plans
+
+Correlated subqueries are common because they are natural to write. They are also increasingly common in generated SQL, including queries produced by agentic systems. But for a database engine, they are hard to execute efficiently.
+
+The naive plan is to evaluate the inner query once for every row from the outer query. That is simple, but often disastrous for performance. To make these queries fast, the optimizer has to decorrelate them: rewrite the query into an equivalent set-oriented plan, typically using joins, aggregations, semi joins, or anti joins.
+
+That rewrite must preserve SQL semantics around duplicates, aggregates, and NULLs, which makes it much harder than it looks.
+
+
+#### Result
+
+> Correlated subqueries are now first-class SQL in ClickHouse. Queries that previously required manual rewrites - including the excluded TPC-H queries - now run directly.
+
+<br/>
+
+### ② Lazy column replication in JOINs
+
+Lazy column replication reduces CPU and memory usage when JOINs logically repeat the same values many times.
+
+
+#### The problem: logical repetition becomes physical copying
+
+In JOIN results, one input row can produce many output rows. In TPC-H, for example, each customer can have multiple orders. When we join `orders` with `customer`, the customer columns are logically repeated once for every matching order.
+
+<pre>
+<code type='click-ui' language='sql' show_line_numbers='false'>
+SELECT
+    o.o_orderkey,
+    o.o_orderdate,
+    c.c_name,
+    c.c_address,
+    c.c_comment
+FROM orders AS o
+INNER JOIN customer AS c
+    ON o.o_custkey = c.c_custkey;
+</code>
+</pre>
+
+Logically, the result looks like this:
+
+![Blog-JOINS-improvements.004.png](https://clickhouse.com/uploads/Blog_JOINS_improvements_004_3a121d9e14.png)
+
+Conceptually, this is the correct result: the same customer values appear next to each matching order.
+
+The expensive part is physical replication. If ClickHouse copies wide values such as c_address or c_comment into every joined row, the join spends CPU cycles and memory bandwidth duplicating the same data again and again. And if later operators like aggregations discard most of those rows, much of that copying was unnecessary.
+
+
+#### Lazy column replication avoids that eager copying.
+
+Instead of physically replicating repeated values during the join, ClickHouse keeps the original values once in a small dictionary data structure and represents the joined column as a compact index value pointing back to them:
+
+![Blog-JOINS-improvements.005.png](https://clickhouse.com/uploads/Blog_JOINS_improvements_005_5694c466bf.png)
+
+If a later query step needs the fully materialized column, ClickHouse can still produce it. But many analytical operations can work directly on the compact representation, so the repeated values never need to be copied at all.
+
+This is especially useful for JOINs that duplicate wide columns, such as strings.
+
+
+#### Benchmark: avoiding physical replication
+
+For the benchmark, we use a self-join on `orders`  to create many repeated `o_comment` values, and then immediately consume them with `cityHash64`.
+
+First, we ran the following example join without lazy replication. 
+
+<pre>
+<code type='click-ui' language='sql' show_line_numbers='false'>
+SELECT sum(cityHash64(t1.o_comment))
+FROM orders AS t1
+INNER JOIN orders AS t2
+    ON t1.o_custkey = t2.o_custkey
+SETTINGS
+    enable_lazy_columns_replication = 0,
+    allow_special_serialization_kinds_in_output_formats = 0;
+</code>
+</pre>
+
+Fastest of three runs:
+
+<pre><code type='click-ui' language='text' show_line_numbers='false'>
+1 row in set. Elapsed: 5.419 sec. Processed 300.00 million rows, 8.89 GB (55.36 million rows/s., 1.64 GB/s.)
+Peak memory usage: 5.27 GiB.
+</code></pre>
+
+
+Then, we ran the same query with lazy columns replication enabled.
+
+This is the ideal case for lazy replication: `o_comment` is only needed as input to a function, so ClickHouse can evaluate `cityHash64` over the compact representation without physically materializing the repeated string column. 
+
+<pre>
+<code type='click-ui' language='sql' show_line_numbers='false'>
+SELECT sum(cityHash64(t1.o_comment))
+FROM orders AS t1
+INNER JOIN orders AS t2
+    ON t1.o_custkey = t2.o_custkey
+SETTINGS
+    enable_lazy_columns_replication = 1,
+    allow_special_serialization_kinds_in_output_formats = 1;
+</code>
+</pre>
+
+Fastest of three runs:
+
+<pre><code type='click-ui' language='text' show_line_numbers='false'>
+1 row in set. Elapsed: 2.847 sec. Processed 300.00 million rows, 8.89 GB (105.36 million rows/s., 3.12 GB/s.)
+Peak memory usage: 5.22 GiB.
+</code></pre>
+
+#### Result
+
+> Result: Lazy column replication made this join **1.9× faster**, reducing runtime from 5.419s to 2.847s, while slightly lowering peak memory usage from 5.27 GiB to 5.22 GiB.
+
+The speedup comes from evaluating `cityHash64` directly over the compact replicated-column representation rather than physically copying repeated strings.
+
+
+### ③ Runtime filters in JOINs
+
+Runtime filters reduce wasted probe-side work in hash joins.
+
+They generalize a technique already used by ClickHouse’s [full sorting merge join algorithm](https://clickhouse.com/blog/clickhouse-fully-supports-joins-full-sort-partial-merge-part3#full-sorting-merge-join), where joined tables can be [filtered by each other’s join keys](https://clickhouse.com/blog/clickhouse-fully-supports-joins-full-sort-partial-merge-part3#filtering-tables-by-each-others-join-key-values-before-joining) before the join itself runs. ClickHouse introduces a similar idea for the default parallel hash join algorithm.
+
+As a reminder, the [parallel hash join algorithm](https://clickhouse.com/blog/clickhouse-fully-supports-joins-hash-joins-part2#parallel-hash-join) is a variation of [hash join](https://clickhouse.com/blog/clickhouse-fully-supports-joins-hash-joins-part2#hash-join) that splits the input data to build several hash tables concurrently, speeding up the build phase.
+
+In the example below, we set [max_threads](https://clickhouse.com/docs/operations/settings/settings#max_threads) = 2, so ClickHouse builds two hash tables in parallel. In practice, max_threads is usually derived from the number of available CPU cores.
+
+The diagram shows the physical query plan, called the query pipeline in ClickHouse, for a TPC-H query joining orders with customer.
+
+![Blog-JOINS-improvements.006.png](https://clickhouse.com/uploads/Blog_JOINS_improvements_006_d7c0b8e7ae.png)
+
+① The predicate on `customer` is pushed down and applied before the join.
+
+② During the build phase, the filtered `customer` rows, the right side of the join, are split into two buckets because `max_threads = 2`. Each bucket is used to build one in-memory hash table.
+
+③ During the probe phase, `orders` rows, the left side of the join, are streamed in parallel and routed to the corresponding hash table for lookup.
+
+
+#### The problem: wasted probe-side work
+
+Note that in step ②, only a subset of customer keys is inserted into the hash tables during the build phase. However, in step ③, ClickHouse still processes all orders rows. For orders whose customer was removed by the customer filter, the lookup can never succeed. Those rows still consume CPU and memory bandwidth before the join rejects them.
+
+
+#### The idea: filter probe rows before lookup
+
+Runtime filters address exactly this wasted work.
+
+While ClickHouse builds the hash tables (in DRAM) from the filtered customer rows, it also creates a compact filter (bloom filter or min/max values) from the join keys that actually made it into the build side. In our example, that means only customer keys that survived c_nation = 'DE'.
+
+That filter is applied to the orders side before the hash-table lookup. If an orders row has an o_custkey that is not present in the filtered build side, ClickHouse can discard it early instead of routing it into the join.
+
+The runtime filter is much smaller than the hash tables themselves, so it can stay close to the CPU, typically in L1 or L2 cache.
+
+
+#### How runtime filters fit into the query pipeline 
+ 
+
+The updated pipeline looks like this:
+
+![Blog-JOINS-improvements.007.png](https://clickhouse.com/uploads/Blog_JOINS_improvements_007_1cf7d0baf0.png)
+
+The updated pipeline adds two steps:
+
+② While reading the filtered customer rows, ClickHouse builds a runtime filter from their join keys.
+
+④ Before probing the hash tables, ClickHouse applies that runtime filter to the orders rows.
+
+⑤ Only rows that pass the runtime filter continue to the hash-table lookup.
+
+The parallel hash join structure stays the same, but many probe-side rows are removed before the expensive lookup.
+
+This keeps the parallel hash join structure unchanged, but removes probe-side rows that could never match. In selective joins, this can significantly reduce CPU work and memory bandwidth.
+
+
+#### How it appears in the query plan
+
+We can see this in the logical query plan with EXPLAIN plan.
+
+First, with runtime pre-filtering disabled:
+
+<pre>
+<code type='click-ui' language='sql' show_line_numbers='false'>
+EXPLAIN plan
+SELECT *
+FROM orders, customer
+WHERE o_custkey = c_custkey
+SETTINGS enable_join_runtime_filters = 0;
+</code>
+</pre>
+
+<pre><code type='click-ui' language='text' show_line_numbers='false'>
+...                             
+Join                                                       
+...
+ReadFromMergeTree (default.orders)                   
+ReadFromMergeTree (default.customer) 
+</code></pre>
+
+We’ll skip the rest of the plan and focus on the core mechanics.
+
+Reading the output from **bottom to top**, we can see that ClickHouse plans to read the data from the two tables, `orders` and `customer`, and perform the join.
+
+Next, let’s inspect the logical query plan for the same join, but this time **with runtime pre-filtering enabled**:
+
+<pre>
+<code type='click-ui' language='sql' show_line_numbers='false'>
+EXPLAIN plan
+SELECT *
+FROM orders, customer
+WHERE o_custkey = c_custkey
+SETTINGS enable_join_runtime_filters = 1;
+</code>
+</pre>
+
+The relevant parts of the plan look like this:
+
+
+<pre><code type='click-ui' language='text' show_line_numbers='false'>
+...
+Join                                                                                                                                                                                             
+...                                                                                                                                                                         
+Prewhere filter column: __filterContains(_runtime_filter_14211390369232515712_0, __table1.o_custkey)                                                                          
+...
+BuildRuntimeFilter (Build runtime join filter on __table2.c_custkey (_runtime_filter_14211390369232515712_0))
+...
+</code></pre>
+
+Reading the plan from **bottom to top**, we can see that ClickHouse first ① builds a **runtime filter** from the join key values on the **right-hand side** (`customer`) table.
+
+This runtime filter is then ② applied as a **[PREWHERE](https://clickhouse.com/docs/optimize/prewhere) filter** on the **left-hand side** (`orders`) table, allowing irrelevant rows to be skipped **before** the join is executed.
+
+
+#### Benchmark: fewer rows, less memory
+
+To measure the effect, we use a slightly extended version of the query, joining orders, customer, and nation, and calculating the average order total for customers from France.
+
+We’ll start with **runtime pre-filtering disabled**:
+
+<pre>
+<code type='click-ui' language='sql' show_line_numbers='false'>
+SELECT avg(o_totalprice)
+FROM orders, customer, nation
+WHERE (c_custkey = o_custkey) AND (c_nationkey = n_nationkey) AND (n_name = 'FRANCE')
+SETTINGS enable_join_runtime_filters = 0;
+</code>
+</pre>
+
+<pre><code type='click-ui' language='text' show_line_numbers='false'>
+┌──avg(o_totalprice)─┐
+│ 151149.41468432106 │
+└────────────────────┘
+
+1 row in set. Elapsed: 1.005 sec. Processed 165.00 million rows, 1.92 GB (164.25 million rows/s., 1.91 GB/s.)
+Peak memory usage: 1.24 GiB.
+
+</code></pre>
+
+Then, we run the same query again, this time **with runtime pre-filtering enabled**:
+
+<pre>
+<code type='click-ui' language='sql' show_line_numbers='false'>
+SELECT avg(o_totalprice)
+FROM orders, customer, nation
+WHERE (c_custkey = o_custkey) AND (c_nationkey = n_nationkey) AND (n_name = 'FRANCE')
+SETTINGS enable_join_runtime_filters = 1;
+</code>
+</pre>
+
+<pre><code type='click-ui' language='text' show_line_numbers='false'>
+┌──avg(o_totalprice)─┐
+│ 151149.41468432106 │
+└────────────────────┘
+
+1 row in set. Elapsed: 0.471 sec. Processed 165.00 million rows, 1.92 GB (350.64 million rows/s., 4.08 GB/s.)
+Peak memory usage: 185.18 MiB.
+</code></pre>
+
+#### Result
+
+> Runtime pre-filtering made this query **2.1× faster**, reducing runtime from 1.005s to 0.471s, while cutting peak memory from 1.24 GiB to 185 MiB.
+
+By filtering rows early, ClickHouse avoids probe-side work that cannot produce matches, reducing both CPU work and memory usage.
+
+
+### ④ Statistics-based join reordering
+
+ClickHouse can now reorder complex join graphs across dozens of tables and [all major join types](https://clickhouse.com/blog/clickhouse-fully-supports-joins-part1).
+
+This matters because SQL joins are [associative](https://en.wikipedia.org/wiki/Associative_property): the same logical query can often be executed using many different join orders. The result is the same, but the runtime can be dramatically different.
+
+
+#### The problem: join order matters
+
+The diagram below shows three different join orders for the same join query and the resulting hash join trees. The query result will be the same in all three cases. 
+
+![Blog-JOINS-improvements.008.png](https://clickhouse.com/uploads/Blog_JOINS_improvements_008_6eab572778.png)
+
+The more tables a query joins, the more important the join order becomes.
+
+As explained in the previous section, in a hash join, the right side is used to build an in-memory hash table, and the left side probes it. Placing the smaller input on the build side is usually much more efficient. 
+
+In some cases, **good and bad join orders can differ by many orders of magnitude in runtime**! 
+
+
+#### Finding a good join order
+
+Finding a good join order is hard because the search space grows extremely quickly. With 12 joined tables, there are already **28 trillion** possible join orders.
+
+ClickHouse therefore, uses a join order optimizer. At a high level, it enumerates candidate join trees, estimates their cost, and picks a good one.
+
+![Blog-JOINS-improvements.009.png](https://clickhouse.com/uploads/Blog_JOINS_improvements_009_b14a1bc01e.png####%20Column%20statistics%20make%20the%20optimizer%20effectiveThe%20optimizer%20needs%20cardinality%20estimates:%20how%20many%20rows%20each%20intermediate%20join%20result%20is%20expected%20to%20contain%20after%20filters%20and%20join%20predicates.Those%20estimates%20come%20from%20[column%20statistics](https://clickhouse.com/docs/engines/table-engines/mergetree-family/mergetree#available-types-of-column-statistics). Since 26.4, ClickHouse generates those statistics automatically for all tables, which makes statistics-based join reordering effective with default settings.
+
+For small join graphs, ClickHouse can use exhaustive dynamic programming (DPSize) to find the optimal order. For larger join graphs, it uses a greedy search that is much faster but not guaranteed to find the optimum.
+
+![Blog-JOINS-improvements.010.png](https://clickhouse.com/uploads/Blog_JOINS_improvements_010_3fb770935a.png)
+
+#### Benchmark: from one hour to 2.7 seconds
+
+To measure the impact, we ran the same six-table TPC-H query twice:
+
+1. Without statistics: tables created with the [default DDL](https://clickhouse.com/docs/getting-started/example-datasets/tpch#data-generation-and-import).
+
+2. With statistics: tables created with [extended DDL that enables column statistics](https://pastila.nl/?01031010/7475d7ba575a41d9fd86eaaff97cb201#SGYcmaof4DoQzewNH3tBKA==).
+
+Both runs used the same query and the same join-order optimizer settings.
+
+<pre>
+<code type='click-ui' language='sql' show_line_numbers='false'>
+SELECT
+  n_name,
+  sum(l_extendedprice * (1 - l_discount)) AS revenue
+FROM
+  customer, 
+  orders, 
+  lineitem, 
+  supplier, 
+  nation, 
+  region
+WHERE
+c_custkey = o_custkey
+AND l_orderkey = o_orderkey
+AND l_suppkey = s_suppkey
+AND c_nationkey = s_nationkey
+AND s_nationkey = n_nationkey
+AND n_regionkey = r_regionkey
+AND r_name = 'ASIA'
+AND o_orderdate >= DATE '1994-01-01'
+AND o_orderdate < DATE '1994-01-01' + INTERVAL '1' year
+GROUP BY
+  n_name
+ORDER BY
+  revenue DESC;
+</code>
+</pre>
+
+First, we executed the query on the tables **without statistics**:
+
+<pre><code type='click-ui' language='text' show_line_numbers='false'>
+USE tpch_no_stats;
+SET query_plan_optimize_join_order_limit = 10;
+SET allow_statistics_optimize = 1;
+<TEST-QUERY>
+</code></pre>
+
+<pre><code type='click-ui' language='text' show_line_numbers='false'>
+┌─n_name────┬─────────revenue─┐
+│ VIETNAM   │  5310749966.867 │
+│ INDIA     │ 5296094837.7503 │
+│ JAPAN     │ 5282184528.8254 │
+│ CHINA     │ 5270934901.5602 │
+│ INDONESIA │ 5270340980.4608 │
+└───────────┴─────────────────┘
+
+5 rows in set. Elapsed: 3903.678 sec. Processed 766.04 million rows, 16.03 GB (196.23 thousand rows/s., 4.11 MB/s.)
+Peak memory usage: 99.12 GiB.
+</code></pre>
+
+<p>That took over one hour! &#x1F40C; And used 99 GiB of main memory.</p>
+
+
+Then we repeated the same query on the tables **with statistics**:
+
+<pre><code type='click-ui' language='text' show_line_numbers='false'>
+USE tpch_stats;
+SET query_plan_optimize_join_order_limit = 10;
+SET allow_statistics_optimize = 1;
+<TEST-QUERY>
+</code></pre>
+
+<pre><code type='click-ui' language='text' show_line_numbers='false'>
+┌─n_name────┬─────────revenue─┐
+│ VIETNAM   │  5310749966.867 │
+│ INDIA     │ 5296094837.7503 │
+│ JAPAN     │ 5282184528.8254 │
+│ CHINA     │ 5270934901.5602 │
+│ INDONESIA │ 5270340980.4608 │
+└───────────┴─────────────────┘
+
+5 rows in set. Elapsed: 2.702 sec. Processed 638.85 million rows, 14.76 GB (236.44 million rows/s., 5.46 GB/s.)
+Peak memory usage: 3.94 GiB.
+</code></pre>
+
+#### Result
+
+> With statistics-based join reordering, the six-table TPC-H query dropped from 3903.7s to 2.7s - about **1,450× faster** - while peak memory fell from 99.1 GiB to 3.9 GiB.
+
+<br/>
+
+## What this unlocked
+
+Two years ago, we decided to make joins a first-class strength in ClickHouse.
+
+The first year laid the foundation: faster parallel hash joins, smarter build/probe-side choices, better planning, more aggressive filter pushdown, and local join reordering. By 25.4, the same TPC-H SF100 join-heavy workload was already **4.4× faster** than in 22.4.
+
+The second year made joins dramatically better again. Between 25.4 and 26.4, another wave of optimizer and execution improvements made the same workload **another 6× faster** with default settings.
+
+The four improvements we covered above each attacked a different part of the join problem:
+
+**① Correlated subqueries** removed a major SQL compatibility gap. ClickHouse can now run correlated subqueries across `SELECT`, `WHERE`, and `HAVING`, including TPC-H queries that previously required manual rewrites or had to be excluded entirely.
+
+**② Lazy column replication** avoids physically copying repeated values produced by joins. In our TPC-H example, it made the join **1.9× faster**.
+
+**③ Runtime filters** reduce wasted probe-side work by filtering rows before they reach the hash-table lookup. In our benchmark, runtime pre-filtering made the query **2.1× faster** and reduced peak memory by **nearly 7×**.
+
+**④ Statistics-based join reordering** lets ClickHouse choose better physical join plans automatically. In the six-table TPC-H query, the runtime dropped from **3903.7 seconds to 2.7 seconds** - about **1,450× faster** - while peak memory fell from **99.1 GiB to 3.9 GiB**.
+
+Taken together, these changes moved joins from “something ClickHouse can do” to something ClickHouse can do **competitively, automatically, and with default settings**.
+
+That is what made the [companion benchmark](/blog/tpc-h-clickhouse-cloud-vs-snowflake-databricks-bigquery-redshift) possible: ClickHouse Cloud can now run the full join-heavy TPC-H workload quickly and cost-efficiently against Snowflake, Databricks, BigQuery, and Redshift, **for less than a cent**.
+
+![Blog-JOINS-results.005.png](https://clickhouse.com/uploads/Blog_JOINS_results_005_f2a4c0e257.png)
+
+## What’s next
+
+ 
+ClickHouse has come a long way on joins.
+
+Two years ago, the TPC-H SF100 workload looked very different. After the first year of focused join engineering, it was already **4.4× faster**. After the second year, it is now **26× faster than in 22.4**, with the last year alone contributing another **6× speedup** under default settings.
+
+That is the story this post covered: the first two years of making joins a first-class strength in ClickHouse.
+
+But we are just getting started. Year three is already underway, with [distributed joins](/blog/multi-stage-distributed-query-execution-clickhouse-cloud) as one of the next steps toward larger workloads such as TPC-H SF1000 and beyond.
+
+We’ll report back in a year.
+
+> "When will you stop optimizing join performance? We will never stop!”  – Alexey Milovidov, inventor of ClickHouse, [during the ClickHouse release 25.10 webinar](https://www.youtube.com/live/cV2hiOCzDG4?si=hEjfRABUz6ZIfp-w&t=1866) 
+
+
+
+---
+
+## Open Houseで発表されたオブザーバビリティ関連の新機能：MCPサーバー、AI Notebooks、ClickStack Cloud
+Published: 2026-06-03T00:52:34+00:00
+URL: https://clickhouse.com/blog/observability-mcp-server-ai-notebooks-jp
+
+---
+title: "Open Houseで発表されたオブザーバビリティ関連の新機能：MCPサーバー、AI Notebooks、ClickStack Cloud"
+date: "2026-06-03T00:52:34.506Z"
+author: "Mike Shi and Brandon Pereira"
+category: "Product"
+excerpt: "Open House 2026では、ClickStack Cloudのプライベートプレビュー、AI Notebooksのベータ提供、そしてClickStack MCPサーバーの3つのアップデートを発表しました。これらは、ClickHouseでのオブザーバビリティをより素早く始められ、調査をより容易にし、お客様の環境とより柔軟に組み合わせられるようにするものです。"
+---
+
+# Open Houseで発表されたオブザーバビリティ関連の新機能：MCPサーバー、AI Notebooks、ClickStack Cloud
+
+Open Houseでは、ワークショップ、技術的な深掘りセッション、製品発表、デモ、そしてリアルタイムデータの今後についての議論を通じて、ClickHouseコミュニティが3日間にわたり一堂に会しました。イベント期間中、多くのユーザー、顧客、そしてオブザーバビリティコミュニティのメンバーと直接お会いできたことを大変嬉しく思います。
+
+直接参加できなかった方々のために、Open Houseで発表したオブザーバビリティ関連の内容をまとめてご紹介します。
+
+ClickStackおよびオブザーバビリティに関する3つの主要なアップデートを発表しました。ClickStack Cloud、ベータ版のAI Notebooks、そして新しいClickStack MCPサーバーです。
+
+## ClickStack Cloud {#clickstack-cloud}
+
+最大の発表は、独立した[ブログ記事](https://clickhouse.com/blog/clickstack-cloud-private-preview)としても取り上げる価値のあるものでした。それが、プライベートプレビューとしてのClickStack Cloudの登場です。
+
+ClickStack Cloudは、ClickHouse上に構築されたフルマネージド・サーバーレスのオブザーバビリティプラットフォームです。コレクター、インフラのサイジング、スケーリングポリシー、スキーマチューニングを直接管理する代わりに、ユーザーはOpenTelemetryデータをマネージドエンドポイントに送信するだけで、ClickStack UIを通じてログ、メトリクス、トレースをすぐに探索できます。
+
+ClickStack Cloudは、ClickHouseが評価されているパフォーマンス特性を維持しつつ、運用負担を削減することを目指しています。
+
+詳細については、[専用記事](https://clickhouse.com/blog/clickstack-cloud-private-preview)をご覧ください。
+
+### Managed ClickStackが一般提供開始 {#managed-clickstack-is-generally-available}
+
+ClickStack Cloudのプライベートプレビュー開始に加えて、既存のManaged ClickStackも正式に一般提供となりました。
+
+Managed ClickStackは、取り込みパイプライン、コンピュートのサイジング、ワークロードの分離、スキーマ設計、データストアチューニングなど、オブザーバビリティスタックを直接運用上コントロールしたいチーム向けに設計されています。ユーザーはOpenTelemetryコレクターと取り込みアーキテクチャを自分で管理しながら、基盤となるオブザーバビリティデータストアとしてClickHouse Cloudを利用します。多くの大規模デプロイメントでは、こうしたコントロールがパフォーマンスの最適化と市場をリードするコスト効率の達成に不可欠です。
+
+Managed ClickStackとClickStack Cloudは、それぞれ異なる運用モデルを想定して設計されています。
+
+前述のとおり、ClickStack Cloudはフルマネージド・サーバーレスのオブザーバビリティ体験を提供し、チームはテレメトリをマネージドエンドポイントに送信するだけで、インフラを直接管理することなくログ、メトリクス、トレースの探索を即座に開始できます。一方、Managed ClickStackは、ClickHouse Cloudインフラ上で稼働しつつも、スケーリング戦略、取り込みアーキテクチャ、ワークロード最適化をより深くコントロールしたい組織向けです。この2つの提供形態により、ターンキー型のオブザーバビリティ体験と、大規模なオブザーバビリティ運用のためのより構成可能なプラットフォームの間で、チームが選択できるようになります。
+
+![](https://clickhouse.com/uploads/clickstack_cloud_may2026_image4_d8d0f91b43.png)
+
+## AI Notebooksベータ版 {#ai-notebooks-in-beta}
+
+また、Managed ClickStack向けにAI Notebooksがベータ版に入ることも発表しました。
+
+過去1年間で、ほぼすべてのオブザーバビリティプラットフォームが何らかのAIチャット体験を追加してきましたが、私たちはチャットだけでは実際のインシデント調査の進み方には合わないと感じるようになっていました。本番環境のデバッグは複雑であり、エンジニアはログ、トレース、ダッシュボード、デプロイメント、仮説の間を行き来します。後戻りしたり、並行して複数の調査に分岐したり、新しいシグナルが見つかるたびに以前の仮定を見直したりします。インシデントが単一スレッドの会話で完結することはまれであるため、インターフェースがそれを強制するべきではないと考えました。
+
+![](https://clickhouse.com/uploads/clickstack_cloud_may2026_image5_4095d770f0.png)
+
+> 調査が単一スレッドで完結することはまれです。SREは通常、解決に至るまでに分岐する複数の仮説を探索する必要があります。
+
+AI Notebooksは、一時的なチャットセッションではなく、永続的な調査ワークスペースとして設計されています。各調査は、プロンプト、クエリ、チャート、推論ステップ、調査結果が構造化されたシーケンスとなり、プロセス全体を通じて可視化され編集可能な状態で保持されます。
+
+エンジニアはノートブックの任意の地点から分岐して、以前の作業やコンテキストを失うことなく代替的な仮説を探索できます。実際のワークフローは、より協調的なデバッグ体験のように感じられます。
+
+<video autoplay="1" muted="1" loop="1" controls="0">
+  <source src="https://clickhouse.com/uploads/AI_Notebooks_Take3_1080p_26e5921ef2.mp4" type="video/mp4" />
+</video>
+
+これを構築するにあたり、透明性についてもかなり強いこだわりを持っていました。本番障害の現場では、エンジニアはシステムが実際に何をしているのかを理解する必要があります。とりわけ調査ループにAIが関わっている場合はなおさらです。すべてのクエリ、チャート、推論ステップ、中間結果はノートブック内で可視化されています。クエリを手動で編集したり、独自の検索を追加したり、提案されたパスを完全に無視して調査を別の方向に進めたりすることもできます。私たちは、AIにバックグラウンドでブラックボックス的な結論を出すシステムというよりも、エンジニアの隣に座っている協力者のように振る舞ってほしかったのです。
+
+![](https://clickhouse.com/uploads/clickstack_cloud_may2026_image6_02f1301f8d.png)
+
+インターフェースの裏側では、NotebooksはClickStackのオブザーバビリティプリミティブと最適化されたClickHouseワークフローの上に直接構築されています。このシステムは単にSQLコンソールにLLMをくっつけたものではありません。モデルは、ClickStack自体を支えるすでに整備された構造化された調査ツールを操作し、最適化された検索、集計、可視化を実行しつつ、生成されたクエリは検査や改善のために常に可視化されています。Notebooksはチーム間で共有することもでき、調査をインシデント終了後に消えてしまう使い捨てのチャット履歴ではなく、永続的に協働できる成果物に変えてくれます。
+
+すでにManaged ClickStackを利用しているユーザーは、ClickStack UI内の左側のナビゲーションパネルから直接AI Notebooksを利用できるようになりました。
+
+![](https://clickhouse.com/uploads/clickstack_cloud_may2026_image7_ae16f00c1f.png)
+
+そして、このNotebook体験は自然な流れで、Open Houseでの3つ目のオブザーバビリティに関する発表へとつながりました。ClickStack内に構造化された調査ワークフローを構築する一環として、新しいClickStack MCPサーバーも導入しました。これにより、外部のAIシステムやエージェントは、Notebooksを内部で支えるのと同じオブザーバビリティプリミティブと直接統合できるようになります。
+
+## ClickStack MCPサーバー {#clickstack-mcp-server}
+
+NotebooksとともにOpen Houseでは、AIとオブザーバビリティツーリングにおいて起きつつあるより広範な変化についても議論しました。
+
+ClickStack内部でのAI支援による調査は重要ですが、私たちは多くのチームがClickStack内で公開しているのと同じ強力なツールを自分たちのエージェントでも活用したいと考えるはずだと思っています。実際に、ユーザーはオブザーバビリティデータを中心に独自のエージェント、プロンプト、ワークフロー、自動化を構築するケースが増えています。Cursorや Claude Codeの中でそれを行う人もいれば、SDKをつなぎ合わせて社内システムに対してローカルにエージェントを実行する人もいます。多くの場合、こうしたワークフローを構築するチームは、インシデントをデバッグする方法に強い運用知識がすでに織り込まれており、ツールにもそれを反映させたいと考えています。
+
+私たちの考えは、オブザーバビリティプラットフォームはユーザーを単一のAI体験に押し込めるのではなく、彼らがすでに作業している場所で迎え入れるべきだ、というものです。そして、「自分のエージェントを持ち込む」(Bring your own agents)という哲学に基づいて構築していきたいと考えています。
+
+最初のステップは、ClickStack Notebooksを内部で支えるのと同じ調査の構成要素を、外部のエージェントやワークフローに対しても公開することです。そのために、オープンソース版ClickStackでClickStack MCPサーバーを発表できることを嬉しく思います。
+
+### なぜClickStack専用のMCPなのか? {#why-a-specialized-clickstack-mcp}
+
+すでに汎用的なClickHouse MCPサーバーが提供されており、幅広い分析タスクやSQL駆動の探索ではうまく機能します。しかし、AI Notebooksを構築する中で、オブザーバビリティワークフローは一般的なBIワークロードとは異なる挙動を示すことが繰り返し分かりました。モデルは、毎回生のSQLクエリを生成するよりも、構造化された調査ツールを操作した方がはるかに性能が良いのです。
+
+![](https://clickhouse.com/uploads/clickstack_cloud_may2026_image8_e7cbc93a2a.png)
+
+> ClickHouseによるオブザーバビリティ向けAIは、ClickStackを通じて提供される協働型ノートブック体験とMCPツール、ClaudeやCodexなど外部エージェントとの統合、そして高性能分析エンジンとしてのClickHouseを組み合わせ、サブ秒のクエリ性能と大規模な高並列性によりフルフィデリティな調査を可能にします。
+
+生のSQLは強力ですが、多くのオブザーバビリティ調査は単発のクエリとして表現するには扱いにくいものです。繰り返し発生するログパターンの抽出、時間ウィンドウ間での挙動比較、トレースの外れ値の根本原因分析、ログ・メトリクス・トレースを横断した調査などのタスクには、複数ステップの分析とドメイン固有のロジックが必要です。これらをすべてモデル任せにすると、毎回必要なクエリパターンや分析ロジックをゼロから組み立てる必要があり、問題そのものではなくクエリの仕組みにコンテキストを消費してしまいます。
+
+ClickStack MCPサーバーは、オブザーバビリティ業務のためのより高レベルのセマンティックなツールをエージェントに提供します。生のSQLインターフェースだけを公開するのではなく、ログパターンのトレンド抽出、属性と外れ値の相関、低速トレースの検査、再現可能なワークフローによる調査の進行など、安定したツールを提供します。内部ではこれらのツールも最適化されたClickHouseクエリを実行しますが、エージェントは毎回複雑な分析を手作業で組み立てるのではなく、意図レベルの操作とやり取りします。
+
+これはAI Notebooks内部で使われているアプローチと同じです。モデルは調査のステップごとに大きなSQL文を手作業でつなぎ合わせているわけではありません。代わりに、基盤となるオブザーバビリティワークフローとClickStackの最適化をすでに理解している専用ツールを操作します。
+
+私たちの内部ベンチマークでは、調査が25%少ないツール呼び出しで完了し、一貫性が2.5倍向上、評価スコアは標準のClickHouse MCPと比較して20%近く改善されました。その大きな要因は、モデルにあらゆるワークフローを生のSQLだけで生成させるのではなく、高いレバレッジを持つセマンティックな調査ツールを与えたことにあります。
+
+### 柔軟性を維持する {#retaining-flexibility}
+
+同時に、構造化された調査ツールが直接的なSQLアクセスを完全に置き換えるべきだとは考えていません。
+
+ClickHouseがエージェント型ワークロードやオブザーバビリティで非常にうまく機能する理由の一つは、SQLが探索言語として非常に強力であり続けていることです。インシデントによっては、もはや高レベルの抽象化では助けにならず、根本的なデータに直接アクセスするしかない地点に達することがあります。構造化ツールは反復的で一般的な調査パスの多くを効率的に処理しますが、エンジニアやエージェントがより深く掘り下げたり、特殊な仮説を検証したり、システムが想定していなかった質問に答える必要が生じたときには、SQLが脱出ハッチとして残っています。
+
+実際には、これらのワークフローは非常に自然に補完し合います。調査の大部分には最適化された調査プリミティブを使い、状況に応じてネイティブなクエリに切り替えるのです。
+
+### 調査だけでなくオーケストレーションも {#orchestration-not-just-investigation}
+
+ターミナルで直接作業したり、Claude Codeのようなエージェントハーネス内で作業することに満足しているエンジニアもいますが、調査は最終的に他の人と共有する必要があります。SREは協働し、コンテキストを保持し、結論に達したら証拠を提示する必要があります。
+
+そのため、私たちはオブザーバビリティMCPサーバーが調査プリミティブだけを公開すべきではないと考えています。実際の運用ワークフローには、ダッシュボードの作成、検索の永続化、アラートの管理、調査結果のチーム横断的な共有といったオーケストレーション・プリミティブも必要です。
+
+これはローカルエージェントのワークフローでは特に重要になります。エージェントがローカルでインシデントを調査した場合、その結果として得られた証拠は、より大きなチームによる共有とレビューのためにどこかに永続化される必要があります。生のチャット出力をドキュメントにコピーしたり、静的なレポートを生成したりするやり方は、実際のインシデントの最中にはすぐに破綻し、不整合を引き起こします。
+
+そのため、ClickStack MCPサーバーはClickStack内部で双方向の管理ツールを直接公開しています。エージェントはインシデントを調査するだけでなく、ダッシュボードを作成し、検索を永続化し、結果として得られた成果物に必要な証拠や可視化が含まれているかを検証することもできます。
+
+実際には、調査は使い捨てのチャット履歴ではなく、永続的な運用成果物へと自然に進化していきます。
+
+### MCPの使い方 {#using-the-mcp}
+
+ClickStack MCPサーバーを使い始めるのは簡単です。フルスタックをローカルで試す最も簡単な方法は、ClickHouse、ClickStack UI (HyperDX)、OpenTelemetry取り込みエンドポイント、MCPサーバーを含む[ClickStackオールインワンコンテナを使用する](https://clickhouse.com/docs/use-cases/observability/clickstack/getting-started/oss)ことです。
+
+<pre><code type='click-ui' language='bash'>
+docker run --name clickstack \
+  -p 8123:8123 \
+  -p 8080:8080 \
+  -p 4317:4317 \
+  -p 4318:4318 \
+  clickhouse/clickstack-all-in-one:latest \
+  clickstack
+</code></pre>
+
+コンテナが起動すると、ClickStack UIは[http://localhost:8080](http://localhost:8080)で利用可能になります。ユーザーを作成してログインしてください。
+
+サンプルデータセットについては、[このガイド](https://clickhouse.com/docs/use-cases/observability/clickstack/getting-started/remote-demo-data#connect-to-the-demo-server)の手順(1)および(2)に従って、ローカルのデータソースを当社のデモサーバーに向けるよう変更できます。
+
+MCPサーバーを使用するには、Personal API Access Keyも必要です。ClickStack UI内で、次のメニューに移動してください: `Team Settings`  → `Integrations` → `API Keys` → `Personal API Access Key`。
+
+![](https://clickhouse.com/uploads/clickstack_cloud_may2026_image9_be45abcb79.png)
+
+MCPエンドポイントは[http://localhost:8080/api/mcp](http://localhost:8080/api/mcp)で公開されます。
+
+そこから、すでに使用しているMCP互換のクライアントやエージェントフレームワークを接続できます。
+
+例えば、Claude Codeを接続する場合:
+
+<pre><code type='click-ui' language='bash'>
+claude mcp add --transport http clickstack http://localhost:8080/api/mcp \
+  --header "Authorization: Bearer &lt;your-api-key&gt;"
+</code></pre>
+
+```shell
+Added HTTP MCP server clickstack with URL: http://localhost:8080/api/mcp to local config
+Headers: {
+  "Authorization": "Bearer &lt;your-api-key&gt;"
+}
+File modified: /Users/demo_user/.claude.json [project: /Users/demo_user]
+```
+
+接続が完了すると、エージェントはClickStackのオブザーバビリティプリミティブと直接やり取りを始められます。例えば、次のような質問ができます:
+
+「直近1時間でエラー率が最も高いサービスを表示して」
+
+![](https://clickhouse.com/uploads/clickstack_cloud_may2026_image10_ad26cd5f59.png)
+
+内部では、MCPサーバーはこれらのリクエストを、その場限りのSQL生成に完全に依存するのではなく、AI Notebooksで使われているのと同じ最適化された調査ツール経由でルーティングします。
+
+例えば、決済サービスのレイテンシ上昇を調査し、最終的にClaudeを通じて根本原因がキャッシュエビクションの問題であると判明したとします。
+
+![](https://clickhouse.com/uploads/clickstack_cloud_may2026_image11_d6a8f4ef67.png)
+
+この時点で、調査内容を永続化して共有する手段が必要になります。生のClaudeの出力をドキュメントにコピーしたり、モデルに静的なHTMLレポートを生成させたりすることもできますが、どちらのワークフローも特に自然とは言えません。
+
+以下では、MCPサーバーを使って調査を要約したダッシュボードを生成し、結果をClickStackに直接永続化します。さらに、検証ステップによってダッシュボードに必要な証拠が表示されていることを確認しています。
+
+![](https://clickhouse.com/uploads/clickstack_cloud_may2026_image12_68ca0875fc.png)
+
+![](https://clickhouse.com/uploads/clickstack_cloud_may2026_image13_a6ed816b79.png)
+
+最終的に得られたダッシュボードは、インシデントを要約し、RCAドキュメントのための証拠を提示する永続化された成果物となります。
+
+## まとめ {#conclusion}
+
+これらの発表はすべて同じ大きな方向性を反映しています。オブザーバビリティツーリングは、エンジニアが事前定義されたワークフローに縛られることなくシステムを調査できるよう支援すべきだということです。ClickStack Cloudは運用負担の多くを軽減し、AI Notebooksは調査の文書化と共有を容易にし、MCPサーバーはチームが自分たちのエージェントや内部ツーリングに同じ機能を統合できるようにします。私たちはまだこの変化の始まりに立っているにすぎませんが、オブザーバビリティシステムは、今日多くのチームが頼っているツーリングよりもはるかに協働的かつプログラマブルなものになっていくと期待しています。
+
+---
+
+## 今すぐ始める
+
+ClickHouseがあなたのデータでどのように動作するのか興味がありますか?数分でClickHouse Cloudを使い始めることができ、300ドル分の無料クレジットを受け取れます。
+
+[Sign up](https://console.clickhouse.cloud/signUp?loc=blog-cta-794-sign-up&utm_blogctaid=794)
+
+---
 
 ---
 
