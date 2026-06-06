@@ -1,5 +1,5 @@
 {
-  "last_sync": "2026-06-05T07:36:24.748294Z",
+  "last_sync": "2026-06-06T07:10:04.867410Z",
   "processed_blogs": {
     "https://clickhouse.com/blog/clickhouse-raises-400-million-series-d-acquires-langfuse-launches-postgres": {
       "title": "ClickHouse raises $400M Series D led by Dragoneer to accelerate expansion across analytics and AI infrastructure",
@@ -4980,9 +4980,39 @@
       "pub_date": "2026-06-03T00:52:34+00:00",
       "file_path": "blogs/2026-06-03-open-house-mcp-ai-notebooks-clickstack-cloud.md",
       "processed_at": "2026-06-04T07:44:41.592054Z"
+    },
+    "https://clickhouse.com/blog/click-a-thon-2026": {
+      "title": "Click-a-thon 2026: 24 hours, Bengaluru, and the fastest analytical database on the planet",
+      "pub_date": "2026-06-05T11:26:57+00:00",
+      "file_path": "blogs/2026-06-05-click-a-thon-2026-24-hours-bengaluru-and-the.md",
+      "processed_at": "2026-06-06T07:10:03.605421Z"
+    },
+    "https://clickhouse.com/blog/selecting-a-real-time-analytical-database": {
+      "title": "What to look for when selecting a real-time analytical database",
+      "pub_date": "2026-06-04T15:31:44+00:00",
+      "file_path": "blogs/2026-06-04-what-to-look-for-when-selecting-a-real-time.md",
+      "processed_at": "2026-06-06T07:10:03.915317Z"
+    },
+    "https://clickhouse.com/blog/tpc-h-clickhouse-cloud-vs-snowflake-databricks-bigquery-redshift-jp": {
+      "title": "1セント未満で実現するTPC-H:ClickHouse Cloud vs. Snowflake、Databricks、BigQuery、Redshift",
+      "pub_date": "2026-06-04T00:47:35+00:00",
+      "file_path": "blogs/2026-06-04-1-tpc-h-clickhouse-cloud-vs-snowflake-databricks.md",
+      "processed_at": "2026-06-06T07:10:04.256267Z"
+    },
+    "https://clickhouse.com/blog/faster-root-cause-for-slow-traces-with-clickstack-event-deltas": {
+      "title": "Faster root cause for slow traces with ClickStack Event Deltas",
+      "pub_date": "2026-06-05T11:24:57+00:00",
+      "file_path": "blogs/2026-06-05-faster-root-cause-for-slow-traces-with-clickstack.md",
+      "processed_at": "2026-06-06T07:10:04.486136Z"
+    },
+    "https://clickhouse.com/blog/indexing-for-data-streams-benocs-telco": {
+      "title": "How BENOCS uses ClickHouse to monitor network traffic for the world’s biggest telcos",
+      "pub_date": "2026-06-05T11:33:13+00:00",
+      "file_path": "blogs/2026-06-05-how-benocs-uses-clickhouse-to-monitor-network.md",
+      "processed_at": "2026-06-06T07:10:04.796224Z"
     }
   },
-  "total_blogs": 830,
+  "total_blogs": 835,
   "failed_blogs": [
     {
       "url": "https://clickhouse.com/jp/blog/clickhouse-gcp-japan-availability",

@@ -1,6 +1,625 @@
 # ClickHouse Blogs
-Last updated: 2026-06-05 07:36:24 UTC
-Total blogs: 830
+Last updated: 2026-06-06 07:10:04 UTC
+Total blogs: 835
+
+---
+
+## How BENOCS uses ClickHouse to monitor network traffic for the world’s biggest telcos
+Published: 2026-06-05T11:33:13+00:00
+URL: https://clickhouse.com/blog/indexing-for-data-streams-benocs-telco
+
+---
+title: "How BENOCS uses ClickHouse to monitor network traffic for the world’s biggest telcos"
+date: "2026-06-05T11:33:13.927Z"
+category: "User stories"
+excerpt: "How BENOCS uses ClickHouse to monitor network traffic for the world’s biggest telcos"
+---
+
+# How BENOCS uses ClickHouse to monitor network traffic for the world’s biggest telcos
+
+<!-- Yay, no errors, warnings, or alerts! -->
+
+Visualizing network traffic, at volume, requires a combination of fast indexing (thanks MergeTrees) and fuzzy matching. In this blog, Benocs shares how they use ClickHouse to provide network traffic optimization and monitoring for telcos.
+
+
+---
+
+
+## **About BENOCS**
+
+Our customers, some belonging to the biggest telecommunications providers in the world, need to monitor and analyze huge amounts of traffic. For this reason, _Flow Analytics_ needs a substantial databank behind it. There is no shortage of database management systems on the market, which means we had to do a lot of testing, before deciding on which one would make BENOCS _Flow Analytics_ work.
+
+While the internet is home to massive amounts of data, this data is not static, but rather hurtling through cyberspace like William Shatner on a rocket joyride into space. And there’s not just one William Shatner taking a 10-minute trip: There are countless data transfers happening all the time. This movement means we need to factor in another dimension: time. BENOCS _Flow Analytics_ users need to investigate incidents that occurred in specific time frames, making fast access to specific time ranges while ignoring the rest of the data a basic requirement.
+
+To visualize network traffic in this way we need to measure traffic volume over time, showing the user how the data is behaving on its journey from its origin to its final destination.
+
+![Demolytics-6D-1.webp](https://clickhouse.com/uploads/Demolytics_6_D_1_52dd97fcdb.webp)
+
+## **Self-healing push architecture**
+
+Analyzing network traffic at high complexity and speeds is challenging, especially in diverse environments with asynchronous data feeds. However, we love a challenge and this is the setup that BENOCS operates and has to deal with. Across different network setups, BENOCS unifies the data sources and correlates the incoming network information.
+
+At BENOCS, we process and correlate data feeds of dozens of terabytes each day. The data processing is built around data becoming available from different sources, then being pushed through several jobs. This essentially becomes a data push architecture that processes data as it becomes available.
+
+In the above scenario, three data feeds are producing three results that are of different data types. Furthermore, each of the individual feeds has its own time resolution as well as delay when the data _should_ be available – however, sometimes it’s late. In the case of data being late, processing should not stop, but rather skip the late pieces until they become available. Once available, they must be made available as well. 
+
+
+## **So why ClickHouse ?**
+
+At BENOCS, we chose to build this architecture with ClickHouse at its core for several reasons. In summary, those are fast indexing and fuzzy matching on data streams.
+
+**Fast indexing**
+
+Fast indexing is the most important reason BENOCS heavily utilizes ClickHouse. It boils down to ClickHouse offering extremely fast lookups on specific dimensions due to its MergeTree table design. ClickHouse allows for skipping vast amounts of data in a matter of seconds based on the primary key without having to consider the data in irrelevant data at all.
+
+For BENOCS, this dimension is time. In the ClickHouse pipeline we run, lookups based upon time are the first step towards any job being scheduled.
+
+![benocs-flow.webp](https://clickhouse.com/uploads/benocs_flow_844f3e1480.webp)
+
+Let’s consider _result 2_ as an example. This can only be processed when _Feeds_ _A_/_C _have data. However, it is possible to partially process data in case data from _Feed A_ is missing. In numbers this means if _Feed A_ has data for 10 5-minute timestamps for a specific hour ready and _Feed C_ has a matching timestamp for that same hour, at least two of the four timestamps in _result 2_ can be calculated. The other two timestamps need to wait until _Feed A_ makes the data for it available.
+
+ClickHouse solves this problem for BENOCS by fast lookups on the time dimension. By running _DISTINCT SELECT_ queries on the primary indexing column, terabytes of data can be searched through in a matter of seconds. This makes the operation of checking the data availability light-weight despite the heavy data burden.
+
+However, searching through the timestamps and finding gaps efficiently is not all. The same principle also applies for the actual data processing correlation. ClickHouse’s ability to skip data based on time makes the table sizes become almost irrelevant, as it can zoom in on the needed data efficiently. This makes the processing time for a single time range independent of the actual table size as well as the position in the data. This ClickHouse mechanism allows BENOCS to run efficient self-healing data streams in the face of unreliable data streams.
+
+**Fuzzy Matching**
+
+When dealing with different time scales, joining tables usually means unifying the matching columns to have _exact_ matches. However, when dealing with vastly different timescales (see _Feed B/C)_, this becomes highly complicated as _FEED B_ might have multiple different matches for one key in _Feed C_. Furthermore, other dimensions complicate things due to missing/incomplete data.
+
+This is where the _ASOF _join of ClickHouse comes to the rescue for BENOCS. This means being able to find the nearest match instead of the exact match using a join. Combined with well selected _WHERE_ clauses this becomes a powerful feature that expedites and simplifies queries massively.
+
+**Summary**
+
+BENOCS processes vast amounts of data in ClickHouse, utilizing its powerful engine. The ability to zero in on the needed data and being able to ignore irrelevant data lets BENOCS build a self-healing data pipeline that can handle unreliable and volatile data feeds into a stable analysis for its customers.
+
+If you’re a telco provider wanting to optimize your network traffic, head on over to [www.benocs.com](http://www.benocs.com/) and register for a free Demolytics account to see BENOCS _Flow Analytics_ in action.
+
+Authors: Ingmar Poese & Rebecca Maschke, BENOCS
+
+
+---
+
+## Click-a-thon 2026: 24 hours, Bengaluru, and the fastest analytical database on the planet
+Published: 2026-06-05T11:26:57+00:00
+URL: https://clickhouse.com/blog/click-a-thon-2026
+
+---
+title: "Click-a-thon 2026: 24 hours, Bengaluru, and the fastest analytical database on the planet"
+date: "2026-06-05T11:26:57.481Z"
+author: "Siddhant Agarwal"
+category: "Community"
+excerpt: "ClickHouse's first in-person hackathon in India. August 1–2, Bengaluru. Four tracks, ₹10,00,000 prize pool, 24 hours to ship something real. Applications close June 25."
+---
+
+# Click-a-thon 2026: 24 hours, Bengaluru, and the fastest analytical database on the planet
+
+Every time you tap your phone, a piece of data is racing somewhere to be counted, joined, scored, and acted on before you've finished the gesture. A fraud check on a payment. A recommendation on a feed. An anomaly alert on a service that's about to fall over. A language model deciding which tool to call next. The window between an event happening and a system doing something useful with it has collapsed from days to seconds.
+
+Now, agents are pushing it even further.
+
+That's where ClickHouse fits in. ClickHouse has become the analytical engine powering the modern internet at serious scale for companies like Cloudflare, Uber, eBay, Lyft, Sony, Cursor, Meta, Lovable, and Instacart. But the reason we're writing this post isn't the database — it's the culture around it. ClickHouse has always been a builder's project, and we want to spend more time in rooms with developers who think like that.
+
+
+## Meet Click-a-thon 2026
+
+ClickHouse's first in-person hackathon in India. Bengaluru. August 1–2, 2026. Teams of 2 to 4 working tech professionals. Four tracks. 24 hours. A total of ₹10,00,000 prize pool.
+
+**Applications are open at [clickhouse.com/clickathon/india2026](https://clickhouse.com/clickathon/india2026) and close on June 25.**
+
+
+![clickathon.jpg](https://clickhouse.com/uploads/1200_x_1200_FINAL_1_0848135c34.jpg)
+
+## Constraints beat roadmaps
+
+You can read the docs. You can watch the benchmarks. You can scroll through the architecture blog posts. None of it teaches you what a database is actually like to build against.
+
+Twenty-four hours does. It's long enough to ship something real and short enough that you have to make decisions you'd normally argue about for a week. It forces the question every good engineering project eventually asks: what is the smallest version of this that actually works, and can we get there before we run out of coffee?
+
+The most interesting things being built on ClickHouse right now aren't coming from the obvious places. They're coming from small teams pairing ClickHouse with the rest of the modern open source stack and finding combinations nobody at our office thought to try. We want to see more of that, in the same room, on the same weekend.
+
+## The stack you might want to reach for
+
+Three projects in particular are worth knowing about before you walk in, because they show what the new generation of real-time and agentic systems actually look like in production.
+
+1. **[ClickStack](https://clickhouse.com/clickstack)** is the open source observability stack built on ClickHouse, combining HyperDX for the UI, OpenTelemetry for ingestion, and ClickHouse itself for storage and querying. Logs, metrics, traces, and session replays all in one place, with sub-second queries over terabytes. If you're building anything that needs to see itself, ClickStack is the path of least resistance.
+
+2. **[Langfuse](https://langfuse.com)** is the open source LLM observability and evaluation platform built on ClickHouse, which handles billions of traces from production AI applications. If your project involves agents, prompt chains, RAG, or anything LLM-shaped, Langfuse is what teams reach for when they want to actually understand what their model is doing in production.
+
+3. **[LibreChat](https://librechat.ai)** is the open source ChatGPT-style interface that supports basically every model provider and an increasingly serious set of agent tooling. Paired with ClickHouse for the analytical layer and Langfuse for the trace layer, you have a complete agentic stack that you can stand up in a single weekend. We've seen teams do exactly that.
+
+This is the stack we'd point a friend toward, and the one we'd love to see you build on.
+
+## Pick your track
+
+1. **Real-Time Analytics** — Data that moves fast deserves tools that move faster. Build systems where the gap between an event happening and an insight appearing is measured in seconds, not minutes. Streaming ingestion, materialized views, projections — the whole toolbox is on the table.
+ 
+2. **Observability** — Logs, traces, and metrics are only useful if they help you find the problem. Build something that actually cuts time to resolution, whether that's a smarter UI on top of ClickStack, a new way to correlate signals across services, or an entirely fresh take on what observability should look like in 2026.
+ 
+3. **Data Warehousing** — Large datasets, complex analytical queries, fast results. This track rewards depth. Teams that can design schemas, optimize queries, pick the right primary key, and squeeze performance out of genuinely hard problems will go far.
+ 
+4. **Agentic AI and Analytics** — Most LLM applications barely scratch the surface of what's possible when you pair language models with a real analytical engine. Build agents that reason over data instead of just retrieving it. Tool-using agents over ClickHouse, evaluated with Langfuse, served through LibreChat — whatever ambitious thing you've been wanting an excuse to try.
+
+## What are you waiting for?
+
+Working tech professionals. Teams of 2 to 4. Bengaluru, August 1–2. With ₹10,00,000 on the table.
+
+Before you apply, read the [participant handbook](https://drive.google.com/file/d/1walCGlp3zUPJedqJj9_s4VEVdBkzGy0I/view). It covers eligibility, event structure, judging, and most of the questions you're about to have. Anything not in there, write to [clickathon-support@clickhouse.com](mailto:clickathon-support@clickhouse.com).
+
+See you in Bengaluru.
+
+---
+
+## Apply now
+
+Applications close June 25, shortlists go out the first week of July. Apply now. The team captain applies on behalf of the team.
+
+[Apply now](https://clickhouse.com/clickathon/india2026?loc=blog-cta-817-apply-now-apply-now&utm_blogctaid=817)
+
+---
+
+---
+
+## Faster root cause for slow traces with ClickStack Event Deltas
+Published: 2026-06-05T11:24:57+00:00
+URL: https://clickhouse.com/blog/faster-root-cause-for-slow-traces-with-clickstack-event-deltas
+
+---
+title: "Faster root cause for slow traces with ClickStack Event Deltas"
+date: "2026-06-05T11:24:57.640Z"
+author: "Dale McDiarmid"
+category: "Product"
+excerpt: "Read how ClickStack's improved Event Deltas make it effortless to pinpoint the root causes of performance outliers in observability data - turning complex trace analysis into instant, actionable insight."
+---
+
+# Faster root cause for slow traces with ClickStack Event Deltas
+
+![Faster root cause for slow traces with ClickStack Event Deltas](https://clickhouse.com/uploads/Using_Click_Stack_Event_Deltas_for_outlier_attribution_in_observability_data_1138_fe2cd9a5f6.jpg)
+
+One of the lesser-known features in ClickStack is **Event Deltas**. When users first open HyperDX, the ClickStack interface, and begin exploring their data, we often hear the same questions: *How do Event Deltas work? When should I use them? What insights can they reveal?*
+
+In this post, we’ll unpack what Event Deltas are, how they can help accelerate root cause analysis for identifying why subsets of traces are slow, and how to interpret their visualizations effectively. We’ll also provide some general recommendations on using them effectively and share details on recent improvements that make the feature more powerful and flexible than ever.
+
+> [ClickStack](https://clickhouse.com/docs/use-cases/observability/clickstack/overview) is a high-performance observability stack bringing the power, speed, and flexibility of ClickHouse to logs, metrics, and traces - all in an open-source package that anyone can use. Event Deltas continue that mission by making it even simpler to identify the root cause of an issue.
+
+## What problem does Event Deltas solve?
+
+Before diving into what Event Deltas are, let’s understand the problem they are designed to address. Observability data, especially trace data, is often high-volume and noisy, making it challenging to visualize patterns or isolate anomalies effectively.
+
+When analyzing traces, **users want to know why certain traces exhibit higher latency**. This can be explored using traditional visualization techniques, **but getting to the root cause is difficult and slow**. It often involves a manual process: filtering spans with higher latency, grouping them by different attributes, and then comparing distributions to spot which attributes appear more frequently in the slow spans than in the faster ones.
+
+This iterative process is time-consuming and repetitive, requiring constant filtering, visualization, and comparison. 
+
+<div class="my-6"><div class="rounded-lg bg-white/10 p-4"><h3 class="text-inherit undefined Typography_suiTitleh3__JlLe2  group/mdHeader toc-ignore" id="test">Get started with ClickStack</h3><p>Discover the world’s fastest and most scalable open source observability stack, in seconds.</p><a class=" w-full" target="_self" href="https://clickhouse.com/docs/use-cases/observability/clickstack/getting-started?loc=blog-o11y-global-cta&amp;utm_source=clickhouse&amp;utm_medium=web&amp;utm_campaign=blog"><button class="styles_button__3smpn mt-6 w-full font-medium" data-type="primary"><span class="flex items-center whitespace-nowrap">Try now</span></button></a></div></div>
+
+
+## How do Event Deltas work?
+
+ClickStack's Event Deltas feature is designed to completely remove the need for this manual, repetitive analysis. 
+
+**Event Deltas surfaces key attribute differences between fast and slow traces automatically**. As an exploratory tool it is designed to help users quickly understand how and why performance changes occur within their traces. Rather than relying on pre-trained models or static alerting, **Event Deltas analyze trace data dynamically** - comparing the properties of *normal* and *slow* traces to highlight what has changed when performance regresses.
+
+By contrasting the latency distributions of these trace groups, **ClickStack automatically identifies which attributes are most correlated with slower behavior**, whether that’s a new deployment version, a specific endpoint, or a particular user segment.
+
+Instead of manually filtering and inspecting individual traces, Event Deltas instantly surface the key factors driving latency differences. This makes it easier to diagnose regressions, pinpoint their likely root causes, and visually connect them to the affected traces. The result is a fast, interactive way to explore observability data that fits the core spirit of ClickStack - helping users move from observation to insight with minimal effort.
+
+## How are Event Deltas unique?
+
+Many observability platforms use machine learning to detect and explain latency anomalies, typically by modeling latency or other KPIs over time against a partition key such as service endpoint, deployment version, or customer region. The model learns normal behavior, flags deviations, and may even suggest likely causes by identifying which attributes are most common in the anomalous data.
+
+These approaches can be powerful for continuous monitoring, but they come with trade-offs. They require users to define areas of interest in advance, demand significant compute for model training and maintenance, and can generate false positives if not carefully tuned. Because they often run as scheduled jobs rather than interactively, they also sit apart from the real-time investigative workflow of SREs. While effective for automated alerting, they’re less suited for exploratory root cause analysis - precisely where Event Deltas shine.
+
+## How do I use Event Deltas?
+
+Suppose an SRE is investigating elevated latency in a specific service. In this example, we'll use our OpenTelemetry-based demo, available at [play-clickstack.clickhouse.com](https://play-clickstack.clickhouse.com). Let’s assume we’ve been alerted to high latency in a payment service, either through user reports or a traditional threshold-based alert.
+
+From here, we open **HyperDX**, the ClickStack interface, and navigate to the **Traces** view for the payment service. Using the search filters, we narrow the dataset to only include traces from the payment service for the last day. 
+
+![hyperdx_traces.png](https://clickhouse.com/uploads/hyperdx_traces_e1f401c4cf.png)
+
+In the default view, traces appear in a table where each row represents a span. Instead of manually building visualizations to uncover the cause of the latency spike, we can simply switch to the **Event Deltas** tab in the left navigation.
+
+![hyperdx_event_deltas.png](https://clickhouse.com/uploads/hyperdx_event_deltas_5621f88387.png)
+
+We're presented with a **density heatmap** showing span durations over time. The x-axis represents time, while the y-axis shows duration. Color intensity is, by default, based on the number of spans in a bucket (a simple count) with **yellow** areas showing higher concentrations of spans and **blue** representing fewer.
+
+This visualization provides an immediate three-dimensional view of system behavior - how durations vary over time, across duration buckets, and by density within those buckets.
+
+![event_deltas_stable_system.png](https://clickhouse.com/uploads/event_deltas_stable_system_bc5a0d0d3c.png)
+
+> For a stable system, such as that shown above, spans should be concentrated in a narrow band. Whether this system is healthy depends on whether the latencies are within the expected range.
+
+![event_deltas_problem_system.png](https://clickhouse.com/uploads/event_deltas_problem_system_47bdfd8ad1.png)
+
+Conversely in the above example, while the system appears mostly stable - most response times cluster tightly along the x-axis indicating generally consistent performance - we can see a cluster of spans sitting above this band. These represent slower responses that warrant investigation.
+
+Our objective is straightforward: **are there any common attributes among these higher-latency events?** If so, they could point us toward the underlying cause.
+
+This is exactly where **Event Deltas** come in. We can simply select the area of interest by drawing a bounding box around the slower spans in the heatmap. We’ll refer to these as the **outliers**. Event Deltas will then identify the columns and key values most associated with those outlier spans compared to the rest of the dataset.
+
+![event_deltas_selection.png](https://clickhouse.com/uploads/event_deltas_selection_f3cb128ea3.png)
+
+For each attribute, ClickStack identifies values that are disproportionately represented in the selected outlier subset. In other words, if a value appears far more often in the slower spans than in the overall dataset, it’s highlighted as significant. Beneath the density plot, ClickStack renders a series of bar charts - one for each attribute, showing the distribution of values across the selected subsets. Attributes with the strongest bias are listed first, surfacing the factors most closely associated with anomalous spans and distinguishing them from normal behavior. 
+
+![event_deltas_example.png](https://clickhouse.com/uploads/event_deltas_example_480d8cdfc4.png)
+
+> Event Deltas work by issuing two queries: one for the selected outlier area and one for the inlier area. Each query is limited to the appropriate duration and time window. A sample of events from both result sets is then inspected, and columns for which a high concentration of values appears predominantly in the outliers are identified. If interested in the queries, you can open your browser devtools to see the queries being issued.
+
+In the example above, the `SpanAttributes.app.payment.card_type` field has surfaced. The Event Delta's analysis reveals that **24%** of inliers use **MasterCard**, while only **1%** of outliers do. Conversely, **99%** of the outliers use **Visa**, compared to **70%** of the inliers. This indicates that the Visa card type is strongly correlated with the higher-latency traces, while MasterCard appears only in the normal subset.
+
+Conversely, values that appear only in the inliers can also provide useful insights. In this example, the error “Visa. Cache full” value appears exclusively in the inlier spans and is entirely absent from the outliers. Whenever this error occurs, latency remains below roughly **50 milliseconds**, suggesting that this condition is actually linked to faster responses rather than elevated latency.
+
+We can use this information to dig deeper, filtering to these event subsets in the Traces view and examining specific traces to confirm the hypothesis.
+
+Importantly, Event Deltas integrate naturally into existing exploratory workflows. They do not replace the usual investigation process but serve as an additional tool for SREs and developers to accelerate analysis and pinpoint issues more efficiently.
+
+## How to best make use of Event Deltas
+
+Event Deltas are a powerful tool for SREs exploring observability data, but like any analytical method, their effectiveness depends on how they are used. To get the most value, it helps to apply a few simple best practices.
+
+### Focus on a single service
+
+Event Deltas produce the best results when analysis is limited to one service at a time. Latency can vary significantly across services, which makes it harder to identify which attributes truly correlate with outliers. For example, the following is challenging for Event Deltas to analyze:
+
+![multiple_services.png](https://clickhouse.com/uploads/multiple_services_a1125f8419.png)
+
+Before enabling Event Deltas, filter spans to a set where latency distributions are expected to be similar - often a single service. You’ll get clearer, more meaningful results by targeting areas where wide variation is unusual rather than expected.
+
+### Select a clean subset for comparison
+
+When defining an area of interest, aim for a clear separation between faster and slower spans. This allows Event Deltas to more accurately distinguish which attributes are driving the performance difference. 
+
+![single_service.png](https://clickhouse.com/uploads/single_service_1259d4a193.png)
+
+### Ensure sufficient sample size
+
+For meaningful comparisons, make sure both the inlier and outlier groups contain enough spans to reflect real patterns rather than random noise. Very small samples can exaggerate correlations or produce misleading results, while larger, well-balanced subsets help Event Deltas surface truly significant attributes and trends.
+
+## Recent improvements - more flexibility
+
+Until recently, Event Deltas were limited to analyzing traces using the `Duration` column on the y-axis, with color intensity based on count i.e. number in the bucket. In most cases, this remains the most effective way to visualize performance data. However, based on user feedback, we added the ability to **customize both the y-axis and the color intensity metric**, providing more flexibility for advanced analysis.
+
+While this is an advanced feature, several use cases have already emerged. A common scenario involves traces that include additional latency-related columns beyond the standard span duration. For example, in our **[public ClickPy demo](https://clickpy.clickhouse.com)**, which provides analytics for Python packages and includes over **2 trillion rows**, OpenTelemetry tracing is used to capture and debug user issues.
+
+Each chart in the application issues multiple queries to ClickHouse. While the overall request duration is captured in the duration column, we are often more interested in the ClickHouse response time itself. High response times might indicate temporary load on the system, but they could also highlight specific queries that consistently run slower.
+
+The field `db.response_time_ms` within the `SpanAttributes` map stores the query response time. We can now adjust the `value` column for Event Deltas directly by modifying the expression above the density heatmap. To analyze this String value we cast it to a UInt64, allowing Event Deltas to analyze response time instead of span duration.
+
+![custom_event_deltas.png](https://clickhouse.com/uploads/custom_event_deltas_3bef4a03e6.png)
+
+In the resulting visualization, we can clearly see periodic clusters of higher latencies. As before, we can select these regions to perform an Event Delta's analysis and identify which attributes are contributing to this pattern.
+
+![custom_event_deltas_columns.png](https://clickhouse.com/uploads/custom_event_deltas_columns_472c53124f.png)
+
+From our analysis we can clearly see it's one specific type of query that is causing these high latencies connected to the visual `getPackageRanking` - this computes how a package ranks within the Python ecosystem for total downloads.
+
+While count-based color intensity is the default and most intuitive way to visualize spans, other aggregate metrics can reveal different dimensions of performance if used to determine the density. Using fields such as status_code, request_size_bytes, cpu_time_ms, or query_cost for color intensity can highlight error frequency, payload size, resource usage, or query complexity in relation to latency. Choosing the right metric allows Event Deltas to move beyond raw counts and uncover deeper correlations within trace data.
+
+> Important, the color intensity column must be an aggregation function. For example, `avg`, `sum`, `max`, `quantile` or even custom expressions such as `countDistinct(field)`.
+
+![custom_density_event_deltas.png](https://clickhouse.com/uploads/custom_density_event_deltas_3f03425028.png)
+
+In this example, we analyze ClickPy spans to see whether overall span duration (the time it takes for visualizations to load) correlates with database response time. Using `Duration` on the y-axis and `db.response_time_ms` for color intensity quickly reveals that slower visualizations align with higher database latency, shown by stronger intensity in upper buckets. This points to the database as the likely source of slowdown, allowing us to focus analysis on specific queries rather than unrelated causes.
+
+## Conclusion
+
+In this post, we’ve explored the motivation behind Event Deltas, the problem they solve, and how they provide a faster, more intuitive way to identify the root causes of performance regressions in observability data. We covered how to use them effectively, outlined best practices for analysis, and highlighted recent improvements that make them more flexible than ever. Event Deltas are a useful tool in SRE’s investigation workflow - helping teams move quickly from identifying outliers to understanding why they occur and taking action to resolve them.
+
+
+
+
+---
+
+## What to look for when selecting a real-time analytical database
+Published: 2026-06-04T15:31:44+00:00
+URL: https://clickhouse.com/blog/selecting-a-real-time-analytical-database
+
+---
+title: "What to look for when selecting a real-time analytical database"
+date: "2026-06-04T15:31:44.438Z"
+author: "Melvyn Peignon"
+category: "Product"
+excerpt: "    Most databases can query fast. Far fewer can query data that arrived seconds ago. Learn what real-time analytics really requires."
+---
+
+# What to look for when selecting a real-time analytical database
+
+"Real-time" is one of the most overloaded terms in the data industry. To a trading desk, it means microsecond order matching, to a team building a user-facing app, a sub-second page load, to a finance analyst "fresh by this morning.” Different workloads, all valid.
+
+In analytics, "real-time" usually means the user experience itself feels live. A customer refreshes a dashboard, opens a leaderboard, or investigates an issue and expects the data to reflect what just happened. Technically, this means not just delivering low-latency analytical queries but achieving this while data is being continuously inserted at high volume. 
+
+> **Real-time analytics is not just delivering fast queries, but delivering fast queries over continuously changing data.**
+
+In this blog, we are going to walk you through why this form of real-time analytics matters more than ever now, and how you can parse the problem by looking at both data availability and query latency. You’ll also come away with a practical set of questions to ask when evaluating whether a database can actually support real-time analytics workloads.
+
+## Why real-time analytics matters now
+
+Analytics has undergone dramatic changes over the years, but a paradigm shift is now driven by three factors that are breaking down the previous batch-based models.
+
+First, analytics is moving into the product. The dashboards that used to be exclusively internal are increasingly being exposed directly to customers: [usage explorers](https://clickhouse.com/blog/how-gitlab-uses-clickhouse-to-scale-analytical-workloads) in SaaS products, performance views for advertisers, trading and risk views for end users. Every application has become data-driven, and as a result, analytics latency has become non-negotiable. Real-time analytics has become a part of the user experience. 
+
+Second, an agent generating a customer summary, [scoring an investigation](https://www.harvey.ai/blog/building-an-agentic-security-operations-center), or routing a [support ticket](https://clickhouse.com/blog/mintlify) is only as good as the data it can see, and only as fast as it can query that data. Latency can become the real bottleneck. But freshness is only half the problem. Agents don't query the way humans do: agents can fire off 100x or more the number of queries in rapid succession, and multiply that by hundreds of agents running concurrently, each burning tokens while they wait. Most analytical engines were never built for workloads this bursty and unpredictable. Getting the data layer right isn't a footnote to agent development; it's a prerequisite. 
+
+Third, [more automated decisions](https://clickhouse.com/blog/mintlify) are based on live data. Pricing, personalization, [fraud prevention](https://tech.instacart.com/real-time-fraud-detection-with-yoda-and-clickhouse-bd08e9dbe3f4?gi=aab23e4a7857), observability alerts, and ad targeting. These are no longer reports that a human reads later, but decisions made inside a request, where end-to-end latency directly affects the quality and usefulness of the decision itself.
+
+The demand is clear. As we parse the challenge here, "latency" is often mistaken as query latency only, when in reality it is actually a much broader system property, including how fast your data arrives, and when it becomes ready for querying.  
+
+## Real-time analytics is a system property, not an engine feature
+
+When customers evaluate a real-time analytics platform, they often focus only on query latency. "Can it return an answer within 50ms?" is a reasonable question, and one most analytical engines can answer convincingly if you throw enough compute at a static dataset.
+
+The question that decides what users actually experience is harder. It is whether the system can return a 50ms answer **on data that arrived a second ago**, while ingestion is still running, and while other users are also querying.
+
+Data availability requires thinking about end-to-end time-to-insight, which has three components.
+
+- **Time to ingest.** How long does it take for newly generated data to land in the platform and become durably stored?
+- **Time to transform and prepare.** How long does it take to clean, enrich, join, pre-aggregate, or update the serving structures (materialized views, rollups, indexes) that queries actually hit?
+- **Time to query.** How long does it take to plan and execute the read once the data is available?
+
+![data_delays.png](https://clickhouse.com/uploads/data_delays_7b8b4a6044.png)
+
+A system can be fast on one of these dimensions but still feel slow to the user if another one dominates. 
+
+**All of these properties need to hold at scale and with resource efficiency under high ingest throughput and high query concurrency.** 
+
+Importantly, a platform that achieves real-time latencies only by throwing unbounded compute at the workload is not a real-time platform you can afford. The hard part is meeting all of these requirements, with the same engine, against the same data, without trading one off against the other.
+
+## Why data platforms struggle with this shape of workload
+
+Most of the platforms in use today were designed for an earlier generation of analytics: batch ingestion, scheduled transformations, and internal users running ad-hoc queries on data that was hours old. They are excellent at what they were built for, but struggle with real-time analytics for reasons that are fundamentally architectural.
+
+These architectural limitations can be broadly grouped into several categories:
+
+1. **An ingest path that is optimized for batches, not continuous streams.** Many warehouse architectures use optimistic concurrency control. Writers proceed independently and resolve conflicts at commit time through retries. This works when writes are infrequent and well-sized batches. However, as concurrent writers grow, the system is subject to more retries to resolve conflicts, causing tail latencies to increase. Continuous high-concurrency ingestion is exactly the workload that exposes this.
+2. **Fresh writes are not immediately visible.** In many modern lakehouse and warehouse architectures, data is not queryable immediately after it is written. It has to pass through a catalog refresh, a manifest update, a materialized view refresh, or a metadata reconciliation step before queries can see it. This delay is fine for an end-of-day report but fatal for a feature whose value depends on showing what just happened.
+3. **Optimizations are not applied to live data.**  Many warehouse architectures rely on materialized views to perform scheduled transformations and precompute results for low-latency serving. These optimizations are often refreshed every hour, every fifteen minutes, or every minute if you are paying for it. As a result, the freshest your serving layer can possibly be is bounded by that interval. This limitation is architectural, with no amount of additional compute able to remove it. While a 15-minute lag is invisible in a billing dashboard, it is the difference between catching and missing an event in a fraud signal or live leaderboard.
+4. **Headline performance depends on caches that do not survive ingestion.** Benchmarks on a static dataset show performance for cached, pre-warmed queries. Once continuous writes are added to the workload, every new part potentially invalidates some of these caches on which performance is dependent. The result is that the performance you saw in the demo is not the performance you will see in production.
+5. **Real-time capabilities are isolated feature sets of the platform.** When a platform was not designed for real-time from the start, the common pattern is to bolt on a separate tier: a different table type, a different warehouse type, a different set of supported operations. Snowflake's Interactive Tables and Interactive Warehouses are a recent example. Low-latency queries are available, but only against a specific table and warehouse type that cannot query standard tables, with a list of feature limitations that the [documentation describes as architectural](https://docs.snowflake.com/en/user-guide/interactive#limitations-of-interactive-warehouses-and-interactive-tables). A user who wants real-time behavior across their entire dataset, not just a carved-out capability, is forced to make compromises and architect their solution according to the constraints.
+6. **Specialized query types that each need their own system.** Modern analytical workloads are not just structured rows. Teams want to filter logs by keyword, compare embeddings for similarity, and query semi-structured JSON with evolving schemas. The traditional answer is to add a search engine for text queries, a vector database for embeddings, and a separate warehouse for everything else. Each additional system is another ingestion pipeline, another consistency boundary, another freshness floor, and more architectural complexity. Your end-to-end latency is determined by the slowest component.
+
+None of this is a criticism of those platforms for what they were built to do. Batch-era warehouses are still excellent at scheduled, internal-facing analytics. The point is that real-time analytics is different enough in shape that retrofitting it onto those architectures runs into limits that are not simply a matter of tuning.
+
+## What a real-time analytics platform actually has to do
+
+A platform built from the ground up for real-time analytics has to make a few specific design decisions. When you evaluate platforms for this workload, these are the requirements to check.
+
+1. **Does ingestion scale without degrading queries?** Continuous writes should not pull query latency along with them. In practice, that means an ingestion path that can run on isolated resources from the read path, and a concurrency model that holds tail latencies bounded as writers grow. ClickHouse, for example, uses consensus-based coordination through Keeper rather than optimistic concurrency. It pays a small coordination cost on every write, but keeps tail latencies predictable at the high insert concurrency seen in real-time workloads.
+2. **Is data queryable within a second or two of being written?** At real-world scale, the realistic target is a delay measured in milliseconds to a couple of seconds, with no catalog or manifest refresh sitting in the middle. 
+3. **Do transformations update incrementally, and not on a schedule?** Materialized views, rollups, and pre-aggregations (done using [AggregatingMergeTree](https://clickhouse.com/docs/engines/table-engines/mergetree-family/aggregatingmergetree) in ClickHouse) should update with each insert, not on an interval. This ensures that they're immediately applied and enforce a delay on data availability. This ensures, for example, that:
+    - A live billing or usage view stays accurate as charges accrue, instead of jumping every fifteen minutes when the rollup refreshes. This matters when customers are looking at the same number you are.
+    - A fraud or anomaly aggregation reflects the most recent events, instead of always being one window behind. This matters when the value of catching the event decays in seconds.
+
+![scheduled_vs_incremental_views.png](https://clickhouse.com/uploads/scheduled_vs_incremental_views_09e6115f62.png)
+
+This maintenance model matters to cost and scalability. Materialized views that rely on full rescans for every update turn freshness into a scaling problem, with update cost growing alongside table size. Incremental materialized views amortize this cost across inserts, processing each row once as it arrives instead of repeatedly recomputing the full dataset.
+
+4. **Can you bias the system towards read-time or write-time work?** Different workloads want different trade-offs. For some, you want indexes and aggregations built at write time so the freshest queries are immediately accelerated. For others, you want to keep the ingest throughput maximal and let the background work catch up. A real-time platform should expose that choice without forcing it. And index maintenance should never block ingestion. New data should be queryable as soon as it is committed, with or without its indexes fully built.
+5. **Does a single engine serve all workloads?** Text search, vector similarity, JSON, structured analytics. These should live in the same storage and query engine, not in four loosely coupled systems with their own freshness floors. Every system you remove from the stack is one fewer place where data can fall behind.
+
+![loosely_tightly_coupled.png](https://clickhouse.com/uploads/loosely_tightly_coupled_07060e9416.png)
+
+6. **Is the performance shown on hot data, not just on cached benchmarks?** The realistic question to ask of any platform is how fast its queries are on data that arrived a second ago, not how fast its repeated queries are on yesterday's table. The first number is what production looks like.
+
+7. **Does resource efficiency hold up at scale?** Real-time systems need to remain efficient as ingest volume, query concurrency, and retention grow. The important question is whether performance scales linearly with workload, or whether latency and compute costs begin to degrade disproportionately as traffic increases.
+
+The common thread across these requirements is that real-time analytics is not a feature you switch on. It is a set of design decisions about ingest, storage, transformation, and query that have to be made consistently across the whole system. Either the platform was designed for this workload, or it is working hard to approximate it.
+
+## Bullet - what real-time looks like in practice
+
+Bullet, a crypto derivatives exchange, runs a trading frontend that depends on real-time data. Their previous batch-era stack ran 5 to 30 second queries and 20-minute hourly ETL jobs, leaving users looking at data up to 1.5 hours stale. On ClickHouse Cloud, queries return in milliseconds, data latency dropped 99.4% to under 5 seconds, and the team handles 1,000× more data at comparable cost. As Co-Founder and CTO Tristan Frizza puts it: 
+
+> "We used to have a data lake, a serving layer, and all these other things that would break all the time. ClickHouse became the one-size-fits-all."
+
+For real-world examples of real-time analytics at scale, [explore how our customers](https://clickhouse.com/user-stories?useCase=1) are delivering fresh data and low-latency insights with ClickHouse.
+
+
+
+---
+
+## Get started today
+
+Interested in seeing how ClickHouse works on your data? Get started with ClickHouse Cloud in minutes and receive $300 in free credits.
+
+[Sign up](https://console.clickhouse.cloud/signUp?loc=blog-cta-816-get-started-today-sign-up&utm_blogctaid=816)
+
+---
+
+---
+
+## 1セント未満で実現するTPC-H:ClickHouse Cloud vs. Snowflake、Databricks、BigQuery、Redshift
+Published: 2026-06-04T00:47:35+00:00
+URL: https://clickhouse.com/blog/tpc-h-clickhouse-cloud-vs-snowflake-databricks-bigquery-redshift-jp
+
+---
+title: "1セント未満で実現するTPC-H:ClickHouse Cloud vs. Snowflake、Databricks、BigQuery、Redshift"
+date: "2026-06-04T00:47:35.221Z"
+author: "Tom Schreiber, Mark Needham, Alexander Gololobov, Andriy Yakovlev and Robert Schulze"
+category: "Engineering"
+excerpt: "ClickHouse Cloudは、TPC-HベンチマークでSnowflake、Databricks、BigQuery、Redshiftに挑み、SF100のコストパフォーマンスで1位を獲得。SF10は1セント未満で実行可能。"
+---
+
+# 1セント未満で実現するTPC-H:ClickHouse Cloud vs. Snowflake、Databricks、BigQuery、Redshift
+
+> **TL;DR**<br/>TPC-H SF100において、59コアのClickHouse Cloudノード1台は、Snowflake、Databricks、BigQuery、Redshiftに対して生のランタイムで競争力を持ちつつ、コストパフォーマンスでは首位となりました。SF10では、22クエリすべてを1セント未満で実行できます。
+
+ 
+<br/>
+
+## ClickHouse CloudがTPC-H比較に参戦
+
+完全な[TPC-H](https://clickhouse.com/docs/getting-started/example-datasets/tpch)ワークロードを、ClickHouse Cloud、Snowflake、Databricks、BigQuery、Redshiftで実行しました。
+
+SF100は、100GBのデータ、8億6,600万行、そして22個のJOIN中心の分析クエリで構成されます。
+
+結果として、ClickHouse Cloudは生のランタイムで競争力を発揮し、コストパフォーマンスでは首位を獲得しました。
+
+SF10では、ワークロード全体が2.9秒で完了し、コンピュートコストはわずか$0.009でした。
+
+1セント未満です。
+
+本記事では、ベンチマーク結果を紹介します。その背景にある2年間のJOINエンジニアリングについては、[コンパニオン記事](/blog/clickhouse-fast-joins)で解説しています。
+
+
+## ベンチマーク設定
+
+すべてのベンチマークスクリプト、クエリ、結果ファイルは公開GitHub[リポジトリ](https://github.com/ClickHouse/tpc-h-openhouse)で公開されており、結果を再現・検証できます。
+
+
+### データセットとランタイム測定
+
+メインの比較ではTPC-H SF100を使用しています:8億6,600万行に対する22クエリです。
+
+ランタイム測定では、コールドランとホットランを区別します:
+
+**コールドラン**: コールドスタート性能の体系的な比較は行いませんでした。クラウドウェアハウスはキャッシュ挙動が異なり、ほとんどの場合、ユーザーがOSレベルのページキャッシュを確実にリセットしたり、コンピュートをオンデマンドで再起動したりすることができません。コールド条件を標準化できないため、コールド結果は公正かつ再現性のある形で示せません。
+
+**ホットラン**: 各クエリは結果キャッシュを無効化した状態で3回実行しました。チャートには最速のホットラン結果を使用しています。結果キャッシュは無効化されているため、ベンチマークはクエリの実行を測定しており、以前にキャッシュされた結果を返すものではありません。
+
+
+### 比較対象システム
+
+**ClickHouse Cloud**では、1つの固定構成を使用しました:59コアのAWSコンピュートノード1台です。他のシステムについては、実用的なウェアハウスまたはサーバーレスのキャパシティ構成を選択し、最も近いハードウェア比較については後述します。
+
+
+
+* **Snowflake**: Small、Medium、Large、4X-Large Gen2の各[ウェアハウス](https://clickhouse.com/blog/how-cloud-data-warehouses-bill-you#snowflake)
+* **Databricks (SQL Serverless)**: Small、Medium、Large、4X-Largeの各[ウェアハウス](https://clickhouse.com/blog/how-cloud-data-warehouses-bill-you#databricks-sql-serverless)
+* **BigQuery**: 2,000 [スロット](https://clickhouse.com/blog/how-cloud-data-warehouses-bill-you#bigquery)
+* **Redshift Serverless**: 128 [RPU](https://clickhouse.com/blog/how-cloud-data-warehouses-bill-you#redshift-serverless)
+
+
+### コスト計算
+
+コスト計算には、クラウドデータウェアハウスの[課金](https://clickhouse.com/blog/how-cloud-data-warehouses-bill-you)および[コストパフォーマンス](https://clickhouse.com/blog/cloud-data-warehouses-cost-performance-comparison)に関する以前の記事で紹介したのと同じ方法論を使用しています。各ベンダーの公開課金モデルを実測のクエリランタイムに適用し、すべてのシステムについて[完全な秒単位のコンピュート課金を想定](https://clickhouse.com/blog/cloud-data-warehouses-cost-performance-comparison#a-note-on-metering-granularity)し、同等の米国東部リージョン(対応システムはAWS `us-east`、BigQueryはGCP `us-east`)におけるEnterpriseティアの価格を使用します。
+
+この設定を前提に、まず生のホットランタイムを見ていきます。
+
+
+## TPC-H SF100: 生のホットランタイム
+
+[TPC-H SF100](https://clickhouse.com/docs/getting-started/example-datasets/tpch)は、**100GBのデータ**、**8億6,600万行**、**22個のJOIN中心の分析クエリ**で構成されます。
+
+下の図では、各バーが22のTPC-Hクエリそれぞれの3回中最速の実行時間の合計を示しています。値が低いほど良好です。
+
+![Blog-JOINS-results.001.png](https://clickhouse.com/uploads/Blog_JOINS_results_001_43c308f4a0.png)
+
+**ClickHouse Cloud**はワークロードを[19.8秒](https://github.com/ClickHouse/tpc-h-openhouse/blob/main/clickhouse-cloud/results_sf100/aws.1.236_run_01_sf100.json)で完了しました。
+
+**Snowflake**は、Smallウェアハウスで[32.7秒](https://github.com/ClickHouse/tpc-h-openhouse/blob/main/snowflake/results_sf100/snowflake_sf100_small_gen2.json)、Mediumで[22.9秒](https://github.com/ClickHouse/tpc-h-openhouse/blob/main/snowflake/results_sf100/snowflake_sf100_medium_gen2.json)、Largeで[15.9秒](https://github.com/ClickHouse/tpc-h-openhouse/blob/main/snowflake/results_sf100/snowflake_sf100_large_gen2.json)、4X-Largeで[14.7秒](https://github.com/ClickHouse/tpc-h-openhouse/blob/main/snowflake/results_sf100/snowflake_sf100_4xl_gen2.json)で完了しました。
+
+**Databricks**は、Smallウェアハウスで[37.3秒](https://github.com/ClickHouse/tpc-h-openhouse/blob/main/databricks/results_sf100/databricks_sf100_Small.json)、Mediumで[40.0秒](https://github.com/ClickHouse/tpc-h-openhouse/blob/main/databricks/results_sf100/databricks_sf100_medium.json)、Largeで[28.9秒](https://github.com/ClickHouse/tpc-h-openhouse/blob/main/databricks/results_sf100/databricks_sf100_large.json)、4X-Largeで[26.4秒](https://github.com/ClickHouse/tpc-h-openhouse/blob/main/databricks/results_sf100/databricks_sf100_4xlarge.json)で完了しました。
+
+**BigQuery**は、2,000スロットで[26.2秒](https://github.com/ClickHouse/tpc-h-openhouse/blob/main/bigquery/results_sf100/results.json)で完了しました。
+
+**Redshift Serverless**は、128 RPUで[30.7秒](https://github.com/ClickHouse/tpc-h-openhouse/blob/main/redshift/results_sf100/results.json)で完了しました。
+
+これらの数値の背後にあるコンピュートは、各システム間で同一ではない点に注意してください。ClickHouse Cloudは、59コアおよび236 GiBメモリを搭載したGraviton3コンピュートノード1台を使用しています。
+
+SnowflakeとDatabricksについては、コンピュートのスケールに応じてランタイムがどう変化するかを示すために複数のウェアハウスサイズをテストしました。ClickHouse Cloudの59コアノードに最も近いハードウェアの比較対象は、Snowflake Large Gen2(64基のAWS Graviton3コアと128GBメモリを[使用しているとされる](https://medium.com/snowflake-engineering/deep-dive-inside-snowflakes-new-gen2-standard-warehouses-powered-by-aws-graviton3-6aacca73ae2d)、[参照](https://select.dev/posts/snowflake-warehouse-sizing))と、Databricks Large(ドキュメント化されたクラシック・コンピュートプレーンのサイジングで、64基のIntel Xeon E5-2686 v4コアと488 GiBメモリに[マッピング](https://docs.databricks.com/aws/en/compute/sql-warehouse/warehouse-behavior#sizing-and-cluster-provisioning)される)です。ベンチマークではDatabricks SQL [Serverless](https://docs.databricks.com/aws/en/getting-started/high-level-architecture#serverless-workspace-architecture)を使用しましたが、公開されているウェアハウスサイジングは有用な比較基準となります。
+
+また、サーバーレスのキャパシティモデルを持つシステムは、事前にプロビジョニングされた大規模なコンピュートプール全体にクエリ処理を自動的にファンアウトすることにも注意してください:BigQueryは本ベンチマークで最大2,000 [スロット](https://clickhouse.com/blog/how-cloud-data-warehouses-bill-you#bigquery)を使用し、Redshift Serverlessは128 [RPU](https://clickhouse.com/blog/how-cloud-data-warehouses-bill-you#redshift-serverless)を使用しました。
+
+> 59コアのコンピュートノード1台で、**ClickHouse Cloudは競争力を発揮**しています。TPC-H SF100の生のランタイムにおいて、同等の64コアのSnowflake/Databricks構成や、59コアを大幅に超える事前プロビジョニングされたコンピュートプールを自動的にファンアウトするサーバーレスエンジンを含む主要なクラウドデータウェアハウスに対して肉薄しています。
+
+ 
+
+
+## ランタイムは話の半分にすぎない
+
+前述のとおり、各システムがTPC-H SF100ワークロードを実行するのに使用したコンピュートを直接比較するのは困難です。
+
+しかし、ワークロード実行の[コスト](https://clickhouse.com/blog/cloud-data-warehouses-cost-performance-comparison)を直接比較することはできます。
+
+下のチャートでは、同じランタイムバーを保持しつつ、各ベンダーの公開[課金モデル](https://clickhouse.com/blog/how-cloud-data-warehouses-bill-you)を用いてホットランのコンピュートコストを重ねて表示しています。
+
+![Blog-JOINS-results.002.png](https://clickhouse.com/uploads/Blog_JOINS_results_002_b4220f44f7.png)
+
+**ClickHouse Cloud**はワークロードを19.8秒、コンピュートコスト[$0.063](https://github.com/ClickHouse/tpc-h-openhouse/blob/main/clickhouse-cloud/results_enriched_sf100/aws.1.236_run_01_sf100.json)で完了しました。
+
+**Snowflake** Largeはより高速で15.9秒でしたが、コストは[$0.143](https://github.com/ClickHouse/tpc-h-openhouse/blob/main/snowflake/results_enriched_sf100/snowflake_sf100_large_gen2_enriched.json)でした。Snowflake 4X-Largeはさらに高速で14.7秒でしたが、コストは[$2.121](https://github.com/ClickHouse/tpc-h-openhouse/blob/main/snowflake/results_enriched_sf100/snowflake_sf100_4xl_gen2_enriched.json)でした。**Databricks**は[$0.087](https://github.com/ClickHouse/tpc-h-openhouse/blob/main/databricks/results_enriched_sf100/databricks_sf100_Small_enriched.json)から[$2.714](https://github.com/ClickHouse/tpc-h-openhouse/blob/main/databricks/results_enriched_sf100/databricks_sf100_4xlarge_enriched.json)の範囲でした。**BigQuery**は26.2秒で[$0.163](https://github.com/ClickHouse/tpc-h-openhouse/blob/main/bigquery/results_enriched_sf100/results_enriched.json)、**Redshift Serverless**は30.7秒で[$0.436](https://github.com/ClickHouse/tpc-h-openhouse/blob/main/redshift/results_enriched_sf100/enriched_results.json)で完了しました。
+
+次のセクションでは、ランタイムとコストを単一のコストパフォーマンススコアに集約します。
+
+
+## TPC-H SF100: コストパフォーマンスランキング
+
+前のチャートでは、ランタイムとコストを並べて表示しました。次に、両者をシンプルな[コストパフォーマンススコア](https://clickhouse.com/blog/cloud-data-warehouses-cost-performance-comparison#how-we-measure-overall-cost-performance-ranking)にまとめます:
+
+`コストパフォーマンススコア = コンピュートコスト × ランタイム`
+
+値が低いほど良好です。
+
+これにより、クラウドベンチマークの本質的な問いに答えられます:
+
+> 1ドルあたり最も高いJOIN性能を提供するのは誰か?
+
+高速なシステムほどスコアが良くなり、低コストなシステムほどスコアが良くなります。遅いまたは高コストなシステムはすぐに順位を落とします。そして、システムが遅く、かつ高価であれば、両方の効果が相乗的に作用します。
+
+![Blog-JOINS-results.003.png](https://clickhouse.com/uploads/Blog_JOINS_results_003_cf3d793dd4.png)
+
+
+**ClickHouse Cloud**が首位となりました。
+
+次に近い構成は**Snowflake** LargeとSnowflake Mediumで、どちらも約2倍悪い結果でした。**Databricks** Smallと2,000スロットの**BigQuery**は3倍悪く、**Databricks** LargeとMediumはそれぞれ5倍、6倍悪い結果でした。
+
+ハイエンドでは、**Redshift Serverless**は11倍、Snowflake 4X-Largeは25倍、Databricks 4X-Largeは57倍、BigQuery [On-demand](https://clickhouse.com/blog/how-cloud-data-warehouses-bill-you#compute-pricing-3)は67倍悪い結果でした。
+
+> ClickHouse CloudはTPC-H SF100で最良のコストパフォーマンスを実現:全体で最も低いスコアを獲得し、次に近いテスト構成は約2倍悪い結果でした。
+
+
+## TPC-H SF100: クエリ別ランタイムの内訳
+
+完全性のため、クエリ別のランタイム内訳を示します。各バーは、22のTPC-Hクエリそれぞれにおける3回中最速の実行時間を表しています。
+
+
+![Blog-JOINS-results.004.png](https://clickhouse.com/uploads/Blog_JOINS_results_004_71f35d37c4.png)
+
+
+集計結果は1つの外れ値によって決まっているわけではありません。ClickHouse Cloudはクエリセット全体にわたって一貫して競争力があります。
+
+
+## スケールダウン: 1セント未満のTPC-H
+
+SF100が本記事のメインベンチマークですが、SF10にスケールダウンすると、タイトルどおりの瞬間が得られます。
+
+SF10では、ワークロードは同じ**22個のJOIN中心のTPC-Hクエリ**全体で**8,600万行**を扱います。
+
+59コアのコンピュートノード1台という同じClickHouse Cloud構成で、ホットなワークロード全体が[2.9秒](https://github.com/ClickHouse/tpc-h-openhouse/blob/main/clickhouse-cloud/results_sf10/aws.1.236_run_01_sf10.json)で実行され、コンピュートコストは[$0.009](https://github.com/ClickHouse/tpc-h-openhouse/blob/main/clickhouse-cloud/results_enriched_sf10/aws.1.236_run_01_sf10.json)でした。
+
+![Blog-JOINS-results.005.png](https://clickhouse.com/uploads/Blog_JOINS_results_005_f2a4c0e257.png)
+
+下のチャートは、ランタイムとコストを単一のコストパフォーマンススコアに集約し、「1ドルあたり最も高いJOIN性能を提供するのは誰か?」の問いに答えます。
+
+![Blog-JOINS-results.006.png](https://clickhouse.com/uploads/Blog_JOINS_results_006_84c9e91fa5.png)
+
+この規模では、**ClickHouse Cloud**が両次元で勝利しています:テストした構成の中で最速かつ最も安価に実行できます。コストパフォーマンスで次点だったのは**Snowflake**でしたが、それでも**8倍悪い**結果でした。**BigQuery**は**12倍悪く**、**Redshift** Serverlessは**27倍悪く**、より大きなSnowflakeおよび**Databricks**の構成はさらに大きく遅れをとりました。
+
+> SF10では、ClickHouse Cloudは22個のTPC-Hクエリすべてを2.9秒、1セント未満で実行し、大差をつけて最良のコストパフォーマンスを実現しました。
+
+
+## スケールアップ: SF1000以降
+
+SF100の結果は、ClickHouseが今日どこに位置するかを示しています:59コアのコンピュートノード1台で、ClickHouse Cloudは、より大規模または弾力的なコンピュート構成を使用するシステムを含む主要なクラウドデータウェアハウスに対して、ランタイムとコストパフォーマンスの両面で競争力があります。
+
+しかし、SF100は話の終わりではありません。
+
+**TPC-H SF1000以上**などのはるかに大規模なスケールファクターでは、JOIN実行を複数ノードにわたって適切にスケールさせる必要があります。エンジニアリングチームが次に注力しているのはまさにこの分野で、ClickHouse Cloudにおける大規模分散JOINのための[マルチステージ分散クエリ実行](/blog/multi-stage-distributed-query-execution-clickhouse-cloud)に取り組んでいます。
+
+それは次の章のテーマです。今回の章は、ここ2年間のJOINエンジニアリングがあったからこそ可能になりました。
+
+
+## ここまでの道のり
+
+上記の結果は、ClickHouseで2年間集中して取り組んだJOINエンジニアリングの成果です。
+
+![Blog-JOINS-results.007.png](https://clickhouse.com/uploads/Blog_JOINS_results_007_7f6820e069.png)
+
+その取り組みから1年経過した時点で、同じTPC-H SF100のJOIN中心ワークロードは既に**22.4と比較して4.4倍高速**になっていました。さらに1年後の現在、全体では**26倍高速**となり、直近1年だけでデフォルト設定下でさらに**6倍の改善**を貢献しました。
+
+この進歩は、スタック全体にわたる改善によってもたらされました:より高速なハッシュJOIN、より良いプランニング、相関サブクエリのサポート、遅延カラム複製、ランタイムフィルタ、統計ベースのJOIN順序の最適化などです。
+
+[コンパニオン記事](/blog/clickhouse-fast-joins)では、これらの数値の背景にあるエンジニアリングのストーリーを解説します:ClickHouseが「高速だがJOINには不向き」から、デフォルトで競争力のあるJOIN性能を実現するまでに、どのように歩んできたかを語ります。
+
+> 2年間集中して取り組んだJOINエンジニアリングにより、ClickHouseはTPC-H SF100のJOIN中心ワークロードで26倍高速になりました。それこそが、これらのベンチマーク結果を可能にしたものです。
 
 ---
 
