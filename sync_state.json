@@ -1,5 +1,5 @@
 {
-  "last_sync": "2026-06-08T07:51:05.716072Z",
+  "last_sync": "2026-06-09T07:21:18.223127Z",
   "processed_blogs": {
     "https://clickhouse.com/blog/clickhouse-raises-400-million-series-d-acquires-langfuse-launches-postgres": {
       "title": "ClickHouse raises $400M Series D led by Dragoneer to accelerate expansion across analytics and AI infrastructure",
@@ -5010,9 +5010,63 @@
       "pub_date": "2026-06-05T11:33:13+00:00",
       "file_path": "blogs/2026-06-05-how-benocs-uses-clickhouse-to-monitor-network.md",
       "processed_at": "2026-06-06T07:10:04.796224Z"
+    },
+    "https://clickhouse.com/blog/monitor-and-scale-clickhouse-cloud-with-clickhousectl": {
+      "title": "Monitor SLAs and scale ClickHouse Cloud with clickhousectl and agents",
+      "pub_date": "2026-06-05T14:58:29+00:00",
+      "file_path": "blogs/2026-06-05-monitor-slas-and-scale-clickhouse-cloud-with.md",
+      "processed_at": "2026-06-09T07:21:15.376126Z"
+    },
+    "https://clickhouse.com/blog/executable-udfs-clickhouse-cloud-beta-jp": {
+      "title": "ClickHouse CloudでExecutable UDFがパブリックベータとして利用可能になりました",
+      "pub_date": "2026-06-08T01:16:33+00:00",
+      "file_path": "blogs/2026-06-08-clickhouse-cloud-executable-udf.md",
+      "processed_at": "2026-06-09T07:21:15.745775Z"
+    },
+    "https://clickhouse.com/blog/lovable-ai-powered-observability-jp": {
+      "title": "Lovable <3 ClickHouse:世界で最も急成長するソフトウェア企業におけるAI駆動のオブザーバビリティと分析",
+      "pub_date": "2026-06-07T12:44:52+00:00",
+      "file_path": "blogs/2026-06-07-lovable-3-clickhouse-ai.md",
+      "processed_at": "2026-06-09T07:21:16.060458Z"
+    },
+    "https://clickhouse.com/blog/canva-faster-search-lower-costs-jp": {
+      "title": "CanvaがClickHouseで検索速度10倍・コスト70%削減を実現した方法",
+      "pub_date": "2026-06-07T12:52:38+00:00",
+      "file_path": "blogs/2026-06-07-canva-clickhouse-10-70.md",
+      "processed_at": "2026-06-09T07:21:16.397793Z"
+    },
+    "https://clickhouse.com/blog/netflix-petabyte-scale-logging-jp": {
+      "title": "Netflixがペタバイト規模のロギングシステムをClickHouseでどう最適化したか",
+      "pub_date": "2026-06-07T13:31:51+00:00",
+      "file_path": "blogs/2026-06-07-netflix-clickhouse.md",
+      "processed_at": "2026-06-09T07:21:16.727820Z"
+    },
+    "https://clickhouse.com/blog/how-gitlab-uses-clickhouse-to-scale-analytical-workloads-jp": {
+      "title": "GitLabが5,000万ユーザーに対してサブ秒の分析を提供する方法",
+      "pub_date": "2026-06-07T13:56:03+00:00",
+      "file_path": "blogs/2026-06-07-gitlab-5-000.md",
+      "processed_at": "2026-06-09T07:21:17.118645Z"
+    },
+    "https://clickhouse.com/blog/laravel-nighwatch-clickhouse-jp": {
+      "title": "Laravel Nightwatchのオブザーバビリティパイプラインの内側:Amazon MSKとClickHouse Cloudによるリアルタイムイベント処理",
+      "pub_date": "2026-06-07T14:01:09+00:00",
+      "file_path": "blogs/2026-06-07-laravel-nightwatch-amazon-msk-clickhouse-cloud.md",
+      "processed_at": "2026-06-09T07:21:17.555828Z"
+    },
+    "https://clickhouse.com/blog/lyft-analytics-clickhouse-cloud-jp": {
+      "title": "LyftがClickHouse Cloudでバッチ分析とリアルタイム分析をどう実現しているか",
+      "pub_date": "2026-06-07T14:05:03+00:00",
+      "file_path": "blogs/2026-06-07-lyft-clickhouse-cloud.md",
+      "processed_at": "2026-06-09T07:21:17.854378Z"
+    },
+    "https://clickhouse.com/blog/deepls-journey-with-clickhouse-jp": {
+      "title": "ClickHouseとともに歩むDeepLの軌跡",
+      "pub_date": "2026-06-07T14:07:43+00:00",
+      "file_path": "blogs/2026-06-07-clickhouse-deepl.md",
+      "processed_at": "2026-06-09T07:21:18.151739Z"
     }
   },
-  "total_blogs": 835,
+  "total_blogs": 844,
   "failed_blogs": [
     {
       "url": "https://clickhouse.com/jp/blog/clickhouse-gcp-japan-availability",
