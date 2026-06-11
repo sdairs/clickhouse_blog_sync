@@ -1,6 +1,376 @@
 # ClickHouse Blogs
-Last updated: 2026-06-10 07:36:14 UTC
-Total blogs: 844
+Last updated: 2026-06-11 07:48:36 UTC
+Total blogs: 849
+
+---
+
+## Agents can now provision ClickHouse and Postgres on ClickHouse Cloud
+Published: 2026-06-10T15:49:47+00:00
+URL: https://clickhouse.com/blog/stripe-projects
+
+---
+title: "Agents can now provision ClickHouse and Postgres on ClickHouse Cloud"
+date: "2026-06-10T15:49:47.293Z"
+author: "Chloé Carasso dit Carson"
+category: "Product"
+excerpt: "One command in the Stripe CLI provisions a ClickHouse or Postgres service on ClickHouse Cloud and hands working credentials straight to your agent, with no UI or manual setup."
+---
+
+# Agents can now provision ClickHouse and Postgres on ClickHouse Cloud
+
+ClickHouse is now available in [Stripe Projects](https://projects.dev/), the new Stripe CLI workflow that lets developers and AI agents provision real infrastructure without leaving the command line.
+
+Starting today, one command provisions a ClickHouse or Postgres service on ClickHouse Cloud, returns working credentials to your environment, and hands off to [`clickhousectl`](https://clickhouse.com/blog/introducing-clickhousectl-official-cli-for-clickhouse-local-and-cloud), a new ClickHouse CLI built for agents, so the agent can keep building.
+
+## Why we built this {#why-we-built-this}
+
+Agents cannot create accounts, click through setup flows, or paste credentials into a config file. We built this integration so that spinning up a ClickHouse or Postgres service on ClickHouse Cloud is something an agent can do completely, with real credentials landing in the environment without any UI interaction.
+
+Stripe Projects is the CLI workflow that puts it all together. Run `stripe projects init my-app`, select the services you need, and Stripe Projects provisions real resources in your own provider accounts, syncs credentials to your `.env`, and keeps everything auditable from the terminal. Credentials land in your environment without any manual steps, and the workflow is the same whether a human or an agent is running it.
+
+This is a developer preview. We want feedback from teams building agent-assisted workflows or just trying to cut the time from new repo to running app.
+
+## What can you provision? {#what-can-you-provision}
+
+ClickHouse Cloud offers two services through Stripe Projects:
+
+**ClickHouse** is the real-time analytics database. ClickHouse is known for: high-ingest, high-concurrency, billions of rows in milliseconds. If your app needs to query event streams, power user-facing analytics, or run aggregations at scale, this is the right service.
+
+**Postgres (public beta)** is a fully managed Postgres service on ClickHouse Cloud, built on local NVMe storage for microsecond latency and up to 10x faster performance on I/O-heavy workloads. For teams that need a transactional store alongside their analytics layer, both services are provisioned through the same CLI workflow, land in the same account, and share credentials.
+
+## How credentials flow to the agent {#how-credentials-flow-to-the-agent}
+
+Once provisioning completes, credentials are written directly to your `.env` file in an agent-readable format. From there, the agent picks them up and continues all operations through `clickhousectl`, the ClickHouse CLI, without any manual credential handling or context switching.
+
+> Note: clickhousectl >v0.3.0 is required.
+
+## Try it {#try-it}
+
+ClickHouse is in the Stripe Projects developer preview today.
+
+<pre><code type='click-ui' language='bash'>
+# Create a project
+stripe projects init my-app
+
+# Add a ClickHouse service
+stripe projects add clickhouse/clickhouse
+
+# Or add a managed Postgres service (public beta)
+stripe projects add clickhouse/postgres
+</code></pre>
+
+
+Install the Stripe CLI, run `stripe projects init my-app`, and add whichever service fits your stack. Credentials sync to `.env` automatically. From there, `clickhousectl` takes over: set up data ingestion with ClickPipes, query your service, and keep building without leaving the terminal.
+
+To learn more, visit [clickhouse.com/cloud](https://clickhouse.com/cloud) or the [Stripe Projects documentation](https://docs.stripe.com/projects).
+
+
+---
+
+## Get started today
+
+Interested in seeing how ClickHouse works on your data? Get started with ClickHouse Cloud in minutes and receive $300 in free credits.
+
+[Sign up](https://console.clickhouse.cloud/signUp?loc=blog-cta-850-get-started-today-sign-up&utm_blogctaid=850)
+
+---
+
+---
+
+## CostBenchのご紹介: データウェアハウスのコストパフォーマンスを測るオープンベンチマーク
+Published: 2026-06-10T00:51:05+00:00
+URL: https://clickhouse.com/blog/costbench-data-warehouse-cost-performance-jp
+
+---
+title: "CostBenchのご紹介: データウェアハウスのコストパフォーマンスを測るオープンベンチマーク"
+date: "2026-06-10T00:51:05.072Z"
+author: "Tom Schreiber and Lionel Palacin"
+category: "Engineering"
+excerpt: "CostBenchを発表します。クラウドデータウェアハウスのランタイムと課金モデルを、比較可能な「価格あたりの性能」結果へと変換するオープンベンチマークです。"
+---
+
+# CostBenchのご紹介: データウェアハウスのコストパフォーマンスを測るオープンベンチマーク
+
+> **TL;DR**<br/>
+CostBenchは、クラウドデータウェアハウスのコストパフォーマンス、すなわち速度だけでなく「1ドルあたりの性能」を測るためのオープンベンチマークです。<br/><br/>リアルタイム分析ワークロードにおいて、1ドルあたり最も高い性能を発揮するシステムを選ぶ手助けをします。
+
+<br/>
+
+## 性能だけでは話の半分にすぎない
+
+ほとんどのベンチマークは、クエリがどれだけ速く実行されるかを示してくれます。それは有用ですが、不完全です。
+
+> クラウドデータプラットフォームにおいて、速度とコストは切り離せません。
+ 
+ウェアハウスAがウェアハウスBより速ければ、性能チャート上ではAが優れて見えます。しかし、Aの運用コストがBの3倍だったら、比較の様相は変わります。同じ予算をBのより大規模な構成に費やせば、より多くの計算リソースが得られ、結果的にBがAよりも速くなり、しかも全体のコストは安く済むかもしれません。
+
+この比較が難しいのは、各プラットフォームがコストを異なる形で提示しているからです。クレジット、DBU、スロット秒、コンピュートユニット、RPU——。
+
+![Blog-Bench2Cost.001.png](https://clickhouse.com/uploads/Blog_Bench2_Cost_001_341b09cafb.png)
+
+単位の名称は異なりますが、根底にある問いは同じです。
+
+> ワークロードを完了するためにシステムはどれだけの計算リソースを必要とし、その計算リソースにはいくらかかったのか?
+
+CostBenchはこの問いに直接答えます。さらに、コストパフォーマンスがどこで崩れるか——インジェスト時、データをクエリ可能な状態にする際、または読み取り処理中——も明らかにします。
+
+
+## なぜAI時代にこれが重要なのか
+
+エージェント型分析は、データベースのあらゆる層への負荷を高めます。
+
+新しいデータは絶え間なく流入します。イベント、トランザクション、ログ、トレース、ユーザーアクティビティ、不正検知シグナル、運用ステート。同時に、ユーザーとエージェントは新鮮なデータに対する高速な回答を期待します。
+
+> データベースが遅ければエージェントも遅くなります。データベースが高価であれば、チームはエージェントの行動を制限し始めます。リトライを減らし、データセットを小さくし、コンテキストを削り、古いデータで我慢する——。
+
+AI時代において、高速かつ低コストであることは、分析パス全体——継続的インジェスト、クエリ可能な状態への準備、読み取り——を通じて保たれなければなりません。
+
+![Blog-Bench2Cost.002.png](https://clickhouse.com/uploads/Blog_Bench2_Cost_002_7f4af0a308.png)
+
+**読み取り側の負荷**はクエリ量から生まれます。ユーザーの1つの質問は、多数のSQLクエリを引き起こす可能性があります。スキーマ探索、検証、リトライ、絞り込み、ドリルダウン、フォローアップなどです。追加のクエリごとに計算リソースが消費されます。エージェント規模では、クエリ量はそのままコスト圧力に直結します。
+
+**書き込み側の負荷**はリアルタイムの鮮度から生まれます。新鮮なデータは継続的に取り込まれ、圧縮され、クエリがより多くのデータをスキップできるように整理されなければなりません。この処理は最初のクエリが実行される前に計算リソースを消費し、後でそれらのクエリがどれだけ計算リソースを消費するかをも左右します。
+
+## CostBenchが測定するもの
+
+CostBenchはその負荷を、測定可能な2つの軸でフルパスのコストパフォーマンスとして可視化します。
+
+* **読み取り側のコストパフォーマンス**: 1ドルあたりどれだけのクエリ性能が得られるか。
+* **書き込み側のコストパフォーマンス**: 各ドルが、新鮮なインジェストをクエリ可能なデータへ変換する効率はどれほどか。
+
+
+両者を組み合わせることで、プラットフォーム選定時に重要となる問いに答えられます。
+
+> リアルタイム分析ワークロードにおいて、1ドルあたり最も高い性能を発揮するのはどのシステムか?
+
+![Blog-Bench2Cost.003.png](https://clickhouse.com/uploads/Blog_Bench2_Cost_003_c9407dbe1a.png)
+
+
+最初のリリースでは、すでにロードされたデータに対する分析クエリ、すなわち読み取り側に焦点を当てています。書き込み側についても測定を開始しており、まずは[ClickHouseとの対比としてSnowflake](https://clickhouse.com/blog/write-side-cost-performance-snowflake-clickhouse)からスタートしています。より広範な書き込み側のカバレッジは順次追加していきます。
+
+これによりCostBenchはシンプルなロードマップを持ちます。新鮮なデータをクエリ可能にする工程から、それを効率的にクエリする段階まで、分析パイプライン全体でリアルタイムのコストパフォーマンスが維持されるかどうかを明らかにすることです。
+
+
+## 最初の結果: 読み取り側のコストパフォーマンス
+
+CostBenchの最初のリリースでは、読み取り側の性能を、主要なクラウドデータウェアハウス間で比較可能な「1ドルあたりの性能」として示しています。
+
+実際の匿名化データセットに対して、本番由来の43本の分析クエリを用いて、ClickHouse Cloud、Snowflake、Databricks、BigQuery、Redshiftを比較しました。その上で、[各ベンダーの実際のコンピュート課金モデル](https://clickhouse.com/blog/how-cloud-data-warehouses-bill-you)を適用し、すべてのシステムを同じコストパフォーマンス平面——速いか遅いか、低コストか高コストか——にプロットしています。
+
+![Blog-Bench2Cost.004.png](https://clickhouse.com/uploads/Blog_Bench2_Cost_004_66900fe22f.png)
+
+ClickHouse Cloudは、データ規模が拡大しても「高速かつ低コスト」のゾーンに留まる唯一のシステムです。最も近い競合でもコストパフォーマンスで23倍劣ります。
+
+これこそがCostBenchの価値です。ベンダー固有のランタイムや課金モデルを、チームがプラットフォームを選ぶ際に活用できる結果へと変換します。
+
+
+## 設計からしてオープンかつ再現可能
+
+CostBenchはオープンです。なぜなら、コストパフォーマンスに関する主張は検証可能であるべきだからです。
+
+このベンチマークは、ワークロード、スクリプト、構成、価格の前提、生のJSON結果、方法論をすべて公開しています。結果が意外に見えた場合は、それを生み出したセットアップを実際に検証できます。
+
+
+## 試してみる
+
+[ClickHouseベンチマークハブ](https://clickhouse.com/benchmarks)で結果を確認したり、生データを調べたり、[CostBenchリポジトリ](https://github.com/ClickHouse/CostBench)をクローンして自分でベンチマークを実行することができます。
+
+コストパフォーマンスはブラックボックスであってはなりません。CostBenchはそれを検証可能にします。
+
+---
+
+## ClickHouse Agents: Claude-powered agentic analytics, now in public beta
+Published: 2026-06-09T16:14:39+00:00
+URL: https://clickhouse.com/blog/clickhouse-agents-beta
+
+---
+title: "ClickHouse Agents: Claude-powered agentic analytics, now in public beta"
+date: "2026-06-09T16:14:39.937Z"
+author: "Ryadh Dahimene"
+category: "Product"
+excerpt: "text"
+---
+
+# ClickHouse Agents: Claude-powered agentic analytics, now in public beta
+
+After running agentic analytics in production for more than a year at ClickHouse, at [Open House 2026](https://clickhouse.com/blog/open-house-2026-day-1) in San Francisco, we announced the public beta of [ClickHouse Agents](https://clickhouse.com/docs/cloud/features/ai-ml/agents), a fully managed agentic analytics service in ClickHouse Cloud, powered by Claude.
+
+ClickHouse Agents is a native AI experience inside ClickHouse Cloud. With ClickHouse Agents, you can build agents easily with no code required where users can ship agents grounded in their live ClickHouse data, with no SQL or setup required. You put those agents to work through a fully managed chat experience right in the Cloud console, with no setup and no separate environment to host.
+
+## What ClickHouse Agents is {#what-clickhouse-agents-is}
+
+ClickHouse Agents is built on [LibreChat](https://github.com/danny-avila/LibreChat), the battle-tested open-source AI platform, and runs fully managed inside ClickHouse Cloud. At its core is the no-code agent builder, which lets anyone, whether analyst, PM, data engineer, or executive, define, configure, and ship agents grounded in their ClickHouse data. ClickHouse Agents also comes with an out-of-box  chat interface, a sandboxed code interpreter, shareable artifacts, skills, memories, and multi-agent workflows. Agents connect natively to ClickHouse and to any MCP-compatible system, pulling context from wherever it already lives.
+
+<video autoplay="1" muted="1" loop="1" controls="0">
+  <source src="https://clickhouse.com/uploads/Ryadh_Keynote_Web_407d0cb26c.mp4" type="video/mp4" />
+</video>
+
+What's included:
+
+* **No-code Agent Builder**: define agents with custom instructions, skills, context files, and MCP tool access, governed by your Cloud RBAC.  
+* **Chat interface**: a fully managed, multi-tenant chat experience. Ask in natural language, generate SQL and visualizations, build artifacts, and run multi-turn conversations against your data.  
+* **Sandboxed code interpreter**: secure Bash, Python and JavaScript [execution](https://clickhouse.com/docs/cloud/features/ai-ml/agents/builder/code-interpreter) inside any conversation, running against live query results without leaving the chat.  
+* **Claude, pre-configured**: every Cloud customer gets Claude models (Sonnet and Haiku) wired in as the default model.  
+* **Skills, memories, and artifacts**: package repeatable workflows and context as skills, persist context with memories, and share charts and dashboards as artifacts.  
+* **Multi-agent workflows**: orchestrate subagents across end-to-end analytical tasks.  
+* **Enterprise security**: SSO, encrypted message storage, and governed data access, built into the managed runtime.
+
+## The ClickHouse Platform for AI {#the-clickhouse-platform-for-ai}
+
+ClickHouse Agents is a piece of what we coined "the ClickHouse Platform for AI".
+
+As every major cloud data platform is racing to make AI a native capability, most are doing it the same way: a walled garden where data and AI come bundled, proprietary, expensive, and locked to a single ecosystem of data constructs, models, agents, and tools. Given how fast this space is moving, we think that is the wrong direction and that openness and interoperability is key. The ClickHouse Platform for AI is an open stack, layered from the data up and served to apps, agents, users, and an API:
+
+* **The data layer**: ClickHouse, the open-source columnar engine that companies like [Shopify](https://clickhouse.com/videos/shopify-open-source-network-monitoring), [Uber](https://www.uber.com/us/en/blog/logging/), [Ramp](https://clickhouse.com/videos/ramp), [Anthropic](https://clickhouse.com/blog/how-anthropic-is-using-clickhouse-to-scale-observability-for-ai-era), [Tesla](https://clickhouse.com/blog/how-tesla-built-quadrillion-scale-observability-platform-on-clickhouse), and [Deutsche Bank](https://clickhouse.com/videos/big-sensitive-data-warehouse-deutsche-bank-clickhouse) already run for real-time analytics at scale, alongside managed Postgres for transactional data. Managed ingestion brings data in from open table formats, data lakes, and other sources, and a context management layer (aka. skills) grounds agents in your own definitions.  
+* **The connectivity layer**: the managed ClickHouse MCP server, plus clients, CLIs, and plugins.  Our customers keep the flexibility and full control over any MCP-compatible app or agent they want to connect. We are seeing customers already plugging in Claude Code, Cursor, Amazon Bedrock agents, and their own custom agents.  
+* **The agentic layer**: the ClickHouse Assistant for quick questions in the SQL Console, and ClickHouse Agents for full agentic workflows with a sandboxed code interpreter.   
+* **Observability and evals, end to end**: ClickHouse also includes ClickStack for observability and Langfuse for LLM observability and evaluations, so you can see what your agents are doing and keep them reliable in production.
+
+
+![](https://clickhouse.com/uploads/clickhouse_agents_jun2026_image3_8315470075.png)
+
+The goal is to allow our customers to benefit from the power of AI with the best real-time analytics platform that is portable, extensible, and free of lock-in. Customers have the flexibility to use our managed agents out of the box, build your own with the no-code builder, or bring your own framework and let ClickHouse be the open data layer underneath. 
+
+What's different with this approach is that ClickHouse does not force customers to choose between first-party or  third-party AI as an either-or scenario. Bring your own agents, models, and tools to ClickHouse and run them over our connectivity layer, or reach for our first-party capabilities like ClickHouse Agents. Both paths sit on the same open data foundation, and meet our customers  where you are  instead of making you pick a side.
+
+![](https://clickhouse.com/uploads/clickhouse_agents_jun2026_image4_33e7a643e2.png)
+
+*MCP Adoption in ClickHouse Cloud (The graph above shows the number of unique services using our remote MCP feature over time)*
+
+To illustrate this, we worked closely with Amazon Web Services to ship a native integration with the AgentCore Registry in ClickHouse Agents. This allows users to use MCP in order to bring their agents, tools and skills managed in AgentCore, and use them in ClickHouse agents.
+
+![](https://clickhouse.com/uploads/clickhouse_agents_jun2026_image5_9d4230b8e1.png)
+
+We build ClickHouse as an open data platform for AI. ClickHouse Agents, LibreChat, MCP, and our work with systems like AWS Agent Registry all reflect the same belief: openness, composability, and interoperability are what enable enterprises move at the speed AI demands. No single vendor is going to integrate a complete AI stack fast enough and complete enough, and the ones that try will lock users into a walled garden. ClickHouse's open and community driven DNA is what makes it the substrate of the agentic era for all our customers.  
+
+## How we got here: Productizing our own experience {#how-we-got-here}
+
+In March 2025 we made our own data warehouse AI-first and built our internal analytics agent, on top of it. We documented the whole thing in [how we made our internal data warehouse AI-first](https://clickhouse.com/blog/ai-first-data-warehouse), and the short version is that it took off fast. Today around 80% of ClickHouse employees use LibreChat daily, and our platform alone handles roughly 70% of our internal data warehouse queries, processing more than 45 million tokens a day. By some distance, it is the most-used internal tool we run.
+
+Picking the chat layer was a real build-versus-buy decision, and our requirements were non-negotiable: work with any LLM provider, solid MCP support, ship enterprise features like SSO and audit logging, render artifacts, and never lock us into a single vendor. [LibreChat](https://github.com/danny-avila/LibreChat) checked every box. For anyone who has not met it, LibreChat is a leading open-source AI chat platform: one self-hostable UI in front of virtually every LLM provider, with enterprise SSO, RBAC, MCP support, agents, artifacts, and a sandboxed code interpreter built in. 
+
+What convinced us LibreChat was the right platform was also the list of companies already running it in production. Shopify CEO Tobi Lütke [put it plainly](https://x.com/tobi/status/1932846291794510241):
+
+"Shopify runs an internal fork of librechat, and we merge most everything back. I highly recommend other companies give this project a look for their internal LLM system. It works very well for us."
+
+[Daimler Truck](https://www.daimlertruck.com/en/newsroom/stories/daimler-truck-makes-artificial-intelligence-accessible-to-all-employees-worldwide-with-librechat) runs a company-wide AI platform on LibreChat with thousands of employees and over 3,000 agents in production. In healthcare, cBioPortal shipped [cBioAgent](https://chat.cbioportal.org/) on the ClickHouse, MCP, and LibreChat stack, letting cancer researchers query genomics datasets in plain language. As Ino de Bruijn, who manages bioinformatics software engineering there, put it, it "puts discovery at cancer researchers' fingertips." In November 2025 [we acquired LibreChat](https://clickhouse.com/blog/clickhouse-acquires-librechat) and welcomed Danny Avila and the team into ClickHouse. ClickHouse Agents inherits LibreChat's production readiness. 
+
+Running our internal use-case also produced a large body of real agentic-analytics workloads, actual questions against actual schemas, with the SQL and tool-use traces to match. That lets us evaluate virtually every available model on the task itself rather than on generic benchmarks. The Claude family came out on top consistently, across SQL generation, schema reasoning, and tool use. It is the leading model for code, and SQL and schema work are a natural extension of that strength, which is why Claude is wired in as the default in ClickHouse Agents.
+
+![](https://clickhouse.com/uploads/clickhouse_agents_jun2026_image6_0be9866d16.png)
+
+## Real-time OLAP for agents {#real-time-olap-for-agents}
+
+Over a year ago, we wrote about [agent-facing analytics](https://clickhouse.com/blog/agent-facing-analytics): the idea that AI agents are a new user persona for real-time databases. The ones that never sleep, never take breaks, and generate SQL like there is no tomorrow. The argument was that a real-time analytics database is the natural context provider for these agents, because it can serve fast, concurrent, exploratory queries over fresh data, exactly the access pattern agents lean on. A year of running them in production and working closely with early adopters confirmed our hypothesis.
+
+![](https://clickhouse.com/uploads/clickhouse_agents_jun2026_image7_e65251f928.png)
+
+Agents fire 10 to 100x the volume of queries a human analyst would, in bursts, and every retry and timeout burns tokens and adds load. Sub-second latency on billions of rows, petabyte-scale storage, thousands of concurrent queries, and the cost efficiency to keep agent traffic affordable as it grows as key characteristics of a platform like ClickHouse. Recent engine work makes this even better, including [joins up to 6x faster](https://clickhouse.com/blog/join-me-if-you-can-clickhouse-vs-databricks-snowflake-join-performance) over the past year, [multi-stage distributed query execution](https://clickhouse.com/blog/multi-stage-distributed-query-execution-clickhouse-cloud), and [full-text search GA](https://clickhouse.com/blog/full-text-search-ga-release).
+
+It unlocks time to insight. The traditional path runs through handoffs: data engineers write queries, analysts build dashboards, business users interpret the results, each step measured in hours or days. With ClickHouse Agents, a PM can ask "what's driving the churn spike last week?" and get the answer, the query behind it, a chart, and the next questions to explore, in seconds.
+
+## What's next {#whats-next}
+
+Besides all the exciting new announcements, we are working with our customers for 
+
+* Deeper Cloud integration, with richer in-chat visualizations and tighter coupling to the SQL Console.  
+* An Agent API for programmatic access to the agents built in ClickHouse Agents  
+* Trust feedback loop: allowing users to run evals and influence context by leveraging our native integration with Langfuse, which [joined ClickHouse in January 2026](https://clickhouse.com/blog/clickhouse-acquires-langfuse-open-source-llm-observability) 
+
+## Get started today {#get-started-today}
+
+ClickHouse Agents is available to all ClickHouse Cloud customers in public beta. If you have a ClickHouse account, you can now access ClickHouse Agents through the SQL console, or simply start using [https://ai.clickhouse.cloud/](https://ai.clickhouse.cloud/). As with any beta, your feedback is the only way this gets better. Find us via the form, our [community Slack](https://clickhouse.com/slack).
+
+If you are building agentic analytics on ClickHouse and want to be a design partner, [reach out](https://clickhouse.com/company/contact). 
+
+*Huge thanks to the AI/ML team, to Danny Avila and the LibreChat community, to our friends at Anthropic and AWS who joined us on the keynote stage, and to every customer working with us on agentic analytics. We are just getting started.*
+
+
+---
+
+## How QRT powers real-time research and risk management at petabyte scale
+Published: 2026-06-09T15:52:52+00:00
+URL: https://clickhouse.com/blog/qrt
+
+---
+title: "How QRT powers real-time research and risk management at petabyte scale"
+date: "2026-06-09T15:52:52.319Z"
+author: "ClickHouse"
+category: "User stories"
+excerpt: "How QRT, a cloud-native quantitative investment manager, uses ClickHouse Cloud and ClickStack to power firm-wide research, real-time risk and P&L, and observability at petabyte scale."
+---
+
+# How QRT powers real-time research and risk management at petabyte scale
+
+## Summary
+
+* QRT, a global investment manager, uses ClickHouse Cloud to power a data platform serving researchers, as well as a real-time risk and P&L system. 
+* Beyond supporting researchers, ClickStack is also the foundation for QRT's observability infrastructure.
+
+Quantitative trading is, at its core, a data challenge. Funds seek to store more of it, query it faster, and act on it first.
+
+[Qube Research & Technologies (QRT)](https://www.qube-rt.com/) is a global quantitative investment manager headquartered in London. The firm's decision to use [ClickHouse Cloud](https://clickhouse.com/cloud) reflects a philosophy that dates back to the firm's origins. Most hedge funds founded in the 1990s and 2000s run on-premise data centers built up over decades. But QRT, launched in 2018 amid a rapid spinout of Credit Suisse's proprietary trading arm, was originally built in the cloud. Rather than inheriting legacy on-premise infrastructure, it built itself cloud-native from day one.
+
+## Built for the cloud, ready to scale
+
+QRT uses [ClickHouse Cloud](https://clickhouse.com/cloud) across two of their major systems. One centralized platform that gives researchers across the firm access to the data they need to develop trading strategies, and another near real-time risk monitoring, management, and P&L system.
+
+"We wanted something faster and much more scalable," says a senior engineer on the team. "With our previous database, we were limited by the number of writers, the number of readers, and the total load per cluster. With ClickHouse, we don't have those limitations."
+
+Beyond supporting researchers, ClickHouse is also the foundation for QRT's observability infrastructure. The migration to [ClickStack](https://clickhouse.com/clickstack), ClickHouse's integrated observability stack, consolidated logs, metrics, and traces onto a single backend for the first time. Alerts, log queries, and metric aggregations that used to require managing multiple systems now run against a single ClickHouse instance using standard SQL. "Having all our monitoring on one backend gives us the simplicity to maintain and is reliably fast," says the QRT engineer.
+
+---
+
+## Get started today
+
+Interested in seeing how ClickHouse works on your data? Get started with ClickHouse Cloud in minutes and receive $300 in free credits.
+
+[Sign up](https://console.clickhouse.cloud/signUp?loc=blog-cta-828-get-started-today-sign-up&utm_blogctaid=828)
+
+---
+
+---
+
+## ClickHouse appoints new leader for Asia Pacific and expands global go-to-market leadership team
+Published: 2026-06-09T02:12:06+00:00
+URL: https://clickhouse.com/blog/clickhouse-appoints-apac-leader-and-expands-global-gtm-leadership
+
+---
+title: "ClickHouse appoints new leader for Asia Pacific and expands global go-to-market leadership team"
+date: "2026-06-09T02:12:06.119Z"
+author: "ClickHouse"
+category: "Company and culture"
+excerpt: "ClickHouse, a leader in real-time analytics, data warehousing, observability, and AI/ML, today announced an expansion of its global go-to-market (GTM) leadership team, including the appointment of Ed Lenta as Vice President, Asia Pacific and Japan (APJ)."
+---
+
+# ClickHouse appoints new leader for Asia Pacific and expands global go-to-market leadership team
+
+_Veteran enterprise leaders join across APJ, public sector, financial services, solutions architecture, and revenue operations as the company scales its global organization_
+
+**SAN FRANCISCO — June 8, 2026 —** ClickHouse, a leader in real-time analytics, data warehousing, observability, and AI/ML, today announced a significant expansion of its global go-to-market (GTM) leadership team, headlined by the appointment of **Ed Lenta** as **Vice President, Asia Pacific and Japan (APJ)**. The additions build on the momentum established last year with the appointment of **Kevin Egan** as **Chief Revenue Officer**, and reflect ClickHouse's strategic investment in scaling its global organization to meet surging customer demand.
+
+Lenta joins ClickHouse to lead the company's go-to-market efforts across the APJ region. He brings deep experience scaling cloud and data platform businesses across the region, most recently as General Manager of Asia Pacific and Japan at Databricks, where he managed operations across more than twenty countries and led customer-facing teams serving organizations from startups to large enterprises and government. Earlier in his career, he helped build Amazon Web Services and VMware from early-stage companies into major platform providers in APJ. Based in Singapore, Lenta will be responsible for accelerating the adoption and expansion of ClickHouse Cloud and the open-source database in the region, empowering enterprises and public sector agencies to solve their growing data challenges.
+
+"ClickHouse is emerging as the foundational data infrastructure for the AI era, and the strategic opportunity across Asia Pacific and Japan is enormous," said Lenta. "As agentic workloads scale, enterprises are rethinking their data architecture around both speed and efficiency, and ClickHouse outperforms traditional data warehouses by orders of magnitude on critical cost-performance metrics – that unique combination is what makes this technology so category-defining. I'm excited to build the teams and partnerships that will help organizations across the region unlock the full power of real-time analytics at scale."
+
+Lenta's appointment in APJ is complemented by the recent hire of **Takeshi Kaneko** as **Country Manager of ClickHouse Japan**. Kaneko brings more than two decades of leadership in the Japanese technology market, including senior executive roles at Nutanix, where he served as President of Nutanix Japan, as well as leadership positions at Red Hat and Microsoft Japan.
+
+The company also announced a series of additional GTM leadership appointments that strengthen its global revenue organization:
+
+- **Billy Schoeffel, Vice President, Financial Services**, joins after more than six years leading global financial services sales at Snowflake, with prior senior sales leadership roles at ServiceNow and across the enterprise software industry.
+- **Kenneth Melero, Vice President, Public Sector**, brings more than 30 years of experience across U.S. federal, state and local government, education, and worldwide public sector environments. He joins ClickHouse from Chainguard, where he led U.S. public sector sales, and previously served as a Regional Vice President at Elastic.
+- **Maged Shehata, Vice President, Global Solutions Architecture**, brings more than 20 years of solution engineering experience in the data and AI space. Most recently at Snowflake, Shehata led solution engineering teams across retail and consumer goods, financial services, and healthcare, bringing expertise spanning data integration, data governance, real-time analytics, and broader enterprise data platforms.
+- **Andrew Straus, Vice President, Global Revenue Strategy and Operations**, slated to join ClickHouse in late June, brings two decades of go-to-market and operating leadership across cloud infrastructure and enterprise software, spanning senior revenue operations and GTM strategy roles at Snowflake, Kong, and HPE.
+
+"As organizations race to modernize their data infrastructure for the demands of agentic AI, we are investing decisively in the world-class team needed to serve them globally," said Kevin Egan, Chief Revenue Officer at ClickHouse. "Ed's leadership in APJ, combined with the strength and breadth of talent joining across the public sector, strategic sales, solutions architecture, and revenue operations functions, positions us to scale with our customers everywhere they operate."
+
+The leadership expansion comes amid a period of exceptional momentum for ClickHouse. The company recently surpassed $250 million in annual run-rate revenue, more than triple a year earlier, and crossed 4,000 customers, adding more than 1,000 net new customers in a single quarter. The breadth of customers featured at the company's Open House 2026 user conference reflects how deeply ClickHouse now sits in the enterprise stack, with speakers including Visa, Cisco, Intuit, Shopify, DoorDash, Mercado Libre, Zoox, and Jump Trading. These leadership appointments are a direct investment in that growth, adding the regional coverage, enterprise relationships, and operational infrastructure to support customers at scale.
+
+<br />
+
+<div align="center">
+  <img src="/uploads/ed_lenta_headshot_7c4a3d6abe.jpg" alt="Ed Lenta" width="400" />
+</div>
 
 ---
 

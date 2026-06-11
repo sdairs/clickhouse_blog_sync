@@ -1,5 +1,5 @@
 {
-  "last_sync": "2026-06-10T07:36:14.097261Z",
+  "last_sync": "2026-06-11T07:48:36.214175Z",
   "processed_blogs": {
     "https://clickhouse.com/blog/clickhouse-raises-400-million-series-d-acquires-langfuse-launches-postgres": {
       "title": "ClickHouse raises $400M Series D led by Dragoneer to accelerate expansion across analytics and AI infrastructure",
@@ -5064,9 +5064,39 @@
       "pub_date": "2026-06-07T14:07:43+00:00",
       "file_path": "blogs/2026-06-07-clickhouse-deepl.md",
       "processed_at": "2026-06-09T07:21:18.151739Z"
+    },
+    "https://clickhouse.com/blog/stripe-projects": {
+      "title": "Agents can now provision ClickHouse and Postgres on ClickHouse Cloud",
+      "pub_date": "2026-06-10T15:49:47+00:00",
+      "file_path": "blogs/2026-06-10-agents-can-now-provision-clickhouse-and-postgres.md",
+      "processed_at": "2026-06-11T07:48:34.645615Z"
+    },
+    "https://clickhouse.com/blog/clickhouse-agents-beta": {
+      "title": "ClickHouse Agents: Claude-powered agentic analytics, now in public beta",
+      "pub_date": "2026-06-09T16:14:39+00:00",
+      "file_path": "blogs/2026-06-09-clickhouse-agents-claude-powered-agentic.md",
+      "processed_at": "2026-06-11T07:48:35.167509Z"
+    },
+    "https://clickhouse.com/blog/qrt": {
+      "title": "How QRT powers real-time research and risk management at petabyte scale",
+      "pub_date": "2026-06-09T15:52:52+00:00",
+      "file_path": "blogs/2026-06-09-how-qrt-powers-real-time-research-and-risk.md",
+      "processed_at": "2026-06-11T07:48:35.509759Z"
+    },
+    "https://clickhouse.com/blog/clickhouse-appoints-apac-leader-and-expands-global-gtm-leadership": {
+      "title": "ClickHouse appoints new leader for Asia Pacific and expands global go-to-market leadership team",
+      "pub_date": "2026-06-09T02:12:06+00:00",
+      "file_path": "blogs/2026-06-09-clickhouse-appoints-new-leader-for-asia-pacific.md",
+      "processed_at": "2026-06-11T07:48:35.846383Z"
+    },
+    "https://clickhouse.com/blog/costbench-data-warehouse-cost-performance-jp": {
+      "title": "CostBenchのご紹介: データウェアハウスのコストパフォーマンスを測るオープンベンチマーク",
+      "pub_date": "2026-06-10T00:51:05+00:00",
+      "file_path": "blogs/2026-06-10-costbench.md",
+      "processed_at": "2026-06-11T07:48:36.121813Z"
     }
   },
-  "total_blogs": 844,
+  "total_blogs": 849,
   "failed_blogs": [
     {
       "url": "https://clickhouse.com/jp/blog/clickhouse-gcp-japan-availability",
@@ -14892,6 +14922,11 @@
       "url": "https://clickhouse.com/jp/blog/using-materialized-views-in-clickhouse-jp",
       "error": "404 Client Error: Not Found for url: https://clickhouse.com/jp/blog/using-materialized-views-in-clickhouse-jp.md",
       "attempted_at": "2026-03-04T06:19:46.357851Z"
+    },
+    {
+      "url": "https://clickhouse.com/blog/datadog-and-clickhouse-partner",
+      "error": "404 Client Error: Not Found for url: https://clickhouse.com/blog/datadog-and-clickhouse-partner.md",
+      "attempted_at": "2026-06-11T07:48:34.912805Z"
     }
   ]
 }
