@@ -1,5 +1,5 @@
 {
-  "last_sync": "2026-06-11T07:48:36.214175Z",
+  "last_sync": "2026-06-12T07:44:35.963355Z",
   "processed_blogs": {
     "https://clickhouse.com/blog/clickhouse-raises-400-million-series-d-acquires-langfuse-launches-postgres": {
       "title": "ClickHouse raises $400M Series D led by Dragoneer to accelerate expansion across analytics and AI infrastructure",
@@ -14927,6 +14927,11 @@
       "url": "https://clickhouse.com/blog/datadog-and-clickhouse-partner",
       "error": "404 Client Error: Not Found for url: https://clickhouse.com/blog/datadog-and-clickhouse-partner.md",
       "attempted_at": "2026-06-11T07:48:34.912805Z"
+    },
+    {
+      "url": "https://clickhouse.com/blog/datadog-and-clickhouse-partner",
+      "error": "404 Client Error: Not Found for url: https://clickhouse.com/blog/datadog-and-clickhouse-partner.md",
+      "attempted_at": "2026-06-12T07:44:35.883934Z"
     }
   ]
 }
