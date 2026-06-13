@@ -1,5 +1,5 @@
 {
-  "last_sync": "2026-06-12T07:44:35.963355Z",
+  "last_sync": "2026-06-13T07:24:42.631985Z",
   "processed_blogs": {
     "https://clickhouse.com/blog/clickhouse-raises-400-million-series-d-acquires-langfuse-launches-postgres": {
       "title": "ClickHouse raises $400M Series D led by Dragoneer to accelerate expansion across analytics and AI infrastructure",
@@ -5094,9 +5094,39 @@
       "pub_date": "2026-06-10T00:51:05+00:00",
       "file_path": "blogs/2026-06-10-costbench.md",
       "processed_at": "2026-06-11T07:48:36.121813Z"
+    },
+    "https://clickhouse.com/blog/building-clickcannon-a-tool-for-benchmark-clickhouse": {
+      "title": "Building ClickCannon - a tool for benchmarking ClickHouse",
+      "pub_date": "2026-06-12T09:40:30+00:00",
+      "file_path": "blogs/2026-06-12-building-clickcannon-a-tool-for-benchmarking.md",
+      "processed_at": "2026-06-13T07:24:41.478545Z"
+    },
+    "https://clickhouse.com/blog/clickpipes-postgres-to-postgres": {
+      "title": "Introducing Postgres to Postgres ClickPipes in ClickHouse Cloud",
+      "pub_date": "2026-06-11T16:10:02+00:00",
+      "file_path": "blogs/2026-06-11-introducing-postgres-to-postgres-clickpipes-in.md",
+      "processed_at": "2026-06-13T07:24:41.780326Z"
+    },
+    "https://clickhouse.com/blog/datadog-and-clickhouse-partnership": {
+      "title": "Datadog and ClickHouse partner to bring full-fidelity data to modern observability",
+      "pub_date": "2026-06-10T17:21:47+00:00",
+      "file_path": "blogs/2026-06-10-datadog-and-clickhouse-partner-to-bring-full.md",
+      "processed_at": "2026-06-13T07:24:41.877356Z"
+    },
+    "https://clickhouse.com/blog/selecting-a-real-time-analytical-database-jp": {
+      "title": "リアルタイム分析データベースを選定する際に注目すべきポイント",
+      "pub_date": "2026-06-12T08:21:38+00:00",
+      "file_path": "blogs/2026-06-12-.md",
+      "processed_at": "2026-06-13T07:24:42.257440Z"
+    },
+    "https://clickhouse.com/blog/multi-stage-distributed-query-execution-clickhouse-cloud-jp": {
+      "title": "ClickHouse Cloudにマルチステージ分散クエリ実行を導入",
+      "pub_date": "2026-06-11T00:47:14+00:00",
+      "file_path": "blogs/2026-06-11-clickhouse-cloud.md",
+      "processed_at": "2026-06-13T07:24:42.533888Z"
     }
   },
-  "total_blogs": 849,
+  "total_blogs": 854,
   "failed_blogs": [
     {
       "url": "https://clickhouse.com/jp/blog/clickhouse-gcp-japan-availability",
