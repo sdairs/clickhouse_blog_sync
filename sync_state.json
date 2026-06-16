@@ -1,5 +1,5 @@
 {
-  "last_sync": "2026-06-15T08:09:46.537315Z",
+  "last_sync": "2026-06-16T08:05:29.589894Z",
   "processed_blogs": {
     "https://clickhouse.com/blog/clickhouse-raises-400-million-series-d-acquires-langfuse-launches-postgres": {
       "title": "ClickHouse raises $400M Series D led by Dragoneer to accelerate expansion across analytics and AI infrastructure",
@@ -5124,9 +5124,27 @@
       "pub_date": "2026-06-11T00:47:14+00:00",
       "file_path": "blogs/2026-06-11-clickhouse-cloud.md",
       "processed_at": "2026-06-13T07:24:42.533888Z"
+    },
+    "https://clickhouse.com/blog/open-source-10": {
+      "title": "Ten years of ClickHouse in open source",
+      "pub_date": "2026-06-15T13:25:29+00:00",
+      "file_path": "blogs/2026-06-15-ten-years-of-clickhouse-in-open-source.md",
+      "processed_at": "2026-06-16T08:05:28.849798Z"
+    },
+    "https://clickhouse.com/blog/achieves-aws-retail-competency": {
+      "title": "ClickHouse achieves AWS Retail Competency",
+      "pub_date": "2026-06-12T21:17:44+00:00",
+      "file_path": "blogs/2026-06-12-clickhouse-achieves-aws-retail-competency.md",
+      "processed_at": "2026-06-16T08:05:29.207749Z"
+    },
+    "https://clickhouse.com/blog/datadog-and-clickhouse-partnership-jp": {
+      "title": "Datadog と ClickHouse が提携、最新のオブザーバビリティにフルフィデリティ（全量）なデータをもたらす",
+      "pub_date": "2026-06-15T07:52:31+00:00",
+      "file_path": "blogs/2026-06-15-datadog-clickhouse.md",
+      "processed_at": "2026-06-16T08:05:29.495549Z"
     }
   },
-  "total_blogs": 854,
+  "total_blogs": 857,
   "failed_blogs": [
     {
       "url": "https://clickhouse.com/jp/blog/clickhouse-gcp-japan-availability",
