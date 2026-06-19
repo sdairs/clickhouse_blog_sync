@@ -1,6 +1,1139 @@
 # ClickHouse Blogs
-Last updated: 2026-06-18 07:48:21 UTC
-Total blogs: 857
+Last updated: 2026-06-19 07:58:57 UTC
+Total blogs: 867
+
+---
+
+## Beyond the warehouse: How METRO Markets built a do-it-all data platform on ClickHouse Cloud
+Published: 2026-06-18T00:00:00+00:00
+URL: https://clickhouse.com/blog/metro-markets-data-warehouse
+
+---
+title: "Beyond the warehouse: How METRO Markets built a do-it-all data platform on ClickHouse Cloud"
+date: "2026-06-18T20:31:40.804Z"
+author: "ClickHouse"
+category: "User stories"
+excerpt: "How METRO Markets replaced a failing Hadoop-based stack with ClickHouse Cloud to build a single platform now powering data warehousing, real-time seller analytics, credit risk modeling, observability, and AI across the whole company."
+---
+
+# Beyond the warehouse: How METRO Markets built a do-it-all data platform on ClickHouse Cloud
+
+## Summary
+
+- METRO Markets uses ClickHouse Cloud to power data warehousing, real-time seller analytics, credit risk modeling, observability, new AI use cases, and more.
+- After outgrowing a self-hosted Hadoop-based stack, METRO Markets consolidated all company data into a single warehouse for the first time in its history.
+- METRO Markets observed substantially faster query performance and lower storage costs compared to BigQuery and Snowflake, and adoption spread faster than anyone anticipated.
+
+Across Europe, the big blue-and-yellow [METRO](https://www.metroag.de/en) wholesale stores are a familiar sight. For six decades, the cash-and-carry warehouses have supplied the continent's restaurants, hotels, and caterers, spanning over 600 locations across more than 20 countries, and cementing METRO's place as one of the largest retailers in the world.
+
+But in 2018, a team inside the company looked at the B2B commerce landscape and saw a gap. Even a company of METRO's scale could only offer its customers a fraction of what they needed to run their businesses. An online marketplace, purpose-built for the hospitality industry, promised a far wider selection than any physical store could ever stock.
+
+[METRO Markets](https://metro-markets.de/) launched in Germany in September 2019 and today operates across six European countries, with over a million products available to the hotels, restaurants, and catering businesses that form its customer base. Behind the scenes, a lean data team powers the intelligence that keeps the platform running, from seller analytics and credit risk scoring to behavioral data and operational logging, all of it flowing through [ClickHouse Cloud](https://clickhouse.com/cloud).
+
+We caught up with the METRO Markets team to find out how their search for a better data warehouse led to something far more valuable and ambitious: a single platform that gives every team in the company a shared view of reality, in real time.
+
+## Growing pains in the data layer
+
+When Luis Jurado joined in 2020 as Data Engineering Team Lead, he arrived into a company growing faster than its infrastructure. Their self-hosted data stack was built on Impala and Kudu, tools from the Hadoop ecosystem that made sense at a certain scale but were showing their limits. "It grew out of hand as the company grew," he says. "There were a lot of in-house maintenance issues, and it wasn't easy to scale."
+
+As the business scaled, data reliability became a growing concern. Engineering teams built parallel data stores to keep pace with demand, but business reporting remained dependent on Impala, which increasingly struggled to meet the reliability and consistency expectations of growing METRO Markets. "We had different teams looking at different numbers," says Hakan Dilaver, Head of Engineering Operations and Security. For a company making real-time decisions about pricing, logistics, and credit, that misalignment came with real costs.
+
+There was a human cost, too. Despite the company's growth, the data team hadn't grown as fast as other parts of the business. Markus Nutz, Data Engineering and Science Lead, describes talented people spending too much time checking whether something had broken overnight rather than doing work that actually moved the needle. They needed something to make everyone's lives easier… or as Markus puts it, "something that just works."
+
+## The road less traveled
+
+When they began looking at alternatives, the obvious choice was Google BigQuery. It's what the broader METRO group uses, and, as Luis says, "Choosing tooling that differs from the rest of the group always requires some extra explanation and consensus."
+
+Even so, the team ran a proper analysis, testing BigQuery alongside Snowflake and ClickHouse against the actual queries they run in production. On queries large and small, Luis says, "ClickHouse ran faster." On one particularly demanding query, we observed a significant difference in completion time between platforms. On another query, response time dropped from four seconds to under 200 milliseconds.
+
+But performance alone wasn't going to win the argument. "From a business standpoint, there was also a need to predict our costs," Luis says. "Cost predictability was a challenge with alternatives. While controls were available to cap spending, we found they came with performance trade offs that didn't work for our use case." ClickHouse's [pricing model](https://clickhouse.com/pricing?plan=scale&provider=aws&region=us-east-1&hours=8&storageCompressed=false), by contrast, made it possible to forecast expenditure without sacrificing query speed.
+
+"We needed the next step in our data journey," Luis says. "We did an analysis of a few tools, tested some of them, and landed on ClickHouse."
+
+## Building the foundation
+
+In the current architecture, Airbyte handles the majority of data movement, pulling from MySQL and Postgres sources via CDC connectors and writing into ClickHouse, though the team plans to test ClickHouse's native ingestion engine, [ClickPipes](https://clickhouse.com/cloud/clickpipes), once GCP support is available. For deduplication during background merges, they use ClickHouse's [ReplacingMergeTree engine](https://clickhouse.com/docs/engines/table-engines/mergetree-family/replacingmergetree) with an experimental cleanup feature. "We look forward to using ClickPipes when it is available for us on GCP to further simplify this infrastructure," Markus says.
+
+One particular challenge was Google Analytics data, which lives in BigQuery and couldn't be moved through standard connectors. The team solved it by dumping the data into cloud storage buckets and loading it into ClickHouse via external tables. Markus calls it a "big step forward," adding, "We now finally have all our company data in one data warehouse."
+
+On the consumption side, Luis says ClickHouse's broad compatibility has been as important as its ingestion capabilities. "When we were on Impala, the only drivers available were ODBC or JDBC," he explains. "Our services are mostly written in PHP. We couldn't use Grafana or Looker Studio." ClickHouse's MySQL-protocol endpoint changed that, allowing developers and business analysts to query the same data through whatever tool they prefer.
+
+## One data platform, many stories
+
+When METRO Markets adopted ClickHouse, nobody anticipated how quickly it would expand beyond its original mandate. What began as a data warehousing project has become a single, scalable platform spanning storage, analytics, machine learning, and observability.
+
+Today, ClickHouse serves as the company's central [data warehouse](https://clickhouse.com/resources/engineering/choosing-cloud-data-warehouse), consolidating transactional data, behavioral data, and MongoDB collections in one place. "That's something we hadn't managed since METRO Markets started," Markus says.
+
+Built atop that foundation is a growing layer of [real-time analytics](https://clickhouse.com/resources/engineering/what-is-real-time-analytics). Merchants who sell on the platform can see, in near real time, whether they're delivering on time, how competitive their pricing is, and how their products are performing. Because it directly affects how sellers run their businesses, the data needs to be fast and available. ClickHouse handles both.
+
+ClickHouse's [Query API endpoints feature](https://clickhouse.com/docs/cloud/get-started/query-endpoints) (which Markus calls a "nice surprise… the documentation sells it a little bit short") have become central to several of these use cases. The team uses them to surface user characteristics like VIP status and account flags to downstream systems instantly. They also power a lightweight [feature store](https://clickhouse.com/blog/powering-featurestores-with-clickhouse) for the company's credit risk model. For every transaction, user features are fetched from ClickHouse and a prediction is generated end to end, without any intermediary systems. "If you think about how you'd normally build a feature store — the infrastructure, the ingestion pipelines — it was a bit of a gamble," Markus says. "But we took the bet, and it's working very well."
+
+Teams are also starting to use ClickHouse for [observability](https://clickhouse.com/resources/engineering/observability). Engineers across the company use it to store and interrogate operational logs, particularly API logs from the seller-facing platform, where being able to run ad hoc counts and rate-limit queries without building a separate metrics layer saves significant time. "With ClickHouse, you can just go and query it," Luis says. "That would be really difficult with standard logs." Hakan adds that the team is exploring moving one of their largest log partitions from Datadog into ClickHouse.
+
+And then there's AI, the use case nobody planned for. Several internal teams are exploring LLM-powered tools to help customer-facing staff look up order information and resolve issues faster. The path of least resistance to the relevant data almost always leads to ClickHouse. It's an example of something [ClickHouse is seeing accelerate across the industry](https://clickhouse.com/blog/ai-redrawing-database-market): as AI agents become the primary interface to data, the database underneath them needs to be fast, concurrent, and always on.
+
+## Cheaper, faster, more reliable
+
+ClickHouse's impact shows up first in storage, which, as Luis explains, leads directly to costs. "When I talk to Hakan, I always say things like, 'this terabyte of data in MySQL costs X amount of dollars to store, but move it to ClickHouse and now it's 100 megabytes, which is also cheaper to store per gigabyte,'" he says. "So it's a clear win."
+
+The decision to go with a managed solution has also proven important. Having lived through the operational burden of running Impala and Kudu themselves, the team made a deliberate choice to let [ClickHouse Cloud](https://clickhouse.com/cloud) handle the infrastructure. As Luis puts it, "We found the pain of self-hosting in our previous solution and didn't want to take that risk again."
+
+"The biggest benefit for me," Markus says, "is having all the data available and being able to query it fast." Benchmark testing against our production queries indicated that ClickHouse was better suited to our particular use case and query patterns.
+
+Hakan agrees: "The most important part was being able to centralize our data operations in a solution that's fast and reliable." That reliability has resolved the misalignment that once plagued the company. Instead of different teams looking at different data sources and getting different versions of the truth, business and engineering draw from the same warehouse, through the tool of their choosing, and the platform stays up.
+
+## The journey continues
+
+Across METRO Markets, teams the data platform never even targeted have found reasons to build on ClickHouse. "The benefits and the number of things we've ended up using it for, because of the feature set, has been more than we anticipated," Luis says.
+
+The journey, he adds, is far from over. "We want to incorporate a lot more things in the future," he says. Next on the roadmap is connecting their Kafka and Flink streaming infrastructure to ClickHouse, opening the door to real-time stream processing use cases that will take the platform further still.
+
+With ClickHouse, what was initially scoped as a data warehousing project has become, quietly and organically, the do-it-all data infrastructure for the whole company.
+
+---
+
+## Get started today
+
+Interested in seeing how ClickHouse works on your data? Get started with ClickHouse Cloud in minutes and receive $300 in free credits.
+
+[Sign up](https://console.clickhouse.cloud/signUp?loc=blog-cta-963-get-started-today-sign-up&utm_blogctaid=963)
+
+---
+
+---
+
+## Why everyone is talking about real-time analytics (a note from “the yellow company”)
+Published: 2026-06-18T00:00:00+00:00
+URL: https://clickhouse.com/blog/why-everyone-is-talking-about-real-analytics-yellow-company
+
+---
+title: "Why everyone is talking about real-time analytics (a note from “the yellow company”)"
+date: "2026-06-18T18:57:19.831Z"
+author: "ClickHouse"
+category: "Product"
+excerpt: "For years, real-time analytics was treated as a niche requirement. We believed otherwise. So why is everyone talking about it now?"
+---
+
+# Why everyone is talking about real-time analytics (a note from “the yellow company”)
+
+There has been a lot of discussion recently around real-time analytics. For years, this was often dismissed as a small use case, relevant to a smaller set of operational or customer-facing workloads. We always believed otherwise. 
+
+Customer-facing analytics, observability, fraud detection, operational applications, and AI agents all depend on fresh data and low-latency queries.
+
+It seems others are now recognizing the category that ClickHouse and our customers have defined for years. It reflects the journey ClickHouse has been on, from an open-source project to serving more than 4,000 customers and over[ $250M in ARR](https://clickhouse.com/blog/thank-you-for-building-with-us). 
+
+It feels like the right moment to revisit two principles we believe matter: openness and a clear definition of what a real-time analytics database actually is.
+
+## Real-time claims deserve real benchmarks
+
+The data industry has a long history of benefiting from open benchmarks. Whether it is [ClickBench](https://benchmark.clickhouse.com), [CostBench](https://clickhouse.com/benchmarks/costbench), [PostgresBench](https://postgresbench.clickhouse.com/), [TPC benchmarks](https://clickhouse.com/blog/tpc-h-clickhouse-cloud-vs-snowflake-databricks-bigquery-redshift), or community-led testing, customers are best served when performance claims can be independently verified.
+
+A useful benchmark should be transparent about what is being measured, reproducible by anyone willing to run it, and clear about the conditions under which the results were achieved. Otherwise, it becomes difficult to distinguish between a meaningful measurement and a marketing claim.
+
+![clickbench.png](https://clickhouse.com/uploads/Blog_Costs_014_291362ced8.png)
+
+> We believe benchmarks should be open, transparent, and reproducible. All of ClickHouse’s benchmarks are publicly available and reproducible, including [ClickBench](https://benchmark.clickhouse.com), [PostgresBench](https://postgresbench.clickhouse.com/), [JSONBench](https://jsonbench.com) and our recently announced [CostBench](https://clickhouse.com/benchmarks/costbench). You can explore the methodology, datasets, queries, and results on our dedicated benchmarks page and reproduce the results yourself.
+
+This is particularly important in real-time analytics, where benchmark results can vary dramatically depending on what is actually being tested. Two systems can produce similar latency numbers under controlled conditions while behaving very differently in production. 
+
+A benchmark showing sub-second queries on a static dataset is useful, but it does not necessarily tell us how a system behaves when new data is continuously arriving, when working sets exceed memory, or when hundreds or thousands of concurrent queries are competing for resources.
+
+As more attention is given to real-time analytics, we hope the industry continues moving toward benchmarks that are open, reproducible, and explicit about what they are measuring. 
+
+## What actually makes a real-time analytics database?
+
+Our experience building systems for this workload has taught us that many of the properties that determine success in production are also the easiest things to omit from a benchmark. Freshness, continuous ingestion, concurrency, transformation latency, and efficiency at scale rarely fit neatly into a single chart on stage, yet they often determine whether a system succeeds or fails once it reaches production.
+
+For this reason, it is worth asking not only how real-time analytics should be benchmarked, but what a real-time analytics database should actually be expected to do. Coincidentally, we recently explored this [question in depth](https://clickhouse.com/blog/selecting-a-real-time-analytical-database). In summary, any platform claiming real-time analytics capabilities should be able to answer a few simple questions:
+
+### Does ingestion scale without degrading queries? 
+
+Continuous writes should not pull query latency along with them. In practice, that means an ingestion path that can run on isolated resources from the read path, and a concurrency model that holds tail latencies bounded as writers grow. ClickHouse, for example, uses consensus-based coordination through Keeper rather than optimistic concurrency. It pays a small coordination cost on every write, but keeps tail latencies predictable at the high insert concurrency seen in real-time workloads.
+
+### Is data queryable within a second or two of being written? 
+
+At real-world scale, the realistic target is a delay measured in milliseconds to a couple of seconds, with no catalog or manifest refresh sitting in the middle.
+
+### Do transformations update incrementally, and not on a schedule? 
+
+Materialized views, rollups, and pre-aggregations (done using AggregatingMergeTree in ClickHouse) should update with each insert, not on an interval. This ensures that they're immediately applied and enforce a delay on data availability. 
+
+### Can you bias the system towards read-time or write-time work? 
+
+Different workloads want different trade-offs. For some, you want indexes and aggregations built at write time so the freshest queries are immediately accelerated. For others, you want to keep the ingest throughput maximal and let the background work catch up. A real-time platform should expose that choice without forcing it. And index maintenance should never block ingestion. New data should be queryable as soon as it is committed, with or without its indexes fully built.
+
+### Does a single engine serve all workloads? 
+
+Text search, vector similarity, JSON, structured analytics. These should live in the same storage and query engine, not in four loosely coupled systems with their own freshness floors. 
+
+### Is the performance shown on hot data, not just on cached benchmarks? 
+
+The realistic question to ask of any platform is how fast its queries are on data that arrived a second ago, not how fast its repeated queries are on yesterday's table. The first number is what production looks like.
+
+### Does resource efficiency hold up at scale? 
+
+Real-time systems need to remain efficient as ingest volume, query concurrency, and retention grow. The important question is whether performance scales linearly with workload, or whether latency and compute costs begin to degrade disproportionately as traffic increases.
+
+The common thread across these requirements is that real-time analytics is not a feature you switch on. It is a set of design decisions about ingest, storage, transformation, and query that have to be made consistently across the whole system. Either the platform was designed for this workload, or it is working hard to approximate it.
+
+## Real-time analytics comes of age
+
+One question worth asking is why real-time analytics has suddenly moved to the forefront. While several trends are contributing, we believe the rise of agentic workloads is [a major factor](https://clickhouse.com/blog/ai-redrawing-database-market). Agents consume data differently from humans. They issue more queries, operate continuously, and depend on fresh context to make decisions. As organizations deploy more of them, the combination of low latency, high concurrency, and fresh data is becoming a prerequisite rather than a luxury.
+
+As the category continues to evolve, we hope two things become standard. First, open and reproducible benchmarks that allow customers to independently evaluate performance claims under realistic conditions. Second, a shared understanding of what real-time analytics actually requires beyond a single latency number. 
+
+As the yellow company, we have been leading in real-time analytics for years, and believe it to be a foundational workload.
+
+It’s nice to see the other colors finally recognizing it too.
+
+
+
+---
+
+## Appcues delivers personalized customer engagement with ClickHouse Cloud
+Published: 2026-06-18T00:00:00+00:00
+URL: https://clickhouse.com/blog/appcues-customer-engagement-analytics
+
+---
+title: "Appcues delivers personalized customer engagement with ClickHouse Cloud"
+date: "2026-06-18T16:21:05.000Z"
+author: "ClickHouse"
+category: "User stories"
+excerpt: "Appcues cut P95 query times 90%, ingestion latency 99%, and analytics spend 23% by migrating from Snowflake and Airflow to ClickHouse Cloud for real-time segmentation across 1.31 PB of data."
+---
+
+# Appcues delivers personalized customer engagement with ClickHouse Cloud
+
+## Summary
+
+- Appcues uses ClickHouse Cloud to support real-time analytics and segmentation across 1.31 PB of data and 410 billion events.
+- While their previous technology stack, which included Airflow and Snowflake, worked well for batch reporting and dashboards, Appcues wanted to innovate and deliver real-time, customer-facing analytics.
+- Now, Appcues cut P95 query times by 90% from 20+ seconds to <2 seconds, and reduced ingestion latency by 99% from 10+ minutes to 5 seconds.
+- Even as workloads expanded to support new capabilities, Appcues reduced analytics spend by 23%.
+
+
+[Appcues](https://www.appcues.com/), a platform that helps SaaS companies engage their customers to drive growth and lives inside its customers’ products, powering things like onboarding flows, tooltips, checklists, banners, emails, and push notifications. Customers send Appcues data from SDKs, Segment streams, CRMs, and public APIs so Appcues can help them, as Chris Brookins, VP of Engineering puts it, “deliver the right experience to the right customer at the right time.”
+
+Today, Appcues manages 1.31 PB of data, has processed 410 billion events, and continuously updates over 1 billion user profiles. “We’re ingesting a ton of data from all these apps,” Chris says, “and there’s a lot of observability we need to provide.” Much of that data shows up in Appcues Studio, where customers track performance and outcomes. 
+
+> “It’s very important that all this information is aggregated and delivered quickly for over a billion user profiles. Page load time has to be practically instant.”
+>
+> — Chris Brookins, VP of Engineering, Appcues
+
+Appcues had spent years running its analytics platform on a stack that included Airflow and Snowflake. While Snowflake remains a strong solution for BI and reporting, delivering the real-time product analytics experience that customers increasingly expect requires a different approach. At our Boston meetup, Chris shared the journey that ultimately led them to [ClickHouse Cloud](https://clickhouse.com/cloud) on AWS.
+
+## Challenges to delivering a delightful product experience
+
+From the beginning, the platform ran on two main databases. DynamoDB handled the sub-second work of matching live visitors to segments, so Appcues could decide, before the next page load, which experiences to show. Snowflake powered analytics, including dashboards, performance graphs, NPS results, and the reporting customers rely on to tell whether their experiences are actually working. 
+
+“Our aim is to create a delightful product experience for our customers,” Chris says. However, as Appcues scaled to ingest more and more data, query times went up to 20 seconds and costs became a challenge to manage as their previous stack wasn’t meant for low-latency analytics at scale. 
+
+To increase query speeds, Appcues relied on Airflow. Every five to 10 minutes, jobs would roll up and pre-process data before writing it back. This delivered the product experience they were looking for, but it added costs and meant maintaining a growing web of jobs and servers. This setup also meant that customers were limited to looking at data in 10 minute windows.
+
+When the team decided to introduce email, Chris' team knew they needed a new solution that was highly performant for real-time analytics and cost efficient. “That was a whole new channel with all sorts of new events and extra segmentation needs,” Chris says. Historically, Appcues was optimized to answer a direct, real-time question: *Which segments does this user belong to*? But with email, they needed to calculate, very quickly, *all the users in a segment*, across hundreds of segments per customer, with complex conditions based on historical behavior and even negative logic like “hasn’t been seen in 30 days.”
+
+## Putting ClickHouse to the test
+
+They started with a list of must-haves. As a small team, they wanted minimal operational overhead. They also wanted an open-source engine for transparency and optionality. After their experience with their previous cloud data warehouse, cost efficiency at scale was a huge priority. And any solution had to support HIPAA-compliant workloads and a future EU data center region. “It was a lot of requirements,” Chris admits. “We wanted to stress test everything possible.” He sent principal engineer Andy LeClair to a ClickHouse meetup to learn more, and those conversations became the start of an evaluation plan.
+
+The first step was to export all Snowflake data to Parquet in S3 and load it into ClickHouse. Appcues also notified customers that ClickHouse would be used as a new sub-processor, since the platform stores a lot of personally identifiable information. 
+
+The proof of concept focused on the email segmentation challenge. “A lot of these segments were very complicated,” Chris explains. “They had AND/OR conditions, nested conditions. They could refer to other segments of users or historical events, like, ‘Has this thing ever occurred in the last three months?’ It was a lot of work.”
+
+In parallel, the team began laying the foundation for production. Events flowed through Kafka into a new “clickwriter” consumer for light deduplication and fast inserts. On the application side, the segment logic was formalized into a “clickclient” library, built on Elixir’s Ecto, giving the team a single, controlled way to generate complex ClickHouse queries.
+
+Testing both their previous data warehouse and ClickHouse, they tuned each platform as far as they could. In ClickHouse’s case, features like [SharedReplacingMergeTree](https://clickhouse.com/docs/cloud/reference/shared-merge-tree) proved “huge in terms of improving performance,” Chris says.
+
+By the end, the outcome was clear: ClickHouse ran the segment queries 73% faster. 
+
+> “No matter how we tuned our previous cloud data warehouse, ClickHouse was faster. We were like, ‘Alright. This is a go.’”
+>
+> — Chris Brookins, VP of Engineering, Appcues
+
+## Migrating to ClickHouse Cloud
+
+From there, the project became a one-year, in-flight migration. “We were doing this while the plane was flying,” Chris says. “We had to ensure there was accuracy all through the project.”
+
+With historical data already loaded into ClickHouse, the next phase was a steady loop of verification and iteration. The team refined their schema, learned how ClickHouse wanted data to be modeled, and worked closely with the ClickHouse team to choose the right [table engines](https://clickhouse.com/docs/engines/table-engines) and [materialized views](https://clickhouse.com/docs/materialized-views). Chris says. “The migration taught us a lot of positive practices. We developed a lot of discipline in terms of data management, moving to ClickHouse,” says Chris.
+
+That discipline mattered, because Appcues’ data is hardly uniform. “Customers can send us anything,” Chris says. “It’s just key-value pairs.” Reports had to work across wildly different customer data shapes, from small startups to large enterprises. The team tested continuously across accounts, using edge cases to pressure-test the system before exposing it broadly.
+
+As confidence grew, they began operationalizing ClickHouse Cloud in earnest. Different workloads were isolated into appropriately sized services, [autoscaling](https://clickhouse.com/docs/manage/scaling) rules were tuned, and the team “rinsed and repeated” until it was stable. Only then did they begin cutting customers over in waves. 
+
+For those enterprise customers especially, the difference was night and day. “With our previous setup, there were queries that would take a week to complete, and other things they just couldn’t even do,” Chris says. “Our largest customers are thrilled.”
+
+
+---
+
+## Get started today
+
+Interested in seeing how ClickHouse works on your data? Get started with ClickHouse Cloud in minutes and receive $300 in free credits.
+
+[Sign up](https://console.clickhouse.cloud/signUp?loc=blog-cta-962-get-started-today-sign-up&utm_blogctaid=962)
+
+---
+
+## Appcues’ new ClickHouse-based setup
+
+By the time Chris took the stage in Boston, Appcues’ analytics system looked very different. At a high level, it now takes a noisy stream of key-value events and turns it into fast, queryable tables that match how the product actually needs to reason about users and experiences.
+
+All events flow through Kafka into Appcues’ “clickwriter” consumer, which performs light deduplication before inserting data into ClickHouse. From there, data is split into two main families: experience analytics—impressions, completions, surveys, and outcomes tied to customer workflows—and user and group profiles, built from streams of property updates that must resolve into a clean, current-state view.
+
+The deployment model reflects Appcues’ scale and compliance needs. Their primary ClickHouse warehouse runs five services with two to three replicas each, thirteen replicas total. Those services take advantage of what Chris calls “ClickHouse’s very fast upscaling and downscaling,” growing from modest instances with 16 GB of memory and 4 vCPUs to machines with over 1 TB of RAM and hundreds of cores during peak demand, then scaling back down to manage cost. A separate, fully isolated warehouse serves HIPAA customers.
+
+[Materialized views](https://clickhouse.com/docs/materialized-views) are key to making this work at scale. Where Airflow once rolled up data every few minutes, ClickHouse now precomputes counts and sums at insert time. “That dramatically improved all our queries,” Chris says. “We were able to eliminate all of our Airflow infrastructure—all of that cost and, most importantly, all of that latency.”
+
+For profile data, [SharedReplacingMergeTree](https://clickhouse.com/docs/cloud/reference/shared-merge-tree) sits at the heart of the design. Updates arrive as events, and ClickHouse resolves them into flattened profile tables. One important optimization was learning when *not* to use [FINAL](https://clickhouse.com/docs/sql-reference/statements/select/from#final-modifier). “We were trying to do all this in real time and not slow anything down,” Chris says. “We found that using [argMax](https://clickhouse.com/docs/sql-reference/aggregate-functions/reference/argmax) instead took stress off the system, while allowing us to get the latest user profile with minimal overhead.”
+
+Late in the project, a final challenge emerged: deletes. Appcues provides self-serve APIs for GDPR and test-data deletions, and some customers generate a constant stream of them. Traditional deletes triggered expensive background merges, and as volume grew, they found themselves facing a growing backlog, with GDPR’s 30-day delete clock ticking.
+
+The solution came with [ClickHouse 25.6](https://clickhouse.com/blog/clickhouse-release-25-06) and the introduction of [lightweight deletes](https://clickhouse.com/docs/guides/developer/lightweight-delete). “Its lightweight patch-part mechanism allowed us to blow through these deletes immediately,” Chris says. “All of a sudden, we were past our major challenge. That was awesome.”
+
+## Faster queries, fresher data, lower cost
+
+Previously, P95 query times hovered around 20 seconds. On ClickHouse, P95 is under two seconds—a 90% improvement—despite the fact that Appcues has added more workloads and features on top of the system. Even P99 and max latencies, Chris says, are “not that much higher… they’re very reasonable.”
+
+The improvements in ingestion latency are even more impressive. Previously, thanks to those Airflow-based rollups, it could take 10 minutes or more for new events to show up in reports. But with ClickHouse, it’s closer to five seconds. “That’s 99% faster from the moment an event hits our servers to the moment you can query the results in ClickHouse,” Chris says.
+
+Cost, meanwhile, has dropped significantly even as capabilities have expanded. Even with all the new segmentation and email workloads layered into ClickHouse, reducing the overall analytics stack by 23%, costs now scale more predictably as usage grows. 
+
+Part of that comes down to the basic economics of [how cloud data warehouses bill for compute](https://clickhouse.com/blog/how-cloud-data-warehouses-bill-you) and [how different execution and scaling models translate performance into cost](https://clickhouse.com/blog/cloud-data-warehouses-cost-performance-comparison). In a provisioned “warehouse” model, scaling performance and concurrency often means scaling the meter right along with it. ClickHouse Cloud gives Appcues a more flexible way to size and autoscale compute to the workload they actually have.
+
+For Chris and the Appcues team, this is only the beginning. “We didn’t stop there,” he says. “It wasn’t just a parity project.” The team has already started to push the platform further, rolling out new funnel reports that use ClickHouse [window functions](https://clickhouse.com/docs/sql-reference/window-functions) to show how users are progressing through workflow and messaging pipelines. They’ve also added AI-powered natural-language insights, with agents leveraging the “clickclient” query library to answer customer questions about product and user activity, benchmarks, and product adoption.
+
+Now with ClickHouse Cloud, Appcues finally has an analytics platform that can keep up with real-time product decisions, support new channels and features, and scale efficiently without becoming a drag on the business. 
+
+> “We’re thrilled with the results, and thrilled with the support we got from the ClickHouse team.”
+>
+> — Chris Brookins, VP of Engineering, Appcues
+
+
+---
+
+## What's new in Postgres Managed by ClickHouse: RBAC, Terraform, ClickPipes, extensions, and more
+Published: 2026-06-18T00:00:00+00:00
+URL: https://clickhouse.com/blog/postgres-managed-by-clickhouse-rbac-terraform-clickpipes-extensions
+
+---
+title: "What's new in Postgres Managed by ClickHouse: RBAC, Terraform, ClickPipes, extensions, and more"
+date: "2026-06-18T16:10:49.322Z"
+author: "Kaushik Iska"
+category: "Engineering"
+excerpt: "Postgres managed by ClickHouse's first major update since public beta, covering fine-grained access control, a redesigned console, Terraform support, MCP integration, Stripe provisioning, migrations, billing, and capacity reservations — all shipped in und"
+---
+
+# What's new in Postgres Managed by ClickHouse: RBAC, Terraform, ClickPipes, extensions, and more
+
+Postgres managed by ClickHouse went into [public beta](https://clickhouse.com/blog/postgres-managed-by-clickhouse-beta) in May. It is a fully managed, NVMe-backed Postgres service that is natively integrated with ClickHouse. Since then it has had a busy summer. We shipped fine-grained access control, a redesigned console, a Terraform provider, MCP support, a Stripe integration, usage metering, and a set of changes deeper in the stack. **The common thread across most of it is a deep push towards making ClickHouse Cloud the best data platform for both OLTP + OLAP**. Here is everything in one place.  
+
+## A redesigned console
+
+Open any Postgres service now and you land on a redesigned homepage that brings the things you check most into a single view. There is a service info card, at-a-glance health stats for used storage, active connections, disk IOPS, and your restore window, with deep links straight into Backups and point-in-time restore. Below that, a Resource usage section charts IOPS, CPU, disk, and connection count over whatever time period you pick, and a [Query insights](https://clickhouse.com/blog/postgres-query-insights-clickhouse-cloud) section breaks down queries per second, query latency, and operations.
+
+The rest of the create and management experience got the same treatment:
+
+- **Reworked create flow.** The custom configuration step has been rebuilt for a cleaner, less cluttered experience.  
+- **Smarter region defaults.** The region closest to you is pre-selected on the create page, so you do not have to hunt for it.  
+- **Downscale safety guard.** When you scale down, sizes that would not fit your existing data are disabled, so you cannot pick a target that loses data.  
+- **Monitoring improvements.** You can now search across metrics, and configuring a metric is smoother.  
+- **Read replica topology view.** A new visualization shows your primary and read replicas with draggable nodes, so the layout is easy to inspect at a glance.
+
+<video autoplay="1" muted="1" loop="1" controls="0">
+  <source src="https://clickhouse.com/uploads/02_ux_walkthrough_42a5c8c605.mp4" type="video/mp4" />
+</video>
+
+## Fine-grained access control
+
+Managed Postgres now supports fine-grained, per-service access control. You no longer have to make a teammate an organization admin just to let them work on a single Postgres service, and the permissions apply the same way across the Cloud Console and the public REST API.
+
+There are two levels:
+
+- **View.** Read-only inside the service, plus read-only access to that service through the public API.  
+- **Manage.** Full administrative control, including settings changes, backups, restore and point-in-time recovery, read replicas, and replication configuration.
+
+A few details that make this work in practice: list endpoints honor these permissions, so each user sees only the services they have view access to. Sensitive fields like connection passwords are hidden from view-only users. And existing organization-admin access is preserved, so nothing changes for current admins.
+
+For a walkthrough of assigning roles, the full list of API permissions, and examples for common team setups, see the [Managed Postgres RBAC documentation](https://clickhouse.com/docs/cloud/managed-postgres/rbac).
+
+<video autoplay="1" muted="1" loop="1" controls="0">
+  <source src="https://clickhouse.com/uploads/03_rbac_walkthrough_A_1280p_crf28_cf0b21256b.mp4" type="video/mp4" />
+</video>
+
+## Infrastructure as code (Terraform)
+
+The [Terraform provider for ClickHouse managed Postgres](https://registry.terraform.io/providers/ClickHouse/clickhouse/latest/docs/resources/postgres_service) is now available in alpha. You can manage a Postgres instance as code, in the same configuration as the rest of your ClickHouse Cloud infrastructure. It covers the full instance lifecycle, including create, resize, HA changes, configuration, and password rotation, along with streaming read replicas and point-in-time restore. Existing services and their CA certificates are available as data sources.
+
+```
+resource "clickhouse_postgres_service" "example" {
+ name           = "my-postgres"
+ cloud_provider = "aws"
+ region         = "us-east-1"
+ size           = "m6gd.large"
+
+ # High-availability mode ("none", "async", or "sync")
+ ha_type = "async"
+
+ tags = {
+   environment = "production"
+   team        = "data"
+ }
+}
+```
+
+The [docs](https://clickhouse.com/docs/cloud/managed-postgres/terraform) have the full schema and more examples. It is alpha, so the provider ships with an alpha warning, and more features are on the way.
+
+## Provision through Stripe
+
+You can now provision Postgres by ClickHouse services through Stripe. [Stripe Connect](https://stripe.com/connect) handles the payment side, including onboarding, payouts, and compliance, so platforms and marketplaces can offer managed Postgres to their own customers without building that plumbing themselves. With a few commands you can provision an instance with the options you would expect in the Stripe catalog, such as custom instance sizes, Postgres versions, and HA settings.
+
+<video autoplay="1" muted="1" loop="1" controls="0">
+  <source src="https://clickhouse.com/uploads/06_stripe_walkthrough_A_1280p_crf28_ce8368acf3.mp4" type="video/mp4" />
+</video>
+
+## Postgres to Postgres Migrations
+
+We launched Postgres to Postgres [ClickPipes](https://clickhouse.com/docs/cloud/managed-postgres/migrations/clickpipes) for Postgres services as part of beta. The feature that sets it apart from other tools on the market is automated schema migration as part of the pipe itself. We also made progress on managed, automated post-migration steps, with automatic sequence resetting now landing in PeerDB.
+
+We wrote up the details, including a demo, in a separate post: [ClickPipes Postgres to Postgres](https://clickhouse.com/blog/clickpipes-postgres-to-postgres).
+
+## Usage metering and billing
+
+[Billing](https://clickhouse.com/blog/postgres-managed-by-clickhouse-beta#pricing) for Postgres services started on June 15 at Beta prices. Usage from all Postgres services is now reported through the same metering pipeline used by ClickHouse Cloud and is visible alongside your other services on the **Usage Breakdown** page.
+
+You get a unified breakdown per service across compute, storage, backups, ClickPipes, and data transfer, with a daily usage chart for spotting trends and spikes over any time period. As with ClickHouse Cloud services, all usage is shown at list price, and you can drill into each dimension from the tabs at the top of the chart.
+
+![image3.png](https://clickhouse.com/uploads/image3_befc217831.png)
+
+Usage also flows through the rest of the billing experience:
+
+- **Periodic billing statements.** Postgres services appear as line items in your monthly statement, broken down by usage dimension, so finance teams see one consolidated bill for ClickHouse and Postgres together.  
+- **Statement CSV downloads.** The full per-service, per-day usage breakdown exports via Download CSV, ready to feed into your own cost reporting, chargeback, or FinOps tooling.
+
+Want to estimate what a workload will cost? The [pricing calculator](https://clickhouse.com/pricing?service=postgres#pricing-calculator) lets you size a configuration and see the price.
+
+## Capacity reserved ahead of demand
+
+The AI boom is consuming cloud compute at a rapid pace, and the largest instance types are getting harder to secure. Even at our scale, and even with strong relationships across the cloud providers, capacity is no longer something to take for granted at the demand levels we are seeing.
+
+To stay ahead of that, managed Postgres now uses dynamic capacity reservations on AWS. The system allocates and resizes AWS On-Demand Capacity Reservations based on current usage, and it keeps that reserved capacity spread across availability zones. When you provision a new service, resize an existing one, or fail over to a standby, the instances you need are already held for you, including the large shapes that are hardest to get.
+
+For you, that means reliability you do not have to plan around. Capacity is reserved ahead of demand rather than requested the moment you need it, which lowers the chance of a shortfall during a new provision, a resize, or a routine VM recycle, and it keeps failovers landing on the right instance type when it matters most.
+
+This is rolling out across our AWS regions now.
+
+## Faster, leaner extensions
+
+This drop also includes work on the Postgres extensions behind managed Postgres:
+
+- **pg_clickhouse**, the [unified query layer](https://clickhouse.com/blog/introducing-pg_clickhouse) that lets an application span Postgres transactions and ClickHouse analytics.  
+- **pg_re2**, which brings RE2-based regular expressions to Postgres and recently reached v0.2.0. Benchmarks are in [re2bench](https://github.com/serprex/re2bench).  
+- **pg_stat_ch**, an extension that exports Postgres statistics and query activity into ClickHouse. It is what feeds the query insights and monitoring you see in the console.
+
+The headline change this cycle was in pg\_clickhouse, which moved its binary driver from clickhouse-cpp to the new header-only [clickhouse-c](https://github.com/ClickHouse/clickhouse-c) library, its first public use (see the [C integration docs](https://clickhouse.com/docs/integrations/c)). The switch removes the conflict between C++ exceptions and Postgres's own error handling, so the extension runs on much more stable code paths. It lets the extension allocate through Postgres memory contexts directly rather than straddling two memory models, and it drops heavy vendored dependencies, which cuts build times and shrinks the compiled extension from 4.9 MB to 1.4 MB on x86-64 Linux. The release also fixes UInt16 values to convert to int32 instead of int16, and it installs as a normal minor update with no reload, restart, or ALTER EXTENSION UPDATE required. pg\_stat\_ch made the same move to clickhouse-c, so both extensions now ride on one lean client.
+
+## Wrapping up
+
+All of this shipped in less than a month since the beta. Access control, the redesigned console, Terraform, MCP, Stripe, migrations, billing, capacity reservations, and the extensions underneath all landed in that window. That is the summer drop for managed Postgres. Most of it comes down to one thing: meeting your Postgres where your team already lives, from per-service permissions and Terraform to MCP, Stripe, and a consolidated bill. A few pieces, Terraform and the extensions in particular, are still moving quickly, so expect more soon.
+
+### Get started
+
+[Sign up for ClickHouse Cloud](https://console.clickhouse.cloud/signUp?intent=PG) to provision an NVMe-backed Postgres service, set up native CDC into ClickHouse, and query across both with [pg\_clickhouse](https://clickhouse.com/blog/introducing-pg_clickhouse). Every new account includes $300 in free credits. To learn more, visit the [Postgres managed by ClickHouse page](https://clickhouse.com/cloud/postgres) or jump into the [documentation](https://clickhouse.com/docs/cloud/managed-postgres).
+
+
+---
+
+## Get started today
+
+Ready to provision an NVM-e backed Postgres service?
+
+[Sign up](https://console.clickhouse.cloud/signUp?intent=PG&loc=blog-cta-958-get-started-today-sign-up&utm_blogctaid=958)
+
+---
+
+---
+
+## June 2026 newsletter
+Published: 2026-06-18T00:00:00+00:00
+URL: https://clickhouse.com/blog/202606-newsletter
+
+---
+title: "June 2026 newsletter"
+date: "2026-06-18T09:23:47.185Z"
+author: "Mark Needham"
+category: "Community"
+excerpt: "Welcome to the June 2026 ClickHouse newsletter, which will round up what’s happened in real-time data warehouses over the last month."
+---
+
+# June 2026 newsletter
+
+Ten years ago this month, we released ClickHouse as an open-source project. What started as a prototype I built to solve a real data problem has grown into something I could not have imagined: 2,000 contributors, users on every continent, and a community that continues to push the project further than any single team could.
+
+In this issue, you will find our own engineering updates alongside stories from community members building real systems with ClickHouse. Seeing people share what they have built is one of the best parts of having an open community.
+
+Here's to the next ten years.
+
+— Alexey Milovidov, inventor of ClickHouse
+
+## Featured community member: Vasily Chekalkin {#featured-community-member}
+
+This month's featured community member is Vasily Chekalkin, Staff Engineer at Neara in Sydney, Australia.
+
+![](https://clickhouse.com/uploads/jun2026_nl_image1_96ed958d70.png)
+
+Vasily contributed a series of improvements to ClickHouse's WebAssembly (WASM) user-defined functions in the 26.5 release.
+
+He added a `DETERMINISTIC` keyword, which means WASM UDFs can be declared as pure functions, making them eligible for constant folding and widening coercions for arguments. He also made WASM UDFs visible in `system.functions` with their argument and return types. Together, these changes make WASM UDFs easier to introspect and better integrated with the query optimizer.
+
+To see what's possible when you push WASM UDFs to their limits, check out his side project <a href="https://github.com/bacek/chgeos" target="_blank">chgeos</a> - PostGIS-compatible spatial functions for ClickHouse (`ST_Intersects`, `ST_Buffer`, `ST_Within`, and more) delivered as a WASM module powered by GEOS 3.12+.
+
+Beyond WASM UDFs, Vasily is a regular contributor across ClickHouse's Geospatial and Iceberg functionality, from fixing WKT parsing to propagating table UUIDs from the Iceberg REST catalog.
+
+➡️ <a href="https://www.linkedin.com/in/bacek/" target="_blank">Connect with Vasily on LinkedIn</a>
+
+## Ten years of ClickHouse in open source {#ten-years-of-clickhouse-in-open-source}
+
+![](https://clickhouse.com/uploads/jun2026_nl_image2_1e2d7960a0.png)
+
+Alexey Milovidov kicked off the 10-year anniversary week with the full origin story.
+
+It starts with a 2008 prototype built to keep up with web analytics data that was growing faster than any existing database could handle, runs through the open-source release on June 15, 2016, and reflects on what it means to build truly in the open, with 2,000+ contributors and counting.
+
+➡️ <a href="https://clickhouse.com/blog/open-source-10" target="_blank">Read the blog post</a>
+
+## 26.5 release {#265-release}
+
+![](https://clickhouse.com/uploads/jun2026_nl_image3_0f8d84a5f8.png)
+
+ClickHouse 26.5 sees some important performance optimizations, particularly around Top-N queries - those that sort or group a large dataset only to return a handful of rows.
+
+Pushing `ORDER BY … LIMIT` through a JOIN (20.4× faster with 175× less memory on TPC-H SF100) and supporting `GROUP BY … LIMIT` without an `ORDER BY` (11.9× faster and 185× less peak memory) both let ClickHouse stop work early instead of processing rows it will only throw away later.
+
+➡️ <a href="https://clickhouse.com/blog/clickhouse-release-26-05" target="_blank">Read the release post</a>
+
+## Open House 2026 announcements {#open-house-2026-announcements}
+
+![](https://clickhouse.com/uploads/jun2026_nl_image4_957b940dec.png)
+
+We hosted our annual Open House conference a few weeks ago in San Francisco and detailed all the announcements in this blog post.
+
+Highlights included **ClickHouse Postgres**, a managed Postgres service that achieved 5x+ more transactions/sec than AWS RDS, and **ClickHouse Agents**, a new agentic analytics service powered by Claude with a native chat interface and a no-code agent builder.
+
+➡️ <a href="https://clickhouse.com/blog/open-house-2026-day-1" target="_blank">Read about the announcements</a>
+
+## Introducing native ClickHouse support in Jaeger {#introducing-native-clickhouse-support-in-jaeger}
+
+![](https://clickhouse.com/uploads/jun2026_nl_image5_42c462214c.png)
+
+Mahad Zaryab walks through the design decisions behind native ClickHouse support in Jaeger v2.18.0, the most-requested storage backend from users running Jaeger at scale.
+
+On a single-node benchmark, it achieved an ingestion rate of 50,000+ spans per second, with 8.6× compression, and sub-50ms search latency across 10 million spans.
+
+➡️ <a href="https://medium.com/jaegertracing/introducing-native-clickhouse-support-in-jaeger-3341e8208720" target="_blank">Read the blog post</a>
+
+## Building ClickCannon: a tool for benchmarking ClickHouse {#building-clickcannon-a-tool-for-benchmarking-clickhouse}
+
+![](https://clickhouse.com/uploads/jun2026_nl_image6_f1677b8991.png)
+
+Spencer Torres introduces ClickCannon, an open-source benchmarking tool for ClickHouse that grew out of internal work to build sizing recommendations for ClickStack.
+
+It replays real production data at controlled throughput, simulates concurrent user query patterns, and decouples disk and insert workers, allowing each to be scaled independently, giving teams a flexible framework for testing any ClickHouse insert and query workload.
+
+➡️ <a href="https://clickhouse.com/blog/building-clickcannon-a-tool-for-benchmark-clickhouse" target="_blank">Read the blog post</a>
+
+## Building a high-throughput KPI pipeline on ClickHouse: partitioning, idempotent recalculation, and flat column storage {#building-a-high-throughput-kpi-pipeline-on-clickhouse-partitioning-idempotent-recalculation-and-flat-column-storage}
+
+![](https://clickhouse.com/uploads/jun2026_nl_image7_fec53eddd2.png)
+
+Mobin Shaterian details three ClickHouse-specific design decisions behind a telecom KPI pipeline processing 15 million rows per hour.
+
+The pipeline uses `ALTER TABLE … DELETE` scoped to a time window for idempotent recalculation, stores hundreds of KPIs as flat columns for compression and query simplicity, and merges sparse KPI sources with CTEs and `FULL OUTER JOIN` so cells with missing data still land in the right row.
+
+➡️ <a href="https://medium.com/stackademic/building-a-high-throughput-kpi-pipeline-on-clickhouse-partitioning-idempotent-recalculation-and-3302a12ddf83" target="_blank">Read the blog post</a>
+
+## How ClickHouse became fast at joins {#how-clickhouse-became-fast-at-joins}
+
+![](https://clickhouse.com/uploads/jun2026_nl_image8_baa16c3c5e.jpg)
+
+Tom Schreiber charts two years of focused join engineering that made ClickHouse 26× faster on TPC-H SF100 join-heavy workloads.
+
+Year one laid the foundation with parallel hash join as the default, smarter filter pushdown, and local join reordering.
+
+In year two, we added correlated subquery support, lazy column replication, runtime filters, and statistics-based join reordering, the last of which dropped a six-table query from 3,903 seconds to 2.7 seconds.
+
+➡️ <a href="https://clickhouse.com/blog/clickhouse-fast-joins" target="_blank">Read the blog post</a>
+
+## Quick reads {#quick-reads}
+
+* Mohamed Hussain S <a href="https://medium.com/stackademic/why-too-many-parts-destroy-clickhouse-performance-d143b75189e3" target="_blank">explains how to avoid ClickHouse's "too many parts" trap</a> by batching inserts into larger writes, using async inserts as a buffer, and avoiding overly granular partition keys, such as hourly timestamps.
+* Mobin Shaterian <a href="https://medium.com/datadriveninvestor/how-we-rebuilt-a-telecom-kpi-platform-to-handle-billions-of-records-from-json-blobs-to-flat-1a4eb6b27574" target="_blank">explains how a telecom KPI platform was rebuilt to handle 10 billion records per month</a>, replacing JSON string columns with flat columnar storage, buffering inserts through Kafka, and pre-calculating KPIs with Airflow to cut query times from minutes to milliseconds.
+* RaviKumar Vatthumalli explains how <a href="https://medium.com/@ravikumar.vattumalli.learning/3-reducing-browser-tab-memory-in-analytics-dashboards-with-clickhouse-arrowstream-24e3f01ce926" target="_blank">switching ClickHouse query results from JSON to ArrowStream</a> reduced memory usage in browser tabs for analytics dashboards.
+* Caesario Kisty builds a <a href="https://blog.dataengineerthings.org/building-a-clickhouse-native-document-ingestion-pipeline-from-minio-to-vector-search-clickvector-448d6511f497" target="_blank">ClickHouse-native RAG ingestion pipeline</a> where ClickHouse handles state tracking, chunking, HNSW vector search, and scheduling via refreshable materialized views.
+* Mark Needham wrote a blog post showing how to do [random native sampling in ClickHouse](https://clickhouse.com/blog/native-random-sampling)
+
+---
+
+## Get started today
+
+Interested in seeing how ClickHouse works on your data? Get started with ClickHouse Cloud in minutes and receive $300 in free credits.
+
+[Sign up](https://console.clickhouse.cloud/signUp?loc=blog-cta-933-get-started-today-sign-up&utm_blogctaid=933)
+
+---
+
+## Events {#events}
+
+### Global virtual events {#global-virtual-events}
+
+* <a href="https://events.nikkeibp.co.jp/event/2026/nb26061819/" target="_blank">Nikkei AI Insight</a> - Jun 18, 2026
+* <a href="https://clickhouse.com/company/events/202606-EMEA-Webinar-Unified-Data-Stack-ClickHouse-Postgres" target="_blank">Combining Postgres & ClickHouse to Build a Unified Data Stack</a> - Jun 23, 2026
+* <a href="https://clickhouse.com/company/events/202606-AMER-CostBench" target="_blank">How to benchmark whether a system is truly real-time and cost-efficient</a> - Jun 24, 2026
+* <a href="https://clickhouse.com/company/events/202606-EMEA-Webinar-FullTextSearch" target="_blank">Full Text Search at ClickHouse scale and speed</a> - Jun 30, 2026
+* <a href="https://clickhouse.com/company/events/202607-APJ-Webinar-open-office-hour" target="_blank">ClickHouse Open Office & Live AMA</a> - Jul 2, 2026 (APJ-timing)
+* <a href="https://clickhouse.com/company/events/202607-EMEA-Webinar-Langfuse" target="_blank">Observing and Improving AI Agents with Langfuse</a> - Jul 8, 2026
+
+### Virtual training {#virtual-training}
+
+* <a href="https://clickhouse.com/company/events/202606-AMER-EMEA-ClickHouse-Fundamentals" target="_blank">ClickHouse Fundamentals</a> - Jun 24, 2026
+* <a href="https://clickhouse.com/company/events/202606-AMER-Integrating-ClickHouse-Data-Lake" target="_blank">Integrating ClickHouse with your Data Lake</a> - Jun 30, 2026
+* <a href="https://clickhouse.com/company/events/202607-APJ-Observability-with-ClickStack-Level1" target="_blank">Observability with ClickStack: Level 1</a> - Jul 8, 2026 (APJ-timing)
+* <a href="https://clickhouse.com/company/events/202607-APJ-Observabiity-with-ClickStack-Level2" target="_blank">Observability with ClickStack: Level 2</a> - Jul 9, 2026 (APJ-timing)
+* <a href="https://clickhouse.com/company/events/202607-APJ-Observabiity-with-ClickStack-Level3" target="_blank">Observability with ClickStack: Level 3</a> - Jul 10, 2026 (APJ-timing)
+* <a href="https://clickhouse.com/company/events/202607-AMER-EMEA-ClickHouse-Fundamentals" target="_blank">ClickHouse Fundamentals</a> - Jul 15, 2026
+
+### Events in AMER {#events-in-amer}
+
+* <a href="https://aws.amazon.com/events/summits/new-york/" target="_blank">AWS Summit New York</a> - New York - Jun 17, 2026
+* <a href="https://clickhouse.com/company/events/seattleicejune26" target="_blank">Seattle Iceberg Meetup</a> - Seattle - Jun 25, 2026
+* <a href="https://aws.amazon.com/es/events/summits/bogota/" target="_blank">AWS Summit Bogotá</a> - Bogotá - Jul 30, 2026
+
+### Events in EMEA {#events-in-emea}
+
+* <a href="https://cloudonair.withgoogle.com/events/london-summit-26-register-your-interest" target="_blank">Google Cloud Summit London</a> - London - Jun 17, 2026
+* <a href="https://vivatech.com" target="_blank">VivaTech</a> - Paris - Jun 17, 2026
+* <a href="https://clickhouse.com/company/events/202606-EMEA-Benelux-Amsterdam-The%20Agentic%20Data%20Stack" target="_blank">The Agentic Data Stack</a> - Amsterdam - Jun 18, 2026
+* <a href="https://clickhouse.com/company/events/202606-EMEA-France-Paris-ClickHousePartner%20Meetup" target="_blank">Meetup Partenaires ClickHouse - Paris</a> - Jun 24, 2026
+* <a href="https://clickhouse.com/company/events/AgenticAI-Energy-Amsterdam" target="_blank">Agentic AI in the Energy Industry - Panel Session</a> - Amsterdam - Jul 1, 2026
+* <a href="https://luma.com/clickh-ha56" target="_blank">Data at Scale</a> - Amsterdam - Jul 7, 2026
+* <a href="https://clickhouse.com/company/events/202607-EMEA-DACH-Germany-Berlin-WeAreDevelopers-MeetingRequest" target="_blank">WeAreDevelopers</a> - Berlin - Jul 8, 2026
+* <a href="https://clickhouse.com/openhouse/amsterdam-2026?utm_source=marketo&utm_medium=email&utm_campaign=202609-EMEA-Benelux-Netherlands-Amsterdam-Open-House-Roadshow" target="_blank">Open House Roadshow</a> - Amsterdam - Sept 1, 2026
+* <a href="https://clickhouse.com/openhouse/london-2026?utm_source=marketo&utm_medium=email&utm_campaign=202609-EMEA-UKI-London-Open-House-Roadshow" target="_blank">Open House Roadshow</a> - London - Sept 30, 2026
+
+### Events in APAC {#events-in-apac}
+
+* <a href="https://clickhouse.com/company/events/202606-APJ-3P-Mumbai-KubeCon" target="_blank">KubeCon + CloudNativeCon India</a> - Mumbai - Jun 18-19, 2026
+* <a href="https://luma.com/clickhouse" target="_blank">ClaudSG x ClickHouse: How AI Queries & Answers From your Data - Singapore</a> - Singapore - June 19, 2026
+* <a href="https://pycon.sg/" target="_blank">PyCon Singapore</a> - Singapore - June 19-20, 2026
+* <a href="https://clickhouse.com/company/events/2026-06_APJ_China_Shanghai_AWS-Summit" target="_blank">AWS Summit Shanghai</a> - Shanghai - Jun 23, 2026
+* <a href="https://clickhouse.com/company/events/ch-syd-meetup-24jun26" target="_blank">Agentic AI Unplugged: Running AI Agents at Scale</a> - Sydney - Jun 24, 2026
+* <a href="https://aws.amazon.com/jp/events/summits/japan/" target="_blank">AWS Summit Japan</a> - Tokyo - Jun 25-26, 2026
+* <a href="https://cloudonair.witney-2026" target="_blank">Google Cloud Summit Sydney</a> - Sydney - Jun 25, 2026
+* <a href="https://clickhoueetup-26jun26" target="_blank">ClickHouse KL Meetup - June 2026</a> - Kuala Lumpur - Jun 26, 2026
+* <a href="https://clickhouse.com/company/eur-KCD" target="_blank">KCD Kuala Lumpur</a> - Kuala Lumpur - Jun 27, 2026
+* <a href="https://clickel-meetup-30jun26" target="_blank">ClickHouse + Confluent Seoul Meetup</a> - Seoul - Jun 30, 2026
+* <a href="https://clickhouse.com/company/events/ch-bom-meetup-04jul26" target="_blank">Lakes to Queries: Building High-Performance Data Platforms</a> - Mumbai - Jul 4, 2026
+* <a href="https://cloudonair.withgoogle.com/events/googlecloudday-taipei-2026" target="_blank">Google Cloud Day Taipei</a> - July 9, 2026
+* <a href="https://clickhouse.com/company/events/ch-blr-meetup-11jul26" target="_blank">Pipes, Streams, and Queries: Engineering Fast Data at Scale</a> - Bangalore - Jul 11, 2026
+* <a href="https://clickhouse.com/company/events/ch-mel-meetup-16jul26" target="_blank">ClickHouse Melbourne Meetup - July 2026</a> - Melbourne - Jul 16, 2026
+* <a href="https://clickhouse.com/clickathon/india2026" target="_blank">Click-a-Thon India</a> - Bangalore - August 1-2, 2026
+* <a href="https://clickhouse.com/openhouse/sydney-2026" target="_blank">Open House Roadshow - Sydney</a> - Aug 11, 2026
+* <a href="https://clickhouse.com/openhouse/melbourne-2026" target="_blank">Open House Roadshow - Melbourne</a> - Aug 13, 2026
+
+
+---
+
+## GCP Pub/Sub connector for ClickPipes is now in Private Preview
+Published: 2026-06-17T00:00:00+00:00
+URL: https://clickhouse.com/blog/clickpipes-gcp-pub-sub-preview
+
+---
+title: "GCP Pub/Sub connector for ClickPipes is now in Private Preview"
+date: "2026-06-17T20:53:04.615Z"
+author: "Marta Paes"
+category: "Engineering"
+excerpt: "Stream data from Pub/Sub in a few clicks for blazing-fast analytics over GCP infrastructure logs, application events, and operational signals. No routing through GCS or Dataflow required."
+---
+
+# GCP Pub/Sub connector for ClickPipes is now in Private Preview
+
+## Summary
+
+Stream data from Pub/Sub in a few clicks for blazing-fast analytics over GCP infrastructure logs, application events, and operational signals. No routing through GCS or Dataflow required.
+
+Pub/Sub is the primary messaging layer for a wide range of GCP services: Cloud Logging, Cloud Monitoring, GKE workloads, and custom event producers across the GCP stack. As more teams route their GCP infrastructure logs, application events, and operational signals to ClickHouse Cloud, we wanted to lower the barrier to get this data in.
+
+Today, we're announcing a new **GCP Pub/Sub connector for [ClickPipes](https://clickhouse.com/cloud/clickpipes)**, now available in Private Preview! You can seamlessly stream data from GCP Pub/Sub into ClickHouse Cloud in **real time** with a few clicks and **no additional infrastructure**. The connector supports all **common formats** (JSON, Avro, Protobuf) and **schema registry integration**, with attribute-based message filtering, flexible seek options, and per-key ordered delivery. Like all ClickPipes connectors, it can also be managed programmatically via OpenAPI and the ClickHouse Terraform provider.
+
+
+---
+
+## GCP Pub/Sub connector for ClickPipes
+
+Join the waitlist today to try out the GCP Pub/Sub connector for ClickPipes!
+
+
+[Join the waitlist](https://clickhouse.com/cloud/clickpipes?loc=blog-cta-925-gcp-pub-sub-connector-for-clickpipes-join-the-waitlist&utm_blogctaid=925#pubsub-private-preview)
+
+---
+
+<video autoplay="1" muted="1" loop="1" controls="0">
+  <source src="https://clickhouse.com/uploads/pubsub_compressed_23960bbecb.mp4" type="video/mp4" />
+</video>
+
+## Why build a ClickPipe?
+
+**Simpler than building your own pipeline.** Previously, getting data from Pub/Sub into ClickHouse meant routing through GCS or standing up a Dataflow pipeline. The Pub/Sub ClickPipe handles all of this automatically: point it at your topic, configure your target table, and the connector manages subscription lifecycle, schema inference, and message delivery for you.
+
+**Built for continuous ingestion.** ClickPipes consumes messages in real-time, optimizing ingestion performance out-of-the-box and eliminating trade-offs between freshness and cost. The connector scales horizontally and vertically for high-throughput topics, is optimized for ClickHouse Cloud's architecture, and handles failures gracefully with configurable replicas and automatic retries.
+
+**Fully managed and native to ClickHouse Cloud.** Built-in metrics, monitoring, and detailed logs give you visibility into your pipeline without standing up external tooling. You can edit ClickPipes in place (*e.g.* add columns, adjust ingestion settings) without recreating them from scratch.
+
+## Main features
+
+### Integration with schema registry
+
+All common serialization formats are supported: **JSON**, **Avro**, and **Protobuf**; including native integration with the **Pub/Sub Schema Registry**. Schemas and field types are inferred and mapped automatically to a target table with ClickHouse native data types. Compressed payloads are **detected and decompressed automatically**, with no additional configuration needed.
+
+### Configurable start offsets
+
+The starting offset supports Pub/Sub's native [seek feature](https://docs.cloud.google.com/pubsub/docs/replay-overview), giving you precise **control over where ingestion begins**: latest, earliest, or a specific timestamp for backfills and point-in-time replay for failure scenarios.
+
+### Message filtering
+
+During ClickPipe creation, you can configure a Pub/Sub [subscription filter](https://docs.cloud.google.com/pubsub/docs/subscription-message-filter) on message attributes to drop messages before they are pulled from the subscription, reducing ingestion volume and associated costs.
+
+### Terraform & Open API support
+
+For mature ClickPipes deployments using workflow automation and Infrastructure as Code (IaC), a new `pubsub` source type is available in [the ClickPipes OpenAPI specification](https://clickhouse.com/docs/cloud/manage/api/swagger#tag/ClickPipes), as well as the ClickHouse Terraform Provider ([3.16.0+](https://github.com/ClickHouse/terraform-provider-clickhouse/releases/tag/v3.16.0)). Here's an example of how you'd configure a GCP Pub/Sub ClickPipe resource in Terraform:
+
+```
+resource "clickhouse_clickpipe" "pubsub" {
+  service_id = var.service_id
+  name       = var.pipe_name
+
+  source = {
+    pubsub = {
+      format         = "JSONEachRow"
+      project_id     = var.gcp_project_id
+      topic          = var.pubsub_topic
+      authentication = "SERVICE_ACCOUNT"
+      seek_type      = "latest"
+
+      service_account_key = {
+        service_account_file = var.gcp_service_account_b64
+      }
+    }
+  }
+
+  destination = {
+    table         = var.table
+    managed_table = true
+
+    table_definition = {
+      engine = {
+        type = "MergeTree"
+      }
+    }
+
+    columns = [
+      {
+        name = "my_field1"
+        type = "String"
+      },
+      {
+        name = "my_field2"
+        type = "UInt64"
+      },
+    ]
+  }
+
+  field_mappings = [
+    {
+      source_field      = "my_field"
+      destination_field = "my_field1"
+    }
+  ]
+}
+
+output "clickpipe_id" {
+  value = clickhouse_clickpipe.pubsub.id
+}
+```
+
+## How to sign up for Private Preview?
+
+The GCP Pub/Sub connector is available upon request, and **free** to use during Private Preview. Fill out [this form](https://clickhouse.com/cloud/clickpipes#pubsub-private-preview) to join the waitlist, or reach out to your ClickHouse Cloud account manager. To get started with step-by-step instructions, check out the [documentation for GCP Pub/Sub ClickPipes](https://clickhouse.com/docs/integrations/clickpipes/pubsub).
+
+
+---
+
+## Ready to test ClickHouse with your Pub/Sub data?
+
+Ready to test ClickHouse with your Pub/Sub data?
+
+In our benchmarks, ClickHouse delivers up to 4x faster query performance and significant cost savings for interactive analytics. Join the waitlist today to try it out for yourself with the new GCP Pub/Sub connector for ClickPipes.
+
+
+[Join the waitlist](https://clickhouse.com/cloud/clickpipes?loc=blog-cta-926-ready-to-test-clickhouse-with-your-pub-sub-data-join-the-waitlist&utm_blogctaid=926#pubsub-private-preview)
+
+---
+
+---
+
+## The open ecosystem around ClickHouse
+Published: 2026-06-17T00:00:00+00:00
+URL: https://clickhouse.com/blog/the-open-ecosystem-around-clickhouse
+
+---
+title: "The open ecosystem around ClickHouse"
+date: "2026-06-17T15:41:30.993Z"
+author: "Al Brown"
+category: "Company and culture"
+excerpt: "Around any good database sits the clients you import, the dashboards your team shares, the pipelines that feed it, the projects that build on top of it, and now the agents that query it."
+---
+
+# The open ecosystem around ClickHouse
+
+Around any good database sits the clients you import, the dashboards your team shares, the pipelines that feed it, the projects that build on top of it, and now the agents that query it. ClickHouse would not have [2,600+ contributors, 240k+ commits, and hundreds of millions of downloads](https://clickhouse.com/blog/what-a-difference-10-years-of-open-source-makes) without the ecosystem that has flourished around it.
+
+## Building on open standards
+
+ClickHouse is open source and built by a community of users. That shapes what the project reaches for when it connects to the rest of the world. ClickHouse gravitates to open standards that are themselves driven by their own communities, and over the years, it has adopted them across use cases: OpenTelemetry in observability, the Model Context Protocol in AI, Iceberg and Delta in the lakehouse. Much like ClickHouse is itself open, it integrates with an open ecosystem, where your data and your tooling stay yours, and you keep complete freedom over how you wire them together.
+
+### Observability
+
+OpenTelemetry is the open standard for instrumenting software, with one set of SDKs and one wire protocol for metrics, logs, and traces. You instrument once, and your telemetry can go anywhere, which means your instrumentation belongs to you.
+
+With ClickHouse rapidly becoming the database of choice for observability, it needed first-class support for OTel. The ClickHouse exporter lives upstream in the OpenTelemetry Collector's contrib repository, and OpenTelemetry is the spine of [ClickStack](https://clickhouse.com/blog/clickstack-a-high-performance-oss-observability-stack-on-clickhouse), the open-source observability stack for ClickHouse.
+
+ClickHouse is learning to speak Prometheus, too, with [PromQL support available experimentally](https://clickhouse.com/blog/open-house-2026-day-1#promql-support), so existing Prometheus queries and muscle memory carry over.
+
+### AI
+
+When agents arrived, they needed a standard way to reach tools and data, and the Model Context Protocol became it: an open protocol any model or framework can implement. The [ClickHouse MCP server](https://github.com/ClickHouse/mcp-clickhouse) is open source, and because MCP is an open protocol, it slots into whatever agent framework you already run. It's been shown [working with Agno, DSPy, LangChain, LlamaIndex, and PydanticAI](https://clickhouse.com/blog/integrating-clickhouse-mcp), and the list keeps growing. Any agent that speaks MCP can explore your tables, write queries, and read back results without anyone building a bespoke integration first.
+
+### Open table formats & catalogs
+
+Open table formats like Iceberg and Delta Lake let a dataset live in object storage, not tied to a single engine.
+
+ClickHouse [reads Iceberg v2 in full](https://clickhouse.com/blog/climbing-the-iceberg-with-clickhouse), including schema evolution, time travel, with Iceberg writes landing in 25.8. Delta Lake support is [built on Delta Kernel](https://clickhouse.com/blog/clickhouse-is-data-lake-ready), and Apache Paimon arrived in [25.10](https://clickhouse.com/blog/clickhouse-2025-roundup).
+
+A table format needs a catalog to track which files make up a table and hand that metadata to whatever engine asks. Here, too, ClickHouse leans on the open ones: it speaks the [Iceberg REST catalog](https://clickhouse.com/docs/use-cases/data-lake/rest-catalog) spec, [Apache Polaris](https://clickhouse.com/docs/use-cases/data-lake/polaris-catalog), and [Unity Catalog](https://clickhouse.com/docs/use-cases/data-lake/unity-catalog), each an open project with its own community. Because the catalog API is a standard rather than a product, you pick whichever one fits your stack, and swap later, without re-platforming your data.
+
+## An open, unified data stack
+
+Postgres is another great open-source database. It has a different job, but the same spirit. It sets the standard for transactional, OLTP workloads, and it does it in the open, guided by a community. ClickHouse does the same for analytics. Put them side by side, and you can't find a more obvious [pair](https://clickhouse.com/blog/postgres-managed-by-clickhouse-beta). GitLab [wrote about this setup](https://about.gitlab.com/blog/two-sizes-fit-most-postgresql-and-clickhouse/) a couple of years ago, and it has become common enough that the combination is turning into a standard in its own right.
+
+There are now several open-source tools that bring the two databases closer together:
+
+* [PeerDB](https://clickhouse.com/blog/postgres-cdc-year-in-review-2025) is the open-source Postgres CDC project that became the engine for moving transactional data into analytical tables.  
+* [pg\_clickhouse](https://clickhouse.com/blog/introducing-pg_clickhouse) is an open-source Postgres extension that makes ClickHouse tables queryable from standard Postgres, with filters, projections, and aggregations pushed down transparently. If a tool speaks Postgres, it now speaks ClickHouse.  
+* [pg\_stat\_ch](https://github.com/ClickHouse/pg_stat_ch) is an open-source Postgres extension that turns every query execution into a compact event and streams it into ClickHouse, where you can slice query latency, errors, and behavior over months of history like an APM.
+
+## Built on ClickHouse
+
+Some of the most interesting things in the ecosystem aren't just integrations. They're whole projects that chose ClickHouse as their engine and grew from there. A few have since become first-party, open-source projects alongside ClickHouse. Together, they mean ClickHouse can be more than a database: a full observability stack, or an LLM engineering platform, all without leaving open source.
+
+[ClickStack](https://clickhouse.com/blog/clickstack-a-high-performance-oss-observability-stack-on-clickhouse) is a full open-source observability stack, ClickHouse for storage, the OpenTelemetry Collector for ingestion, and the HyperDX UI on top, launched in May 2025\. A [year in](https://clickhouse.com/blog/clickstack-a-year-in-review-2025), it's become one of the most active corners of the community.
+
+[chDB](https://github.com/chdb-io/chdb) started as a community project, embedding ClickHouse in-process for Python, before [joining the family in 2024](https://clickhouse.com/blog/chdb-joins-clickhouse-family). It's still Apache 2.0 and, as of June 2026, sits at around 24 million PyPI downloads, running about 2.3 million a month. [chDB v4](https://clickhouse.com/blog/chdb.4-0-pandas-hex), released in March 2026, added the DataStore API, which lets you write pandas-compatible code that lazily compiles to optimized SQL on the ClickHouse engine, falling back to real pandas automatically for operations ClickHouse can't do. [Hex announced a partnership](https://hex.tech/blog/announcing-clickhouse-partnership/) that preinstalls chDB on every Hex notebook, with a one-click ClickHouse connection.
+
+[Langfuse](https://clickhouse.com/blog/open-house-2026-day-1) is the open-source LLM observability and engineering platform, tracing, evals, and prompt management for teams building on top of models. Its team joined ClickHouse in January 2026, with Langfuse remaining open source, OpenTelemetry-native, and self-hostable.
+
+[LibreChat](https://clickhouse.com/blog/open-house-2026-day-2) is the open-source agent and chat platform. It joined ClickHouse in October 2025 and continues as an active OSS project, shipping new releases every few weeks.
+
+## Build with ClickHouse
+
+Every official client is open source, and between them they cover the languages you're most likely to be writing:
+
+- [Go](https://github.com/ClickHouse/clickhouse-go)  
+- [Java](https://github.com/ClickHouse/clickhouse-java)  
+- [JavaScript and Node.js](https://github.com/ClickHouse/clickhouse-js)  
+- [Python](https://github.com/ClickHouse/clickhouse-connect)  
+- [C++](https://github.com/ClickHouse/clickhouse-cpp)  
+- [.NET](https://github.com/ClickHouse/clickhouse-cs)  
+- [Rust](https://github.com/ClickHouse/clickhouse-rs)
+
+The official Rust client, [clickhouse-rs](https://github.com/ClickHouse/clickhouse-rs), didn't start official at all. Paul Loyd built and maintained it as a community project for years before it became the official client. Someone built the thing because they needed it, the community gathered around it, and eventually it became part of the family.
+
+The clients have had a busy year, and a lot of it shipped at [Open House](https://clickhouse.com/blog/open-house-2026-day-2). The Python client, clickhouse-connect, hit v1.0 GA with native async and full sync parity, 4x faster cold starts, and first-class numpy, pandas, pyarrow, and polars support, plus a SQLAlchemy dialect with Alembic migrations. The .NET client reached v1.2.0 with Entity Framework Core, a Serilog sink, and Aspire and Semantic Kernel packages on NuGet. There's a Laravel driver with Eloquent models and artisan migrations for the PHP side of the house.
+
+And it's not just the clients. For teams running ClickHouse on Kubernetes, there's now an [official Apache 2.0 open-source Kubernetes operator](https://clickhouse.com/blog/clickhouse-kubernetes-operator), shipped in January 2026\. It automates the fiddly parts of running production clusters, sharding, replication, scaling, and safe rolling version upgrades, all driven through Kubernetes custom resources.
+
+## Partners and integrations
+
+[Apache Airflow](https://clickhouse.com/blog/open-house-2026-day-2#apache-airflow-native-provider) is the open-source standard for orchestrating data pipelines, the scheduler running the jobs that feed analytical tables, so a first-class ClickHouse provider reaches a lot of teams. ClickHouse is now getting an official hook and operator in [upstream Airflow](https://github.com/apache/airflow/pull/67080); going upstream, rather than living in a side plugin, means anyone who installs Airflow gets ClickHouse support in the box. But that official provider didn't appear out of nowhere. For years, community members Ivan Klimenko and Anton Bryzgalov built and maintained their own ClickHouse providers for Airflow racking up hundreds of thousands of downloads and keeping teams unblocked long before anything official existed.
+
+[dbt](https://www.getdbt.com/) is the open-source tool analytics engineers use to transform data in the warehouse by writing plain SQL select statements, and the ClickHouse adapter itself [started as a gift from the community](https://clickhouse.com/blog/clickhouse-dbt-project-introduction-and-webinar). ClickHouse is now the first partner co-developing a [dbt Fusion engine adapter](https://clickhouse.com/blog/open-house-2026-day-2#dbt-clickhouse-fusion-adapter), now in alpha.
+
+> "ClickHouse has become one of the fastest-growing databases in the dbt community" - Hope Watson, dbt Labs.
+
+[Grafana](https://grafana.com/) is the open-source dashboarding tool that a huge share of engineering teams already keep open on a second monitor, which makes its plugin one of the most common ways people see ClickHouse data. It's also one of the longest-running integrations anywhere, and the teams have published [a shared vision for where it goes next](https://clickhouse.com/blog/grafana-plugin-vision).
+
+[Fivetran's ClickHouse Cloud destination went GA](https://clickhouse.com/blog/open-house-2026-day-2#fivetran-generally-available), opening up more than 500 sources. [Sigma Computing's connector entered public beta](https://clickhouse.com/blog/open-house-2026-day-2#sigma-computing-connector-in-public-beta), Notion built a native ClickHouse MCP connector, and Google Cloud shipped a GA Dataflow template for Pub/Sub. Artie, Dreambase, Tavily, and Hightouch all shipped integrations of their own.
+
+## Here's to the next 10 years
+
+This open ecosystem has been building and flourishing for 10 years. 
+
+ClickHouse is now becoming a default for AI-native companies, foundation labs, and the agents they build. You can see it threaded through this post: the MCP servers, agents querying ClickStack, chDB handing agents a pandas interface, and the [ClickHouse Agent Skills](https://clickhouse.com/blog/introducing-clickhouse-agent-skills). Given how fast that space is moving, this is surely only scratching the surface of what integrating with it will look like.
+
+That's the thing about an open ecosystem: nobody gets to script it. The ClickHouse story has always been written by the people using it. 200+ integrations and hundreds of millions of downloads, built by maintainers, by partners, and by a community that just keeps shipping. If you've built something that talks to ClickHouse, you're part of this story.
+
+We don't know what the next ten years of the ClickHouse ecosystem will look like. We can't wait to find out.  
+
+
+---
+
+## 92x faster queries: How Open Electricity uses ClickHouse to track Australia’s energy transition in real time
+Published: 2026-06-17T00:00:00+00:00
+URL: https://clickhouse.com/blog/openelectricity-australia-energy-transition
+
+---
+title: "92x faster queries: How Open Electricity uses ClickHouse to track Australia’s energy transition in real time"
+date: "2026-06-17T12:06:29.853Z"
+author: "ClickHouse"
+category: "User stories"
+excerpt: "Open Electricity migrated ~1 billion rows of Australian energy data from Postgres and TimescaleDB to ClickHouse, achieving 92x faster queries on a fraction of the hardware."
+---
+
+# 92x faster queries: How Open Electricity uses ClickHouse to track Australia’s energy transition in real time
+
+## Summary
+
+* Open Electricity uses ClickHouse to power an open platform and public API serving live Australian energy data across \~1 billion records.  
+* Migrating from Postgres and TimescaleDB to ClickHouse delivered a 92x query speed improvement, with a benchmark query dropping from over 5 minutes to just over 3 seconds—and 60 milliseconds via materialized view.  
+* ClickHouse runs on significantly less hardware: 4 cores, 4GB RAM, and 200GB disk versus Postgres’s 16 cores, 32GB RAM, and 1.6TB, at a fraction of the cost.
+
+Something remarkable is happening to Australia's electricity grid. In the midst of a massive transformation, it has become one of the most closely watched energy systems on the planet.
+
+"Twenty years ago, the grid was pretty boring," says Nik Cubrilovic, a developer at [Open Electricity](https://openelectricity.org.au/), an open platform tracking Australia's electricity transition. Back then, the country had a hundred-odd generators—coal-fired power stations, the Snowy scheme, a handful of gas plants. "You might add or retire a facility each year," Nik says.
+
+In 2025 alone, Australia registered 40 new facilities. And the grid isn't just growing. "The composition of the grid is also changing," Nik says, highlighting that more than half of those new facilities are battery storage. "The capacity of the coal-fired power stations is decreasing, whereas batteries, solar power, and wind have really taken off."
+
+![](https://clickhouse.com/uploads/openelectricity_jun2026_image1_a384eadde2.png)
+
+*Australia's electricity generation capacity by fuel type since 1999. Coal (black and brown) has declined, while batteries (dark blue), solar (yellow), and wind (green) have surged in recent years.*
+
+"This is what makes our grid interesting, not just in Australia but globally," Nik says. "There are a lot of regulators and researchers all around the world who are interested in Australia's energy data to see how we're adapting with some of the challenges that come out of it."
+
+At a [February 2026 ClickHouse meetup in Melbourne](https://clickhouse.com/videos/202602-melbourne-meetup-openelectricity), Nik shared how Open Electricity is making that data accessible, what led them to migrate over a billion rows to ClickHouse, and why he believes ClickHouse plus Postgres is a "magical pairing."
+
+## A billion rows and counting
+
+Open Electricity pulls its data from two grids: the NEM, or National Electricity Market, covering the eastern states from Tasmania to north Queensland, and the WEM, the Wholesale Electricity Market in Western Australia. Every five minutes, each generating unit reports how much power it produced, and the regulator publishes that data in what Nik describes as "really awkward CSV files" that Open Electricity must then parse and enrich.
+
+The grid, Nik explains, has a hierarchy. Each network is made up of facilities, each facility is made up of units, and each unit has its own fuel technology. "A coal-fired power station might have four different units," he says. "A wind farm might have 30 different wind generators."
+
+The data breaks down into three types: market data (price, demand, generation, and forecasts per region), generation data recorded per unit per interval going back to 1999, and curated facility data built by Open Electricity on top of the raw four-digit regulator codes, covering over 100 fields per facility. Altogether that adds up to around 1 billion records, with the platform adding another 500,000 each day.
+
+The scale is easy to see when you start digging into charts on the Open Electricity [website](https://openelectricity.org.au/). The default 7-day view draws on over 32,000 data points—12 five-minute intervals per hour, 24 hours a day, seven days, across 16 fuel technology groups. The all-time view, stretching back to 1999, requires aggregating around 45 million data points out of that billion-row table, which users can slice by region, fuel type, or renewables versus non-renewables. All of it is served live through a public API used by around 300 companies and institutions.
+
+![](https://clickhouse.com/uploads/openelectricity_jun2026_image3_238c75f05e.png)
+
+*Open Electricity's default view, showing seven days of generation by fuel technology type.*
+
+![](https://clickhouse.com/uploads/openelectricity_jun2026_image2_e5175d3c0f.png)
+
+*The all-time view, aggregated from billions of 5-minute data points stretching back to 1999.*
+
+For Nik, who has worked across finance, crypto, and everywhere in between, nothing matches energy data for its intensity and complexity. "Electricity networks are extremely complex, and there is intricacy in parsing the data to tell its story."
+
+That complexity doesn't go away just because you've put it in a database. For a small team serving live data to hundreds of institutions around the world, every five minutes of every day, getting the infrastructure right matters enormously.
+
+## From TimescaleDB to ClickHouse
+
+For years, Open Electricity ran on a combination of Postgres and TimescaleDB. But with a billion rows and counting, the setup was starting to strain, with some queries taking upwards of five minutes to complete. The worst offenders were joins between market data and generation data. As Nik says, "Doing a join based on an interval and then going back through a billion rows gets pretty expensive pretty quickly."
+
+TimescaleDB did offer some relief. Its time-series functions, particularly time_bucket and time_bucket_gapfill, were useful for a dataset full of gaps, since generators don't run continuously, and filling nulls before joining the data was a constant requirement.
+
+But it also had serious limitations. Continuous aggregates didn't support time_bucket_gapfill, and there was no timezone handling in materialized views—a problem given that, as Nik explains, "We're dealing with east coast time zones and summing it up with west coast time zones and having to show an Australia-wide view on top of that." Queries on continuous aggregates were still slow, and refreshing materialized views locked tables. The team ended up selecting out of large queries and writing results into separate tables manually.
+
+Materialization was the right instinct. What they needed was a purpose-built OLAP engine. "I've been using ClickHouse for longer than ClickHouse has been a company," Nik says. "It's a column store. The compression is great. It's a lot easier to query… if you know SQL, you can pretty quickly pick up some of the custom ClickHouse functions."
+
+It also offered [multiple engine types](https://clickhouse.com/docs/engines/table-engines) for different aggregation patterns, [clear performance benefits](https://clickhouse.com/docs/concepts/why-clickhouse-is-so-fast), and [materialized views](https://clickhouse.com/docs/materialized-views) that Nik and the team have put to full use. "We've got so many different ways of representing energy data that it's very cheap with ClickHouse to create materialized views once you've got your base tables," he says. "We run over 20 of them now, and we keep adding more and more all the time. If we see a hot spot with a query, we just create a new materialized view for it and then point the query to that."
+
+## A new architecture that's 92x faster
+
+With ClickHouse added to the stack, Open Electricity's architecture snapped into a clean division of labor that Nik calls "the best of both worlds—we've got the heavy relational data still in Postgres, but all the analytic workloads are happening on ClickHouse now. There aren't many workloads that you can throw at it where it's just not going to chew through it."
+
+At the core of the ClickHouse setup are two tables: unit_intervals, which stores per-unit 5-minute generation, emissions, and market value data; and market_summary, which holds per-region price and demand. Both use [ReplacingMergeTree](https://clickhouse.com/docs/engines/table-engines/mergetree-family/replacingmergetree), one of ClickHouse's specialized engine types designed for deduplication. "ClickHouse's [documentation](https://clickhouse.com/docs/) and the [GitHub community](https://github.com/ClickHouse/ClickHouse/discussions) around ClickHouse are fantastic," Nik says. "You can learn all about the different engine types and when to apply each one."
+
+On top of those two base tables sits a hierarchy of materialized views, each tuned to its aggregation pattern. "The queries are very fast," Nik says. "Some of those Postgres queries that were taking on the order of minutes are now returning in milliseconds."
+
+To benchmark performance properly, the team ran the same query on both systems, aggregating all-time energy by fuel technology, grouped by month, going back to 1999. Postgres took 313 seconds. ClickHouse took 3.4 seconds. "So it's about 92 times faster," Nik says. "And it gets even better," he adds, noting that with the monthly materialized view, the same query comes back in just 60 milliseconds.
+
+Nik is quick to point out that the benchmark isn't a hardware-for-hardware comparison. Postgres runs on 16 cores, 32 GB of RAM, and 1.6 TB of disk. ClickHouse runs on 4 cores, 4 GB of RAM, and 200 GB—a fraction of the hardware, at a fraction of the cost.
+
+## Lessons learned from the migration
+
+Nik and the team opted for a gradual migration, running the old and new systems in parallel and moving traffic over bit by bit. Feature flags let them toggle between the two systems per endpoint, with identical API output so users never knew which database they were hitting. They could bucket a percentage of users into one or the other, compare results, and flip the switch further when confident.
+
+"ClickHouse is so cheap to run that you can run it in parallel for as long as you need to perfect it," Nik says. "There's no reason you can't go to the office, load up a ClickHouse schema, and start running it alongside your existing workloads and flick it over bit by bit."
+
+While they're happy with where they landed, they had to overcome a few "gotchas." The first was what Nik calls the "FINAL trap." ClickHouse's ReplacingMergeTree engine doesn't deduplicate at query time unless you explicitly add [FINAL](https://clickhouse.com/docs/sql-reference/statements/select/from#final-modifier) to your query. "It's important to understand how ClickHouse is architected," Nik says. Otherwise you can "wake up one morning and all your data is doubled."
+
+The second was a bit subtler. Combining auto-populating materialized views with ReplacingMergeTree can lead to, as Nik puts it, a "disaster," with partial daily aggregates winning the "max version lottery" over complete ones. The team came up with a clever hack: encode data completeness directly into the version number, so a full-day backfill with 288 intervals always outranks a partial auto-populated aggregate with 10.
+
+Timezones caused headaches, too. With east and west coast data flowing through a Python backend, multiple drivers, and a JavaScript frontend, there are around 20 places in the pipeline where dates are touched. "If you alternate between non-timezone and timezone fields, it's going to get mangled," Nik says. He recommends standardizing [DateTime64](https://clickhouse.com/docs/sql-reference/data-types/datetime64) with UTC from day one.
+
+Other gotchas included memory management during backfills (ClickHouse favors [bulk inserts](https://clickhouse.com/docs/optimize/bulk-inserts), and the team found that chunking data into 3-day windows with 20,000-record batches was the most efficient approach) and disk space, where "out of memory" errors often turned out to be ClickHouse running out of temporary disk space for large operations. Nik also recommends matching timeouts to the type of operation, with user-facing queries timing out in seconds and longer-running backfill and optimization tasks given much more room to breathe.
+
+"Each one of these touchpoints I could go on for days about—there's a lot of learned experience in our codebase," he says with a smile.
+
+## ClickHouse + Postgres = "A magical pairing"
+
+Open Electricity's move to ClickHouse has enabled the team to query data in ways that weren't practical before—live, at scale, across a billion rows, in milliseconds.
+
+Nik closed his presentation with two demos that show that speed and flexibility in action: a real-time status page for every coal-fired generator in Australia, displaying capacity and output at every 5-minute interval; and a solar generation heatmap built that same day by a frontend developer, tracking hour-by-hour solar output from 2016 to 2025. "We're talking millisecond-scale queries now," Nik says.
+
+"Postgres combined with ClickHouse is a magical pairing," he continues. "You've got Postgres for all your relational workloads and ClickHouse for all your analytical workloads. It's been working really well for us, allowing us to query data in ways we couldn't before."
+
+For a small nonprofit tracking one of the world's most closely watched energy transitions, that pairing is what lets researchers, journalists, and policymakers see what's happening to Australia's grid in real time, and share that picture with the rest of the world.
+
+
+---
+
+## Get started today
+
+Interested in seeing how ClickHouse works on your data? Get started with ClickHouse Cloud in minutes and receive $300 in free credits.
+
+[Sign up](https://console.clickhouse.cloud/signUp?loc=blog-cta-897-get-started-today-sign-up&utm_blogctaid=897)
+
+---
+
+---
+
+## What a difference 10 years of open source makes
+Published: 2026-06-16T00:00:00+00:00
+URL: https://clickhouse.com/blog/what-a-difference-10-years-of-open-source-makes
+
+---
+title: "What a difference 10 years of open source makes"
+date: "2026-06-17T11:32:16.602Z"
+author: "Al Brown"
+category: "Engineering"
+excerpt: "On June 15, 2016, ClickHouse went open source under the Apache 2.0 license. Ten years later, it's one of the most widely deployed analytical databases in the world. "
+---
+
+# What a difference 10 years of open source makes
+
+On June 15, 2016, ClickHouse went open source under the Apache 2.0 license. Ten years later, it's one of the most widely deployed analytical databases in the world. And that's because of you. The 2,600+ people who have built, broken, debated, and contributed your way through a decade of monthly releases.
+
+Alexey Milovidov, ClickHouse's creator and CTO, has [written his own reflections on the decade](https://clickhouse.com/blog/open-source-10).
+
+## A decade in the open
+
+[In 2025 alone](https://clickhouse.com/blog/alexey-favorite-features-2025), ClickHouse gained **277 new features, 319 performance optimizations, and 1,051 bug fixes** across twelve releases.
+
+In 10 years that looks like:
+
+- **2,600+ contributors**  
+- **~48,000 GitHub stars**  
+- **~239,000 commits**  
+- **~800 releases**  
+- **Hundreds of millions of downloads**  
+- **200+ integrations**
+
+But what have those ~240k commits been building towards?
+
+![feature_timeline.png](https://clickhouse.com/uploads/feature_timeline_de8c8a9ef1.png)
+
+## Joining the dots on JOINs
+
+Asked on a release call when ClickHouse would stop optimizing join performance, Alexey's answer was: "We will never stop!"
+
+He means it. Over [two years of focused join engineering](https://clickhouse.com/blog/clickhouse-fast-joins), ClickHouse became **26× faster** on the join-heavy TPC-H SF100 workload, comparing version 22.4 to 26.4, with the last year alone contributing roughly 6×:
+
+- **Correlated subquery decorrelation:** queries that previously couldn't run at all now execute as ordinary joins.  
+- **Lazy column replication:** 1.9× faster by avoiding physical row duplication when joins fan out.  
+- **Runtime filters:** build-side join keys filter the probe side during execution, making queries 2.1× faster and dropping peak memory on one query from 1.24 GiB to 185 MiB.  
+- **Statistics-based join reordering:** the optimizer reorders joins automatically. One six-table query went from 3,903.7 seconds to 2.7 seconds (1,450× faster) and from 99.1 GiB of memory to 3.9 GiB.
+
+![fastjoinsprogress.png](https://clickhouse.com/uploads/fastjoinsprogress_c5df6c9dae.png)
+
+## Updates, deletes, JSON, search, and vectors
+
+Joins weren't the only thing moving. In about eighteen months, ClickHouse picked up real SQL updates, a true JSON type, full-text search, and production-grade vector search, all in the open.
+
+### Real UPDATEs and DELETEs (25.7)
+
+Column stores aren't supposed to be good at updates, but rules are meant to be broken. ClickHouse 25.7 (July 2025) shipped standard SQL UPDATE, built on [patch parts](https://clickhouse.com/blog/updates-in-clickhouse-2-sql-style-updates): tiny delta parts written alongside your data instead of rewriting whole columns. On a [600-million-row benchmark](https://clickhouse.com/blog/updates-in-clickhouse-3-benchmarks), that works out to **1,700× faster than classic mutations** for bulk updates and up to 2,400× for single-row updates.
+
+### A true JSON type (25.3)
+
+ClickHouse 25.3 (March 2025) shipped a [production-ready JSON type](https://clickhouse.com/blog/clickhouse-release-25-03): real columnar JSON, built on the Variant and Dynamic types and plugged into all the usual query acceleration. And 25.8 made complex JSON [58× faster with 3,300× less memory](https://clickhouse.com/blog/json-data-type-gets-even-better). On the [billion-document JSON benchmark](https://clickhouse.com/blog/json-bench-clickhouse-vs-mongodb-elasticsearch-duckdb-postgresql), one billion Bluesky events, ClickHouse ran aggregations 2,500× faster than MongoDB with 40% less storage, and fit in 99 GB what took PostgreSQL 622 GB.
+
+### Full-text search (26.2)
+
+As of 26.2 (March 2026), ClickHouse has native full-text search. Columnar [inverted indexes](https://clickhouse.com/blog/clickhouse-full-text-search) that went experimental in 25.9, beta in 25.12, and [production-ready in 26.2](https://clickhouse.com/blog/full-text-search-ga-release). Cold text queries run 7–10× faster with the index, and one GitHub-events example dropped from a 193-second scan to 0.422 seconds.
+
+Getting full-text search right was a [multi-year journey](https://clickhouse.com/blog/clickhouse-search-with-inverted-indices) with many contributions. Three iterations later, it's [one of the most powerful full-text search implementations you can run anywhere](https://clickhouse.com/blog/elasticsearch-log-analytics-clickhouse).
+
+### Vector search grew up (25.8 and beyond)
+
+Vector similarity indexes (HNSW) [hit GA in 25.8](https://clickhouse.com/blog/clickhouse-2025-roundup). Then came [QBit](https://clickhouse.com/blog/qbit-vector-search) (October 2025), a data type you won't find anywhere else: it lets you pick your vector precision at query time instead of locking it in when you design the table. That buys roughly 2× faster searches at the same recall, brute-force memory down from 6.05 GiB to 740 MiB, and 4.3× higher throughput.
+
+## Faster by default
+
+Every release has engine work under the hood, as we always want each new version to be faster than the last without you changing a thing. And when you want to push further, we want you to have the right tools for that too:
+
+- [**Lazy materialization**](https://clickhouse.com/blog/clickhouse-gets-lazier-and-faster-introducing-lazy-materialization) (25.4, on by default): defer reading large columns until they're actually needed. A Top-N query went from 219 seconds to 139 milliseconds (1,576× faster) with 40× less I/O and 300× lower peak memory. "You get the speed without lifting a finger."  
+- [**Query condition cache**](https://clickhouse.com/blog/introducing-the-clickhouse-query-condition-cache) (25.3, now on by default): one bit per filter condition per granule, so repeated dashboard-style queries skip data the primary index can't, a 13× speedup in the demo workload.  
+- [**Projections as secondary indexes**](https://clickhouse.com/blog/projections-secondary-indices) (25.6, polished through 26.1): _part_offset-based projections behave like secondary indexes without duplicating the data. One example cut rows scanned from 30.73 million to 16,384, a 1,876× reduction.  
+- [**CoalescingMergeTree**](https://clickhouse.com/blog/clickhouse-25-6-coalescingmergetree) (25.6): a table engine that keeps the latest non-null value per column, turning partial updates into plain appends. Contributed by community member Konstantin Vedernikov.  
+- [**Parallel replicas**](https://clickhouse.com/blog/clickhouse-parallel-replicas) (beta): spread a single query across every replica in the cluster, so adding replicas makes the same query faster. A raw GROUP BY over 100 billion rows ran in 414 milliseconds, peaking at 241.83 billion rows per second.
+
+## Open benchmarks, open methodology
+
+Database benchmarketing has a deservedly bad reputation with cherry-picked workloads, hidden configs, numbers nobody can reproduce. 
+
+Just like the engine itself, ClickHouse benchmarks are open-source, with all the data, schemas, queries, scripts, and results, so anyone can run and validate. Over the years that's grown into a whole family:
+
+- [**ClickBench**](https://benchmark.clickhouse.com/): the analytical database benchmark, now covering 50+ systems, with every script and result [on GitHub](https://github.com/ClickHouse/ClickBench). Anyone can submit a system, and many vendors have.  
+- [**JSONBench**](https://github.com/ClickHouse/JSONBench): a billion Bluesky events testing how databases really handle semi-structured data, the benchmark behind the JSON numbers above.  
+- [**TPC-H**](https://github.com/ClickHouse/tpc-h-openhouse): the classic warehouse benchmark, where ClickHouse [runs all 22 SF100 queries in around 20 seconds](https://clickhouse.com/blog/tpc-h-clickhouse-cloud-vs-snowflake-databricks-bigquery-redshift) on a single node. At SF10, running the entire suite costs $0.009.  
+- [**CostBench**](https://github.com/ClickHouse/CostBench): an open cost-performance benchmark [introduced in May 2026](https://clickhouse.com/blog/costbench-data-warehouse-cost-performance), publishing workloads, pricing assumptions, and raw results, on the principle that "cost-performance should not be a black box."  
+- [**PostgresBench**](https://github.com/ClickHouse/PostgresBench): the [same open treatment](https://clickhouse.com/blog/postgresbench) applied to managed Postgres services, built on the standard pgbench tool.
+
+Ten years in, the open ethos extends from code to methodology. Don't trust our numbers; run them.
+
+## Meeting you where you are
+
+ClickHouse has always been easy to pick up, being one binary that runs happily on a laptop. But how you can use it has been evolving, from agents running ClickHouse for you, to running custom code inside UDFs, to querying ClickHouse with Postgres:
+
+- [**clickhousectl**](https://clickhouse.com/blog/introducing-clickhousectl-official-cli-for-clickhouse-local-and-cloud): the official CLI, itself an [Apache 2.0 project](https://github.com/ClickHouse/clickhousectl) written in Rust. One line `curl https://clickhouse.com/cli | sh` gets you installed, giving you local version management, project scaffolding, local server management and ClickHouse Cloud control.  
+- [**AI functions**](https://clickhouse.com/docs/sql-reference/functions/ai-functions) (26.4): call an LLM straight from SQL. aiGenerate, aiClassify, aiExtract, and aiTranslate work against OpenAI, Anthropic, or any OpenAI-compatible endpoint, so you can classify or enrich rows mid-query.  
+- [**31 SQL dialects**](https://presentations.clickhouse.com/2026-release-26.3/) (26.3): SET dialect = 'polyglot' and ClickHouse accepts queries written in other dialects, from Postgres to Snowflake to Spark, via a library seeded from sqlglot.  
+- [**WebAssembly UDFs**](https://clickhouse.com/blog/clickhouse-release-26-03) (26.3, experimental): write user-defined functions in any language that compiles to Wasm, sandboxed in Wasmtime.  
+- [**PromQL**](https://clickhouse.com/blog/open-house-2026-day-1) (experimental): query ClickHouse in Prometheus's query language, with integration in open-source ClickStack.  
+- [**pg_clickhouse**](https://clickhouse.com/blog/introducing-pg_clickhouse): an open-source Postgres extension that lets standard Postgres query ClickHouse with transparent pushdown.
+
+## A community of builders
+
+As we say in every release post: "A special welcome to all the new contributors!"
+
+With every release, new contributors are joining the ClickHouse community to help build the world's fastest analytical database. Every contribution, big or small, is what makes ClickHouse, ClickHouse.
+
+If you've been part of the ClickHouse journey for a while, you might recognize some frequent flyers:
+
+- **Amos Bird**, a legendary long-time contributor, built the projections indexing syntax that shipped in 26.1.  
+- **Michael Jarrett** contributed automatic minmax indices in 26.2, after validating sub-0.2-second Top-N queries on a 50-billion-row table as a user in 25.12.  
+- **Jiebin Sun** made uniqExact 3–15× faster on high-core-count machines in 26.4.  
+- **Yarik Briukhovetskyi** sped up RIGHT and FULL JOIN in 26.2.  
+- **Nihal Z. Miaji** shipped dictGetKeys in 25.12, faster DISTINCT on LowCardinality columns in 26.1, and the primes table function in 26.2.  
+- **Konstantin Vedernikov** contributed an entire table engine, the CoalescingMergeTree covered above.
+
+At Open House 2026, we launched the [Community Champions Program](https://clickhouse.com/blog/open-house-2026-day-2) to recognize the people who answer the questions, write the integrations, and file the bug reports that keep the project honest.
+
+## To the next ten years
+
+To everyone who has used and contributed to ClickHouse: [thank you!](https://clickhouse.com/blog/thank-you-for-building-with-us)
+
+> "This momentum and achievement is thanks to the community that has built, broken, debated, contributed to, and pushed ClickHouse forward long before there was a company to put a logo on it. Thank you." - Aaron Katz, CEO, ClickHouse Inc.
+
+If you want to be part of the next ten: [star or contribute on GitHub](https://github.com/ClickHouse/ClickHouse), join a monthly release call, or raise your hand for the Community Champions Program.
+
+The ClickHouse journey has only just begun.
 
 ---
 
@@ -194,6 +1327,94 @@ ClickStack が皆さんのオブザーバビリティデータでどのように
 [Sign up](https://console.clickhouse.cloud/signUp?loc=blog-cta-886-sign-up&utm_blogctaid=886)
 
 ---
+
+---
+
+## Cisco Talos empowers threat researchers while reducing TCO by 75% with ClickHouse Cloud
+Published: 2026-06-15T00:00:00+00:00
+URL: https://clickhouse.com/blog/cisco
+
+---
+title: "Cisco Talos empowers threat researchers while reducing TCO by 75% with ClickHouse Cloud"
+date: "2026-06-18T16:16:41.458Z"
+author: "ClickHouse"
+category: "User stories"
+excerpt: "Cisco Talos runs a threat intelligence reputation service on ClickHouse Cloud, classifying file hashes so researchers can make fast, accurate security decisions."
+---
+
+# Cisco Talos empowers threat researchers while reducing TCO by 75% with ClickHouse Cloud
+
+## Summary
+
+* Cisco Talos runs a threat intelligence reputation service on ClickHouse Cloud, classifying file hashes so researchers can make fast, accurate security decisions.  
+* The team migrated a nearly 2-trillion-row, 2 PB dataset from self-managed OSS ClickHouse to ClickHouse Cloud with zero downtime and a 100% data match.  
+* The move cut storage costs by \~90%, reduced TCO by \~75%, and reclaimed over 300 engineer hours a year for building new products.
+
+[Cisco Talos](https://talosintelligence.com/) is one of the world's most trusted cybersecurity threat intelligence teams, made up of expert researchers, analysts, incident responders, and engineers. They defend [Cisco](https://www.cisco.com/site/us/en/index.html) customers and raise awareness of evolving threats within the cybersecurity community, partnering with industry and government organizations around the globe.
+
+Senay Goitom is part of a small engineering team that provides the centralized data lake and enrichments behind that mission. One of its most important offerings is a reputation service built on a massive hash dataset, which classifies the disposition of every file artifact Talos sees, storing the verdicts for individual file hashes collected from Cisco product telemetry.
+
+> "Our threat researchers use these data for guardrails that prevent false positive convictions of benign hashes, and our threat hunters use them to look for low prevalence hashes that might be signals for malware campaigns. In both cases, they, and by extension, our customers need fast, accurate answers." — Senay Goitom, Software Engineer, Cisco
+
+But delivering those answers is, as Senay puts it, like searching for a needle in a haystack. In production, the dataset holds nearly 2 trillion rows, with 27 billion new rows ingested daily. On disk, that's around 192 TB of compressed data, or around 2 PB uncompressed. Because these systems power threat intelligence services for Cisco customers, latency and accuracy directly impact the company's security products.
+
+At our [2026 Open House SF user conference](https://clickhouse.com/openhouse/san-francisco), Senay shared how he and the team moved this workload from OSS ClickHouse to [ClickHouse Cloud](https://clickhouse.com/cloud) on AWS and how it helped Cisco dramatically reduce costs with zero downtime.
+
+## Outgrowing the old architecture
+
+In the original design, data originated in a Databricks Delta table stored as Parquet files in S3. A custom, event-driven serverless ingestion pipeline fed a self-managed Kubernetes (EKS) cluster, where a staging table rolled up into an aggregated table behind an API endpoint. Under the old retention policy, the team kept about a petabyte of compressed, replicated data on 32 high-compute nodes, each with seven EBS volumes attached.
+
+![](https://clickhouse.com/uploads/ciscotalos_jun2026_image1_63d917b06b.jpg)
+
+*Cisco Talos's original self-managed architecture: a custom ingestion pipeline feeds an EKS cluster, with data flowing from a staging table to an aggregated table behind an API endpoint.*
+
+"It worked," Senay says, "but we started experiencing some challenges." As a small team inside a threat research organization, they found that running a cluster of that size pulled them away from their actual mission. "We were spending time on upgrades, backups, and troubleshooting," he explains, "instead of building new products for our threat researchers."
+
+That setup also tied the team's storage to compute in a costly way. "Query performance needs meant we had to tie our ever-increasing storage needs to expensive compute nodes," Senay says. "Scaling up or down, depending on traffic, was a costly process and risked service disruption for our consumers. We have to ensure customer trust, so it ultimately meant that we had to over-provision."
+
+He highlights two other challenges beyond the operational and cost burden. The first was SOC 2 compliance. "We had to be constantly vigilant about vulnerability management," Senay says, noting that this added even more overhead to an already lean team. The other was architectural complexity. Custom ingestion, custom aggregation, and custom optimizations created a system that was "hard to maintain and harder to evolve," requiring "additional engineer hours for maintenance and incident response."
+
+---
+
+## Get started today
+
+Interested in seeing how ClickHouse works on your data? Get started with ClickHouse Cloud in minutes and receive $300 in free credits.
+
+[Sign up](https://console.clickhouse.cloud/signUp?loc=blog-cta-961-get-started-today-sign-up&utm_blogctaid=961)
+
+---
+
+## Choosing the right real-time data platform to support threat researchers
+
+In their search for a better solution, the team weighed three options. They quickly ruled out Snowflake because of the storage costs and complexity it would have introduced. As Senay puts it, "Our query latency needs meant that we were going to have to go with a more complicated architecture than we would under ClickHouse."
+
+They also looked at MongoDB, but its document model "wasn't a natural fit for our aggregation workload," Senay says, "and it wasn't cost-effective at the scale that we were operating."
+
+That left one clear option: "ClickHouse Cloud was the natural choice," Senay says. The team already knew the technology, and its [columnar storage model](https://clickhouse.com/docs/faq/general/columnar-database) "was a perfect fit for our hash lookup pattern." [Separation of storage and compute](https://clickhouse.com/docs/guides/separation-storage-compute) promised to dramatically reduce storage costs, and conversations with a ClickHouse solutions architect convinced the team they could land on a far simpler architecture than the one they were maintaining themselves.
+
+## Rebuilding around ClickHouse Cloud
+
+Senay and the team ran the migration in four phases. The first laid the foundation: reusable Terraform modules for the ClickHouse service, [ClickPipes](https://clickhouse.com/cloud/clickpipes), and the database resources, plus SSO/SAML integration and the deployment of both dev and prod services. Next came the data pipeline, standing up the new ingestion flow and backfilling 12 months of historical data using sharded ClickPipes.
+
+With the pipeline in place, the team moved to shadow traffic, routing live production queries to both backends in parallel for initial data validation and performance testing. The fourth and final phase was the cutover, a comprehensive data comparison against the source at scale, followed by stakeholder sign-off and the switch itself.
+
+The result was a vastly simplified architecture. The new design keeps the Databricks Delta table as the source, but replaces the custom ingestion code with managed building blocks. Amazon EventBridge detects new objects as they land in S3 and routes them to SQS queues, and ClickPipes handles ingestion into ClickHouse Cloud. "All of that custom code, all of that orchestration is gone," Senay says.
+
+![](https://clickhouse.com/uploads/ciscotalos_jun2026_image2_8cb4fabb23.jpg)
+
+*Cisco Talos's new architecture on ClickHouse Cloud: ClickPipes handles ingestion with no custom code, feeding a staging table that serves queries via AWS PrivateLink behind an API endpoint.*
+
+Inside ClickHouse Cloud, the team uses the [SharedMergeTree table engine](https://clickhouse.com/docs/cloud/reference/shared-merge-tree), which stores data in object storage and is fully managed by ClickHouse. The Lambda function that routes queries to the backend connects over AWS PrivateLink, so traffic never goes through the public internet. Senay adds that a smart [partitioning](https://clickhouse.com/docs/partitions) strategy helped the team "drastically simplify our back end," letting them aggregate at query time rather than pre-aggregating in the cluster.
+
+## A simpler, more cost performant backend
+
+"From an operational perspective," Senay says, "the results speak for themselves." After a month in production, the new pipeline had ingested roughly 3,000 files a day with zero data loss and less than a minute of queue lag between a file landing in S3 and becoming queryable in ClickHouse Cloud. When the team compared API responses between the old and new backends across more than 1,000 randomly selected hashes, the match rate was 100%. All of this validation happened with zero consumer impact and zero downtime.
+
+"And the cost story is just as dramatic," Senay adds. By breaking the dependency between storage and expensive compute, and by retiring the custom ingestion pipeline and the SOC 2 maintenance overhead that came with their old self-managed setup, the team cut storage costs by roughly 90% and reduced total cost of ownership (TCO) by about 75% across compute, storage, and engineering hours.
+
+> "Moving to ClickHouse Cloud has allowed us to dramatically reduce our TCO by 75% and save over 300 engineer hours a year that can be spent on building new products for our threat intelligence teams." — Senay Goitom, Software Engineer, Cisco
+
+For a small team inside one of the world's largest threat intelligence providers, that shift, from maintaining infrastructure to building on it, ultimately serves the researchers hunting threats, and the Cisco customers who depend on them.
 
 ---
 

@@ -1,5 +1,5 @@
 {
-  "last_sync": "2026-06-18T07:48:21.513556Z",
+  "last_sync": "2026-06-19T07:58:57.594029Z",
   "processed_blogs": {
     "https://clickhouse.com/blog/clickhouse-raises-400-million-series-d-acquires-langfuse-launches-postgres": {
       "title": "ClickHouse raises $400M Series D led by Dragoneer to accelerate expansion across analytics and AI infrastructure",
@@ -5142,9 +5142,69 @@
       "pub_date": "2026-06-15T07:52:31+00:00",
       "file_path": "blogs/2026-06-15-datadog-clickhouse.md",
       "processed_at": "2026-06-16T08:05:29.495549Z"
+    },
+    "https://clickhouse.com/blog/metro-markets-data-warehouse": {
+      "title": "Beyond the warehouse: How METRO Markets built a do-it-all data platform on ClickHouse Cloud",
+      "pub_date": "2026-06-18T00:00:00+00:00",
+      "file_path": "blogs/2026-06-18-beyond-the-warehouse-how-metro-markets-built-a-do.md",
+      "processed_at": "2026-06-19T07:58:54.926443Z"
+    },
+    "https://clickhouse.com/blog/why-everyone-is-talking-about-real-analytics-yellow-company": {
+      "title": "Why everyone is talking about real-time analytics (a note from “the yellow company”)",
+      "pub_date": "2026-06-18T00:00:00+00:00",
+      "file_path": "blogs/2026-06-18-why-everyone-is-talking-about-real-time-analytics.md",
+      "processed_at": "2026-06-19T07:58:55.015674Z"
+    },
+    "https://clickhouse.com/blog/appcues-customer-engagement-analytics": {
+      "title": "Appcues delivers personalized customer engagement with ClickHouse Cloud",
+      "pub_date": "2026-06-18T00:00:00+00:00",
+      "file_path": "blogs/2026-06-18-appcues-delivers-personalized-customer-engagement.md",
+      "processed_at": "2026-06-19T07:58:55.390322Z"
+    },
+    "https://clickhouse.com/blog/postgres-managed-by-clickhouse-rbac-terraform-clickpipes-extensions": {
+      "title": "What's new in Postgres Managed by ClickHouse: RBAC, Terraform, ClickPipes, extensions, and more",
+      "pub_date": "2026-06-18T00:00:00+00:00",
+      "file_path": "blogs/2026-06-18-what-s-new-in-postgres-managed-by-clickhouse-rbac.md",
+      "processed_at": "2026-06-19T07:58:55.682019Z"
+    },
+    "https://clickhouse.com/blog/202606-newsletter": {
+      "title": "June 2026 newsletter",
+      "pub_date": "2026-06-18T00:00:00+00:00",
+      "file_path": "blogs/2026-06-18-june-2026-newsletter.md",
+      "processed_at": "2026-06-19T07:58:55.955325Z"
+    },
+    "https://clickhouse.com/blog/clickpipes-gcp-pub-sub-preview": {
+      "title": "GCP Pub/Sub connector for ClickPipes is now in Private Preview",
+      "pub_date": "2026-06-17T00:00:00+00:00",
+      "file_path": "blogs/2026-06-17-gcp-pub-sub-connector-for-clickpipes-is-now-in.md",
+      "processed_at": "2026-06-19T07:58:56.233724Z"
+    },
+    "https://clickhouse.com/blog/the-open-ecosystem-around-clickhouse": {
+      "title": "The open ecosystem around ClickHouse",
+      "pub_date": "2026-06-17T00:00:00+00:00",
+      "file_path": "blogs/2026-06-17-the-open-ecosystem-around-clickhouse.md",
+      "processed_at": "2026-06-19T07:58:56.643609Z"
+    },
+    "https://clickhouse.com/blog/openelectricity-australia-energy-transition": {
+      "title": "92x faster queries: How Open Electricity uses ClickHouse to track Australia’s energy transition in real time",
+      "pub_date": "2026-06-17T00:00:00+00:00",
+      "file_path": "blogs/2026-06-17-92x-faster-queries-how-open-electricity-uses.md",
+      "processed_at": "2026-06-19T07:58:56.919160Z"
+    },
+    "https://clickhouse.com/blog/what-a-difference-10-years-of-open-source-makes": {
+      "title": "What a difference 10 years of open source makes",
+      "pub_date": "2026-06-16T00:00:00+00:00",
+      "file_path": "blogs/2026-06-16-what-a-difference-10-years-of-open-source-makes.md",
+      "processed_at": "2026-06-19T07:58:57.219998Z"
+    },
+    "https://clickhouse.com/blog/cisco": {
+      "title": "Cisco Talos empowers threat researchers while reducing TCO by 75% with ClickHouse Cloud",
+      "pub_date": "2026-06-15T00:00:00+00:00",
+      "file_path": "blogs/2026-06-15-cisco-talos-empowers-threat-researchers-while.md",
+      "processed_at": "2026-06-19T07:58:57.496400Z"
     }
   },
-  "total_blogs": 857,
+  "total_blogs": 867,
   "failed_blogs": [
     {
       "url": "https://clickhouse.com/jp/blog/clickhouse-gcp-japan-availability",
