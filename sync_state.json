@@ -1,5 +1,5 @@
 {
-  "last_sync": "2026-06-19T07:58:57.594029Z",
+  "last_sync": "2026-06-20T07:26:23.159726Z",
   "processed_blogs": {
     "https://clickhouse.com/blog/clickhouse-raises-400-million-series-d-acquires-langfuse-launches-postgres": {
       "title": "ClickHouse raises $400M Series D led by Dragoneer to accelerate expansion across analytics and AI infrastructure",
@@ -5202,9 +5202,15 @@
       "pub_date": "2026-06-15T00:00:00+00:00",
       "file_path": "blogs/2026-06-15-cisco-talos-empowers-threat-researchers-while.md",
       "processed_at": "2026-06-19T07:58:57.496400Z"
+    },
+    "https://clickhouse.com/blog/ten-years-of-open-source-a-stained-glass-view": {
+      "title": "Ten years of open source: a stained-glass view",
+      "pub_date": "2026-06-19T00:00:00+00:00",
+      "file_path": "blogs/2026-06-19-ten-years-of-open-source-a-stained-glass-view.md",
+      "processed_at": "2026-06-20T07:26:23.066767Z"
     }
   },
-  "total_blogs": 867,
+  "total_blogs": 868,
   "failed_blogs": [
     {
       "url": "https://clickhouse.com/jp/blog/clickhouse-gcp-japan-availability",
