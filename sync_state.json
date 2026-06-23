@@ -1,5 +1,5 @@
 {
-  "last_sync": "2026-06-22T08:11:17.777725Z",
+  "last_sync": "2026-06-23T07:21:50.660546Z",
   "processed_blogs": {
     "https://clickhouse.com/blog/clickhouse-raises-400-million-series-d-acquires-langfuse-launches-postgres": {
       "title": "ClickHouse raises $400M Series D led by Dragoneer to accelerate expansion across analytics and AI infrastructure",
@@ -5208,9 +5208,21 @@
       "pub_date": "2026-06-19T00:00:00+00:00",
       "file_path": "blogs/2026-06-19-ten-years-of-open-source-a-stained-glass-view.md",
       "processed_at": "2026-06-20T07:26:23.066767Z"
+    },
+    "https://clickhouse.com/blog/the-future-of-observability-not-one-proprietary-ai-agent-thousands-by-teams": {
+      "title": "The future of observability won’t be one proprietary AI agent. It will be thousands built by teams.",
+      "pub_date": "2026-06-22T00:00:00+00:00",
+      "file_path": "blogs/2026-06-22-the-future-of-observability-won-t-be-one.md",
+      "processed_at": "2026-06-23T07:21:49.767605Z"
+    },
+    "https://clickhouse.com/blog/spyne-clickpipes-cdc-pipeline": {
+      "title": "How Spyne simplified their CDC pipeline with ClickPipes and ClickHouse Cloud",
+      "pub_date": "2026-06-22T00:00:00+00:00",
+      "file_path": "blogs/2026-06-22-how-spyne-simplified-their-cdc-pipeline-with.md",
+      "processed_at": "2026-06-23T07:21:50.567896Z"
     }
   },
-  "total_blogs": 868,
+  "total_blogs": 870,
   "failed_blogs": [
     {
       "url": "https://clickhouse.com/jp/blog/clickhouse-gcp-japan-availability",

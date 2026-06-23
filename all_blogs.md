@@ -1,6 +1,289 @@
 # ClickHouse Blogs
-Last updated: 2026-06-22 08:11:17 UTC
-Total blogs: 868
+Last updated: 2026-06-23 07:21:50 UTC
+Total blogs: 870
+
+---
+
+## The future of observability won’t be one proprietary AI agent. It will be thousands built by teams.
+Published: 2026-06-22T00:00:00+00:00
+URL: https://clickhouse.com/blog/the-future-of-observability-not-one-proprietary-ai-agent-thousands-by-teams
+
+---
+title: "The future of observability won’t be one proprietary AI agent. It will be thousands built by teams."
+date: "2026-06-22T12:19:19.034Z"
+author: "Mike Shi"
+category: "Product"
+excerpt: "We don’t think observability will be dominated by a single AI agent. The future belongs to teams building agents around their own systems, workflows, and operational knowledge."
+---
+
+# The future of observability won’t be one proprietary AI agent. It will be thousands built by teams.
+
+The common vendor bet in observability right now is convergence.
+
+One SRE agent, built into one platform, trained around one vendor’s view of how incidents should be investigated. It understands your telemetry, answers your questions, explains what went wrong, and eventually helps fix production before anyone opens a dashboard.
+
+That version of the future will be useful, but it will also be too narrow.
+Observability does not work like a generic support queue. Debugging is shaped by the systems a team owns, the way those systems fail, the data they trust, the runbooks they follow, the tools they use, and the operational scars they have accumulated over time. A database team, frontend team, payments team, and infrastructure team do not investigate production the same way.
+
+**In this post, we explore why we think the future of observability will not be one proprietary AI agent, but thousands built by teams like yours.**
+
+## AI agents are becoming the new interface for observability
+
+I hope most people would agree that the shift to AI agents in observability is no longer a particularly bold prediction.
+
+Today, most investigations begin with a human opening dashboards, searching logs, inspecting traces, and manually gathering context. Increasingly, that work is being delegated to agents. Models are already capable of querying telemetry, summarizing findings, identifying patterns, and generating plausible hypotheses about what is happening within a system.
+
+![agents_humans.png](https://clickhouse.com/uploads/agents_humans_b65d7ba6ce.png)
+
+As models continue to improve, the interface to observability will increasingly become human → agent → data instead of human → dashboard → data. Engineers will still decide what action to take, but much of the mechanical work of an investigation will happen before they ever touch a chart or write a query.
+
+<blockquote>
+<p>"We actually see a trend shift in our Slack incident channels. Engineers previously used to share links to logs or metrics. Now teams are sharing snippets of AI investigations and diving deep into it." <br><br></p>
+<p>Anil K, DoorDash</p>
+</blockquote>
+
+## AI changes the shape of observability workloads
+
+Most discussions about observability agents focus on what the agents can do. Far less attention is given to what happens underneath when they become a normal part of the workflow.
+
+A human investigator is relatively constrained. They open a handful of dashboards, run some queries, inspect a trace or two, and gradually narrow the search space. Even experienced engineers can only evaluate so many possibilities at once.
+
+An agent has no such limitation. While an engineer may compare two time windows, an agent can compare twenty. While a human might manually investigate a few likely causes, an agent can pursue dozens of hypotheses simultaneously, continuously gathering evidence and eliminating dead ends as it goes.
+
+<iframe src="https://clickhouse.com/uploads/clickstack_vs_traditional_82948145ce.html"  width="100%" height="auto" style="aspect-ratio: 1100/550;"></iframe>
+
+The practical consequence is that investigations become broader and place greater demands on the underlying systems. Agents can examine more historical data and explore far more potential explanations before converging on an answer. This all results in more queries requiring low-latency responses.
+
+<blockquote>
+<p>"Agents could brute force it — make 10 queries instead of what, if I query, I would make two dashboard clicks. Which means our API layer or storage have to be robust to take that non-linear pattern of queries." <br><br></p>
+<p>Anil K, DoorDash</p>
+</blockquote>
+
+It also changes the requirements around the underlying data. Agents can only reason over the context they are given. If historical data has been discarded, important context may be missing. If telemetry has been heavily sampled, critical evidence may simply not exist in the dataset. Unlike experienced engineers, agents cannot compensate for these gaps with intuition or institutional knowledge. Their conclusions are constrained by the completeness and fidelity of the data available to them.
+
+Most observability platforms were designed around human investigators and the workloads they generate. The next generation will increasingly need to support investigations carried out on behalf of humans.
+
+## An industry betting on the great SRE agent
+
+A lot of companies are investing in building for a simple vision of the future: the universal SRE agent.
+
+![god_agent.png](https://clickhouse.com/uploads/god_agent_8d5db894d0.png)
+
+This is a compelling idea. An observability vendor provides the platform, the data, and the agent. Engineers ask questions in natural language instead of learning dashboards, writing queries, or navigating telemetry. Over time, the agent becomes increasingly capable, eventually handling much of the investigation process on its own.
+
+There is real value in this model. Most observability tools remain difficult to use, and agents have the potential to dramatically lower the barrier to understanding and operating complex systems.
+
+Models will also continue to improve and will become better at reasoning, better at writing SQL, and better at packaging common investigation patterns into reusable workflows. Much of what we consider expert knowledge today will become increasingly accessible through agents.
+
+## The hard part of debugging: context
+
+The problem is that debugging does not converge quite as neatly as software vendors would like. 
+
+While models continue to improve, what remains difficult is context. 
+
+The next step in an investigation depends on far more than the telemetry sitting inside an observability platform. It depends on how a team operates, which signals it trusts, what has broken before, how ownership is divided, and where operational knowledge lives. Much of that context is scattered across runbooks, tickets, postmortems, Slack threads, internal documentation, deployment systems, and the heads of experienced engineers.
+
+<blockquote>
+<p>"Ring Central is a 25-year-old company. There is a lot of tribal knowledge within the operations team that is not documented anywhere, no matter whether we've connected all the wikis. If you don't have any data to give it, it's going to just hallucinate." <br><br></p>
+<p>Sushant Hiray, AI Leader, RingCentral</p>
+</blockquote>
+
+## Every team works differently
+
+Furthermore, two companies running similar technology stacks can investigate the same incident in completely different ways because their systems, teams, and operational history are different. A vendor can package best practices, but it cannot package the accumulated experience of every engineering team that uses its product.
+
+Much of the context required to debug production systems lives outside the observability platform itself. It is scattered across runbooks, tickets, postmortems, internal documentation, Slack threads, deployment systems, and the institutional knowledge of engineers who have operated the system for years. The location of that knowledge, the way teams are structured, and the processes they follow vary not only across organizations, but across industries and functions within those organizations.
+
+None of these approaches is inherently correct. They simply reflect different mental models built through experience. The signals teams trust, the workflows they follow, and the context they rely on are often unique to the systems they operate.
+
+## A more open model for agentic observability
+
+Taken together, these challenges point toward a very different future than the one many vendors are betting on. 
+
+As agents become the primary interface for observability and investigations increasingly shaped by organizational context, the value shifts away from a single universal agent toward agents built for specific teams and domains.
+
+<blockquote>
+<p>"Instead of building a super-cooled arrangement from the get-go, we doubled down on building a headless platform - improve our APIs, our data storage - and build an observability MCP so that we would unblock or enable every engineer or every team to build their own agentic workflows, which are more tailored towards their debugging use cases." <br><br></p>
+<p>Anil K., DoorDash</p>
+</blockquote>
+
+Instead of converging on a single SRE agent, we believe observability is more likely to evolve into an ecosystem of specialized agents, each optimized for a particular organization, team, or problem space. Some will focus on infrastructure, others on databases, security, payments, customer experience, or internal platforms. Many will be built around an organization’s own runbooks, documentation, workflows, business logic, and operational knowledge.
+
+Just as importantly, this future depends on openness. 
+
+By "openness," we do not simply mean open-source software. We mean giving teams and individual engineers the freedom to choose the best technology for each layer of the stack:  models, harnesses, tools, workflows, and interfaces. It means being able to build agents around the systems and processes that already exist within an organization rather than adapting those processes to fit a vendor’s view of how observability should work.
+
+It also means having the freedom to choose the layers beneath those agents. Teams should control where their data lives, how skills are developed and managed, which MCP gateways and servers sit in front of production systems, and how the agent’s behavior is observed, governed, and integrated into the rest of the engineering environment.
+
+<blockquote>
+<p>"The way we prefer is to partner with platforms that give us enough flexibility that there's an opportunity for us to build on top of that. As long as it works with enough of our internal tooling, that's the sweet spot."<br><br></p>
+<p>Sushant Hiray, AI Leader, RingCentral</p>
+</blockquote>
+
+The most successful observability platforms will not be the ones that force everyone into a single way of working. They will be the ones that provide a shared foundation upon which thousands of different agents can be built.
+
+## Agents need shared context
+If every team or even individual builds and adapts their own agents, investigations will not happen in one place. One engineer may start in an IDE, another in a notebook, another in an internal chat interface, and another through a custom incident workflow. Agents may run in different harnesses, use different models, and follow different investigation paths, even when they are all trying to understand the same production issue.
+
+This creates a collaboration problem. Investigation output cannot remain trapped inside transient chat sessions or private agent traces. Teams need durable, inspectable artifacts that show what was queried, what evidence was found, which hypotheses were explored, and why a conclusion was reached. This matters for humans reviewing an incident, but it also matters for future agents that need to learn from previous investigations instead of starting from scratch every time.
+
+<video autoplay="1" muted="1" loop="1" controls="0">
+  <source src="https://clickhouse.com/uploads/Notebook_Video_Product_D_1280p_crf20_e65a30386e.mp4" type="video/mp4" />
+</video>
+
+
+As a result, agentic observability will require some form of persistent investigation surface where humans and agents can collaborate. A place where investigations can be shared, reviewed, rerun, refined, and built upon over time. Whether an investigation begins in an IDE, a notebook, a chat interface, or a custom workflow is ultimately less important than having a common place where the results can be preserved and reused.
+
+These investigation artifacts become more than a record of what happened. They become a growing body of operational knowledge that future engineers and future agents can draw upon when similar problems arise.
+
+## Humans will still be the control plane
+
+All of this assumes that humans remain in the control plane, at least for now.
+
+Agents can gather evidence, execute investigations, explore hypotheses, and surface relevant context far faster than any individual engineer. But they still lack the judgment required to understand business priorities, weigh competing risks, navigate ambiguity, and ultimately decide what action should be taken. Those decisions remain the responsibility of the people operating the system.
+
+Perhaps that changes over time. It is easy to imagine a future where specialized agents collaborate with one another, continuously monitoring systems and autonomously resolving classes of incidents without human involvement. But that is not the future we are building for today.
+
+Today, the more practical and useful model is collaboration. Agents accelerate investigations. Humans provide direction. Agents gather context. Humans make decisions. The notebook becomes the shared workspace where those interactions take place, creating a durable record that can be inspected, shared, refined, and reused.
+
+Whether the future eventually becomes fully autonomous or remains permanently human-guided, one thing seems increasingly clear: the future of observability will not be one proprietary AI agent sitting behind a single vendor interface.
+
+It will be thousands of agents, built by you.
+
+
+
+
+
+---
+
+## Get started Managed ClickStack today
+
+Managed ClickStack gives your teams an open foundation for agentic observability, powered by the performance of ClickHouse.
+
+Get started with Managed ClickStack in minutes and receive $300 in free credits.
+
+[Sign up](https://console.clickhouse.cloud/signUp?intent=o11y&loc=blog-cta-985-get-started-managed-clickstack-today-sign-up&utm_blogctaid=985)
+
+---
+
+---
+
+## How Spyne simplified their CDC pipeline with ClickPipes and ClickHouse Cloud
+Published: 2026-06-22T00:00:00+00:00
+URL: https://clickhouse.com/blog/spyne-clickpipes-cdc-pipeline
+
+---
+title: "How Spyne simplified their CDC pipeline with ClickPipes and ClickHouse Cloud"
+date: "2026-06-22T11:37:29.230Z"
+author: "ClickHouse"
+category: "User stories"
+excerpt: "Spyne cut table onboarding from 1.5+ hours to minutes and eliminated schema drift by migrating their CDC pipeline from a self-managed Debezium/Kafka stack to ClickPipes and ClickHouse Cloud."
+---
+
+# How Spyne simplified their CDC pipeline with ClickPipes and ClickHouse Cloud
+
+## Summary
+
+* Spyne uses ClickPipes to power its real-time CDC pipeline, streaming changes from MySQL and MongoDB sources directly into ClickHouse Cloud.  
+* They migrated from a self-managed Debezium/Kafka stack to ClickPipes, eliminating 1.5+ hours of manual work per table onboarding and resolving schema drift issues.  
+* Automated schema evolution in ClickPipes replaced a slow, error-prone manual process, drastically improving developer velocity and data consistency.
+
+[Spyne](https://www.spyne.ai/) is an AI-native automotive retail tech company that helps dealerships sell faster and engage smarter. Its two flagship products handle opposite ends of the dealership workflow: [Studio AI](https://www.spyne.ai/virtual-car-photography-studio) transforms raw vehicle photos into studio-quality images, spins, and videos for digital storefronts, while [Vini AI](https://www.vini.mx/) acts as an always-on AI sales assistant, answering calls and chats, qualifying leads, and booking appointments.
+
+Both products depend on data being accurate and up-to-date. But as the company grew and added new features, the team responsible for keeping that data flowing was spending more time maintaining the pipeline than analyzing what flowed through it.
+
+At a [January 2026 ClickHouse meetup in Gurgaon](https://clickhouse.com/videos/202601-gurgaon-meetup-spyneai), DevOps engineer Abhash Solanki shared how Spyne simplified their CDC pipeline, migrating from a self-managed setup built on Debezium and Kafka to serverless [ClickPipes](https://clickhouse.com/cloud/clickpipes) and [ClickHouse Cloud](https://console.clickhouse.cloud/).
+
+<iframe width="768" height="432" src="https://www.youtube.com/embed/gNJENprGhm0" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe>
+
+## Infrastructure toil and schema drift
+
+Spyne's old CDC pipeline was, in Abhash's words, a "complex beast, an intricate web of open-source tools and custom configurations."
+
+Source databases in MySQL and MongoDB fed into Debezium connectors, which read changes from binary and operation logs in real time and published them as messages to a Kafka cluster. The Kafka cluster then fed those into a self-hosted ClickHouse instance, with a [Kafka engine table](https://clickhouse.com/docs/engines/table-engines/integrations/kafka) consuming the stream and flattening each message into a single JSON payload. From there, [materialized views](https://clickhouse.com/docs/materialized-views) (specific to the schema) transformed the flattened JSONs into final [ReplacingMergeTree tables](https://clickhouse.com/docs/engines/table-engines/mergetree-family/replacingmergetree), ClickHouse's mechanism for handling updates efficiently.
+
+![Spyne AI Diagrams MDSN-54.png](https://clickhouse.com/uploads/Spyne_AI_Diagrams_MDSN_54_af64f3e4a7.png)
+
+*Spyne's old CDC pipeline: MySQL/MongoDB sources flowing through Debezium connectors, a Kafka cluster, and ClickHouse's Kafka engine table and materialized views into ReplacingMergeTree tables.*
+
+The architecture, while functional, created what Abhash calls significant "operational toil," demanding constant attention and consuming valuable engineering hours.
+
+The first major bottleneck was onboarding new tables. Every new table triggered a manual process: raise a DevOps ticket, map data types from MySQL or MongoDB to ClickHouse-compatible DDL (a manual, error-prone process Abhash calls the "type mismatch nightmare"), write the Kafka engine table, create the materialized view, update the Debezium connector config, and restart the pipeline, risking downtime.
+
+"Adding a new table would take at least 1 to 1.5 hours of manual intervention and manual workload," Abhash says. "Whenever a new product release or a new analytical table has to be added, this whole cycle has to be performed."
+
+That wasn't even the biggest pain point. The main problem, as Abhash describes it, was "schema drift nightmares." In a dynamic dev environment like Spyne's, source tables change frequently; new columns get added, data types get altered. When that happened, Debezium would faithfully capture the change and Kafka would deliver it, but the downstream materialized view, locked to its original DDL, would "silently ignore" the new data, leading to data inconsistencies and a lack of visibility into critical new features.
+
+Identifying the gap could take days, after which the fix required stopping the pipeline, altering the materialized view and final table, restarting everything, and often resyncing the whole table from scratch. This manual intervention created major delays and increased the risk of errors, making every release, as Abhash puts it, a "high-stakes operation."
+
+## Embracing simplicity with ClickPipes
+
+When Abhash went looking for a more robust and manageable solution, he didn't have to look far. Spyne was already self-hosting ClickHouse, and he saw that the database's managed service, [ClickHouse Cloud](https://console.clickhouse.cloud/), offered a native ingestion engine, [ClickPipes](https://clickhouse.com/cloud/clickpipes). "The promise of a fully managed service, designed for seamless CDC, was compelling," he says.
+
+With ClickHouse Cloud's efficient and easy-to-use UI, setting up a new data pipeline now takes "mere minutes," a welcome change from the meticulous Debezium configuration and schema mapping of the old system. "For a person who was manually adding each table and generating schemas for it, it felt like magic," Abhash says.
+
+![Spyne AI Diagrams.png](https://clickhouse.com/uploads/Spyne_AI_Diagrams_0f719848ca.png)
+
+*Spyne's new CDC pipeline, with sources flowing directly into ClickHouse Cloud via ClickPipes.*
+
+The biggest win, as he puts it, is "automated schema evolution." ClickPipes automatically detects upstream changes in sources like MongoDB and MySQL, then applies them to the corresponding ClickHouse tables instantly, with no manual intervention or pipeline restarts. This "zero-touch maintenance" has drastically improved developer velocity, allowing features to be deployed and data to be analyzed with "unprecedented speed and reliability."
+
+## Solving challenges along the way
+
+While ClickPipes immediately solved the team's main challenges, Abhash is quick to point out that "managed services aren't always magic… they also have some toils of their own." He notes that even with advanced platforms like ClickHouse Cloud, you still need to understand how things work under the hood and be willing to adapt how you operate.
+
+As the team got to know the platform, they encountered specific architectural nuances and behaviors that required them to evolve their SQL patterns and operational awareness to fully leverage its benefits. "This was less about fixing flaws," Abhash says, "and more about optimizing our approach for the new paradigm."
+
+---
+
+## Get started today
+
+Interested in seeing how ClickHouse works on your data? Get started with ClickHouse Cloud in minutes and receive $300 in free credits.
+
+[Sign up](https://console.clickhouse.cloud/signUp?loc=blog-cta-982-get-started-today-sign-up&utm_blogctaid=982)
+
+---
+
+
+## Challenge #1: The "snapshot" block
+
+[Adding a new table](https://clickhouse.com/docs/integrations/clickpipes/postgres/add_table) to an active ClickPipe causes the entire pipe to pause its CDC streaming while it snapshots the new table. For Spyne, where new tables are added regularly, this created lag in analytics dashboards and interrupted real-time data flow.
+
+The solution was careful ClickPipes planning. Abhash and the team isolated the 10 or so most critical large historical tables (i.e. those requiring real-time analytics at all times) into dedicated ClickPipes. New and lower-priority tables were grouped separately, so that when a snapshot pause occurs, production analytics remain unaffected.
+
+## Challenge #2: The "consistency trap" with ReplacingMergeTree
+
+ClickPipes uses ClickHouse's ReplacingMergeTree engine for efficient data ingestion and deduplication. While powerful, this introduces the concept of [eventual consistency](https://en.wikipedia.org/wiki/Eventual_consistency), which Abhash acknowledges caught the team off guard initially.
+
+What it means is that when a row is updated, two versions briefly coexist (the old and the new) until a background merge resolves them. In Spyne's self-hosted setup, they had tuned this process to complete in less than a minute. But that level of control wasn't available in a managed environment like ClickHouse Cloud.
+
+The team's solution was to add [`FINAL`](https://clickhouse.com/docs/sql-reference/statements/select/from#final-modifier) to their downstream queries, forcing deduplication at query time rather than waiting for the background merge. The trade-off, as Abhash notes, is increased CPU usage on the ClickHouse cluster due to the on-demand deduplication, but it guarantees accurate results in the dashboards that matter most.
+
+## Challenge #3: The "all-or-nothing" recovery risk
+
+When a source database outage (e.g. an AWS RDS failover) causes binary log loss, it creates what Abhash calls the "nightmare scenario": a binlog gap that breaks the CDC chain, invalidating the replication slot and halting data flow.
+
+With self-managed Debezium, the team could perform a targeted partial resync, reingesting only the data from the window around the outage. But with ClickPipes, that granular recovery control isn't available. Recovery often requires a full table resync, which for Spyne can mean reingesting terabytes of data, driving up both ingress costs and latency.
+
+For planned downtime, they can prevent the binlog gap from occurring by pausing the ClickPipe before the maintenance window begins. But for unplanned outages (which he notes are rare in managed services) there's no clean fix. "We have to adapt to it," he says.
+
+## Less engineering toil, more time analyzing data
+
+Throughout the migration, Abhash was clear about the tradeoffs. "Managing a self-managed pipeline gave us intricate control, but it had a very manual way of ingesting data into ClickHouse," he says. "Moving to ClickPipes has eliminated our operational toil."
+
+With [ClickHouse Cloud](https://console.clickhouse.cloud/), Spyne has successfully removed the engineering toil of managing Debezium configurations, Kafka, and complex schema mappings. They've automated schema evolution with ClickPipes, dramatically improving velocity and data consistency. And they've learned to optimize queries for ReplacingMergeTree and strategically manage costs under ClickHouse Cloud's consumption-based pricing model.
+
+As Abhash puts it, "The trade-offs were undeniably worth it for the enhanced stability and significant speed gains we achieved in our data pipelines at Spyne."
+
+---
+
+## Get started today
+
+Interested in seeing how ClickHouse works on your data? Get started with ClickHouse Cloud in minutes and receive $300 in free credits.
+
+[Sign up](https://console.clickhouse.cloud/signUp?loc=blog-cta-983-get-started-today-sign-up&utm_blogctaid=983)
+
+---
 
 ---
 
