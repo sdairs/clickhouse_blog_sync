@@ -1,5 +1,5 @@
 {
-  "last_sync": "2026-06-23T07:21:50.660546Z",
+  "last_sync": "2026-06-24T07:18:08.895298Z",
   "processed_blogs": {
     "https://clickhouse.com/blog/clickhouse-raises-400-million-series-d-acquires-langfuse-launches-postgres": {
       "title": "ClickHouse raises $400M Series D led by Dragoneer to accelerate expansion across analytics and AI infrastructure",
@@ -5220,9 +5220,27 @@
       "pub_date": "2026-06-22T00:00:00+00:00",
       "file_path": "blogs/2026-06-22-how-spyne-simplified-their-cdc-pipeline-with.md",
       "processed_at": "2026-06-23T07:21:50.567896Z"
+    },
+    "https://clickhouse.com/blog/real-time-analytics-cost-performance-snowflake-vs-clickhouse": {
+      "title": "The end-to-end cost-performance of real-time analytics: Snowflake vs. ClickHouse Cloud",
+      "pub_date": "2026-06-23T00:00:00+00:00",
+      "file_path": "blogs/2026-06-23-the-end-to-end-cost-performance-of-real-time.md",
+      "processed_at": "2026-06-24T07:18:05.346521Z"
+    },
+    "https://clickhouse.com/blog/whats-new-in-clickstack-may-2026": {
+      "title": "What's new in ClickStack - May 2026",
+      "pub_date": "2026-06-23T00:00:00+00:00",
+      "file_path": "blogs/2026-06-23-what-s-new-in-clickstack-may-2026.md",
+      "processed_at": "2026-06-24T07:18:08.604612Z"
+    },
+    "https://clickhouse.com/blog/pg_clickhouse-whats-new-june-2026": {
+      "title": "What's New in pg_clickhouse v0.3.2: Postgres 19, TLS, Regex, and Memory",
+      "pub_date": "2026-06-23T00:00:00+00:00",
+      "file_path": "blogs/2026-06-23-what-s-new-in-pg-clickhouse-v0-3-2-postgres-19.md",
+      "processed_at": "2026-06-24T07:18:08.801652Z"
     }
   },
-  "total_blogs": 870,
+  "total_blogs": 873,
   "failed_blogs": [
     {
       "url": "https://clickhouse.com/jp/blog/clickhouse-gcp-japan-availability",
