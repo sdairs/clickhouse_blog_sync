@@ -1,5 +1,5 @@
 {
-  "last_sync": "2026-06-24T07:18:08.895298Z",
+  "last_sync": "2026-06-25T07:18:46.852794Z",
   "processed_blogs": {
     "https://clickhouse.com/blog/clickhouse-raises-400-million-series-d-acquires-langfuse-launches-postgres": {
       "title": "ClickHouse raises $400M Series D led by Dragoneer to accelerate expansion across analytics and AI infrastructure",
@@ -5238,9 +5238,21 @@
       "pub_date": "2026-06-23T00:00:00+00:00",
       "file_path": "blogs/2026-06-23-what-s-new-in-pg-clickhouse-v0-3-2-postgres-19.md",
       "processed_at": "2026-06-24T07:18:08.801652Z"
+    },
+    "https://clickhouse.com/blog/announcing-managed-clickstack-mcp-server": {
+      "title": "Announcing the Managed ClickStack MCP Server",
+      "pub_date": "2026-06-24T00:00:00+00:00",
+      "file_path": "blogs/2026-06-24-announcing-the-managed-clickstack-mcp-server.md",
+      "processed_at": "2026-06-25T07:18:46.612412Z"
+    },
+    "https://clickhouse.com/blog/visa-conversational-agents": {
+      "title": "How Visa went from multi-day reporting to conversational analytics agents with ClickHouse Cloud and LibreChat",
+      "pub_date": "2026-06-24T00:00:00+00:00",
+      "file_path": "blogs/2026-06-24-how-visa-went-from-multi-day-reporting-to.md",
+      "processed_at": "2026-06-25T07:18:46.759044Z"
     }
   },
-  "total_blogs": 873,
+  "total_blogs": 875,
   "failed_blogs": [
     {
       "url": "https://clickhouse.com/jp/blog/clickhouse-gcp-japan-availability",

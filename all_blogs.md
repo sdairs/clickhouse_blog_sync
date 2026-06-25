@@ -1,6 +1,270 @@
 # ClickHouse Blogs
-Last updated: 2026-06-24 07:18:08 UTC
-Total blogs: 873
+Last updated: 2026-06-25 07:18:46 UTC
+Total blogs: 875
+
+---
+
+## Announcing the Managed ClickStack MCP Server
+Published: 2026-06-24T00:00:00+00:00
+URL: https://clickhouse.com/blog/announcing-managed-clickstack-mcp-server
+
+---
+title: "Announcing the Managed ClickStack MCP Server"
+date: "2026-06-24T16:35:22.586Z"
+author: "The ClickStack Team"
+category: "Product"
+excerpt: "Announcing the Managed ClickStack MCP Server: purpose-built observability tools, full-fidelity telemetry, and dedicated compute for AI-driven investigations at scale."
+---
+
+# Announcing the Managed ClickStack MCP Server
+
+## Bringing the ClickStack MCP Server to the Cloud
+
+Last month at Open House, we introduced the ClickStack MCP server, making the same observability investigation capabilities that power ClickStack available to external agents and AI workflows. Initially released as part of open-source ClickStack, it gave users a way to connect tools such as Claude, Cursor, and Codex directly to their observability data through a set of specialized investigation primitives designed specifically for logs, metrics, and traces.
+
+Today, we’re bringing those same capabilities to Managed ClickStack in ClickHouse Cloud.
+
+For Managed ClickStack users, this means agents can now access the same specialized observability tools while benefiting from the underlying ClickStack architecture that allows teams to retain more telemetry for longer, store unsampled logs, metrics, and traces at low cost, and avoid the rollups often used elsewhere to manage observability spend.
+
+These capabilities give agents access to significantly more context. They can reason across longer historical windows, identify trends that emerge over time, and investigate using complete telemetry rather than sampled or aggregated views of the underlying system.
+
+The MCP server also benefits from the broader ClickStack Cloud architecture. Agent workloads can run against dedicated compute resources, independent of ingestion and user-facing workloads, while features such as compute-compute separation, notebooks, dashboards, and collaborative investigation workflows remain available. The result is a straightforward way to bring AI agents to production observability without introducing another system to operate.
+
+## Why a specialized observability MCP?
+
+There is already a generic ClickHouse MCP server available today, and it works well for broad analytical tasks and SQL-driven exploration. But while building AI Notebooks, we repeatedly found that observability workflows behave differently from general BI workloads. Models perform much better when they operate against structured investigative tools rather than generating raw SQL queries repeatedly.
+
+![clickstack_mcp.png](https://clickhouse.com/uploads/clickstack_mcp_95a62233a7.png)
+
+Raw SQL is powerful, but many observability investigations are awkward to express as one-off queries. Tasks like mining recurring log patterns, comparing behavior across time windows, root causing trace outliers, or following an investigation across logs, metrics, and traces require multi-step analysis and domain-specific logic. Leaving all of that to the model means it has to reconstruct the required query patterns and analysis logic from scratch each time, spending context on query mechanics instead of the problem itself.
+
+The ClickStack MCP server gives agents higher-level semantic tools for observability work. Instead of exposing only a raw SQL interface, it provides stable tools for finding trends in patterns of logs, correlating attributes with outliers, inspecting slow traces, and moving through an investigation with repeatable workflows. Under the hood, those tools still execute optimized ClickHouse queries, but the agent interacts with intent-level operations rather than hand-assembling complex analysis every time.
+
+The result of these tools is that our internal benchmarks show that investigations completed with 25% fewer tool calls, with a 2.5x increase in consistency and an almost 20% increase in evaluation scores vs the standard ClickHouse MCP. A large part of that came from giving the model high-leverage semantic investigation tools instead of forcing it to generate every workflow from raw SQL alone.
+
+
+
+
+---
+
+## Get started today
+
+Interested in seeing how the MCP server works on your data? Get started with Managed ClickStrack in minutes and receive $300 in free credits.
+
+[Sign up](https://console.clickhouse.cloud/signUp?intent=o11y&loc=blog-cta-1052-get-started-today-sign-up&utm_blogctaid=1052)
+
+---
+
+### Example tool - event patterns
+
+As an example, consider the event patterns tool.
+
+Event patterns in ClickStack are used to make sense of large volumes of logs or traces by clustering similar events together. 
+
+![event_patterns.png](https://clickhouse.com/uploads/event_patterns_47b3286fb2.png)
+
+Instead of scrolling through millions of individual log lines, users get a smaller set of meaningful groups that show which errors are recurring, which are new, and which are driving changes in event volume.
+
+In raw SQL, this is difficult to express efficiently. A model would typically need to generate a query that normalizes the event body, often using regular expressions, then group by the resulting pattern and count occurrences over time. On a large dataset, this scales with the amount of data being scanned and can quickly run into high-cardinality outputs, long query times, or unnecessary server pressure. Quotas and query complexity limits can contain the worst cases, but the user still often ends up narrowing the time range or tuning the underlying data model before the question can be answered.
+
+The ClickStack MCP server takes a different path. For event patterns, it can run a small number of lighter queries, including a random sample of matching events and a count of the total result set. The sample is then processed in the MCP layer using the Drain3 algorithm to identify patterns, with the final counts extrapolated and ranked before being returned to the agent.
+
+![event_patterns_mcp.png](https://clickhouse.com/uploads/event_patterns_mcp_dfc443cb77.png)
+
+This gives the model a much better primitive to work with. The query overhead is fixed rather than growing linearly with the full dataset, the raw output has much lower cardinality, and the tool continues to work well even when the underlying event bodies are highly variable.
+
+### Reusing tools
+
+These same tools are used inside ClickStack AI Notebooks. The model is not manually stitching together large SQL statements for every step of an investigation. Instead, it works against specialized tools that already understand the underlying observability workflows and ClickStack optimizations.
+
+
+
+
+
+
+<video autoplay="1" muted="1" loop="1" controls="0">
+  <source src="https://clickhouse.com/uploads/ai_notebook_6446f8392a.mp4" type="video/mp4" />
+</video>
+
+### Retaining flexibility
+
+At the same time, we do not think structured investigative tools should completely replace direct SQL access.
+
+One of the reasons ClickHouse works so well for agentic workloads and observability is that SQL remains an incredibly powerful exploratory language. Sometimes an incident eventually reaches a point where there is no higher-level abstraction that helps anymore, and you simply need direct access to the underlying data. The structured tools handle many of the repetitive and common investigation paths efficiently, but SQL remains the escape hatch when engineers or agents need to go deeper, test unusual hypotheses, or answer questions the system was never explicitly designed around.
+
+In practice, the workflows end up complementing each other quite naturally: use optimized investigative primitives for the majority of the investigation, then drop into native queries when the situation calls for it.
+
+### Orchestration, not just investigation
+
+While some engineers are perfectly happy working directly in the terminal or inside an agent harness like Claude Code, investigations eventually need to be shared with other people. SREs need to collaborate, preserve context, and present evidence once they reach a conclusion.
+
+That is why we do not think observability MCP servers should only expose investigative primitives. Real operational workflows also require orchestration primitives for creating dashboards, persisting searches, managing alerts, and sharing findings across teams.
+
+This becomes especially important for local agent workflows. If an agent investigates an incident locally, the resulting evidence needs to be persisted somewhere for sharing and review by the larger team. Copying raw chat output into documents or generating static reports quickly breaks down during real incidents, leading to inconsistencies.
+
+For that reason, the ClickStack MCP server exposes bi-directional management tools directly inside ClickStack itself. Agents can not only investigate incidents, but also create dashboards, persist searches, and validate that the resulting artifacts contain the required evidence and visualizations.
+
+In practice, investigations naturally evolve into persistent operational artifacts rather than disposable chat histories.
+
+## An MCP server with full context and dedicated compute
+
+As observability becomes increasingly agent-driven, we expect both the number of queries and the amount of data being analyzed to grow significantly. Unlike traditional dashboards, agents are inherently exploratory, iteratively investigating systems, testing hypotheses, and traversing across logs, metrics, and traces.
+
+At the same time, the quality of these investigations depends heavily on context. Agents benefit from access to longer retention windows for historical analysis and trend discovery, as well as unsampled telemetry that allows them to understand the complete picture. Without that context, an investigation can easily end up following a promising path only to discover that the relevant data was sampled away, aggregated, or no longer retained.
+
+Taken together, these trends place new demands on the underlying observability platform. It needs to retain full-fidelity telemetry cost-effectively for long periods of time while supporting significantly higher query volumes as agents continuously explore, investigate, and validate hypotheses.
+
+<iframe src="https://clickhouse.com/uploads/clickstack_vs_traditional_82948145ce.html"  width="100%" height="auto" style="aspect-ratio: 1100/550;"></iframe>
+
+Managed ClickStack is designed for exactly these workloads. Built on ClickHouse Cloud, it allows teams to retain large volumes of logs, metrics, and traces cost-effectively while avoiding the sampling and rollups often used to control observability costs. 
+
+![agentic_compute_pool.png](https://clickhouse.com/uploads/agentic_compute_pool_89a959a591.png)
+
+Just as importantly, agent workloads can be isolated from both ingestion and user-facing workloads using dedicated compute resources. This allows teams to scale agent-driven investigations independently while ensuring production dashboards, alerts, and ingestion pipelines remain unaffected.
+
+## Connecting the MCP Server in Managed ClickStack
+
+Getting started with the Managed ClickStack MCP server is straightforward. ClickStack on ClickHouse Cloud exposes a managed MCP endpoint at `https://mcp.clickhouse.cloud/clickstack` and uses OAuth 2.0 for authentication.
+
+Before connecting, ensure you have a ClickHouse Cloud service with ClickStack enabled. MCP access can be enabled from the Cloud console by selecting **Connect → Connect with MCP** and toggling MCP support on.
+
+<img alt="mcp_server_config.png" loading="lazy" width="60%" height="1000" src="/uploads/mcp_server_config_b3a6e59515.png"/>
+
+Once enabled, navigate to ClickStack for the service, and select **Team Settings → API & Agents**. Here, ClickStack provides pre-configured connection strings for common MCP clients, including Claude Code, Cursor, and Codex CLI. 
+
+![mcp_config.png](https://clickhouse.com/uploads/mcp_config_39f8cffa61.png)
+
+Once configured, you'll need to complete authentication. For example, assume you've copied an MCP connection string for Claude.
+
+```sh
+claude mcp add clickstack --transport http https://mcp.clickhouse.cloud/clickstack --header "x-service-id: 11e1031f-9a13-4cac-9bc7-d4ec9286ec17"
+```
+
+In this case, launch Claude Code and run /mcp, then select clickstack-cloud to complete the OAuth flow.
+
+> One important detail is that the generated connection string contains a ClickHouse Cloud service ID. This determines which ClickHouse service executes the underlying queries. If you want agent workloads to run on dedicated compute, isolated from your other workloads, you can create a [child service](https://clickhouse.com/docs/cloud/reference/warehouses) and launch ClickStack from that service. The generated MCP configuration will then automatically target the appropriate service, allowing agent-driven investigations to scale independently from ingestion and user-facing workloads.
+
+Once connected, the agent can begin interacting directly with ClickStack’s observability primitives. For example, you can ask questions like:
+
+_"Show me the services with the highest error rate over the last 24 hours"_
+
+![simple_mcp_call.png](https://clickhouse.com/uploads/simple_mcp_call_3e12c36cd2.png)
+
+Under the hood, the MCP server routes these requests through the same optimized investigative tools used by AI Notebooks rather than relying entirely on ad hoc SQL generation.
+
+Suppose we investigate elevated latency in a payment service and eventually determine, through Claude, that the root cause is a cache eviction issue.
+
+![investigate_issues.png](https://clickhouse.com/uploads/investigate_issues_5f73fb12c2.png)
+
+At that point, we need a way to persist and share the investigation. We could copy the raw Claude output into a document or ask the model to generate a static HTML report, but neither workflow feels particularly natural.
+
+Below, we use the MCP server to generate a dashboard summarizing the investigation and to persist the findings directly in ClickStack, with a validation step confirming that the dashboard presents the required evidence.
+
+![create_dashboard.png](https://clickhouse.com/uploads/create_dashboard_80c18cbec3.png)
+
+![generated_dashboards.png](https://clickhouse.com/uploads/generated_dashboards_4fbf21a8f9.png)
+
+Our resulting dashboard provides a persisted artifact summarizing the incident and presenting evidence for any RCA document.
+
+## Conclusion
+
+We believe observability is becoming increasingly agent-driven, but for agents to be effective, they need more than access to raw data. They need specialized investigation tools, long-term context, full-fidelity telemetry, and the ability to operate at scale. With the Managed ClickStack 
+
+
+
+---
+
+## How Visa went from multi-day reporting to conversational analytics agents with ClickHouse Cloud and LibreChat
+Published: 2026-06-24T00:00:00+00:00
+URL: https://clickhouse.com/blog/visa-conversational-agents
+
+---
+title: "How Visa went from multi-day reporting to conversational analytics agents with ClickHouse Cloud and LibreChat"
+date: "2026-06-24T15:12:01.773Z"
+author: "ClickHouse"
+category: "User stories"
+excerpt: "Visa paired LibreChat with ClickHouse Cloud to build conversational BI agents on Authorize.net payments data, cutting multi-day reports to sub-second queries and reclaiming 8-10 hours per user each week."
+---
+
+# How Visa went from multi-day reporting to conversational analytics agents with ClickHouse Cloud and LibreChat
+
+## Summary
+
+* Visa used [ClickHouse Cloud](https://clickhouse.com/cloud) to build conversational BI agents on [Authorize.net](http://Authorize.net) payments data, letting teams query in natural language instead of writing SQL.   
+* Pairing [LibreChat](https://www.librechat.ai/) with ClickHouse via the [ClickHouse MCP server](https://github.com/ClickHouse/mcp-clickhouse), the team turned multi-day reporting into sub-second answers over 40 PBs containing millions of rows.   
+* Materialized views delivered roughly 50-70x faster analyses, reclaiming 8-10 hours per user each week while preserving Visa’s security and governance controls
+
+"At Visa, we share a deep love of enterprise-scale data analytics," says Rafeeq Abdul, Senior Director of Engineering in the company's Authorize.net payments solution. "We've built a very strong partnership with ClickHouse over the past year-plus to enable a vision and deliver a strong analytics platform that powers business insights and drives business outcomes."
+
+The partnership started in 2025 when Visa's observability team successfully migrated a major [application-logging use case](https://clickhouse.com/resources/engineering/log-monitoring) from Splunk to ClickHouse. That early win, built with open-source ClickHouse running on-premise, proved the database could handle petabyte-scale workloads at Visa's standards. The next step in their ClickHouse journey was moving beyond logs to the business data itself.
+
+Rafeeq joined us at our [2026 Open House user conference](https://clickhouse.com/openhouse/) in San Francisco, where he shared how Visa used [ClickHouse Cloud](https://clickhouse.com/cloud) on AWS and LibreChat to build a conversational AI intelligence layer that delivers sub-second insights at scale, while respecting the key controls and governance principles within Visa's ecosystem.
+
+## Deriving signals from the data
+
+Authorize.net, a Visa solution, lets SMBs accept credit card and electronic payments online. The platform analyzes around $250 million in annual revenue across 2 million authorization events and 500,000 raw transactions, with a data footprint of roughly 40 petabytes that's growing by the day.
+
+"The numbers here speak to the volume," Rafeeq says, "but they hide a story."
+
+The story, as Rafeeq tells it, is what those numbers make possible. "Data is the fuel," he says. Value comes not from any one table but from the signals that emerge across them. Merchants, gateways, usage, APIs, segmentation, recommendations, attrition, revenue… each is a different lens on the same payments activity, all of it spread across hundreds of source tables in a multi-database topology, with individual queries scanning millions of rows.
+
+And each signal, Rafeeq adds, matters to a different audience. Product managers need customer, usage, and attrition signals to understand how the product is being adopted. Visa's executives want concise revenue and trend summaries. And the product itself draws on the same data to power features and surface insights for customers.
+
+## Why Visa chose ClickHouse Cloud
+
+As Rafeeq explains, the long-standing challenge for Visa wasn't so much accessing the data as getting it fast enough to do anything about it. Legacy pipelines processed large volumes inefficiently, so daily, weekly, and monthly reports could take two to three days to produce. Getting an answer in the first place usually meant routing the question through a specialized data analyst with a multi-day turnaround time. By the time a report landed, the window to act on it had already closed.
+
+"That's where we challenged ourselves to build a real-time platform that allows us to extract the business value and drive business outcomes by modernizing our data analytics stack fully native to the cloud," Rafeeq says.
+
+They chose [ClickHouse Cloud](https://clickhouse.com/cloud) for a number of reasons. For one, Rafeeq says, it "completely offloaded" the burden of managing scale, letting the team bring infrastructure online with far less friction and keep their attention on outcomes. The [separation of storage and compute](https://clickhouse.com/docs/guides/separation-storage-compute) also gives them granular control over cost, with the ability to size unit cost to actual demand.
+
+On performance and features, ClickHouse excelled at flat-table scans across hundreds of columns, proved enterprise-ready for BI integrations including Power BI, and offered state-of-the-art encryption and CMEK support. Rafeeq also highlights ClickHouse's excellent [compression and storage efficiency](https://clickhouse.com/docs/data-compression/compression-in-clickhouse), as well as its [vibrant and mature community](https://clickhouse.com/community), which combine to give the platform a "very solid foundation."
+
+## Building conversational analytics agents with LibreChat and ClickHouse MCP
+
+With ClickHouse Cloud as the backbone, the team built an interface that makes it usable by everyone. The solution pairs LibreChat, an open-source conversational AI interface [acquired by ClickHouse](https://clickhouse.com/blog/clickhouse-acquires-librechat), with the [ClickHouse MCP server](https://github.com/ClickHouse/mcp-clickhouse), which lets AI agents explore and run queries against data in ClickHouse Cloud.
+
+The effect, as Rafeeq puts it, is to "evenly distribute knowledge across all users." Visa's internal teams don't have to be seasoned SQL engineers; they can ask questions in natural language (e.g. "show revenue risk by merchant segment") and all the complexity of joins and denormalization stays hidden behind the curtain.
+
+The results speak for themselves, with sub-second queries over millions of rows. As Rafeeq puts it, "The multi-day process of turning raw data into useful insights has been squashed into milliseconds."
+
+<video autoplay="1" muted="1" loop="1" controls="0">
+  <source src="https://clickhouse.com/uploads/visa_librechat_B_fullres_crf32_c8c5d3438e.mp4" type="video/mp4" />
+</video>
+
+ClickHouse's [materialized views](https://clickhouse.com/docs/materialized-views), which pre-compute and incrementally update results as new data arrives, is a big reason for that performance. Different from other similar database approaches, materialized views in ClickHouse processes as inserts occur instead of a static time interval. In one example, a revenue analysis that scanned 500,000 rows in 2-3 seconds now reads from a 624-row materialized view in just 100 milliseconds, roughly 50 times faster. An approval analysis by card brands dropped from 2 million rows read in 3-5 seconds to a 29,000-row view in 100 milliseconds, about 70 times faster. And a merchant risk analysis that required a multi-table join and took 5-8 seconds now completes in 200 milliseconds from a pre-joined view, about 30 times faster.
+
+> "Every signal matters to someone making a critical business decision, and those decisions can't wait days for answers. ClickHouse Cloud and LibreChat deliver real-time insights to the right people, helping identify at-risk merchants and surface millions of dollars in potential revenue risk."
+>
+> — Rafeeq Abdul, Sr. Director of Engineering, Visa
+
+## Fresh data, secure and governed control
+
+Rafeeq is quick to stress that none of these results came at the expense of security. "The key principles of Visa data compliance and governance are rigorous and upheld" he says.
+
+ClickHouse provides the deployment flexibility to meet Visa where they are in terms of security and compliance requirements. In the new pipeline, data starts in on-prem SQL databases, which remain in place. Files are PGP-encrypted in transit and handed off into Amazon S3 as a protected, raw data store. From there, a VPC PrivateLink connection feeds a custom ETL pipeline that moves the data into ClickHouse Cloud, so the data plane is reached over private connectivity rather than the public internet.
+
+![Visa User Story Diagram (1).jpg](https://clickhouse.com/uploads/Visa_User_Story_Diagram_1_25b4bd037b.jpg)
+
+This architecture, Rafeeq explains, delivers both freshness and control. Change data capture and materialized views keep data current and shaped for the way teams consume it, while federated access controls govern who can see what. The result is fewer handoffs and simpler management, delivering real-time insight with disciplined, enterprise-ready controls.
+
+## The business impact: revenue and time savings
+
+While the latency and performance achievements are impressive, the big payoff for Visa is what these enable for the business. By flagging at-risk merchants in real time, they've surfaced millions of dollars in revenue risk, fast enough to act on. In the old system, that kind of signal would often show up days late.
+
+From a productivity standpoint, work that used to eat up hours of an analyst's week has effectively gone to zero. Manual dashboard creation, data lookups across hundreds of tables, and report prep for intake/onboarding are now completely self-service, generated on demand via plain English, turning around in seconds instead of 2 to 3 days. "Everything is now available at their fingertips in a natural-language scenario," Rafeeq says. All told, he estimates that the platform has helped Visa reclaim 8 to 10 hours per user, per week and collectively save thousands of hours across teams per month.
+
+With [ClickHouse Cloud](https://clickhouse.com/cloud), [LibreChat](https://www.librechat.ai/), and the [ClickHouse MCP server](https://github.com/ClickHouse/mcp-clickhouse), what began as a logging migration from Splunk has become a way for Visa's business teams to interrogate payments data directly, without waiting around for a SQL specialist. Looking ahead, Rafeeq says the team plans to "continue to extend our partnership and build on top of our platform," widening the set of questions anyone at Visa can answer, in natural language, in real time.
+
+---
+
+## Get started today
+
+Interested in seeing how ClickHouse works on your data? Get started with ClickHouse Cloud in minutes and receive $300 in free credits.
+
+[Sign up](https://console.clickhouse.cloud/signUp?loc=blog-cta-1036-get-started-today-sign-up&utm_blogctaid=1036)
+
+---
 
 ---
 
