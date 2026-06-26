@@ -1,6 +1,408 @@
 # ClickHouse Blogs
-Last updated: 2026-06-25 07:18:46 UTC
-Total blogs: 875
+Last updated: 2026-06-26 07:24:50 UTC
+Total blogs: 879
+
+---
+
+## Announcing Silk: a silky smooth fiber runtime for ClickHouse
+Published: 2026-06-25T00:00:00+00:00
+URL: https://clickhouse.com/blog/silk
+
+---
+title: "Announcing Silk: a silky smooth fiber runtime for ClickHouse"
+date: "2026-06-25T19:37:21.023Z"
+author: "James Cunningham and Vadim Skipin"
+category: "Engineering"
+excerpt: "Silk is a new open-source C++ fiber runtime built for ClickHouse, combining a NUMA-aware work-stealing scheduler, io_uring I/O, and zero heap allocation in the steady state to deliver nanosecond-level fiber yields and dramatically lower tail latency for h"
+---
+
+# Announcing Silk: a silky smooth fiber runtime for ClickHouse
+
+## TL;DR {#tldr}
+
+*Silk is a stackful-fiber library and scheduler with a NUMA-aware work-stealing loop, io_uring as the I/O ground truth, and zero heap allocation in the steady-state hot path. We built it for ClickHouse, and the first place we aim to integrate it is in our distributed cache.*
+
+## What are fibers? What is Silk? {#what-are-fibers-what-is-silk}
+
+Fibers are a lightweight user-space execution unit, somewhat like threads. Unlike threads, fibers participate in cooperative multitasking instead of the preemptive multitasking that threads use; allowing fibers to yield their work instead of block on it. This particular behavior is best suited for asynchronous I/O, which is becoming more of a bottleneck in distributed systems as CPUs grow faster and clusters grow larger.
+
+Unlike threads, fibers do not have a rich ecosystem of language support, which is why we created Silk. Silk is a C++ library that gives you a cooperative fiber scheduler, backed by a per-CPU scheduler that uses `io_uring` for asynchronous I/O and steals work between cores when local queues run dry. It is exceptional at executing high-concurrency networking I/O (hint hint: ClickHouse) and also at high-currency file I/O (surprise surprise: also ClickHouse).
+
+The name is a homage to Cilk, the 1994 MIT work-stealing scheduler whose name was itself a portmanteau of "silk" plus C. Silk is meant to position itself in that lineage. The fiber-as-silk-thread metaphor is a side benefit.
+
+What made us write a runtime rather than reach for an existing one off the shelf is the combination of properties we needed from it:
+
+1. A fiber that yields in tens of nanoseconds
+2. Work stealing that respects CPU topology
+3. No heap allocation in the steady state
+4. `io_uring` treated as the I/O ground truth rather than as a backend bolted onto an older reactor design.
+
+None of the off-the-shelf options gets all four. So we wrote one that does, and we ship it with the harness, GDB extension, and BPF profiler that proves we aim to depend on it in ClickHouse.
+
+## Why fibers, why these fibers, and why now? {#why-fibers-why-these-fibers-and-why-now}
+
+ClickHouse already has a concurrency model, and it works. It's the right model for the parts of the engine that look like query execution: long-running threads doing real CPU work, where the per-thread overhead is amortized over millions of rows of computation.
+
+Yet, we need silk for the rest of the engine. If you trace a query through ClickHouse Cloud, increasingly the long pole is not "a thread did a lot of computation," it is "ten thousand tiny operations completed in a particular order, and the slowest of them shaped the tail." This takes an aim at increasing the performance of object-storage I/O, distributed cache lookups, replica coordination, HTTP fan-out. All components that are I/O-bound, highly concurrent, and decided at the 99th and 99.9th percentile. They are exactly the workloads where the cost of one in-flight request is supposed to be a stack pointer, not a kernel thread.
+
+The argument for stackful fibers, over OS threads or stackless C++20 coroutines, is essentially this: OS threads are too expensive to use as the primary unit of concurrency in a database engine. A few microseconds per context switch, kilobytes of stack, and a finite number of them before the kernel starts context-switching itself to death. Stackless coroutines are cheap but viral: every function on a suspension path has to be marked `co_await`-able, and the compiler's heap allocation elision optimization (HALO) reliably stops firing the moment the coroutine handle escapes to a real scheduler queue. Stackful fibers give you cheap suspension without the language footprint: any function can yield and the stack is a normal stack.
+
+The historical objection to stackful fibers, dating back to the Photon paper from Alibaba, is cache aliasing: fibers allocated from a slab can have stacks that map to the same L1 cache lines, producing pathological eviction. The Photon paper measured a 13% scheduler-level cost from this. Silk's response is that the problem is a property of slab-allocated stacks specifically, not of stackful fibers in general. Each fiber's stack is `mmap`'d from a per-fiber pool with guard pages on either side. There is no slab and no aliasing. The 13% cost does not appear in our benchmarks, because the precondition for it does not exist.
+
+What silk delivers, by its own benchmarks against the field, is roughly the following:
+
+- About 3.6 nanoseconds per fiber yield with cross-CPU work stealing
+- About 7.6 microseconds for an `io_uring` ping-pong
+- 5.9 million file IOPS at a working configuration
+- Roughly fifteen times the throughput of `boost::asio` at one connection, and roughly four times at high concurrency
+- Per-CPU lock-free stack performance up to 2068x faster than a global lock-free stack at 32 threads, via `rseq`
+
+Want to test these numbers yourself? They come from a benchmark harness in the repository (`./bb`) that runs the exact same workloads through silk and the comparison tool, with controlled CPU pinning, fixed warmup periods, percentile tracking, and JSON output that anyone can re-run and verify. The methodology is the strongest single aspect of how silk presents itself.
+
+## How does Silk work? {#how-does-silk-work}
+
+The scheduler runs one OS thread per CPU, pinned. Each scheduler thread owns a per-CPU `ProcessorState` containing a bounded ready queue (a Vyukov MPMC queue with cache-line-aligned producer/consumer slots), an `io_uring` ring for asynchronous I/O and timer expiry, a sleep tree ordered by deadline, and an eventfd that doubles as a wakeup doorbell. Every fiber-bearing operation (submitting an I/O, waking a waiter, scheduling a new fiber) happens on the CPU that originated it whenever possible. When a CPU's ready queue is empty, the scheduler thread wakes via a persistent `IORING_OP_POLL_ADD_MULTI` on the eventfd and runs a service loop that drains its CQ ring, processes expired sleeps, and looks for work to steal.
+
+Work stealing is topology-aware. At startup, silk reads the system's CPU topology from `/sys` and builds a steal-candidate list per CPU, sorted by estimated cost: hyperthread siblings first (about a microsecond), same-socket cores next (about fifty microseconds), and cross-socket cores last (about five hundred microseconds). When a CPU steals, it walks its candidate list in cost order, with random shuffling within each cost tier to avoid hot-spotting. This technique is a concrete realization of a "NUMA-aware" scheduler, it's not just "we have separate queues," it's "we know which CPUs are cheap to steal from and prefer them."
+
+Topology-aware scheduling aside, silk has another important performant property: **the steady-state runtime does no heap allocation.** Fiber stacks come from a pool that is `mmap`'d at init and never freed. `FiberFuture`, `IoFuture`, `SleepFuture`, and `MultipleWaitState` all live on the caller's stack; the `outstandingCount` accounting in `waitForMultiple` exists precisely because the state is on the stack and the function must not return until all in-flight signals have completed. Every container is intrusive: the queue node, suspended-list entry, lock-free-stack hook, and waiter-table hook are *fields inside the `Fiber` object itself*, not separate allocations. A fiber can be enqueued in three different containers simultaneously and the cost is zero additional bytes of heap. The same applies to `SleepFuture`, which carries its own `StackEntry` and `TreeEntry` fields for the cancel queue and the deadline-ordered tree. After init, the hot path does no allocation at all. Not less than other libraries, zero.
+
+The last important performant property we shipped silk with: `boost::asio` allocating per async operation. C++20 stackless coroutines allocate per coroutine frame on the heap unless HALO fires (which usually doesn't happen with a real scheduler). Among production-grade general-purpose async runtimes, the property of zero hot-path allocation belongs almost exclusively to systems engineered for real-time use: DPDK, Seastar, or parts of the Linux kernel itself. Silk is in that category as a deliberate design choice, and the consequence is that it can be deployed in places where allocator behavior is part of the SLA: query execution under memory pressure, kernel-bypass paths, or latency-sensitive hot loops where a `malloc` on the wrong page fault means a missed deadline. All key hotspots of a highly performant distributed database.
+
+## What are some of the design choices? {#what-are-some-of-the-design-choices}
+
+**The synchronization primitives are textbook in shape.** The `FiberFuture` packed-state pattern, the `FiberSequencer` flat-combining loop, and the `FiberMutex` lock-and-flag race-handling are each canonical implementations of patterns that go wrong in subtle ways more often than they're done right. Every memory fence has a paired counterparty. Every CAS uses the strictest necessary ordering and no stronger.
+
+**HALO does not fire with schedulers that handle production workloads.** The standard pitch for C++20 stackless coroutines is "zero overhead because of HALO." HALO requires the coroutine handle never to escape to a scheduler queue. Every real scheduler violates that condition, so the "zero overhead" claim holds for synthetic benchmarks where the scheduler is trivial and breaks for real applications where the scheduler bears real load.
+
+**The race-handling for park-then-wake is the key to throughput.** Every primitive that suspends a fiber has the same shape: optimistically attempt the operation; on failure, set a flag indicating waiters exist; suspend the fiber via a callback that runs after the fiber has fully parked; in the callback, register the fiber as a waiter and re-check for missed wakeups. Once you have read it carefully in `FiberFuture`, the futex, the mutex, and the sequencer all read fast.
+
+**The whole synchronization layer is one pattern.** When you can implement six synchronization primitives in 700 lines because they are all variations on "packed state plus flag CAS plus queue or table plus suspend callback that re-checks," you have found the right abstraction. The construction of the library had each primitive deliberately built on top of the previous one. Six primitives, two patterns, one underlying suspend-callback contract.
+
+**The public API is small.** There are a total of eight verbs in `FiberScheduler`: initialize, destroy, run, schedule, yield, suspend, enqueue/release waiters, and the I/O primitives. The header is under 400 lines and reads like API reference documentation. Stackful state is treated as an implementation detail, not as something the user composes around.
+
+**The benchmarks are reproducible.** Every comparison is apples-to-apples and every run is reproducible from one command. The silk-vs-asio comparison is silk against asio's *better* configuration: enabling asio's io_uring backend made it slower, not faster. The silk-vs-fio comparison is silk against fio's `--ioengine=io_uring`, not against `psync`.
+
+**The operational tooling is as serious as the code.** A working GDB extension that handles both x86_64 and aarch64, with frame layouts pulled from the Boost.Context assembly source files. A BPF profiler with on-CPU and off-CPU sampling, capability-gated for unprivileged use. A benchmark harness that runs comparisons against the reference tool for each workload (asio for network I/O, fio for file I/O, sockperf for TCP latency, nginx for HTTP). The GDB extension has its own integration test in CTest. We want to ship a library that is useful outside of our own authors.
+
+**This is the cache-aliasing rebuttal of Photon.** The Photon paper has been circulating as the standard "stackful fibers are slow" reference for years. The argument that the 13% scheduler-level miss rate it measured is an artifact of slab-allocated stacks, not of stackful fibers per se, and that mmap-from-pool with guard pages sidesteps it entirely, has not been published in the form silk presents it. The benchmarks back it up: silk's per-yield cost is in the nanoseconds, not the microseconds you would expect from a 13% miss-rate runtime.
+
+## Ok, but it's not perfect, right? {#ok-but-its-not-perfect-right}
+
+While we're proud of what we've authored, we can acknowledge limitations and constraints.
+
+First and foremost, Silk is Linux-only. It depends on io_uring, eventfd, mmap with guard pages, rseq, and the modern Linux capability model. There is no portability layer for macOS, Windows, or older kernels. This is a deliberate scope choice, as the target is server-class Linux, and supporting kqueue or IOCP would double the surface for a use case the team does not have.
+
+Second, the scheduler is a process-wide singleton, accessed via static methods on `FiberScheduler`. There is no way to instantiate two isolated schedulers in the same process. This makes the API ergonomic but rules out testing scenarios and advanced usage like "one scheduler for latency-critical work, one for batch." We deliberately kept multi-scheduling out of the library's current scope; as it would be a breaking API change to add later.
+
+Third, the fiber API requires entry-point parameters to fit in 64 bytes (`FIBER_PARAMETERS_SIZE`). Larger payloads need to be heap-allocated and passed by pointer. This avoids per-fiber allocation churn for the common case but is a real constraint that surfaces at compile time via `static_assert`.
+
+And last but not least, the profiler shipping with the library is, in its current form, a generic on-CPU and off-CPU sampling profiler. It's useful, but not yet aware of fiber identity, though per-fiber attribution is on our roadmap. The architectural foundation is in place: silk knows which fiber is running on each thread (via `threadFiber` TLS), the GDB extension already demonstrates that suspended fiber stacks can be walked from outside, and the BPF profiler is structured for incremental probe additions. What's missing is the BPF program updates to read the TLS, plus probably one or two USDT probes at the suspend/resume boundary.
+
+## Where will ClickHouse utilize this first? {#where-will-clickhouse-utilize-this-first}
+
+While we have many places where fibers can increase our performance, the first probable target is our [**distributed cache**](https://clickhouse.com/blog/building-a-distributed-cache-for-s3). It is network-bound and high-fan-out, having a possibility of a single query touching hundreds of cache nodes. It is tail-latency-sensitive in the way that decides query latency. Every cache request maps cleanly to a single fiber: fan in, do io_uring reads, fan out, return. The I/O is io_uring-shaped already, and the working set is dominated by short-lived requests rather than long-running query work, so silk's steady-state zero-allocation property is most visible exactly here. We expect the largest visible wins to be in the tail: the 99th and 99.9th percentiles, where OS scheduler jitter and allocator pauses under thousands of concurrent threads are the dominant contributors, and where silk's per-CPU pinning and zero hot-path allocation give the kernel and the allocator nothing to flinch at. We have already seen this shape on internal benchmarks: at ten thousand concurrent S3-style requests, the fiber executor's 99.9th percentile is roughly 65% better than the equivalent thread-pool executor, even when median throughput is identical and MinIO is the bottleneck on both. Distributed cache is where silk runs smoothest first; the rest of the engine is on a separate timeline, and we will write about each integration as it lands.
+
+## Where can I see more? {#where-can-i-see-more}
+
+Silk is published at [github.com/ClickHouse/silk](http://github.com/ClickHouse/silk). The repository contains the library, the benchmark harness, the GDB extension, the BPF profiler, and four documents worth opening first: [`docs/scheduler.md`](https://github.com/ClickHouse/silk/blob/main/docs/scheduler.md), [`docs/sync.md`](https://github.com/ClickHouse/silk/blob/main/docs/sync.md), [`docs/coroutines.md`](https://github.com/ClickHouse/silk/blob/main/docs/coroutines.md), and [`docs/perf.md`](https://github.com/ClickHouse/silk/blob/main/docs/perf.md). Every benchmark in this post is reproducible from a clean checkout. If you are working on a Linux server-class C++ system and the workload looks like high-concurrency I/O with strict tail-latency requirements (distributed caches, object-storage clients, RPC fabrics, HTTP fan-out), silk is in a state where it would value being kicked at. Read the docs, run the benchmarks, file issues. ClickHouse moves fast because the layers underneath it are precise. Silk is the next layer underneath, and it is the layer we needed.
+
+Lastly, as we weave Silk into ClickHouse, we'll author more pieces about how it has increased performance. Be sure to stay tuned!
+
+---
+
+## Get started today
+
+Interested in seeing how ClickHouse works on your data? Get started with ClickHouse Cloud in minutes and receive $300 in free credits.
+
+[Sign up](https://console.clickhouse.cloud/signUp?loc=blog-cta-1103-get-started-today-sign-up&utm_blogctaid=1103)
+
+---
+
+---
+
+## ClickHouse is now a native connection in Notion Custom Agents
+Published: 2026-06-25T00:00:00+00:00
+URL: https://clickhouse.com/blog/notion-custom-agents
+
+---
+title: "ClickHouse is now a native connection in Notion Custom Agents"
+date: "2026-06-25T19:14:12.886Z"
+author: "Alex Francoeur and Aditya Chidurala"
+category: "Product"
+excerpt: "ClickHouse is now a native connection in Notion Custom Agents. Connect with OAuth and let agents run read-only queries on your data without leaving Notion."
+---
+
+# ClickHouse is now a native connection in Notion Custom Agents
+
+## Summary
+
+ClickHouse is now a native connection in Notion Custom Agents. Connect with OAuth, then ask your data questions in plain language and run read-only queries without leaving Notion.
+
+We are building toward [agentic analytics](https://clickhouse.com/blog/agent-facing-analytics) and the [Agentic Data Stack](https://clickhouse.com/ai). The [ClickHouse Remote MCP server](https://clickhouse.com/docs/use-cases/AI/MCP/remote_mcp) connects ClickHouse to the tools where developers and data teams already work.
+
+ClickHouse is now a native, preconfigured connection in [Notion Custom Agents](https://www.notion.com/help/custom-agents). There is no MCP server to deploy and no URL to paste. Connect a Notion Custom Agent to ClickHouse Cloud with OAuth, and the agent can explore your data, run read-only queries, and surface service and cost information without leaving Notion. This is the first native ClickHouse connector inside Notion, and part of the first [House Mates](https://clickhouse.com/blog/introducing-house-mates) partner cohort.
+
+
+## Add ClickHouse to a Notion Custom Agent
+
+Notion supports MCP connections out of the box, so adding ClickHouse takes a few clicks.
+
+In Notion, create a Custom Agent from the Agents section in the sidebar. Open the agent’s Settings, go to Tools and Access, and select Add connection. Choose ClickHouse from the list, click Connect, and complete the OAuth flow with your ClickHouse Cloud credentials. Access is scoped to the organizations and services your account can already reach.
+
+
+**Prerequisites**: You need a ClickHouse Cloud service with the Remote MCP server enabled and a Notion workspace on the Business or Enterprise plan.
+
+![Notion Image 1.png](https://clickhouse.com/uploads/Notion_Image_1_b841ac8333.png)
+
+
+*ClickHouse is a preconfigured connection in Notion Custom Agents.*
+
+
+## Choose which tools the agent can use
+
+After connecting, expand the ClickHouse connection and toggle on the tools this agent can use. Every tool exposed by the ClickHouse Remote MCP server is read-only. For each tool, you decide whether the agent runs it automatically or asks for approval first.
+
+The 14 tools cover what an agent needs to explore and report on your data. It can list databases and tables, run SELECT queries against ClickHouse and [Managed Postgres](https://clickhouse.com/cloud/postgres), and pull organization and service details, ClickPipes, backups, and cost. See the [tool reference](https://clickhouse.com/docs/cloud/features/ai-ml/remote-mcp) for the full list.
+
+
+![Notion Image 2.png](https://clickhouse.com/uploads/Notion_Image_2_197f9ee4b9.png)
+
+
+*Per-tool toggles. Every tool is read-only, and you choose whether the agent runs it automatically or asks first.*
+
+---
+
+## Get started today
+
+Interested in seeing how ClickHouse works on your data? Get started with ClickHouse Cloud in minutes and receive $300 in free credits.
+
+[Sign up](https://console.clickhouse.cloud/signUp?loc=blog-cta-1102-get-started-today-sign-up&utm_blogctaid=1102)
+
+---
+
+## Ask questions in plain language
+
+Once connected, the agent turns plain-language questions into ClickHouse SQL and runs them. Notion suggests generic starter prompts like “Show me all tables in the analytics database,” “What’s the average session duration by country?” and “What was my organization’s cost last week?”
+
+Your Notion pages and databases supply the context and semantic layers. The agent grounds itself in your schema, ClickHouse runs the query, and returns the answer inside the workspace where your team already works.
+
+![Notion Image 3.png](https://clickhouse.com/uploads/Notion_Image_3_e4b7b6693e.png)
+
+*A Notion agent answering a plain-language analytics question, showing the generated SQL and the result table*
+
+
+## Build a daily observability report
+
+Custom Agents run on a schedule, so you can turn a one-off question into a recurring report stored in a Notion database. Point a Custom Agent at a [Managed ClickStack](https://clickhouse.com/cloud/clickstack) service and have it summarize your observability data every morning.
+
+Give the agent a job and a trigger: query error rates, p99 latency, and request volume over the last 24 hours, then write the summary to a Notion page. The agent runs the queries against ClickStack, formats the numbers, and updates the page before your team logs on. 
+
+No dashboard to open and no query to rerun.
+
+![Notion Image 4.png](https://clickhouse.com/uploads/Notion_Image_4_a258ef6c83.png)
+
+*A Notion page with a daily observability report that the agent generated from a ClickStack service*
+
+
+## Analytics where your team already works
+
+The native Notion connector brings ClickHouse analytics into the workspace where teams plan, document, and decide. Notion handles context and collaboration; ClickHouse answers the data questions in real time. The connector is in beta today.
+
+Learn more at [clickhouse.com/docs/integrations/notion](https://clickhouse.com/docs/integrations/notion)
+
+
+---
+
+## Why we rewrote WAL-G for Postgres backups in Rust: Meet WAL-RUS
+Published: 2026-06-25T00:00:00+00:00
+URL: https://clickhouse.com/blog/walrus-postgres-backups-in-rust
+
+---
+title: "Why we rewrote WAL-G for Postgres backups in Rust: Meet WAL-RUS"
+date: "2026-06-25T16:00:33.907Z"
+author: "Sai Srirampur and Philip Dubé"
+category: "Engineering"
+excerpt: "How we built WAL-RUS, an open-source Rust-based Postgres backup tool that reduces virtual memory usage by over 70% compared to WAL-G while maintaining full compatibility."
+---
+
+# Why we rewrote WAL-G for Postgres backups in Rust: Meet WAL-RUS
+
+![WAL-RUS Blog Banner.jpg](https://clickhouse.com/uploads/WAL_RUS_Blog_Banner_00f644032a.jpg)
+
+Postgres backups are one of those pieces of infrastructure that should be boring. They sit in the background, continuously archiving WAL files, uploading backups, and making sure that when something goes wrong, recovery is possible.
+
+At ClickHouse Cloud, this path is critical. WAL archival is what allows us to preserve durability and recoverability for our Postgres services. WAL-G has been a strong and reliable tool for this job. It is mature, battle-tested, and has served the Postgres community well.
+
+But as we pushed Postgres into tighter and more resource-constrained environments, we started hitting a specific problem: memory predictability.
+
+That led us to build [**WAL-RUS**](https://github.com/ClickHouse/wal-rus), an **open-source** Rust-based implementation of Postgres backup and WAL archival tooling, designed for predictable memory-efficiency and WAL-G compatibility.
+
+## The problem {#the-problem}
+
+WAL-G is written in Go, a garbage-collected language. While Go makes it easy to build reliable infrastructure software, garbage-collected runtimes make memory usage harder to predict, especially for long-running services like WAL archival.
+
+The challenge isn't just **resident memory** (memory actively being used), but also **virtual memory** (memory reserved from the operating system). Go's runtime manages its own memory pools and can [reserve significantly more virtual memory](https://go.dev/doc/faq#Why_does_my_Go_process_use_so_much_virtual_memory) than the application is actively using. As workloads change, this footprint can fluctuate in ways that are difficult to reason about and tune. The [Go GC guide](https://go.dev/doc/gc-guide) describes this as a characteristic "sawtooth" pattern, where memory usage grows between garbage collection cycles and then falls after collection, making it difficult to predict peak memory consumption and provision resources efficiently.
+
+For operators, that creates a simple but important problem: **how much memory should be reserved for backup infrastructure?**
+
+The answer is usually "more than necessary" to avoid unexpected memory pressure. Memory budgeted for WAL archival is memory that cannot be confidently allocated to Postgres itself for queries, shared buffers, and page cache. [Postgres runs most reliably with overcommit disabled](https://www.postgresql.org/docs/current/kernel-resources.html#LINUX-MEMORY-OVERCOMMIT), making virtual memory a valuable resource modern software often leaves as an afterthought.
+
+WAL-G remains a proven and reliable tool, but as we scaled Postgres into increasingly resource-constrained environments, we wanted a backup system with a more predictable memory profile, delivering the same functionality while consuming fewer resources and making capacity planning simpler.
+
+## The solution: Introducing WAL-RUS {#the-solution-introducing-wal-rus}
+
+We weren't looking for new functionality. WAL-G is a mature and reliable backup system we’re happy to contribute to. Our goal was to preserve core functionality and compatibility while providing a more predictable resource profile.
+
+WAL-RUS is a Rust implementation of Postgres backup and WAL archival tooling built to address the operational challenges we encountered with memory predictability and resource usage.
+
+**1\. Predictable Resource Usage:** Unlike garbage-collected runtimes, Rust gives us direct control over [memory allocation and concurrency](https://github.com/ClickHouse/wal-rus/blob/176a430d021bab6016c828bbd1dbe85ac1396cfc/src/main.rs#L22). WAL-RUS uses bounded worker pools and carefully controlled concurrency, making memory consumption easier to reason about and reducing the need to over-provision resources for backup infrastructure.
+
+**2\. Built for Continuous WAL Archival:** WAL-RUS prioritizes WAL-G’s daemon architecture. Instead of spawning a new process and establishing new connections for every WAL file, it maintains persistent object storage connections that continuously process archival requests in the background.
+
+**3\. Optimized for Streaming Workloads:** WAL archival is fundamentally a streaming problem: read WAL files, compress them, and upload to object storage. WAL-RUS minimizes unnecessary buffering and data copies throughout this pipeline, allowing it to perform the same archival work with a smaller and more predictable memory footprint.
+
+**4\. WAL-G Compatibility:** WAL-RUS uses the same `WALG_` configuration variables as WAL-G and is continuously tested for interoperability. WAL-G can read archives generated by WAL-RUS, and WAL-RUS can read archives generated by WAL-G, making migration straightforward for existing deployments.
+
+## Benchmarks {#benchmarks}
+
+To evaluate WAL-RUS, we built a [reproducible benchmark](https://github.com/ClickHouse/wal-rus/tree/main/bench) that compares WAL-RUS, WAL-G, and pgBackRest under a sustained, WAL-heavy PostgreSQL workload. The benchmark continuously generates WAL, archives it to S3, and measures how efficiently each archiver uses memory while keeping up with WAL generation. To ensure a fair comparison, all three tools were configured with **four concurrent archival workers**.
+
+### Memory usage {#memory-usage}
+
+Memory efficiency was the primary motivation behind WAL-RUS, making memory consumption the first metric we examined.
+
+![image (23).png](https://clickhouse.com/uploads/image_23_1483929622.png)
+
+WAL-G reached nearly **2.8 GB** of peak virtual memory during the benchmark, while WAL-RUS remained below **1 GB**, a reduction of more than **70%**. WAL-RUS also maintained a stable memory profile throughout the run, making its resource requirements easier to reason about in production environments. pgBackRest deserves credit here as well. As a C-based implementation without a garbage-collected runtime, it has tight control over memory allocation.
+
+### WAL archival throughput {#wal-archival-throughput}
+
+![image (24).png](https://clickhouse.com/uploads/image_24_a91bdef1e0.png)
+
+Both WAL-RUS and WAL-G consistently maintained minimal backlog throughout the benchmark, demonstrating they could keep up with the workload being generated. pgBackRest accumulated a larger backlog during periods of intense WAL activity, illustrating their architectural tradeoffs between daemon-based and process-based archival throughput.
+
+### CPU utilization {#cpu-utilization}
+
+![image (25).png](https://clickhouse.com/uploads/image_25_66b4c49349.png)
+
+CPU utilization is less important, but good to keep an eye on. Usage is comparable between all three, primarily computing LZ4 compression.
+
+## Summary and conclusion {#summary-and-conclusion}
+
+WAL-RUS was built to solve a practical problem: delivering reliable PostgreSQL backups and WAL archival with a smaller, more predictable resource footprint. By combining Rust's explicit memory management with a daemonized streaming architecture, WAL-RUS achieves archival throughput comparable to WAL-G while significantly reducing memory consumption.
+
+Importantly, WAL-RUS remains fully compatible with existing WAL-G archives and configuration, making adoption straightforward for existing deployments. WAL-RUS introduces support for using Postgres 17’s wal summaries for incremental backups, which we’re working to [upstream to WAL-G](https://github.com/wal-g/wal-g/pull/2293).
+
+We didn't build WAL-RUS because WAL-G lacked functionality. WAL-G remains a mature and battle-tested project. We built WAL-RUS because we wanted tighter control over resource usage while preserving compatibility with the ecosystem that WAL-G helped establish.
+
+As we continue to develop and harden the project, we plan to make WAL-RUS the default backup and WAL archival mechanism for our managed Postgres offering in ClickHouse Cloud.
+
+The project is open source, and we welcome feedback, testing, and contributions!
+
+
+---
+
+## Try Postgres managed by ClickHouse
+
+ClickHouse + Postgres has become the unified data stack for applications that scale. With Managed Postgres now available in ClickHouse Cloud, this stack is a day-1 decision.
+
+[Sign up](https://clickhouse.com/cloud/postgres?loc=blog-cta-1090-try-postgres-managed-by-clickhouse-sign-up&utm_blogctaid=1090)
+
+---
+
+---
+
+## How Vibe.co handles billions of ad impressions with ClickHouse Cloud
+Published: 2026-06-25T00:00:00+00:00
+URL: https://clickhouse.com/blog/vibe-adtech-analytics
+
+---
+title: "How Vibe.co handles billions of ad impressions with ClickHouse Cloud"
+date: "2026-06-25T13:30:44.974Z"
+author: "ClickHouse"
+category: "User stories"
+excerpt: "How Vibe.co scaled from 100 GB to 2 TB of Connected TV ad impression data without rearchitecting anything, by migrating from Postgres to ClickHouse Cloud."
+---
+
+# How Vibe.co handles billions of ad impressions with ClickHouse Cloud
+
+## Summary
+
+* [Vibe.co](http://Vibe.co), recently acquired by Walmart, uses ClickHouse Cloud to power real-time campaign reporting for thousands of Connected TV (CTV) advertisers across billions of ad impressions.  
+* The team migrated from Postgres after outgrowing its pre-aggregation architecture. The platform now serves 90+% of client campaign reports in under 100ms, and has scaled from \~100 GB to over 2 TB without rearchitecting anything.  
+* They chose ClickHouse Cloud over self-hosted for operational simplicity, team support, and predictable pricing with separation of storage and compute.
+
+When you stream a show on your Connected TV (CTV), you might notice the ads, but you probably don't think much about how they got there. Behind every ad is a chain of decisions about who to reach, when, on which platform, and at what frequency. For large brands with dedicated media teams, navigating that world has always been complex but at least manageable. For everyone else, it was often out of reach entirely.
+
+[Vibe.co](http://Vibe.co), recently acquired by Walmart, is an all-in-one platform with a mission of making CTV advertising accessible to any brand, of any size, in under five minutes. Its customers range from household names to small businesses running their first-ever TV campaign. What unites them is access to premium streaming inventory through a self-serve platform that feels familiar to anyone who has ever run a Google or Meta ad.
+
+Rémi Paulin is a Staff Data Engineer on Vibe's data platform team, where he has spent the last two years building the infrastructure that makes all of this possible. He's a big believer in keeping things simple: fewer moving parts means fewer things that can break, and fewer things that can break means a platform clients can actually trust. That philosophy applies to user experience, system architecture, and—yes—real-time analytics. Increasingly, it also applies to choosing infrastructure that AI agents can use as fluently as humans do — which, in practice, means picking a database that takes SQL seriously.
+
+> "The best architecture is the simplest one that actually solves the problem. ClickHouse lets us keep the architecture simple without compromising on performance or flexibility, and that combination is rarer than it sounds." 
+> 
+> — Rémi Paulin, Staff Data Engineer, Vibe
+
+## The right tool for the wrong scale
+
+Like many startups, Vibe.co started with Postgres. As Rémi says, "It's very versatile—you can do a lot with it." But as the platform grew and ad impressions climbed into the billions, Postgres began to show its limits. "Postgres wasn't built for OLAP — once we were doing aggregation-heavy queries over billions of rows, the pre-aggregation layer became the bottleneck," Rémi says.
+
+The problem was architectural. Postgres wasn't designed for OLAP workloads—the kind of high-volume, aggregation-heavy analytical queries that power client-facing reporting. "We had jobs that would preaggregate the data so we wouldn't explode the database in size and keep the performance acceptable," Rémi says.
+
+It worked, but only just. Every new reporting use case meant writing a new job. Every deviation from the expected query pattern made things slow or expensive. The transformation layer had become the most fragile part of the stack.
+
+What Rémi and the team wanted was to eliminate that middle tier entirely. Clients needed to be able to slice and dice their campaign data interactively, not just consume whatever the pre-aggregation jobs happened to produce. And internally, other teams needed to be able to build new products on top of the data without going back to the data platform for a new pipeline every time.
+
+"We wanted to simplify the architecture," Rémi says. "We wanted to be able to just load the data directly into the database, and query it fast enough for any kind of reasonable aggregation." In this vision there would be no pre-computation required, no bespoke pipelines for every new use case or query pattern. With the right database, they could build a system that was genuinely flexible, not just flexible within the use cases they'd already anticipated.
+
+## Why they chose ClickHouse Cloud
+
+As a [columnar OLAP database](https://clickhouse.com/resources/engineering/what-is-columnar-database) built for performance and flexibility, ClickHouse was the logical choice to replace Postgres. The question was how to deploy it.
+
+The team evaluated their options. They benchmarked self-hosted ClickHouse, a managed option via another vendor, and [ClickHouse Cloud](https://clickhouse.com/cloud). While the Vibe team is comfortable self-hosting and even saw a slight performance edge thanks to storage locality, Rémi was clear-eyed about the tradeoff: "As a startup, we don't have time to manage databases. We don't want to allocate human resources to self-host, and we knew it would only become worse as we scaled."
+
+There's also something to be said for going with the people who actually build the product. "When you go managed, you're betting on the people running the service as much as the service itself," Rémi says. "Working with the team behind the team - the engineers who actually build ClickHouse - means their roadmap and ours stay aligned as we both grow."
+
+That extends to Rémi's broader philosophy on choosing infrastructure—and partners. "Being surrounded by knowledgeable partners is definitely a good thing, especially when you want to move fast and you don't have the time to invest into reading every blog post or piece of documentation," he says. "Working with great partners gives you fresh ideas and a fresh outlook on things."
+
+In addition to the operational simplicity and team support, Rémi was drawn to ClickHouse Cloud's [separation of storage and compute](https://clickhouse.com/docs/guides/separation-storage-compute). He contrasts it with the per-query billing used by other warehouse solutions, where every additional query against a larger dataset costs more, and growth can quickly lead to bill shock. "Whether we have more customers on the platform or existing customers with more data, we're not worried about unpredictable cost spikes," Rémi says.
+
+## GB to TB scale, without rearchitecting anything
+
+Since migrating to ClickHouse Cloud, Vibe has grown its stored data from ~100 GB to over 2 TB, and the architecture has barely changed. "That's one of the key measures of success," Rémi says.
+
+> "You build something, and 20x the data volume down the line, you haven't changed the architecture, the data flows, or the way consumers access the data. We've scaled the instances a bit, but that's so much cheaper than scaling the engineering team behind all of this." 
+> 
+> — Rémi Paulin, Staff Data Engineer, Vibe
+
+The two metrics Rémi watches most closely are cost and latency. He's not losing sleep over cost. "Storage is cheap," he says. "Whether you store one terabyte or five, it's not going to change the bill significantly. If the volume goes up, impressions go up, ads go up—the company is doing well. We're never going to be worried if that number goes up."
+
+Latency is where the real work happens. ClickHouse's built-in observability gives the team fine-grained visibility into query performance across every client. The team uses a hot/cold tiering pattern built on [refreshable materialized views](https://clickhouse.com/docs/materialized-view/refreshable-materialized-view): a hot table covering the last 30 days — which serves the vast majority of client queries — sits in front of the full historical dataset, with each tier tuned to its actual query patterns. The result: under 100ms response times for 90+% of client campaign reports, across billions of impressions.
+
+"The performance is great," Rémi says. "We're very happy with it."
+
+## Simple, flexible, and built to scale
+
+Ask Rémi what he wants people to take away from Vibe's story, and a few themes keep coming up: simplicity, quality, flexibility, and longevity. In his view, they're all connected.
+
+"The fewer moving parts you have, the less risk of something breaking," he says. "The simpler the architecture, the higher the quality." Quality, in other words, isn't just about uptime or performance. It's about trust. "Our clients, but also our internal teams, are comfortable trusting what we make available to them."
+
+Flexibility is what makes that trust scalable. With ClickHouse as the foundation, other teams at Vibe can pursue new product ideas without going back to the data platform team for a bespoke solution every time. "We want people to have a great idea and just be able to implement it," Rémi says. "Flexibility is super important if you want to move fast."
+
+That flexibility extends to [SQL](https://clickhouse.com/docs/sql-reference). Many fast databases support SQL in name only—a long list of unsupported features buried in the documentation. ClickHouse, Rémi argues, treats it differently. "ClickHouse is designed with no compromise on that front," he says. "SQL is a first-class citizen." That matters not only for analysts and internal teams, but increasingly for the AI agents that are becoming a larger part of how data teams work. SQL is the language agents know best, and a database that speaks it fluently is a strategic asset.
+
+The last thing Rémi keeps coming back to is longevity. The data infrastructure space moves fast, and technologies that don't move with it get left behind. Choosing a platform whose trajectory you trust is, in Rémi's view, as important as what it can do for you today. For Vibe, that means picking partners who keep pace with how the industry is evolving, and who give the team room to grow without being locked into decisions made on day one.
+
+
+---
+
+## Get started today
+
+Interested in seeing how ClickHouse works on your data? Get started with ClickHouse Cloud in minutes and receive $300 in free credits.
+
+[Sign up](https://console.clickhouse.cloud/signUp?loc=blog-cta-1086-get-started-today-sign-up&utm_blogctaid=1086)
+
+---
 
 ---
 

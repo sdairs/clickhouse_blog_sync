@@ -1,5 +1,5 @@
 {
-  "last_sync": "2026-06-25T07:18:46.852794Z",
+  "last_sync": "2026-06-26T07:24:50.521097Z",
   "processed_blogs": {
     "https://clickhouse.com/blog/clickhouse-raises-400-million-series-d-acquires-langfuse-launches-postgres": {
       "title": "ClickHouse raises $400M Series D led by Dragoneer to accelerate expansion across analytics and AI infrastructure",
@@ -5250,9 +5250,33 @@
       "pub_date": "2026-06-24T00:00:00+00:00",
       "file_path": "blogs/2026-06-24-how-visa-went-from-multi-day-reporting-to.md",
       "processed_at": "2026-06-25T07:18:46.759044Z"
+    },
+    "https://clickhouse.com/blog/silk": {
+      "title": "Announcing Silk: a silky smooth fiber runtime for ClickHouse",
+      "pub_date": "2026-06-25T00:00:00+00:00",
+      "file_path": "blogs/2026-06-25-announcing-silk-a-silky-smooth-fiber-runtime-for.md",
+      "processed_at": "2026-06-26T07:24:49.956776Z"
+    },
+    "https://clickhouse.com/blog/notion-custom-agents": {
+      "title": "ClickHouse is now a native connection in Notion Custom Agents",
+      "pub_date": "2026-06-25T00:00:00+00:00",
+      "file_path": "blogs/2026-06-25-clickhouse-is-now-a-native-connection-in-notion.md",
+      "processed_at": "2026-06-26T07:24:50.110434Z"
+    },
+    "https://clickhouse.com/blog/walrus-postgres-backups-in-rust": {
+      "title": "Why we rewrote WAL-G for Postgres backups in Rust: Meet WAL-RUS",
+      "pub_date": "2026-06-25T00:00:00+00:00",
+      "file_path": "blogs/2026-06-25-why-we-rewrote-wal-g-for-postgres-backups-in-rust.md",
+      "processed_at": "2026-06-26T07:24:50.255867Z"
+    },
+    "https://clickhouse.com/blog/vibe-adtech-analytics": {
+      "title": "How Vibe.co handles billions of ad impressions with ClickHouse Cloud",
+      "pub_date": "2026-06-25T00:00:00+00:00",
+      "file_path": "blogs/2026-06-25-how-vibe-co-handles-billions-of-ad-impressions.md",
+      "processed_at": "2026-06-26T07:24:50.423225Z"
     }
   },
-  "total_blogs": 875,
+  "total_blogs": 879,
   "failed_blogs": [
     {
       "url": "https://clickhouse.com/jp/blog/clickhouse-gcp-japan-availability",
