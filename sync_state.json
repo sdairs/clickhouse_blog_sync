@@ -1,5 +1,5 @@
 {
-  "last_sync": "2026-06-26T07:24:50.521097Z",
+  "last_sync": "2026-06-27T07:10:52.327379Z",
   "processed_blogs": {
     "https://clickhouse.com/blog/clickhouse-raises-400-million-series-d-acquires-langfuse-launches-postgres": {
       "title": "ClickHouse raises $400M Series D led by Dragoneer to accelerate expansion across analytics and AI infrastructure",
@@ -5274,9 +5274,21 @@
       "pub_date": "2026-06-25T00:00:00+00:00",
       "file_path": "blogs/2026-06-25-how-vibe-co-handles-billions-of-ad-impressions.md",
       "processed_at": "2026-06-26T07:24:50.423225Z"
+    },
+    "https://clickhouse.com/blog/how-i-hunt-for-vulnerabilities-with-ai": {
+      "title": "How I hunt for vulnerabilities with AI",
+      "pub_date": "2026-06-26T00:00:00+00:00",
+      "file_path": "blogs/2026-06-26-how-i-hunt-for-vulnerabilities-with-ai.md",
+      "processed_at": "2026-06-27T07:10:51.914809Z"
+    },
+    "https://clickhouse.com/blog/achieves-aws-cloudops-competency": {
+      "title": "ClickHouse achieves AWS Cloud Operations Competency",
+      "pub_date": "2026-06-26T00:00:00+00:00",
+      "file_path": "blogs/2026-06-26-clickhouse-achieves-aws-cloud-operations.md",
+      "processed_at": "2026-06-27T07:10:52.230837Z"
     }
   },
-  "total_blogs": 879,
+  "total_blogs": 881,
   "failed_blogs": [
     {
       "url": "https://clickhouse.com/jp/blog/clickhouse-gcp-japan-availability",
