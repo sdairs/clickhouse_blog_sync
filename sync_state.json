@@ -1,5 +1,5 @@
 {
-  "last_sync": "2026-06-29T07:52:05.295906Z",
+  "last_sync": "2026-06-30T07:24:53.371320Z",
   "processed_blogs": {
     "https://clickhouse.com/blog/clickhouse-raises-400-million-series-d-acquires-langfuse-launches-postgres": {
       "title": "ClickHouse raises $400M Series D led by Dragoneer to accelerate expansion across analytics and AI infrastructure",
@@ -5286,9 +5286,21 @@
       "pub_date": "2026-06-26T00:00:00+00:00",
       "file_path": "blogs/2026-06-26-clickhouse-achieves-aws-cloud-operations.md",
       "processed_at": "2026-06-27T07:10:52.230837Z"
+    },
+    "https://clickhouse.com/blog/databricks-reyden-benchmark-transparency-clickhouse": {
+      "title": "Benchmarks and Obscurantism: A “red” line that should not be crossed",
+      "pub_date": "2026-06-29T00:00:00+00:00",
+      "file_path": "blogs/2026-06-29-benchmarks-and-obscurantism-a-red-line-that.md",
+      "processed_at": "2026-06-30T07:24:53.048532Z"
+    },
+    "https://clickhouse.com/blog/agents-hate-friction": {
+      "title": "Agents hate friction: early thoughts on building for agents",
+      "pub_date": "2026-06-29T00:00:00+00:00",
+      "file_path": "blogs/2026-06-29-agents-hate-friction-early-thoughts-on-building.md",
+      "processed_at": "2026-06-30T07:24:53.295339Z"
     }
   },
-  "total_blogs": 881,
+  "total_blogs": 883,
   "failed_blogs": [
     {
       "url": "https://clickhouse.com/jp/blog/clickhouse-gcp-japan-availability",
