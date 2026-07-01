@@ -1,5 +1,5 @@
 {
-  "last_sync": "2026-06-30T07:24:53.371320Z",
+  "last_sync": "2026-07-01T07:36:53.661109Z",
   "processed_blogs": {
     "https://clickhouse.com/blog/clickhouse-raises-400-million-series-d-acquires-langfuse-launches-postgres": {
       "title": "ClickHouse raises $400M Series D led by Dragoneer to accelerate expansion across analytics and AI infrastructure",
@@ -5298,9 +5298,21 @@
       "pub_date": "2026-06-29T00:00:00+00:00",
       "file_path": "blogs/2026-06-29-agents-hate-friction-early-thoughts-on-building.md",
       "processed_at": "2026-06-30T07:24:53.295339Z"
+    },
+    "https://clickhouse.com/blog/jua": {
+      "title": "How Jua delivers the world’s most accurate physics simulations 3x faster with ClickHouse Cloud",
+      "pub_date": "2026-06-30T00:00:00+00:00",
+      "file_path": "blogs/2026-06-30-how-jua-delivers-the-world-s-most-accurate.md",
+      "processed_at": "2026-07-01T07:36:53.398268Z"
+    },
+    "https://clickhouse.com/blog/a-quadrillion-rows-across-the-three-cloud-scaling-loghouse": {
+      "title": "A Quadrillion Rows across three Clouds: scaling LogHouse",
+      "pub_date": "2026-06-30T00:00:00+00:00",
+      "file_path": "blogs/2026-06-30-a-quadrillion-rows-across-three-clouds-scaling.md",
+      "processed_at": "2026-07-01T07:36:53.564236Z"
     }
   },
-  "total_blogs": 883,
+  "total_blogs": 885,
   "failed_blogs": [
     {
       "url": "https://clickhouse.com/jp/blog/clickhouse-gcp-japan-availability",
