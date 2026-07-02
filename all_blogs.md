@@ -1,6 +1,700 @@
 # ClickHouse Blogs
-Last updated: 2026-07-01 07:36:53 UTC
-Total blogs: 885
+Last updated: 2026-07-02 07:13:29 UTC
+Total blogs: 890
+
+---
+
+## How we scale PgBouncer in ClickHouse Managed Postgres
+Published: 2026-07-01T00:00:00+00:00
+URL: https://clickhouse.com/blog/pgbouncer-clickhouse-managed-postgres
+
+---
+title: "How we scale PgBouncer in ClickHouse Managed Postgres"
+date: "2026-07-01T15:40:41.569Z"
+author: "Kaushik Iska"
+category: "Product"
+excerpt: "PgBouncer is single-threaded, so a single process caps out at one CPU core no matter the box size. See how ClickHouse Managed Postgres runs a peered fleet of PgBouncer processes with so_reuseport to scale pooling across every core — with benchmarks showin"
+---
+
+# How we scale PgBouncer in ClickHouse Managed Postgres
+
+PgBouncer is single-threaded. A single process uses one CPU core, no matter how many the machine has. On a 16-vCPU box that means one core does all the connection pooling while the other fifteen sit idle, and the pooler starts capping throughput long before Postgres runs out of room.
+
+In ClickHouse Managed Postgres we run a fleet of PgBouncer processes, sized proportional to the available cores.
+
+Every process in the fleet binds the same port with `so_reuseport` enabled. The kernel load-balances incoming connections across the processes, so clients still connect to a single endpoint and never know there is more than one PgBouncer behind it. This is the mechanism PgBouncer's own docs point to for using more than one core: it is single-threaded per process, and `so_reuseport` is how you put every core to work.
+
+![pgbouncer_jul2026_image5.png](https://clickhouse.com/uploads/pgbouncer_jul2026_image5_331a55a410.png)
+
+## The catch: query cancellation {#the-catch-query-cancellation}
+
+A Postgres cancel request arrives on a brand-new connection carrying a cancel key, separate from the connection running the query. With `so_reuseport`, the kernel is free to hand that new connection to a different process than the one holding the session. The cancel lands on a process that has never heard of the query, and nothing happens.
+
+Peering fixes this. The processes are aware of one another, so a cancel that lands on the wrong process is forwarded to the one that actually owns the session. Cancellation works across the whole fleet, even though any given request can arrive anywhere.
+
+Pooling runs in transaction mode, so a server connection is returned to the pool the moment a transaction commits. And the connection budget is split across the fleet: `max_client_conn` and `max_db_connections` are divided by the number of processes, so the fleet as a whole never oversubscribes Postgres.
+
+## Seeing it on real hardware {#seeing-it-on-real-hardware}
+
+We ran both configurations on identical AWS EC2 instances: a 16-vCPU `c7i.4xlarge` for the pooler, a separate box for Postgres, and a third driving load with `pgbench` in select-only, transaction-pooled mode. One pooler box ran a single PgBouncer process; the other ran a fleet of 16. Same instance type, same Postgres, same workload. The only variable is one process versus sixteen.
+
+We ramped client connections from 8 to 256 and measured throughput and how much of the 16-core box each pooler actually used.
+
+![](https://clickhouse.com/uploads/pgbouncer_jul2026_image3_b133a69db7.png)
+
+The single process peaks around 87k transactions/sec and then gets *worse* under more load, sliding to 77k at 256 clients as everything contends for one core. The fleet keeps climbing to roughly 336k transactions/sec, about 4x, because it has more cores to climb into.
+
+![](https://clickhouse.com/uploads/pgbouncer_jul2026_image2_d80d2830d5.png)
+
+The single process never gets past about one core of work: under load, `pidstat` shows the PgBouncer process pinned at ~97% CPU, a full core, while the 16-vCPU box as a whole stays under 10% utilized. The fleet spreads across the machine, reaching roughly 8 cores busy, and it still had headroom when Postgres and the load generator became the limit.
+
+![](https://clickhouse.com/uploads/pgbouncer_jul2026_image1_b126444a8f.png)
+
+Hold 256 clients steady against each box: the single-process box runs near 9% CPU for the entire run while the fleet holds around 52%. Same instance type, same Postgres, same workload. One configuration leaves the machine idle, the other puts it to work.
+
+![](https://clickhouse.com/uploads/pgbouncer_jul2026_image4_5c07f1bf5e.png)
+
+EC2's own CloudWatch metric says the same thing from outside the guest: during the load the single-process instance averages about 16% CPUUtilization, the fleet about 60%. CloudWatch reads a little higher than the in-guest number, but the same gap holds: on a box you're paying 16 vCPUs for, a single PgBouncer leaves almost all of it on the floor.
+
+The connection ceiling behaves the same way. A single process enforces `max_client_conn` on its own, and once you cross it, new clients are turned away:
+
+<pre><code type='click-ui' language='bash'>
+FATAL:  no more connections allowed (max_client_conn)
+</code></pre>
+
+Splitting the budget across the fleet is what lets you raise the aggregate ceiling while keeping each process, and Postgres, within safe limits.
+
+| Clients | Single TPS | Single box CPU | Fleet TPS | Fleet box CPU |
+| ----: | ----: | ----: | ----: | ----: |
+| 8 | 8,910 | 0.8% | 6,450 | 2.9% |
+| 32 | 54,203 | 5.2% | 64,244 | 12.3% |
+| 64 | 86,570 | 8.3% | 219,439 | 31.9% |
+| 128 | 83,463 | 8.1% | 320,547 | 45.9% |
+| 256 | 76,893 | 7.7% | 336,469 | 48.9% |
+
+At a handful of connections the single process is actually fine, even a hair faster, since there's nothing to parallelize and the fleet's connections are spread thin. The gap opens exactly where it matters: under real concurrency, where one core becomes the wall.
+
+## The takeaway {#the-takeaway}
+
+A single PgBouncer is a fine default until the pooler, not Postgres, is what caps your throughput. Sizing a fleet to the cores, sharing one port with `so_reuseport`, and wiring the processes together with peering turns the pooler back into plumbing instead of a bottleneck.
+
+Every ClickHouse Managed Postgres server ships with this setup by default. Provision a Postgres and see it in action.
+
+
+---
+
+## Try Postgres managed by ClickHouse
+
+ClickHouse + Postgres has become the unified data stack for applications that scale. With Managed Postgres now available in ClickHouse Cloud, this stack is a day-1 decision.
+
+[Sign up](https://clickhouse.com/cloud/postgres?loc=blog-cta-1162-try-postgres-managed-by-clickhouse-sign-up&utm_blogctaid=1162)
+
+---
+
+---
+
+## How Artemis Security runs 69x faster detection queries with ClickHouse Cloud
+Published: 2026-07-01T00:00:00+00:00
+URL: https://clickhouse.com/blog/artemis-security-real-time-threat-detection
+
+---
+title: "How Artemis Security runs 69x faster detection queries with ClickHouse Cloud"
+date: "2026-07-01T13:47:42.556Z"
+author: "ClickHouse"
+category: "User stories"
+excerpt: "Artemis Security cut detection query times 69x and investigative lookups up to 60x using ClickHouse query coalescing, materialized extraction, and AI-powered debugging with Claude."
+---
+
+# How Artemis Security runs 69x faster detection queries with ClickHouse Cloud
+
+## Summary
+
+* Artemis is an AI-native threat detection platform that uses ClickHouse to run real-time security analytics across terabytes of daily log data from enterprise customers.  
+* Coalescing hundreds of individual detection rule queries into single scans reduced query overhead by 69x; batches of over 100 rules execute in under a second.  
+* Extracting frequently-queried sub-columns from JSON into a parallel materialized table delivered 30-60x faster investigative queries and up to 400x lower CPU consumption.
+
+Today's cyber threat landscape has fundamentally changed. Attackers are using AI to move faster, probe deeper, and evade the signature-based detection rules that traditional SIEMs were built around, making it harder and harder for legacy tools to keep up.
+
+[Artemis](https://artemissecurity.com/) is an AI-native threat detection platform built for this new reality. As co-founder and CTO Dan Shiebler explains, "We work with companies to take all of the logs and telemetry from different sources—cloud sources, identity sources, network sources, endpoints—and do real-time analytics to identify potential cyber attacks and other strange behavior." Rather than relying on static rules, detection is handled by AI agents that continuously query incoming data, investigate potential threats, and surface cases to security teams.
+
+The New York-based startup, which [came out of stealth in April 2026](https://fortune.com/2026/04/15/exclusive-artemis-raises-70m-to-help-fight-ai-powered-attacks-with-ai/) with $70 million in funding, is already trusted by security teams at companies like Wix, Mercury, Lemonade, and Upwork. "As a result, we're ingesting and processing an enormous amount of data," Dan says. "The hardest problems we face are problems at the data plane."
+
+Every day, Artemis ingests many terabytes of compressed log data (tens of billions of rows) and runs around millions queries against trillions of rows. Detection rules run continuously against the freshest incoming data, scanning for individual behavior patterns across every customer environment. "You might see something malicious and say, 'Is there any indication of something similar anywhere else in my estate?'" Dan says. "You need to be able to surface that kind of needle in a haystack very quickly."
+
+Because understanding whether a behavior is anomalous depends on knowing if it has happened before, the system also needs to aggregate months of historical data in real time. Has the user logged in from this IP address before? Is this sequence of events normal for this organization? Making things harder still, logs arrive from dozens of different systems and telemetry sources. As Dan notes, this has been a "consistent point of difficulty when trying to build a system that can perform aggregations over evolving semi-structured schemas."
+
+Dan and Artemis' software engineer Sergey spoke at an [April 2026 ClickHouse meetup in NYC](https://clickhouse.com/videos/meetupny-march01), where they shared how Artemis uses ClickHouse Cloud on AWS to keep organizations secure, including three engineering solutions that have made the platform even faster and more efficient.
+
+<iframe width="768" height="432" src="https://www.youtube.com/embed/JzHtHUSXf58" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe>
+
+## Solution #1: Query coalescing for 69x faster detection
+
+Artemis runs hundreds of detection rules per customer, each one a SQL query that scans a rolling window of fresh log data looking for a specific pattern (e.g. a deleted IAM policy, a newly created access key, a suspicious login sequence). In a naive implementation, 150 rules per customer translates to thousands of queries per cycle, each scanning the same data range independently. As Dan and Sergey put it, the overhead is multiplicative.
+
+The fix came when Dan asked the team, "If all these rules are querying the same time window of the same data, why not run them as one query?" The technique they built, which they call query coalescing, uses ClickHouse's native functions to combine all individual rule predicates into a single query that sweeps the data once and tags each matching row with the rule ID that triggered it. "We just run one query instead of 500," Sergey says.
+
+With ClickHouse's internal caching, Sergey assumed any gains would be modest. But when he ran a quick POC, he says, "It turned out crazy." A single coalesced query completed in 2.5 seconds versus 173—69x faster, using 46x less CPU and 100x less memory I/O. In production, batches of over 100 detection rules now execute in less than a second. A customer with 150 CloudTrail rules runs just two coalesced batches instead of 150 standalone queries.
+
+That said, Sergey notes that "stuff is not always as easy as it seems when you run a quick experiment." For one, not all queries can be coalesced. CTEs, JOINs, GROUP BY, LIMIT, subqueries, and lambdas all break inside ARRAY JOIN. So the team built a lightweight runtime classifier that automatically excludes around 15% of rules with no manual opt-in required.
+
+They also ran into ClickHouse's 256 KB max_query_size limit. The fix was to bump the limit to 1 MB and add size-aware batching with a binary-split fallback. If a batch fails, the system splits it in half to isolate the problematic rule, so one bad query never poisons an entire batch.
+
+Sergey acknowledges that the system requires ongoing maintenance. The security research team regularly writes queries that push the classifier's heuristics, and keeping the coalescing percentage high means regularly tuning it for new edge cases. "It's an investment in platform stability, not set-and-forget," he says. "Overall, we find it quite worth it. Oftentimes, it's not through working with our great ClickHouse solution architects, reading documentation, or doing schema optimizations that get you the biggest results. Sometimes it pays to take a step back and look at your application usage."
+
+## Solution #2: AI-powered ClickHouse debugging with Claude
+
+Diagnosing performance issues in a high-throughput ClickHouse deployment isn't exactly straightforward. For Artemis, understanding what went wrong means correlating signals across ClickHouse system tables, CloudWatch metrics, Datadog dashboards, the application database, and source code. Doing that manually takes time, requires deep familiarity with the infrastructure, and is error-prone even for experienced engineers.
+
+Artemis's solution is a Claude Code skill they call "/poke" (named in part for one of the office's favorite food options), a single debugging command that ties all of those systems together in one interface. A natural language prompt is enough to kick off an autonomous investigation. Sergey says he runs it around 20 times a day and calls it the team's "Swiss Army knife command" for infrastructure debugging.
+
+The /poke skill is built on a relatively simple markdown file containing example ClickHouse system table queries, references to internal architecture documentation, and pointers to relevant source code. That context is enough for Claude to autonomously generate queries, pull data from multiple systems, write Python and bash scripts on the fly to massage the results, and surface actionable recommendations. "It performs crazy well," Sergey says.
+
+When Artemis's dedicated "burst" ClickHouse instance (used to isolate expensive agentic investigation queries from the main ingestion pipeline) started degrading, Sergey had a choice between debugging it the "old-school" way or using /poke. Opting for the latter, in 90 seconds, a five-word prompt (/poke "burst instance performance degraded") triggered Claude to query [system.processes](https://clickhouse.com/docs/operations/system-tables/processes) for long-running queries, find investigation queries consuming 8+ GiB of memory and reading 42 TiB with no time bound, cross-reference the app database to identify which case investigation triggered it, and suggest steps for remediation (killing the queries, adding time-bound guardrails, and setting per-user memory limits).
+
+"With our /poke command, anyone on our team without any engineering experience can do a better job than I was doing manually, and much faster," Sergey says. "LLMs, especially the latest iterations, are surprisingly good at working with ClickHouse."
+
+## Solution #3: Materialized extraction for 30-60x faster investigative queries
+
+The third optimization is, as Sergey puts it, less about AI specifically and more what you'd expect from a database-related talk. "We did something with our database, and now all of our queries are much faster—that kind of story," he jokes.
+
+The problem was performance on investigative queries. These are the needle-in-a-haystack lookups that Artemis's investigative agents and security analysts depend on (e.g. finding every event involving a specific IP address, tracing a user's activity over the past 30 days, surfacing anomalies within a narrow time window). Speed on these queries can be the difference between catching an attack in progress and reconstructing it after the fact.
+
+The root cause was Artemis's use of ClickHouse's JSON columns to handle the diversity of incoming log formats. With dozens of source types all landing in a single multi-tenant [SharedMergeTree table](https://clickhouse.com/docs/cloud/reference/shared-merge-tree), JSON columns are "on the surface, an ideal match for our use case," Sergey says, flexible enough to accommodate constantly evolving schemas without requiring upfront normalization. But every query against a JSON column parses it at read time, and there's no efficient way to index deeply nested fields, leading to performance issues.
+
+Working iteratively with ClickHouse's solution architects, Sergey and the team arrived at [materialized views](https://clickhouse.com/docs/materialized-views) as the solution. Rather than modifying the main table (DDL operations on a live production table being, as Sergey notes, "sometimes not ideal, sometimes risky") they extracted the most frequently-queried sub-columns into a parallel table with native ClickHouse types, populated automatically on every INSERT.
+
+They also developed a "hybrid two-step" query pattern: filter first on the extracted table to find a narrow time range, then query the full JSON table only for that slice. This gives them fast lookups without sacrificing access to the complete schema.
+
+With this approach, filtering on status and event code dropped from around 12 seconds in the main table to 0.2 seconds in the extracted table, a 60x speed improvement. Grouping by source IP fell from 45 seconds to 1.5 seconds, and CPU consumption per query dropped by 60x to 400x depending on the workload, what Sergey calls a "massive reduction."
+
+## Building the future of AI-powered cybersecurity
+
+Artemis's user base is expanding fast, its data volumes are growing every week, and the threat landscape it's defending against is getting more sophisticated just as quickly.
+
+The three optimizations Dan and Sergey shared are part of an infrastructure layer built to scale without a proportional increase in cost or complexity. Detection queries run 69x faster, investigative lookups that once took 45 seconds complete in less than two, and any engineer on the team, regardless of their ClickHouse experience, can diagnose and resolve infrastructure problems in a matter of minutes.
+
+"We're growing extremely quickly," Dan says. With ClickHouse Cloud, they have a data foundation that gets faster and more efficient as the data grows, so Artemis can stay a step ahead of the AI-powered attackers it's built to stop.
+
+---
+
+## Get started today
+
+Interested in seeing how ClickHouse works on your data? Get started with ClickHouse Cloud in minutes and receive $300 in free credits.
+
+[Sign up](https://console.clickhouse.cloud/signUp?loc=blog-cta-1151-get-started-today-sign-up&utm_blogctaid=1151)
+
+---
+
+---
+
+## ClickHouse Release 26.6
+Published: 2026-07-01T00:00:00+00:00
+URL: https://clickhouse.com/blog/clickhouse-release-26-06
+
+---
+title: "ClickHouse Release 26.6"
+date: "2026-07-01T13:11:27.127Z"
+category: "Engineering"
+excerpt: "ClickHouse 26.6 is here! In this release, we have hypothetical skip indexes, cascading refreshable materialized views, experimental support for continuous queries, and more!"
+---
+
+# ClickHouse Release 26.6
+
+Another month goes by, which means it’s time for another release! 
+
+<p>The ClickHouse 26.6 release contains 56 new features &#127774; 79 performance optimizations &#127958;&#65039; 366 bug fixes &#127846;</p>
+
+This release introduces hypothetical skip indexes, cascading refreshable materialized views, experimental support for continuous queries, and more!
+
+## New contributors {#new_contributors}
+
+A special welcome to all the new contributors in 26.6! The growth of ClickHouse's community is humbling, and we are always grateful for the contributions that have made ClickHouse so popular.
+
+Below are the names of the new contributors:
+
+*Aditya Chopra, Alasdair Brown, Almaz Kunpeissov, Andriy Yakovlev, Antonio Filipovic, Asya Shneerson, Avenir Voronov, Dmitriy Borisenko, Elian Gidoni, Hanzi Jiang, Harikrishnan Prabakaran, Joe Smith, Joey Yu, Le Zhang, Lefteris Gilmaz, Maksim Dergousov, Maksim Moisiuk, Mathuranath Metivier, Minh Vu, Mohamed Abdelhalim, Mohamed Hussain, MunMunMiao, Patrick Pichler, Ramarajusairajesh, Rory Shanks, SKULLFIRE07, Saarthak Gupta, Sacheendra Talluri, Sergey Kuznetsov, Thomas Cabral, Valerii Mordovskii, Valerii Petrov, Varoon Pazhyanur, Venkata Vineel, Vinayak Joshi, Walt Ribeiro, Youssef Kadry, abdelhalim, abduldjafar, alexbakharew, andyzzhao, bernardlim, daxzel, harikrishnan94, leonard9893, linjiayu, mzitnik, ofeliacode, siwakorn.r, sugaf1204, thewisenerd, uber, uwezkhan, valerypetrov, yousefQadry, zhiqiang-hhhh*
+
+Hint: if you’re curious how we generate this list… [here](https://gist.github.com/gingerwizard/5a9a87a39ba93b422d8640d811e269e9).
+
+<iframe width="768" height="432" src="https://www.youtube.com/embed/-NmqMH9y4EY?si=Pr5MVBncQC-1KfHs" title="YouTube video player" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" referrerpolicy="strict-origin-when-cross-origin" allowfullscreen></iframe>
+
+You can also [view the slides from the presentation](https://presentations.clickhouse.com/2026-release-26.6).
+
+## Hypothetical skip indexes {#hypothetical_skip_indexes}
+
+### Contributed by Yarik Briukhovetskyi
+
+Starting from ClickHouse 26.6, it’s possible to ask "what if I had this skip index?" without having to build it.
+
+Hypothetical indexes live only in the current session and are invisible to other sessions and discarded when the session ends.
+
+<iframe width="768" height="432" src="https://www.youtube.com/embed/sm5f0vpiCRE?si=2NIVsQD6VYy-w1rf" title="YouTube video player" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" referrerpolicy="strict-origin-when-cross-origin" allowfullscreen></iframe>
+
+
+We tried them out on the [UK properties dataset](https://clickhouse.com/docs/getting-started/example-datasets/uk-price-paid), having duplicated the partitions a few times so that we had more rows to work with:
+
+<pre><code type='click-ui' language='sql'>
+ALTER TABLE uk_price_paid
+ATTACH PARTITION ID 'all'
+FROM uk_price_paid;
+</code></pre>
+
+We have almost 500 million rows:
+
+<pre><code type='click-ui' language='sql'>
+SELECT count() FROM uk_price_paid;
+</code></pre>
+
+```shell
+┌───count()─┐
+│ 487239408 │ -- 487.24 million
+└───────────┘
+
+1 row in set. Elapsed: 0.006 sec.
+```
+
+We run the following query to find the districts in London with the most sales:
+
+<pre><code type='click-ui' language='sql'>
+SELECT district, count(), round(avg(price)) AS avgPrice
+FROM uk_price_paid
+WHERE town = 'LONDON'
+GROUP BY ALL
+ORDER BY count() DESC
+LIMIT 10;
+</code></pre>
+
+```shell
+┌─district────────────┬─count()─┬─avgPrice─┐
+│ WANDSWORTH          │ 3258048 │   496367 │
+│ LAMBETH             │ 2354352 │   402424 │
+│ CITY OF WESTMINSTER │ 2164304 │  1215976 │ -- 1.22 million
+│ TOWER HAMLETS       │ 2098864 │   473783 │
+│ LEWISHAM            │ 2022208 │   291688 │
+│ SOUTHWARK           │ 1998816 │   462604 │
+│ BARNET              │ 1942384 │   449124 │
+│ GREENWICH           │ 1874464 │   316369 │
+│ WALTHAM FOREST      │ 1813360 │   270709 │
+│ NEWHAM              │ 1706352 │   284768 │
+└─────────────────────┴─────────┴──────────┘
+
+10 rows in set. Elapsed: 0.317 sec. Processed 487.24 million rows, 1.20 GB (1.54 billion rows/s., 3.80 GB/s.)
+Peak memory usage: 894.97 KiB.
+```
+
+We can probably improve the performance of this query by adding a set skip index on the `town` column. 
+
+A set skip index would store the unique values for that column for the provided number of granules. At query time, ClickHouse could refer to this skip-index set to determine whether it needs to scan a particular granule/granules.
+
+Before 26.6, we’d need to create that skip index and test it out, but now we can create a hypothetical index instead. And, in fact, we’re going to create two hypothetical indexes so that we can see the difference between creating a skip index per granule compared to one for every 128 granules:
+
+<pre><code type='click-ui' language='sql'>
+CREATE HYPOTHETICAL INDEX town_set_10_granularity_1
+ON uk_price_paid (town)
+TYPE set(10)
+GRANULARITY 1;
+
+CREATE HYPOTHETICAL INDEX town_set_10_granularity_128
+ON uk_price_paid (town)
+TYPE set(10)
+GRANULARITY 128;
+</code></pre>
+
+Once we’ve done that, we can prefix our district query with `EXPLAIN WHATIF`:
+
+<pre><code type='click-ui' language='sql'>
+EXPLAIN WHATIF
+SELECT district, count(), round(avg(price)) AS avgPrice
+FROM uk_price_paid
+WHERE town = 'LONDON'
+GROUP BY ALL
+ORDER BY count() DESC
+LIMIT 10;
+</code></pre>
+
+When we run that query, ClickHouse will read table data to build the candidate index in memory, and scan counts against the session's read limits and quotas. The output of running the query is shown below:
+
+```shell
+┌─explain───────────────────────────────────────────────┐
+│ Baseline (after PK + partition + existing indexes):   │
+│   table:       default.uk_price_paid                  │
+│   parts:       3                                      │
+│   marks:       59479                                  │
+│   est_bytes:   831.90 MiB                             │
+│                                                       │
+│ With town_set_10_granularity_128 (set, hypothetical): │
+│   status:       applicable                            │
+│   marks:        13702                                 │
+│   est_bytes:    191.64 MiB                            │
+│   skip_ratio:   77.0%                                 │
+│                                                       │
+│ Estimation:                                           │
+│   source:           empirical                         │
+│   empirical_status: ok                                │
+│   sampled_parts:    3 / 3                             │
+│   sampled_marks:    59479 / 118964                    │
+│   elapsed_us:       3826267                           │
+│                                                       │
+│ With town_set_10_granularity_1 (set, hypothetical):   │
+│   status:       applicable                            │
+│   marks:        4663                                  │
+│   est_bytes:    65.22 MiB                             │
+│   skip_ratio:   92.2%                                 │
+│                                                       │
+│ Estimation:                                           │
+│   source:           empirical                         │
+│   empirical_status: ok                                │
+│   sampled_parts:    3 / 3                             │
+│   sampled_marks:    59479 / 118964                    │
+│   elapsed_us:       4283731                           │
+│                                                       │
+└───────────────────────────────────────────────────────┘
+
+32 rows in set. Elapsed: 8.115 sec. Processed 974.48 million rows, 1.95 GB (120.08 million rows/s., 240.11 MB/s.)
+Peak memory usage: 269.35 KiB.
+```
+
+If we look at row 12, we can see that the index for 128 granules will skip 77% of granules for this query, whereas on row 25, the index per granule would instead skip 92% of granules. 
+
+This gives us some useful information before deciding whether to create a skip index and what settings to use.
+
+## Cascading refreshable materialized views {#cascading_refreshable_materialized_views}
+
+### Contributed by Michael Kolupaev
+
+ClickHouse 26.6 introduces an overhaul of how dependencies work for refreshable materialized views.
+
+Before this release, it was possible to create dependencies between refreshable materialized views, but the dependent views still ran on their own independent timers. This meant that latency could build up between stages if the schedules drifted, and views could skip or lag by a full refresh cycle.
+
+Let’s have a look at how to set things up with the following set of tables that represent IMDB data:
+
+<pre><code type='click-ui' language='sql'>
+CREATE TABLE actor_summary
+(
+    `id` UInt32,
+    `name` String,
+    `movies` UInt16,
+    `avg_rank` Float32,
+    `genres` UInt16,
+    `directors` UInt16,
+    `updated_at` DateTime
+)
+ENGINE = MergeTree
+ORDER BY movies;
+</code></pre>
+
+<pre><code type='click-ui' language='sql'>
+CREATE TABLE actor_rank
+(
+    `id` UInt32,
+    `name` String,
+    `movies` UInt16,
+    `avg_rank` Float32,
+    `genres` UInt16,
+    `directors` UInt16,
+    `updated_at` DateTime
+)
+ENGINE = MergeTree
+ORDER BY movies;
+</code></pre>
+
+<pre><code type='click-ui' language='sql'>
+CREATE TABLE actor_rank_over_time
+(
+    `id` UInt32,
+    `name` String,
+    `avg_rank` Float32,
+    `as_of` DateTime
+)
+ENGINE = MergeTree
+ORDER BY as_of;
+</code></pre>
+
+We previously populated these tables like this:
+
+<pre><code type='click-ui' language='sql'>
+CREATE MATERIALIZED VIEW actor_summary_mv
+REFRESH EVERY 2 MINUTES TO actor_summary AS
+...
+</code></pre>
+
+<pre><code type='click-ui' language='sql'>
+CREATE MATERIALIZED VIEW actor_rank_mv
+REFRESH EVERY 1 MINUTE DEPENDS ON actor_summary_mv
+TO imdb.actor_rank AS
+SELECT *
+FROM actor_summary
+WHERE movies > 10
+ORDER BY avg_rank DESC
+LIMIT 5;
+</code></pre>
+
+<pre><code type='click-ui' language='sql'>
+CREATE MATERIALIZED VIEW actor_rank_over_time_mv
+REFRESH EVERY 1 MINUTE DEPENDS ON actor_rank_mv
+APPEND
+TO imdb.actor_rank_over_time AS
+SELECT id, name, avg_rank, now() AS as_of
+FROM actor_rank
+ORDER BY avg_rank DESC
+LIMIT 1;
+</code></pre>
+
+Now, only `actor_summary_mv` has a timer, but we don’t need to specify one for `actor_rank_mv` or `actor_rank_over_time_mv`. So, we end up with the following:
+
+<pre><code type='click-ui' language='sql'>
+CREATE MATERIALIZED VIEW actor_summary_mv
+REFRESH EVERY 2 MINUTES TO actor_summary AS
+...
+</code></pre>
+
+<pre><code type='click-ui' language='sql'>
+CREATE MATERIALIZED VIEW actor_rank_mv
+REFRESH DEPENDS ON actor_summary_mv
+TO imdb.actor_rank AS
+SELECT *
+FROM actor_summary
+WHERE movies > 10
+ORDER BY avg_rank DESC
+LIMIT 5;
+
+</code></pre>
+
+<pre><code type='click-ui' language='sql'>
+CREATE MATERIALIZED VIEW actor_rank_over_time_mv
+REFRESH DEPENDS ON actor_rank_mv
+APPEND
+TO actor_rank_over_time AS
+SELECT id, name, avg_rank, now() AS as_of
+FROM imdb.actor_rank
+ORDER BY avg_rank DESC
+LIMIT 1;
+</code></pre>
+
+## ALTER TABLE … ADD ENUM VALUES {#alter_table_add_enum_values}
+
+### Contributed by Ilya Golshtein
+
+We can write the following query to find the enum columns in our `uk_price_paid` table:
+
+<pre><code type='click-ui' language='sql'>
+SELECT name, type
+FROM system.columns
+WHERE table = 'uk_price_paid'
+  AND database = 'default'
+  AND type LIKE 'Enum%'
+FORMAT Vertical;
+</code></pre>
+
+```shell
+Row 1:
+──────
+name: type
+type: Enum8('other' = 0, 'terraced' = 1, 'semi-detached' = 2, 'detached' = 3, 'flat' = 4)
+
+Row 2:
+──────
+name: duration
+type: Enum8('unknown' = 0, 'freehold' = 1, 'leasehold' = 2)
+```
+
+Prior to ClickHouse 26.6, if we wanted to add a new enum value, we’d need to also provide the existing values when doing so:
+
+<pre><code type='click-ui' language='sql'>
+ALTER TABLE uk_price_paid
+MODIFY COLUMN type Enum8(
+ 'other' = 0, 
+ 'terraced' = 1,
+ 'semi-detached' = 2,
+ 'detached' = 3,
+ 'flat' = 4,
+ 'royal' = 5
+);
+</code></pre>
+
+It’s now possible to append a new value using the `ADD ENUM VALUES` syntax:
+
+<pre><code type='click-ui' language='sql'>
+ALTER TABLE uk_price_paid 
+MODIFY COLUMN type
+ADD ENUM VALUES('royal' = 5);
+</code></pre>
+
+And if we re-run the query to show our enum columns:
+
+```shell
+Row 1:
+──────
+name: type
+type: Enum8('other' = 0, 'terraced' = 1, 'semi-detached' = 2, 'detached' = 3, 'flat' = 4, 'royal' = 5)
+
+Row 2:
+──────
+name: duration
+type: Enum8('unknown' = 0, 'freehold' = 1, 'leasehold' = 2)
+
+2 rows in set. Elapsed: 0.006 sec.
+```
+
+## help in the CLI {#help_in_the_cli}
+
+### Contributed by Alexey Milovidov
+
+If you’re in the ClickHouse zone and need to look up some documentation, there’s no need to move out of the CLI to search the docs or ask your AI agent for the answer. Instead, you can type `help` followed by the topic, and you’ll get back in-line documentation.
+
+<pre><code type='click-ui' language='bash'>
+help Geometry;
+</code></pre>
+
+```shell
+GEOMETRY  (Data Type)
+─────────────────────────────────────────────────────────────────────────────────────────
+
+Alias of Geometry.
+
+Geometry  (Data Type)
+─────────────────────────────────────────────────────────────────────────────────────────
+
+Geometry is a Variant type that can hold any of the geometric data types: Point,
+LineString, MultiLineString, Polygon, MultiPolygon, or Ring.
+
+Syntax
+
+    Geometry
+
+Related: Point
+```
+
+This is backed by the new `system.documentation` table, which you can also query directly:
+
+<pre><code type='click-ui' language='sql'>
+SELECT type, count()
+FROM system.documentation
+GROUP BY type
+ORDER by count() DESC
+LIMIT 10;
+
+</code></pre>
+
+```shell
+┌─type───────────────┬─count()─┐
+│ Function           │    1593 │
+│ Setting            │    1549 │
+│ Server Setting     │     412 │
+│ MergeTree Setting  │     316 │
+│ Aggregate Function │     197 │
+│ Data Type          │     140 │
+│ Format             │     109 │
+│ Table Engine       │      79 │
+│ Table Function     │      66 │
+│ Dictionary Layout  │      19 │
+└────────────────────┴─────────┘
+
+10 rows in set. Elapsed: 0.019 sec. Processed 4.54 thousand rows, 4.36 MB (240.42 thousand rows/s., 230.69 MB/s.)
+Peak memory usage: 6.18 MiB.
+```
+
+## Transform clickhouse-local to a server {#transform_clickhouse_local_to_a_server}
+
+### Contributed by Alexey Milovidov
+
+[clickhouse-local](https://clickhouse.com/docs/concepts/features/tools-and-utilities/clickhouse-local) is our go-to tool for doing any ad hoc data analysis, but sometimes you want to hook up your ClickHouse instance to external tools, which wasn’t straightforward.
+
+As of 26.6, you can now have clickhouse-local listen for connections on the fly:
+
+<pre><code type='click-ui' language='bash'>
+SYSTEM START LISTEN TCP;
+SYSTEM START LISTEN HTTP;
+</code></pre>
+
+You can then connect to it as you’re running ClickHouse Server. And once you’re done, it’s easy enough to stop listening on those ports:
+
+<pre><code type='click-ui' language='bash'>
+SYSTEM STOP LISTEN TCP;
+SYSTEM STOP LISTEN HTTP;
+</code></pre>
+
+## Lighter, faster query startup {#lighter_faster_query_startup}
+
+### Contributed by Raúl Marín, Dmitry Novik, Max Justus Spransy, Azat Khuzhin
+
+There are a series of improvements in 26.6 that significantly reduce per-query overhead for simple queries.
+
+Deeply nested queries, in particular, are now analyzed more efficiently. Let’s run the following (unnecessarily complex) query:
+
+<pre><code type='click-ui' language='sql'>
+SELECT * FROM (SELECT * FROM (SELECT * FROM (SELECT * FROM (
+SELECT * FROM (SELECT * FROM (SELECT * FROM (SELECT * FROM (
+SELECT * FROM (SELECT * FROM (SELECT * FROM (SELECT * FROM (
+SELECT * FROM (SELECT * FROM (SELECT * FROM (SELECT * FROM (
+SELECT * FROM (SELECT * FROM (SELECT * FROM (
+    SELECT * FROM uk_price_paid LIMIT 10
+)))))))))))))))))));
+</code></pre>
+
+Against 26.5:
+
+```shell
+10 rows in set. Elapsed: 0.098 sec.
+10 rows in set. Elapsed: 0.102 sec.
+10 rows in set. Elapsed: 0.100 sec.
+```
+
+And against 26.6:
+
+```shell
+10 rows in set. Elapsed: 0.030 sec.
+10 rows in set. Elapsed: 0.036 sec.
+10 rows in set. Elapsed: 0.050 sec.
+```
+
+The best time on 26.6 was 30 milliseconds, compared to the best of 98 milliseconds on 26.5, a roughly 3 times improvement.
+
+## Continuous queries {#continuous_queries}
+
+### Contributed by Mikhail Artemenko
+
+We also have the introduction of streaming queries in experimental mode. You can now write a query that never ends by appending `STREAM`. The query will keep emitting new rows as they are inserted.
+
+To enable this feature, you can use the following setting:
+
+<pre><code type='click-ui' language='bash'>
+SET enable_streaming_queries = 1;
+</code></pre>
+
+And then, we could write the following query that blocks and keep streaming new rows:
+
+<pre><code type='click-ui' language='sql'>
+SELECT id, msg 
+FROM live_events STREAM;
+</code></pre>
+
+As new rows are added to `live_events`, they would be returned by the above query. 
+
+This feature can also be used in a more advanced mode with cursors:
+
+<pre><code type='click-ui' language='sql'>
+SELECT _block_number AS bn, _block_offset AS bo, id, msg
+FROM events STREAM 
+CURSOR {'all': {'block_number': 2, 'block_offset': 0}};
+</code></pre>
+
+As of ClickHouse 26.6, this feature is only available for Linux.
+
+
+---
+
+## Get started today
+
+Interested in seeing how ClickHouse works on your data? Get started with ClickHouse Cloud in minutes and receive $300 in free credits.
+
+[Sign up](https://console.clickhouse.cloud/signUp?loc=blog-cta-1150-get-started-today-sign-up&utm_blogctaid=1150)
+
+---
+
+<style>
+pre code { white-space: pre !important; }
+</style>
 
 ---
 
@@ -10,7 +704,7 @@ URL: https://clickhouse.com/blog/jua
 
 ---
 title: "How Jua delivers the world’s most accurate physics simulations 3x faster with ClickHouse Cloud"
-date: "2026-06-30T15:35:49.285Z"
+date: "2026-07-01T10:14:52.161Z"
 author: "ClickHouse"
 category: "User stories"
 excerpt: "Jua replaced a file-based forecast pipeline with ClickHouse Cloud, cutting data delivery time from one hour to 20 minutes and historical query times from hours to seconds — giving energy traders a faster edge."
@@ -88,7 +782,7 @@ When it comes to building a competitive edge, the proof is already there. The ga
 
 Interested in seeing how ClickHouse works on your data? Get started with ClickHouse Cloud in minutes and receive $300 in free credits.
 
-[Sign up](https://console.clickhouse.cloud/signUp?loc=blog-cta-1138-get-started-today-sign-up&utm_blogctaid=1138)
+[Sign up](https://console.clickhouse.cloud/signUp?loc=blog-cta-1149-get-started-today-sign-up&utm_blogctaid=1149)
 
 ---
 
@@ -505,6 +1199,202 @@ A few things we're working on now:
 
 **More OTel traces and metrics.** Beyond filling in SysEx gaps, we want to broaden the range of telemetry LogHouse stores, OTel traces, and OTel metrics in particular. The infrastructure is ready. The next step is making sure ingestion, retention, and query patterns all hold up as we add these new data types at scale.
 
+
+---
+
+## Clever ingests 200x more logs at the same cost with ClickHouse Cloud
+Published: 2026-06-30T00:00:00+00:00
+URL: https://clickhouse.com/blog/clever-observability-at-scale
+
+---
+title: "Clever ingests 200x more logs at the same cost with ClickHouse Cloud"
+date: "2026-07-01T15:37:39.129Z"
+author: "ClickHouse"
+category: "User stories"
+excerpt: "Clever replaced Datadog with ClickHouse Cloud and went from indexing 10% of their logs to 100%, gaining 200x more searchable log volume and 60 days of retention at no additional cost."
+---
+
+# Clever ingests 200x more logs at the same cost with ClickHouse Cloud
+
+## Summary
+
+- Clever, the leading identity platform for K-12 education, uses ClickHouse Cloud to index and analyze logs across 400 services and 200 AWS Lambdas, generating around 150 TB of uncompressed data per month.
+- They migrated from Datadog to ClickHouse Cloud, going from indexing just 10% of their logs to indexing all of them, while also increasing retention from 3 to 60 days, resulting in 200× more searchable log volume at no additional cost.
+- Clever's infrastructure team built a custom query layer on top of ClickHouse Cloud that translates LogQL to SQL, giving engineers a familiar log exploration experience without a steep learning curve.
+
+[Clever](https://www.clever.com/) is on a mission to connect every student to a world of learning. As the leading identity platform for K-12 education, Clever powers secure digital learning experiences for over 29 million teachers and students, reaching 77% of U.S. K-12 schools.
+
+At that scale, logs add up fast. Clever runs 400 services and workers on AWS Fargate, alongside 200 AWS Lambdas generating around 150 TB of logs every month. For senior software engineer Jake Gutierrez, keeping those logs accessible to the rest of Clever's engineering team was becoming a problem in its own right.
+
+Jake joined solutions architect Jake Vernon on a [webinar](https://clickhouse.com/videos/clever-observability-at-scale), where they walked through how they rebuilt their logging infrastructure, and how switching from Datadog to [ClickHouse Cloud](https://clickhouse.com/cloud) on AWS helped them index 200x more logs at no additional cost.
+
+## A frustrating, fragmented logging system
+
+Before ClickHouse, Clever sent all of its logs to Datadog. The problem was that Datadog only indexed about 10% of Clever's logs and kept them for just three days. The remaining 90% went into AWS Athena, where they were available for up to 60 days but required writing SQL to access. Any engineer trying to debug an issue had to figure out whether they needed to look beyond the three-day retention window and switch tools.
+
+"This dual-brain system proved to be very confusing," Jake says. "Engineers would say, 'Where's my log?' because we didn't index the debug logs. Or they'd say, 'This error log started three days ago,' when in reality it started much longer than that. If they wanted to look at a trend over 30 days, it would be very difficult—they'd have to go to Athena for that."
+
+## Three requirements that led them to ClickHouse
+
+In need of a better solution, the Clever team started with three requirements.
+
+First, they wanted the ability to store all logs in one place for 60 days. This would provide the historical context engineers needed to spot trends and debug with confidence.
+
+Second, the solution had to be competitively priced, highly available, and ideally a managed service so that, as Jake puts it, "we don't have to bear that maintenance overhead."
+
+Third, it had to be easy to use. Most of Clever's engineers don't work with SQL day-to-day. The new system, Jake says, needed to be "very straightforward, similar to Datadog, at a similar performance level."
+
+[ClickHouse Cloud](https://clickhouse.com/cloud) checked those boxes. As Jake recalls, "We came across ClickHouse because of so many high-profile observability use cases that had come out recently." They evaluated a few other ClickHouse-based solutions, but ruled them out as "too expensive for storing the entire dataset." ClickHouse's managed service struck the right balance, giving Clever the performance they needed while keeping cost and the maintenance burden low.
+
+## Schema design for observability with ClickHouse
+
+As Jake notes, [schema design](https://clickhouse.com/docs/use-cases/observability/schema-design) is one of the more interesting topics in the ClickHouse community. "There are lots of different ways to store logs in ClickHouse," he says. Clever's logs are largely structured JSON, so the team wanted a way to index them at write time, instead of having to parse them at query time.
+
+Next, commonly queried fields like `level` and `service` are extracted directly into their own columns. For everything else, the team takes what Jake calls a hybrid approach, storing the full log as both a raw JSON string and an attributes map. The map contains only fields that haven't already been extracted to their own columns, so engineers can pull top-level fields quickly and expand into the raw JSON only when they need more detail.
+
+Clever uses a variety of [data skipping indexes](https://clickhouse.com/docs/optimize/skipping-indexes#minmax). A [minmax](https://clickhouse.com/docs/optimize/skipping-indexes#minmax) index on the timestamp column keeps normal timestamp filtering working correctly. A token [bloom filter](https://clickhouse.com/docs/optimize/skipping-indexes#minmax) on the body field enables fast, case-insensitive full-text search. Bloom filters on the map keys and token bloom filters on the map values extend that searchability into the attributes. Through internal benchmarking, Jake determined that a granularity of 32 for the body and attribute value indexes provided a good balance between performance and index size.
+
+[Partitioning](https://clickhouse.com/docs/partitions) is, as Jake puts it, "pretty straightforward"—by date, paired with a TTL of 60 days, along with [`ttl_only_drop_parts`](https://clickhouse.com/docs/use-cases/observability/clickstack/ttl). "That gives us pretty good performance for dropping entire partitions," he notes.
+
+Next comes the [primary key](https://clickhouse.com/docs/best-practices/choosing-a-primary-key) and [ORDER BY](https://clickhouse.com/docs/sql-reference/statements/select/order-by). "This is where it gets interesting," Jake says. Rather than storing records in forward chronological order, Clever stores them in reverse, ordered by negative Unix timestamp. This means ClickHouse finds what it's looking for at the front of the data rather than scanning through it. The result was an 8-10x speedup in query times. The minmax index on the timestamp column (which, Jake notes, might seem redundant given the primary key) is what makes normal timestamp filtering still work correctly without engineers having to invert their queries.
+
+Timestamps, which are stored at both seconds and milliseconds precision. "We filter on the timestamp in seconds, then use milliseconds to narrow within that range," he explains. "This gives us pretty good performance and compression."
+
+Finally, Clever enabled the ClickHouse Cloud setting [`cache_populated_by_fetch`](https://clickhouse.com/docs/operations/settings/merge-tree-settings#cache_populated_by_fetch), which proactively populates the filesystem cache on replicas as data is ingested. This helps ensure consistent query performance regardless of which replica serves a request. As Jake says, "a SELECT query to one should have consistent results and consistent performance across all of them."
+
+## Keeping the system resilient
+
+"Observability is one of the most important parts of any system," Jake says, "which means it must be resilient to outages and highly available." He walked through Clever's three resiliency requirements: separate production and dev logs, write to multiple regions, and manage the entire system as code.
+
+Separating prod and dev logs, he says, is primarily about "avoiding contention." For example, a developer running a load test could spike log volume, bringing down the production logging system. A separate dev ClickHouse service eliminates that risk, giving the team a safe environment to test changes to the logging pipeline without impacting production.
+
+![clever_jul2026_image1.jpg](https://clickhouse.com/uploads/clever_jul2026_image1_96612a9bda.jpg)
+
+*Production logs are split across two ClickHouse services based on the region and Dev logs are stored in another separate ClickHouse service.*
+
+Since Clever runs across multiple AWS regions, the team wanted the logging system to be multi-region as well. This way, Jake says, "If ClickHouse is down in us-east-1 or there are connectivity issues, we don't just lose all logs from that region." Production logs are split across regions and environments: ClickHouse Cloud services in us-east and us-west, with a third service handling dev logs. ClickHouse's [remoteSecure](https://clickhouse.com/docs/sql-reference/table-functions/remote) table function and [merge tables](https://clickhouse.com/docs/engines/table-engines/special/merge) stitch the two production services into a single queryable surface, with reads load-balanced across both regions.
+
+> "ClickHouse Cloud multi-region availability gives us the business continuity and disaster recovery we needed. In case of an outage, we can easily stop and redirect all reads or writes to only one of these services, we're much more resilient." — Jake Gutierrez, Sr Software Engineer, Clever
+
+The infrastructure-as-code requirement was about making the system easily reproducible. Every ClickHouse service, secret, and KMS key is provisioned with Terraform. Schema changes are managed through Goose using incremental SQL migration files, supplemented by Go-based migrations for anything that requires dynamic resource creation (e.g. the remote tables that connect the regional services). "The Go functions are also useful for pulling credentials so we don't have to store plaintext passwords in GitHub," Jake says.
+
+## Making ClickHouse feel like home
+
+The third area Jake covered was query experience. "We wanted something similar to Datadog, so that it's easy for engineers to ramp up to this new system with no steep learning curve," Jake says. While raw SQL access to ClickHouse is powerful, most of Clever's engineers don't use SQL day-to-day. They were familiar with Grafana and wanted to keep using it, but the official ClickHouse Grafana plugin didn't support their non-standard schema.
+
+So the Clever team built their own query layer. "Q-Layer," as it's known, is a service that implements a subset of Grafana's LogQL and translates those queries into ClickHouse SQL behind the scenes. Engineers write queries in a familiar, Datadog-like syntax; Q-Layer handles the translation. As Jake notes, "More complex queries can still be made in SQL, and engineers can always request improvements to the LogQL implementation." [Projections](https://clickhouse.com/docs/sql-reference/statements/alter/projection) back the log volume chart for fast count queries, while a [materialized view](https://clickhouse.com/docs/materialized-views) powers IntelliSense-style autocomplete on log labels.
+
+The result, as Jake puts it, is a logging system that engineers can query without having to think about what's running underneath.
+
+## 200x more logs, 0% cost increase
+
+With ClickHouse in place, Clever has seen a 10x compression ratio on its 150 TB of monthly logs. And whereas Datadog was indexing just 10% of those logs, ClickHouse indexes all of them, amounting to a 200x increase in searchable log volume.
+
+> "With ClickHouse, we see a compression ratio of 10x and a 200x increase in indexed logs. These logs are easily accessible to all engineers; they don't have to think about whether to go to Grafana, Athena, Datadog, or whatnot. And all of this came at a 0% increase in cost." — Jake Gutierrez, Sr Software Engineer, Clever
+
+For anyone thinking about building something similar, Jake's advice is simple: just start. "Spin up ClickHouse locally and try it yourself," he says. "Even inserting random records into a table or backfilling some logs into a ClickHouse cluster helped me a lot." Jake also suggests running both systems in parallel initially. "That helped us guarantee we were moving to a system that was a step up from what we had," he says.
+
+While Clever built a custom schema tailored to their structured JSON logs, not every team needs to start from scratch. For teams using OpenTelemetry, [ClickStack](https://clickhouse.com/docs/use-cases/observability/clickstack/overview) provides an optimized schema out of the box, designed to handle observability workloads at scales of tens of terabytes per day. Many of the techniques Clever adopted, including extracting frequently queried fields, using data skipping indexes, and optimizing sort order for common access patterns, are the same principles we recommend when tuning ClickStack for larger-scale deployments.
+
+---
+
+## Get started today
+
+Interested in seeing how ClickHouse works on your data? Get started with ClickHouse Cloud in minutes and receive $300 in free credits.
+
+[Sign up](https://console.clickhouse.cloud/signUp?loc=blog-cta-1158-get-started-today-sign-up&utm_blogctaid=1158)
+
+---
+
+---
+
+## How Jua delivers the world’s most accurate physics simulations 3x faster with ClickHouse Cloud
+Published: 2026-06-30T00:00:00+00:00
+URL: https://clickhouse.com/blog/jua-physics-foundation-model
+
+---
+title: "How Jua delivers the world’s most accurate physics simulations 3x faster with ClickHouse Cloud"
+date: "2026-07-01T10:14:52.161Z"
+author: "ClickHouse"
+category: "User stories"
+excerpt: "Jua replaced a file-based forecast pipeline with ClickHouse Cloud, cutting data delivery time from one hour to 20 minutes and historical query times from hours to seconds — giving energy traders a faster edge."
+---
+
+# How Jua delivers the world’s most accurate physics simulations 3x faster with ClickHouse Cloud
+
+## Summary
+
+* Jua uses ClickHouse Cloud to power the world’s first physics foundation model, delivering physics simulation data to energy traders and grid operators faster than any competing platform.  
+* ClickHouse Cloud cut forecast delivery time from one hour to 20 minutes, helped reduce compute costs by a third, and cut historical query times from hours to seconds.  
+* Jua chose ClickHouse Cloud for its operational simplicity, cost efficiency, and ability to handle both point queries and large regional aggregations at petabyte scale.
+
+[Jua](https://jua.ai/) is a Zurich-based physics AI company with an ambitious vision: to simulate the entire universe. Its architecture combines a world model that learns the governing physics of any system purely from observational data, and a continuous learning agent that trains inside that world model and optimizes toward whatever objective a customer defines.
+
+The company started with the atmosphere, arguably the hardest proving ground there is. Predicting it requires learning multiple branches of physics simultaneously, including fluid dynamics, thermodynamics, radiative transfer, and atmospheric chemistry.
+
+![jua_jun2026_image2.png](uploads/jua_jun2026_image2_dc4b92b36b.png)
+
+[EPT-2](https://docs.jua.ai/models-and-products/jua-models/ept-2), Jua's physics foundation model, does exactly that. It holds the global state of the art in atmospheric prediction, outperforming Google DeepMind, Microsoft, and Nvidia in independent benchmarks. And because it learns actual physics rather than statistical patterns, it transfers to other fluid dynamics problems like airfoil simulations and wind tunnel scenarios with minimal fine-tuning.
+
+Weather forecasting for energy traders is the first commercial application of that architecture. As renewables add volatility to the grid, accurate forecasts have never mattered more. "If suddenly a cloud appears where you didn't expect it, your solar generation might drop for a small period of time, which puts a lot of strain on the grid," says engineering lead Mark Frey. "With more accurate forecasts, you can guarantee a more stable power grid."
+
+But building the world's first universal physics simulation engine is only half the challenge. Getting that data into customers' hands faster than anyone else requires an entirely different kind of infrastructure. That's where ClickHouse comes in.
+
+We caught up with Mark to learn about the data challenges behind the platform, why they chose [ClickHouse Cloud](https://clickhouse.com/cloud), and how speed has become a core part of Jua's competitive edge.
+
+## When 10 PB becomes 1 - a story of compression
+
+"We generate a lot of data per day," Mark says. Each forecast run ingests data from multiple models (EPT-2, open-source models, classical numerical models from European weather agencies), amounting to several hundred gigabytes per model. With multiple forecast runs per day, that adds up to around four terabytes of new data ingested daily, for a total compressed dataset of around 1 petabyte, or over 10-12 petabytes uncompressed.
+
+![jua_jun2026_image1.png](https://clickhouse.com/uploads/jua_jun2026_image1_9ca605ee41.png)
+
+For a long time, the industry has handled data like this the traditional way, using file-based storage, with atmospheric data saved as large arrays and dumped to disk. It works at a basic level, but it creates a bottleneck between generating a forecast and making it accessible. For Jua, getting data from files to customers meant managing pre-fetching, caching to API servers, and manually notifying customers when data was ready.
+
+"We observed that it adds a lot of overhead and complexity to make that data readily available for customers to query," Mark says. "If you have a forecast you can generate in 20 minutes but it takes an hour for people to access it, you don't really gain much from being faster."
+
+In Jua's market, that matters enormously. Every trader and grid operator is working from weather forecasts. The advantage goes to whoever has the most accurate data, updated most frequently, available the soonest. "Time really matters," Mark says. "If you have the data before others do, then you have an edge."
+
+## Choosing ClickHouse Cloud
+
+In their old setup, Jua worked extensively with Zarr files, experimenting with different architectures and pre-fetching approaches across various backends. But as Mark says, "It quickly became clear that for a small team, this is too much maintenance."
+
+They looked at other options, including TileDB, before ultimately landing on ClickHouse. They were swayed in part by the [user stories](https://clickhouse.com/user-stories) they read on ClickHouse's blog, including [how Tesla built a quadrillion-scale observability platform](https://clickhouse.com/blog/how-tesla-built-quadrillion-scale-observability-platform-on-clickhouse). "That was a big plus for us, because we had just crossed the petabyte scale on our old storage backend," Mark says.
+
+The initial test was straightforward. They stood up the open-source version locally and ran it against their real data. "What was really nice about ClickHouse was that we could just try it out," Mark says. It handled the workload well. That was enough to move forward.
+
+When it came to deployment, Jua weighed self-hosting against [ClickHouse Cloud](https://clickhouse.com/cloud). With a team of 10 engineers, the operational burden of self-hosting wasn't realistic or appealing. "We don't have the resources to have a dedicated team just making sure our ClickHouse cluster is up and running," Mark says.
+
+ClickHouse Cloud's [separation of storage and compute](https://clickhouse.com/docs/guides/separation-storage-compute) was also a deciding factor. "If we had to replicate all the data, storage costs would increase significantly, and the setup would be much more complicated," Mark says. "This would again result in more maintenance overhead."
+
+Ultimately, it was cost and operational simplicity that sold them on ClickHouse Cloud. As Mark puts it, "We realized pretty quickly that ClickHouse Cloud is actually not that expensive, especially given that we have no development costs ourselves. The time to get started was short, which was a big plus, and the maintenance effort is minimal."
+
+## Faster forecasts, lower costs
+
+They saw the impact right away. By replacing the file-based pipeline with ClickHouse, Jua eliminated much of the manual overhead that had been slowing down data delivery. "It was roughly an hour from when we started a forecast until data was available," Mark says. "Now, because it's real-time, our upload overhead is about 20 seconds. So for our flagship model, EPT-2, we've cut delivery time from an hour to 20 minutes."
+
+The speed gains had a knock-on effect on infrastructure costs, too. Faster uploads meant the GPU instances running the output computation could be freed up sooner. "We're now about a third faster than before," Mark says, "which translates to roughly a third in cost savings."
+
+For historical queries, the improvement was even more dramatic. Before ClickHouse, a user requesting two years of data for a single location meant manually trawling through hundreds of files, a process that could take hours. "Now, with ClickHouse, it's a matter of seconds," Mark says. "Customers can do it on demand, so we don't have to do any manual labor."
+
+Mark was also surprised by how well ClickHouse handles the full range of query types Jua needs. Physics simulation data, he explains, tends to be queried in two very different ways: specific lookups and large regional aggregations. File-based systems typically favor one over the other, but ClickHouse handles both. "It handles all the caching for us," he says, "and it allows both point queries like 'what's the forecast for Zurich?' as well as broader requests like 'give me all the data for Germany.' On top of that, what's super helpful for us, we can also do analytics, like 'what's the maximum wind speed in Austria for the next week?'"
+
+## What's next for Jua and ClickHouse
+
+Jua's ClickHouse journey is just getting started. The team plans to add more models, more features, and more historical data, steps that will expand Jua's physics simulation capabilities into new domains and sectors like insurance and agriculture. ClickHouse now holds actual weather observations going back to 1990, enabling queries like "what are the top 10 sunniest places in Germany?" that would have been impractical before.
+
+Mark is also keeping an eye on ClickHouse's observability offerings, including [ClickStack](https://clickhouse.com/clickstack) and its recent [acquisition of Langfuse](https://clickhouse.com/blog/clickhouse-acquires-langfuse-open-source-llm-observability). As the platform grows, having deeper visibility into how the stack is performing becomes increasingly important. "ClickHouse's offerings there are great, so we'll probably be looking into those features," he says.
+
+When it comes to building a competitive edge, the proof is already there. The gap between Jua and other providers goes beyond model accuracy; it's in how fast that data reaches the people who need it. "We observe this ourselves when we have to interact with other providers," Mark says. "Our API is just much, much faster, which comes down to the backend."
+
+---
+
+## Get started today
+
+Interested in seeing how ClickHouse works on your data? Get started with ClickHouse Cloud in minutes and receive $300 in free credits.
+
+[Sign up](https://console.clickhouse.cloud/signUp?loc=blog-cta-1149-get-started-today-sign-up&utm_blogctaid=1149)
+
+---
 
 ---
 

@@ -1,6 +1,6 @@
 ---
 title: "How Jua delivers the world’s most accurate physics simulations 3x faster with ClickHouse Cloud"
-date: "2026-06-30T15:35:49.285Z"
+date: "2026-07-01T10:14:52.161Z"
 author: "ClickHouse"
 category: "User stories"
 excerpt: "Jua replaced a file-based forecast pipeline with ClickHouse Cloud, cutting data delivery time from one hour to 20 minutes and historical query times from hours to seconds — giving energy traders a faster edge."
@@ -78,6 +78,6 @@ When it comes to building a competitive edge, the proof is already there. The ga
 
 Interested in seeing how ClickHouse works on your data? Get started with ClickHouse Cloud in minutes and receive $300 in free credits.
 
-[Sign up](https://console.clickhouse.cloud/signUp?loc=blog-cta-1138-get-started-today-sign-up&utm_blogctaid=1138)
+[Sign up](https://console.clickhouse.cloud/signUp?loc=blog-cta-1149-get-started-today-sign-up&utm_blogctaid=1149)
 
 ---

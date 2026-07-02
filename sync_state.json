@@ -1,5 +1,5 @@
 {
-  "last_sync": "2026-07-01T07:36:53.661109Z",
+  "last_sync": "2026-07-02T07:13:29.346663Z",
   "processed_blogs": {
     "https://clickhouse.com/blog/clickhouse-raises-400-million-series-d-acquires-langfuse-launches-postgres": {
       "title": "ClickHouse raises $400M Series D led by Dragoneer to accelerate expansion across analytics and AI infrastructure",
@@ -5310,9 +5310,39 @@
       "pub_date": "2026-06-30T00:00:00+00:00",
       "file_path": "blogs/2026-06-30-a-quadrillion-rows-across-three-clouds-scaling.md",
       "processed_at": "2026-07-01T07:36:53.564236Z"
+    },
+    "https://clickhouse.com/blog/pgbouncer-clickhouse-managed-postgres": {
+      "title": "How we scale PgBouncer in ClickHouse Managed Postgres",
+      "pub_date": "2026-07-01T00:00:00+00:00",
+      "file_path": "blogs/2026-07-01-how-we-scale-pgbouncer-in-clickhouse-managed.md",
+      "processed_at": "2026-07-02T07:13:28.169228Z"
+    },
+    "https://clickhouse.com/blog/artemis-security-real-time-threat-detection": {
+      "title": "How Artemis Security runs 69x faster detection queries with ClickHouse Cloud",
+      "pub_date": "2026-07-01T00:00:00+00:00",
+      "file_path": "blogs/2026-07-01-how-artemis-security-runs-69x-faster-detection.md",
+      "processed_at": "2026-07-02T07:13:28.472433Z"
+    },
+    "https://clickhouse.com/blog/clickhouse-release-26-06": {
+      "title": "ClickHouse Release 26.6",
+      "pub_date": "2026-07-01T00:00:00+00:00",
+      "file_path": "blogs/2026-07-01-clickhouse-release-26-6.md",
+      "processed_at": "2026-07-02T07:13:28.622904Z"
+    },
+    "https://clickhouse.com/blog/clever-observability-at-scale": {
+      "title": "Clever ingests 200x more logs at the same cost with ClickHouse Cloud",
+      "pub_date": "2026-06-30T00:00:00+00:00",
+      "file_path": "blogs/2026-06-30-clever-ingests-200x-more-logs-at-the-same-cost.md",
+      "processed_at": "2026-07-02T07:13:28.992582Z"
+    },
+    "https://clickhouse.com/blog/jua-physics-foundation-model": {
+      "title": "How Jua delivers the world’s most accurate physics simulations 3x faster with ClickHouse Cloud",
+      "pub_date": "2026-06-30T00:00:00+00:00",
+      "file_path": "blogs/2026-06-30-how-jua-delivers-the-world-s-most-accurate.md",
+      "processed_at": "2026-07-02T07:13:29.251030Z"
     }
   },
-  "total_blogs": 885,
+  "total_blogs": 890,
   "failed_blogs": [
     {
       "url": "https://clickhouse.com/jp/blog/clickhouse-gcp-japan-availability",
