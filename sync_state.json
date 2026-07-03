@@ -1,5 +1,5 @@
 {
-  "last_sync": "2026-07-02T07:13:29.346663Z",
+  "last_sync": "2026-07-03T09:19:05.091431Z",
   "processed_blogs": {
     "https://clickhouse.com/blog/clickhouse-raises-400-million-series-d-acquires-langfuse-launches-postgres": {
       "title": "ClickHouse raises $400M Series D led by Dragoneer to accelerate expansion across analytics and AI infrastructure",
@@ -5340,9 +5340,21 @@
       "pub_date": "2026-06-30T00:00:00+00:00",
       "file_path": "blogs/2026-06-30-how-jua-delivers-the-world-s-most-accurate.md",
       "processed_at": "2026-07-02T07:13:29.251030Z"
+    },
+    "https://clickhouse.com/blog/clickhouse-agents-managed-postgres": {
+      "title": "ClickHouse Agents is now available for Managed Postgres",
+      "pub_date": "2026-07-02T00:00:00+00:00",
+      "file_path": "blogs/2026-07-02-clickhouse-agents-is-now-available-for-managed.md",
+      "processed_at": "2026-07-03T09:19:04.807417Z"
+    },
+    "https://clickhouse.com/blog/making-clickstack-5x-faster-clickhouse-observability": {
+      "title": "How we made ClickStack 5x faster for ClickHouse observability",
+      "pub_date": "2026-07-02T00:00:00+00:00",
+      "file_path": "blogs/2026-07-02-how-we-made-clickstack-5x-faster-for-clickhouse.md",
+      "processed_at": "2026-07-03T09:19:04.993061Z"
     }
   },
-  "total_blogs": 890,
+  "total_blogs": 892,
   "failed_blogs": [
     {
       "url": "https://clickhouse.com/jp/blog/clickhouse-gcp-japan-availability",
