@@ -1,6 +1,267 @@
 # ClickHouse Blogs
-Last updated: 2026-07-06 10:23:37 UTC
-Total blogs: 892
+Last updated: 2026-07-07 09:42:13 UTC
+Total blogs: 894
+
+---
+
+## 98% faster queries, 50% lower cloud costs: Verihubs’ journey from Postgres to ClickHouse
+Published: 2026-07-06T00:00:00+00:00
+URL: https://clickhouse.com/blog/verihubs-data-warehouse
+
+---
+title: "98% faster queries, 50% lower cloud costs: Verihubs’ journey from Postgres to ClickHouse"
+date: "2026-07-06T13:20:29.307Z"
+author: "ClickHouse"
+category: "User stories"
+excerpt: "Verihubs rebuilt its Postgres data warehouse on ClickHouse with real-time Kafka streaming, cutting query times by up to 98% and cloud costs by up to 50%."
+---
+
+# 98% faster queries, 50% lower cloud costs: Verihubs’ journey from Postgres to ClickHouse
+
+## Summary
+
+- Verihubs rebuilt its data warehouse on ClickHouse to power traffic analysis, reconciliation, performance reporting, and invoicing at scale.
+- Streaming ingestion via Kafka/Connect + Debezium and MergeTree engines replaced daily Postgres pulls, improving freshness and reliability for stakeholders.
+- ClickHouse delivered up to 98% faster queries and up to 50% lower cloud costs, turning dashboards into an interactive OLAP experience.
+
+[Verihubs](https://verihubs.com/en/) is an AI company that builds identity infrastructure like face recognition, deepfake detection, liveness detection, eKYC flows, and WhatsApp OTP for some of Indonesia’s biggest banks, fintechs, and digital apps. 
+
+“The data we manage is important and sensitive,” says software engineering lead Ray Antonius. The company also operates at significant scale: “We handle a huge number of transactions every day—around 50 million API calls per month across all our services.”
+
+Behind those API calls is the data warehouse that helps Verihubs understand traffic, reconcile usage, measure client performance, and generate invoices. The warehouse doesn’t store sensitive data, but it still needs to be accurate, fast, and dependable, especially when finance and operations are trying to close the books or resolve discrepancies.
+
+At our [December 2025 meetup in Jakarta](https://clickhouse.com/videos/jakarta-meetup-verihubs-09dec25), Ray shared how Verihubs rebuilt its warehousing stack around ClickHouse. In about six months, the team moved from a batch-heavy Postgres-based setup to a faster, cheaper, real-time OLAP architecture.
+
+<iframe width="768" height="432" src="https://www.youtube.com/embed/Kl5mZASUzcQ" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe>
+
+## The pains of Postgres
+
+When Ray joined Verihubs in 2022, he inherited a data warehousing pipeline built around Postgres. A service running in Docker connected to the database, while Airflow pulled data in daily batches each morning. That data would be loaded into the warehouse, refined through additional Airflow jobs when needed, and then surfaced through Metabase.
+
+![Verihub Diagram_2.png](https://clickhouse.com/uploads/Verihub_Diagram_2_881d1a0d7e.png)
+
+*Verihubs’ old architecture, with daily batch pulls from Postgres into the data warehouse.*
+
+“The main issue,” Ray says, “is that almost *everything* had problems.”
+
+The first bottleneck was the choice to run analytics on Postgres, and to do it by repeatedly extracting from the OLTP system in batches. As Ray puts it, “Postgres was fast at first, but at some point it started to get really slow.” A single service could take two to six hours to process data. “Sometimes the process times out, fails, needs to be repeated, and the finance team keeps chasing us,” he adds.
+
+Worse, the data didn’t always arrive within the window the pipeline assumed. Verihubs works with vendors that send callbacks indicating whether an SMS or WhatsApp message was delivered or failed. “Sometimes the data only arrives 20 days later, when it should be available within 24 hours,” Ray explains. “Other times, we’ve already pulled the data, generated the invoices, and processed the data, but it turns out to be wrong and needs to be replaced. That takes even more time.”
+
+Backfills helped correct the record, but they also brought Postgres to its knees. “Because of how Postgres works during backfill, queries become extremely slow,” Ray says. As a result, the team kept getting the same stakeholder questions: *When can I get the latest data? Why does this number look different? Why does the query take so long?*
+
+## A new ClickHouse-based architecture
+
+Ray and the team had three main goals for their new architecture: speed, cost, and user experience. They rebuilt the warehouse around ClickHouse, splitting the design into two phases: ingestion and post-processing.
+
+![](https://clickhouse.com/uploads/Verihub_Diagram_1_2b8f79e8b1.png)
+
+*Verihubs’ new architecture, split into real-time data ingestion and post-processing in ClickHouse.*
+
+## Data ingestion
+
+On the ingestion side, the biggest shift was moving from daily pulls to streaming. “We now perform data ingestion in real time,” Ray says. Instead of extracting from OLTP each morning, Verihubs pushes data through Kafka, using Kafka Connect for streaming and Debezium for change data capture when rows need to be updated later.
+
+Ray notes that ClickHouse offers simpler Kafka integration through [ClickPipes](https://clickhouse.com/cloud/clickpipes), but Verihubs hasn’t adopted it yet. Kafka also gave them something their old system didn’t: a built-in retry mechanism. Rather than writing directly to ClickHouse and dealing with timeouts and failed inserts, they buffer through Kafka so ingestion can recover gracefully.
+
+From there, Verihubs routes data into ClickHouse based on its update pattern. Append-only transaction logs land in [MergeTree](https://clickhouse.com/docs/engines/table-engines/mergetree-family/mergetree) tables optimized for fast inserts and analytical scans. Updatable datasets captured via CDC flow into [ReplacingMergeTree](https://clickhouse.com/docs/guides/replacing-merge-tree) tables, allowing the warehouse to reconcile corrected rows over time without forcing the whole pipeline back into batch mode.
+
+## Data post-processing
+
+Once the data is in ClickHouse, post-processing becomes a mix of in-database refinement and external orchestration for the toughest logic. The team uses [materialized views](https://clickhouse.com/docs/materialized-views) to pre-aggregate high-volume tables into daily and monthly rollups, and [projections](https://clickhouse.com/docs/sql-reference/statements/alter/projection) to speed up stakeholder queries without changing the tables they already query. 
+
+When transformations get too complex, or when the task starts to look like detection rather than aggregation, the team uses Dagster, with pipelines that flag suspicious behavior patterns (like sequential SMS spam across different phone numbers) and trigger notifications to Slack.
+
+![](https://clickhouse.com/uploads/Verihub_Diagram_3_6e24e64085.png)
+
+*Kafka streams events into ClickHouse, where MVs build daily/monthly transaction and COGS tables.*
+
+In his presentation, Ray shared an example of Verihubs’ reconciliation path. ClickHouse ingests streaming transaction data, pulls in related reference data via CDC, and uses materialized views to produce downstream tables (e.g. daily COGS) that finance can use for reconciliation and invoicing.
+
+## From 20-30 minutes to 2-3 seconds
+
+For stakeholders used to waiting on slow, timeout-prone dashboards, Ray says, “the results are very significant.”
+
+After migrating to ClickHouse, Verihubs saw query speed improve by as much as 98%. Queries that once took 20 to 30 minutes now finish in just two to three seconds, even when scanning datasets as large as 18 million rows.
+
+The performance gains also changed how teams use the warehouse day to day. “We now have a real-time OLAP analytics database,” Ray says. This means stakeholders have faster access to up-to-date traffic and reconciliation data without waiting on daily batch processing.
+
+And speed wasn’t the only win. With the new architecture, Ray says, Verihubs was able to reduce cloud spend, saving up to 50% in infrastructure costs.
+
+## Four lessons from the migration
+
+Ray shared a few lessons Verihubs learned while migrating from Postgres to ClickHouse.
+
+“First,” he says, “database design is crucial.” In ClickHouse, the schema and table layout do a lot of the work. Verihubs focused on keeping schemas as normalized as possible, minimizing joins in downstream queries, and choosing [ordering keys](https://clickhouse.com/docs/integrations/clickpipes/postgres/ordering_keys) carefully. Get those decisions wrong early, Ray notes, and you may end up dropping and rebuilding tables to fix them. 
+
+Table engine choice matters, too. Selecting the right [MergeTree family engine](https://clickhouse.com/docs/engines/table-engines/mergetree-family) is a commitment that shapes how you backfill, query, and insert data over time.
+
+Next, Ray emphasized that ClickHouse’s performance profile isn’t symmetric across all write operations. Inserts are fast, but updates and deletes behave differently. ClickHouse applies mutations gradually, which may surprise teams coming from Postgres. Verihubs ran into moments where they’d applied an update, notified finance, and then had to explain why the numbers hadn’t changed yet, because the mutation hadn’t fully taken effect.
+
+While ClickHouse SQL will feel familiar to Postgres users, it’s “not exactly the same as SQL in Postgres,” Ray says. There are differences in syntax and behavior, especially around [JOINs](https://clickhouse.com/docs/guides/joining-tables) and [ORDER BY](https://clickhouse.com/docs/sql-reference/statements/select/order-by). ClickHouse also comes with an array of built-in functions for time bucketing and transformations. “There are many functions you can use to speed up queries,” he adds.
+
+Finally, Ray cautioned that backfills require planning, especially when materialized views depend on other tables. Unlike projections, materialized views don’t backfill automatically from their source tables. “Think carefully before creating cascading materialized views,” he says, “because you’ll have to backfill repeatedly.”
+
+## Faster, more cost-effective analytics
+
+Verihubs’ migration story underscores a lesson many teams learn the hard way: the database that feels “easy and cheap” at first can become a hidden tax once analytics becomes a core operational workflow. “Over time, it becomes anything but cheap,” Ray says. “Eventually, hosting costs, effort, and mental overhead all get more expensive.”
+
+“ClickHouse lets you redesign for speed while still being cost-effective,” he adds. Streaming through Kafka replaced fragile daily pulls. Choosing the right MergeTree engines aligned the warehouse with how their data changes. Materialized views and projections turned raw, high-volume tables into fast, stakeholder-friendly datasets that support reconciliation and invoicing without bringing the system to a crawl.
+
+With ClickHouse, the things that matter most to Verihubs—speed, cost, and user experience—reinforce each other instead of fighting for priority. Stakeholders get fresher data and faster answers, finance can reconcile and invoice with confidence, and Ray’s team can focus on building and shipping new capabilities.
+
+
+
+---
+
+## Get started today
+
+Interested in seeing how ClickHouse works on your data? Get started with ClickHouse Cloud in minutes and receive $300 in free credits.
+
+[Sign up](https://console.clickhouse.cloud/signUp?loc=blog-cta-1212-get-started-today-sign-up&utm_blogctaid=1212)
+
+---
+
+---
+
+## Introducing AI dashboard and workflow generation in ClickStack
+Published: 2026-07-06T00:00:00+00:00
+URL: https://clickhouse.com/blog/clickstack-ai-dashboard-generation
+
+---
+title: " Introducing AI dashboard and workflow generation in ClickStack"
+date: "2026-07-06T12:59:56.782Z"
+author: "Alex Fedotyev"
+category: "Product"
+excerpt: "ClickStack can now generate full dashboards and linked investigative workflows from a single prompt, using an AI Notebook and the same MCP tools available to external agents like Claude, Cursor, and Codex."
+---
+
+#  Introducing AI dashboard and workflow generation in ClickStack
+
+# From prompt to dashboards and workflows
+
+Building a useful dashboard takes more than arranging a few charts on a canvas. You need to understand your telemetry, identify the right questions to ask, write queries, choose useful visualizations, and often iterate several times before you arrive at something worth sharing.
+
+Today, we’re announcing AI dashboard generation in ClickStack to remove much of this work. Instead of building a dashboard manually, you describe what you’re trying to understand, and ClickStack generates it for you. Whether you want an overview of service health, latency by endpoint, or errors grouped by deployment, you can start with a prompt instead of SQL and visualization builders and refine the result from there.
+
+What makes this feature interesting isn’t simply that it generates dashboards. Investigations rarely begin and end with a single dashboard, and building a useful one requires understanding the underlying data before deciding what to visualize. Rather than asking an LLM to generate a finished result, ClickStack investigates the data through an AI Notebook using the same MCP tools available to external AI agents. That process allows it to explain its reasoning, generate connected dashboards linked together into full investigative workflows, and leave behind a complete record that you can inspect, refine, or build on later.
+
+# Making observability accessible
+
+Building dashboards has traditionally been one of the biggest barriers to getting value from an observability platform. AI dashboard generation removes much of that work. Instead of starting with an empty canvas, you describe what you’re trying to understand, and ClickStack explores your telemetry, generates the queries, validates the resulting visualizations, and assembles a dashboard you can immediately begin using. Every chart remains fully editable, making the generated dashboard a starting point rather than a finished artifact.
+
+For experienced users, this dramatically reduces the time spent creating routine dashboards. For teams new to ClickStack, it removes much of the learning curve around schema discovery and query writing, allowing them to focus on understanding their systems instead of learning the mechanics of the platform.
+
+The experience starts with a prompt.
+
+![](https://clickhouse.com/uploads/image2_8ec42cd02e.png)  
+*Here, we ask for span performance visualized over time using heat maps, with clear indicators for p90 and p99 latency to surface tail-latency issues*
+
+From here, ClickStack begins generating the requested dashboard. At first glance, this might seem like the kind of task that could be handled by a background worker that calls an LLM and returns a completed dashboard a few moments later. We deliberately took a different approach.
+
+# Building dashboards is an investigation
+
+It would have been easy to send the prompt to an LLM and return a completed dashboard a few moments later. But this doesn’t reflect how good dashboards are actually created. Building a dashboard is an investigative process. Engineers explore their telemetry, inspect fields, validate assumptions, test queries, and gradually assemble a set of visualizations that answer a question. AI dashboard generation in ClickStack follows exactly the same process.
+
+For that reason, every generated dashboard is built inside ClickStack’s existing AI Notebook feature, a collaborative investigative workspace where the model and SRE work together to explore telemetry, validate assumptions, and build up a dashboard step by step. Every query, visualization, and finding is captured as part of a persistent, editable investigation, allowing the model to show how it arrived at the final dashboard rather than simply returning the finished result.
+
+<video autoplay="1" muted="1" loop="1" controls="0">
+  <source src="https://clickhouse.com/uploads/building_dashboard_B_fullres_crf32_2783376cc8.mp4" type="video/mp4" />
+</video>
+
+Once generation has finished, the notebook remains fully editable. You can modify queries, regenerate visualizations, or branch from any point in the investigation to explore a different approach. The notebook also explains why each visualization was included, allowing you to validate the generated dashboard before using it.
+
+![](https://clickhouse.com/uploads/image5_09aed11427.png)
+
+The final notebook cell links directly to the generated dashboard, providing a seamless transition from the investigation to the finished artifact. While the dashboard becomes your primary workspace, the notebook remains available as a complete, editable history that you can revisit to refine queries, branch the investigation, or generate additional dashboards as your understanding evolves.
+
+![](https://clickhouse.com/uploads/image3_cd12283343.png)
+
+# From dashboards to workflows
+
+Generating a dashboard, along with the investigation that produced it, is useful, but dashboards rarely solve a problem in isolation. Most investigations begin with a high-level overview before narrowing to a specific service, endpoint, deployment, or trace. In practice, engineers move between a collection of connected dashboards as they diagnose an issue.
+
+This is where AI dashboard generation becomes something more than a productivity feature. Recent additions to ClickStack, including [dashboard actions](https://clickhouse.com/blog/whats-new-in-clickstack-may-2026#dashboard-actions), allow dashboards to be linked together into investigative workflows. Because these capabilities are exposed through the same MCP tools used by AI dashboard generation, the model can build those workflows automatically.
+
+Instead of asking for a single dashboard, you can ask ClickStack to create an entire workflow. In the example below, the prompt requests a system health overview linked to a service-level dashboard. 
+
+![](https://clickhouse.com/uploads/image8_50660884ad.png)
+
+The model investigates the telemetry, generates both dashboards, configures the links between them, and explains each step of the process as it works.
+
+
+<video autoplay="1" muted="1" loop="1" controls="0">
+  <source src="https://clickhouse.com/uploads/multi_dashboard_building_D_1280p_mp4_7b7861e03d.mp4" type="video/mp4" />
+</video>
+
+By the end of the investigation, the notebook has produced two connected dashboard artifacts rather than one. The first provides a fleet-wide view of system health, while the second focuses on the individual services identified during the investigation.
+
+<video autoplay="1" muted="1" loop="1" controls="0">
+  <source src="https://clickhouse.com/uploads/ai_dashboards_navigation_B_fullres_crf32_aa676dbedb.mp4" type="video/mp4" />
+</video>
+
+Instead of producing a single dashboard, ClickStack generates an investigative workflow that users can immediately begin to explore and extend.
+
+# One MCP toolchain everywhere
+
+Throughout this post, we’ve shown dashboards exploiting features such as threshold-aware [color palettes](https://clickhouse.com/blog/whats-new-in-clickstack-may-2026#dashboard-actions#custom-color-palettes-for-number-visualizations) and [dashboard actions](https://clickhouse.com/blog/whats-new-in-clickstack-may-2026#dashboard-actions). None of these capabilities is hardcoded into the dashboard generator. Instead, the notebook uses the same ClickStack MCP server that is available to external agents, giving it access to the same high-level observability and dashboard management tools.
+
+This reflects our broader [“Bring Your Own Agents”](https://clickhouse.com/blog/the-future-of-observability-not-one-proprietary-ai-agent-thousands-by-teams) philosophy. We don’t think observability workflows should be confined to a single AI experience inside ClickStack. Many teams already build their own agents, prompts, and automation using tools such as Claude, Cursor, or Codex. By exposing the same semantic tools through the ClickStack MCP server, those agents can create, refine, and extend dashboards using exactly the same APIs as ClickStack itself, regardless of whether those dashboards were created manually or by AI.
+
+<details open>
+<summary>Using the ClickStack MCP server from Claude, Cursor or Codex</summary>
+
+<p>Navigate to Team Settings → API &amp; Agents within your ClickStack service. Here you’ll find pre-configured MCP connection strings for supported clients, including Claude Code, Cursor, and Codex CLI, together with the credentials required to authenticate.</p>
+
+<br />
+<br />
+
+<img src="/uploads/image4_aa6e884ebd.png" alt="" />
+
+<br />
+
+<blockquote>Using the same prompt as before, we can also generate a dashboard from Claude via the MCP tool. The sequence remains similar, and the same validation step is required to confirm the dashboard matches the requested system overview and service drill-down views.</blockquote>
+
+<br />
+
+<p>For example, to add ClickStack to Claude Code:</p>
+
+<br />
+
+<pre><code type='click-ui' language='bash'>
+claude mcp add clickstack --transport http https://mcp.clickhouse.cloud/clickstack --header "x-service-id: &lt;your-service-id&gt;"
+</code></pre>
+
+<p>After adding the server, launch Claude Code and run:</p>
+
+<br />
+
+<pre><code type='click-ui' language='bash'>
+/mcp
+</code></pre>
+
+<p>Select <strong>clickstack</strong> to complete the OAuth authentication flow. Once connected, Claude can use the same dashboard and workflow management tools described throughout this post.</p>
+
+</details>
+
+The result is a single toolchain that evolves together. As new dashboard capabilities are built, they immediately become available through the MCP server, and thus also immediately become available both inside ClickStack and to external agents without requiring separate implementations.
+
+# Conclusion
+
+AI dashboard generation makes ClickStack easier to get started with, but the goal was never just to make dashboards easier to build. It was to make investigations easier to perform. By treating dashboard creation as an investigation, every generated dashboard is backed by a complete history of the queries, reasoning, and decisions that produced it. That history remains editable, allowing users to refine, branch, and extend the investigation long after the initial dashboard has been generated.
+
+We think dashboard generation is only the beginning. The more interesting problem is workflow generation. Engineers don’t solve problems with isolated dashboards. They solve them by moving through connected investigations. By combining AI Notebooks, dashboard actions, and the ClickStack MCP server, ClickStack can generate those workflows from a single prompt, and that capability will continue to expand as the platform and its ability to link visual components evolves.
+
+
+---
+
+## Get started today
+
+Interested in seeing how Managed ClickStack works on your observability data? Get started with Managed ClickStack in minutes and receive $300 in free credits.
+
+[Sign up](https://console.clickhouse.cloud/signUp?intent=o11y&loc=blog-cta-1202-get-started-today-sign-up&utm_blogctaid=1202)
+
+---
 
 ---
 

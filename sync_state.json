@@ -1,5 +1,5 @@
 {
-  "last_sync": "2026-07-06T10:23:37.821077Z",
+  "last_sync": "2026-07-07T09:42:13.781810Z",
   "processed_blogs": {
     "https://clickhouse.com/blog/clickhouse-raises-400-million-series-d-acquires-langfuse-launches-postgres": {
       "title": "ClickHouse raises $400M Series D led by Dragoneer to accelerate expansion across analytics and AI infrastructure",
@@ -5352,9 +5352,21 @@
       "pub_date": "2026-07-02T00:00:00+00:00",
       "file_path": "blogs/2026-07-02-how-we-made-clickstack-5x-faster-for-clickhouse.md",
       "processed_at": "2026-07-03T09:19:04.993061Z"
+    },
+    "https://clickhouse.com/blog/verihubs-data-warehouse": {
+      "title": "98% faster queries, 50% lower cloud costs: Verihubs’ journey from Postgres to ClickHouse",
+      "pub_date": "2026-07-06T00:00:00+00:00",
+      "file_path": "blogs/2026-07-06-98-faster-queries-50-lower-cloud-costs-verihubs.md",
+      "processed_at": "2026-07-07T09:42:13.469061Z"
+    },
+    "https://clickhouse.com/blog/clickstack-ai-dashboard-generation": {
+      "title": "Introducing AI dashboard and workflow generation in ClickStack",
+      "pub_date": "2026-07-06T00:00:00+00:00",
+      "file_path": "blogs/2026-07-06-introducing-ai-dashboard-and-workflow-generation.md",
+      "processed_at": "2026-07-07T09:42:13.705797Z"
     }
   },
-  "total_blogs": 892,
+  "total_blogs": 894,
   "failed_blogs": [
     {
       "url": "https://clickhouse.com/jp/blog/clickhouse-gcp-japan-availability",
