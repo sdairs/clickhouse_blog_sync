@@ -1,5 +1,5 @@
 {
-  "last_sync": "2026-07-07T09:42:13.781810Z",
+  "last_sync": "2026-07-08T08:29:25.061600Z",
   "processed_blogs": {
     "https://clickhouse.com/blog/clickhouse-raises-400-million-series-d-acquires-langfuse-launches-postgres": {
       "title": "ClickHouse raises $400M Series D led by Dragoneer to accelerate expansion across analytics and AI infrastructure",
@@ -5364,9 +5364,21 @@
       "pub_date": "2026-07-06T00:00:00+00:00",
       "file_path": "blogs/2026-07-06-introducing-ai-dashboard-and-workflow-generation.md",
       "processed_at": "2026-07-07T09:42:13.705797Z"
+    },
+    "https://clickhouse.com/blog/ai-best-of-breed-data-stack": {
+      "title": "AI needs the best-of-breed data stack: Postgres and ClickHouse",
+      "pub_date": "2026-07-07T00:00:00+00:00",
+      "file_path": "blogs/2026-07-07-ai-needs-the-best-of-breed-data-stack-postgres.md",
+      "processed_at": "2026-07-08T08:29:24.632997Z"
+    },
+    "https://clickhouse.com/blog/chdb-agents-local-data-engine": {
+      "title": "chDB as the Agent's Local Data Engine",
+      "pub_date": "2026-07-07T00:00:00+00:00",
+      "file_path": "blogs/2026-07-07-chdb-as-the-agent-s-local-data-engine.md",
+      "processed_at": "2026-07-08T08:29:24.963747Z"
     }
   },
-  "total_blogs": 894,
+  "total_blogs": 896,
   "failed_blogs": [
     {
       "url": "https://clickhouse.com/jp/blog/clickhouse-gcp-japan-availability",
