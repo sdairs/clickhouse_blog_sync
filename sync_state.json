@@ -1,5 +1,5 @@
 {
-  "last_sync": "2026-07-08T08:29:25.061600Z",
+  "last_sync": "2026-07-09T09:40:08.725406Z",
   "processed_blogs": {
     "https://clickhouse.com/blog/clickhouse-raises-400-million-series-d-acquires-langfuse-launches-postgres": {
       "title": "ClickHouse raises $400M Series D led by Dragoneer to accelerate expansion across analytics and AI infrastructure",
@@ -5376,9 +5376,15 @@
       "pub_date": "2026-07-07T00:00:00+00:00",
       "file_path": "blogs/2026-07-07-chdb-as-the-agent-s-local-data-engine.md",
       "processed_at": "2026-07-08T08:29:24.963747Z"
+    },
+    "https://clickhouse.com/blog/introducing-pg_re2-regex-in-postgres": {
+      "title": "Introducing pg_re2, fast, RE2-powered regular expressions in Postgres",
+      "pub_date": "2026-07-08T00:00:00+00:00",
+      "file_path": "blogs/2026-07-08-introducing-pg-re2-fast-re2-powered-regular.md",
+      "processed_at": "2026-07-09T09:40:08.625874Z"
     }
   },
-  "total_blogs": 896,
+  "total_blogs": 897,
   "failed_blogs": [
     {
       "url": "https://clickhouse.com/jp/blog/clickhouse-gcp-japan-availability",
