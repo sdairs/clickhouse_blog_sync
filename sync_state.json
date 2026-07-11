@@ -1,5 +1,5 @@
 {
-  "last_sync": "2026-07-10T09:36:11.385944Z",
+  "last_sync": "2026-07-11T07:57:04.791979Z",
   "processed_blogs": {
     "https://clickhouse.com/blog/clickhouse-raises-400-million-series-d-acquires-langfuse-launches-postgres": {
       "title": "ClickHouse raises $400M Series D led by Dragoneer to accelerate expansion across analytics and AI infrastructure",
@@ -5388,9 +5388,21 @@
       "pub_date": "2026-07-09T00:00:00+00:00",
       "file_path": "blogs/2026-07-09-how-trigger-dev-is-using-clickhouse-to-scale.md",
       "processed_at": "2026-07-10T09:36:11.313638Z"
+    },
+    "https://clickhouse.com/blog/docker-hardened-images": {
+      "title": "ClickHouse on Docker Hardened Images",
+      "pub_date": "2026-07-10T00:00:00+00:00",
+      "file_path": "blogs/2026-07-10-clickhouse-on-docker-hardened-images.md",
+      "processed_at": "2026-07-11T07:57:04.524493Z"
+    },
+    "https://clickhouse.com/blog/introducing-the-clickhouse-adbc-driver": {
+      "title": "One Driver, One Format, Every Language: ADBC",
+      "pub_date": "2026-07-10T00:00:00+00:00",
+      "file_path": "blogs/2026-07-10-one-driver-one-format-every-language-adbc.md",
+      "processed_at": "2026-07-11T07:57:04.692661Z"
     }
   },
-  "total_blogs": 898,
+  "total_blogs": 900,
   "failed_blogs": [
     {
       "url": "https://clickhouse.com/jp/blog/clickhouse-gcp-japan-availability",
