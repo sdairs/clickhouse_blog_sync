@@ -1,5 +1,5 @@
 {
-  "last_sync": "2026-07-13T09:28:20.926560Z",
+  "last_sync": "2026-07-14T08:05:46.944195Z",
   "processed_blogs": {
     "https://clickhouse.com/blog/clickhouse-raises-400-million-series-d-acquires-langfuse-launches-postgres": {
       "title": "ClickHouse raises $400M Series D led by Dragoneer to accelerate expansion across analytics and AI infrastructure",
@@ -5400,9 +5400,15 @@
       "pub_date": "2026-07-10T00:00:00+00:00",
       "file_path": "blogs/2026-07-10-one-driver-one-format-every-language-adbc.md",
       "processed_at": "2026-07-11T07:57:04.692661Z"
+    },
+    "https://clickhouse.com/blog/insiderone-customer-data-platform": {
+      "title": "How Insider One uses ClickHouse Cloud to power real-time customer engagement at scale",
+      "pub_date": "2026-07-13T00:00:00+00:00",
+      "file_path": "blogs/2026-07-13-how-insider-one-uses-clickhouse-cloud-to-power.md",
+      "processed_at": "2026-07-14T08:05:46.841721Z"
     }
   },
-  "total_blogs": 900,
+  "total_blogs": 901,
   "failed_blogs": [
     {
       "url": "https://clickhouse.com/jp/blog/clickhouse-gcp-japan-availability",
