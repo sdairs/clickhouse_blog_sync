@@ -1,6 +1,365 @@
 # ClickHouse Blogs
-Last updated: 2026-07-14 08:05:46 UTC
-Total blogs: 901
+Last updated: 2026-07-15 08:11:01 UTC
+Total blogs: 904
+
+---
+
+## How Bullet uses ClickHouse Cloud to give DeFi's fastest exchange real-time analytics
+Published: 2026-07-15T00:00:00+00:00
+URL: https://clickhouse.com/blog/bullet-real-time-analytics
+
+---
+title: "How Bullet uses ClickHouse Cloud to give DeFi's fastest exchange real-time analytics"
+date: "2026-07-14T14:23:01.118Z"
+author: "ClickHouse"
+category: "User stories"
+excerpt: "Switching from Databricks to ClickHouse Cloud cut Bullet's query latency 10,000x and eliminated an entire serving layer, giving DeFi's fastest exchange real-time analytics at comparable cost."
+---
+
+# How Bullet uses ClickHouse Cloud to give DeFi's fastest exchange real-time analytics
+
+## Summary
+
+- Bullet uses ClickHouse Cloud to index, analyze, and monitor its real-time DeFi perpetuals exchange processing 150 million+ rows per hour.
+- Switching from Databricks cut query latency 10,000x, from 10-15 seconds to milliseconds, eliminating the need for a separate DynamoDB serving layer entirely.
+- Data freshness improved from 1-2 hours to under 5 seconds, at a comparable cost, while handling 1,000x more data across three environments.
+
+
+When Tristan Frizza and his co-founders started [Bullet](https://www.bullet.xyz/), they had a specific gap in mind. Over the past half-decade, perpetual futures (perps) had emerged as the dominant trading product in crypto, but most were concentrated on centralized exchanges. Platforms like FTX showed the risk of that model; when you trade on a centralized exchange, you custody your assets with them. When FTX collapsed, traders lost everything.
+
+The alternative, DeFi (decentralized finance), existed in principle, but it was too slow and expensive in practice to attract serious traders. On early Ethereum-based exchanges, a single trade could cost $20 and take a minute to settle. “For the average consumer who’s used a Robinhood or Coinbase, that’s a huge downgrade,” Tristan says.
+
+Bullet is his team’s bet on what DeFi can become. The platform offers perpetuals, spot trading, and lending all on a single exchange. Trades settle on a blockchain, users self-custody their assets, and the whole thing runs fast enough for pro traders. As Tristan puts it, “We’re trying to build the ‘everything exchange’ that has everything you need, and everything runs on blockchain, and everything is fast… so it’s quite a lofty goal.”
+
+Tristan spoke at a [January 2026 ClickHouse meetup in Singapore](https://clickhouse.com/videos/singapore-meetup-sierraresearch), where he walked through Bullet’s sub-millisecond trading architecture. He also shared how they’re using [ClickHouse Cloud](https://clickhouse.com/cloud) for event indexing, real-time analytics, monitoring, and how switching from Databricks cut query latency from 10-15 seconds to milliseconds and eliminated an entire serving layer, all while handling 1,000 times more data at a similar cost.
+
+<iframe width="768" height="432" src="https://www.youtube.com/embed/AmGnllMOM-0" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe>
+
+## The latency problem at the heart of DeFi
+
+In trading, market information travels at the speed of light. That’s why Wall Street firms spend millions on fiber connections and microwave towers, trying to shave microseconds off the time it takes for price information to travel between exchanges. If you’re a market maker quoting prices on a slow platform, you’re constantly exposed; arbitrageurs can buy from your stale quotes faster than you can cancel them. Market makers demand low latency for exactly this reason, and it’s why deep, liquid markets cluster on the fastest venues.
+
+This has historically been DeFi’s Achilles heel. Ethereum L1 settles in about 15 seconds. Solana brought that down to 400 milliseconds, which was revelatory when it launched, but still too slow for derivatives trading. Hyperliquid, one of the most successful recent DeFi trading platforms, gets to around 70 milliseconds by concentrating infrastructure geographically. Binance, as a centralized exchange, hits 10-20 milliseconds, but at the cost of the self-custody and transparency that make DeFi worth using.
+
+“We figured, blockchains have been pretty slow historically,” Tristan says. “Can we do better? Can we make things faster? Can we make market information propagate a lot quicker, but do it in a blockchain way where people own their own assets, and it’s not just sitting on some central server?” By speeding things up, he adds, “We can get a lot more liquidity, and we can get good markets where, at the end of the day, consumers get very good depth, they can trade in very big size, and they’re not taking a lot of slippage and losing out on every trade.”
+
+Bullet, running as an app-specific rollup in pure Rust on Solana, achieves sub-millisecond speeds, faster than Hyperliquid or Binance, including ~500 microseconds at p50 and ~650 microseconds at p99. Tristan stresses the value of that p99 number: “If your median time is a millisecond but your worst case is a second, you’re always going to lose on that worst case,” he says. Low jitter (predictable fills, not just fast ones) is what makes market makers willing to provide liquidity, which is what makes an exchange worth trading on.
+
+![](https://clickhouse.com/uploads/bullet_jul2026_image2_bb6fd7343b.png)
+
+*Order processing time on Bullet's mainnet: p50 (green) holds around 500μs, p99 (yellow) around 650μs, staying within ~150μs of each other across six hours of live trading.*
+
+## Why ClickHouse was a perfect fit
+
+Bullet’s trading infrastructure solves the execution problem, but it creates a different one. Blockchains are state machines, meaning they process transactions and move to the next state, but they don’t retain history. “If someone’s done a trade,” Tristan says, “and they want to come back and audit it for tax purposes, or look back at what were my trades last week, that information is basically gone, because it’s stateless in that sense.”
+
+This is where ClickHouse comes in. Bullet uses [ClickHouse Cloud](https://clickhouse.com/cloud) to index every event the exchange emits and make it queryable in milliseconds. That data powers three main use cases: user-facing features like trade history, P&L charts, and audit logs; real-time analytics like 24-hour volume, leaderboard rankings, and referral rewards; and internal monitoring, with state snapshots every minute feeding Grafana dashboards that alert the team via Slack and PagerDuty before anything goes wrong (Tristan was even paged *during* his presentation in Singapore; “It shows it’s working,” he joked).
+
+Blockchain data is append-only, meaning Bullet is never updating old records, only adding new ones. At over 150 million rows per hour, that volume adds up. ClickHouse’s [columnar storage](https://clickhouse.com/resources/engineering/what-is-columnar-database) model, Tristan says, is a “perfect fit” for this kind of workload. The database powers sub-second queries on time-series data, while its “incredible compression ratio” dramatically reduces storage costs compared to Bullet’s previous approach of storing uncompressed JSON in S3. Similarly, ClickHouse’s [native Kafka integration](https://clickhouse.com/docs/integrations/kafka) “just works out of the box,” letting data flow straight from Bullet’s event stream into the database without custom wiring.
+
+ClickHouse Cloud’s reliability and ease of use are a far cry from Bullet’s previous setup. “Things would break all the time, and I had to maintain it all, even when I’d go on holidays… it was just kind of a nightmare,” Tristan says. “ClickHouse is great. We put our events in there, we put our analytics in there, monitoring, a bunch of other stuff. We use it for the majority of things in our stack. It’s become the one-size-fits-all for a lot of our stuff.”
+
+## Getting data in: ingestion and deduplication
+
+Bullet’s ingestion pipeline starts at the rollup sequencer. A Rust indexer listens over a WebSocket to what Tristan calls a “crazy firehose of thousands of events per second,” batching everything into a Kafka topic that runs on AWS MSK. Redpanda Connect handles event classification, reading each event, identifying what type it is, and routing it to the appropriate Kafka topic (with a parallel feed to S3 Glacier for disaster recovery). ClickHouse Cloud consumes from those topics directly, writing events into dedicated tables rather than one large unstructured database. This keeps queries “very fast,” Tristan says, as each table can be sorted and ordered by the fields that matter most for that event type.
+
+![](https://clickhouse.com/uploads/bullet_jul2026_image1_9844a0777c.png)
+
+*Bullet’s ingestion pipeline: events flow through a Rust indexer into Kafka, where Redpanda Connect classifies and routes them to dedicated ClickHouse Cloud tables, with a parallel S3 backup for recovery.*
+
+The pipeline has been load-tested to 3 million transactions per second with zero message loss. In production, events reach ClickHouse in under a second from the moment they’re emitted by the sequencer. “It scales really well and plugs nicely into ClickHouse,” Tristan says.
+
+One of the more important patterns Bullet uses is ClickHouse’s [ReplacingMergeTree table engine](https://clickhouse.com/docs/engines/table-engines/mergetree-family/replacingmergetree), which solves the problem of deduplication. In a high-throughput pipeline, the same event can arrive more than once (e.g. a network hiccup, a retry, a reindex). Before ClickHouse, Bullet ran deduplication jobs in Spark, processing everything in RAM. It was expensive, hard to scale, and time-consuming for a founder also running the company. With ReplacingMergeTree, each trade has a unique auto-incrementing event number and transaction hash; ClickHouse keeps the latest version of any record with matching keys, using an indexed timestamp as the tiebreaker.
+
+The practical effect (what Tristan calls the “superpower” of ReplacingMergeTree) is that the entire pipeline becomes idempotent. If something breaks, Bullet can reindex from the rollup and ClickHouse deduplicates automatically. “It takes a lot of cognitive load off us,” Tristan says. “We know that our trades table has no duplicates, all our data is clean, and we can just rerun the pipelines, backfill, do all that kind of stuff.”
+
+## Simplified serving infrastructure
+
+Before ClickHouse, Bullet ran its analytics on Databricks. The architecture worked, but there was a fundamental mismatch. As Tristan explains, Spark takes 5 to 30 seconds just to boot the JVM and plan a query. That made it too slow for serving data to a frontend where users expect results in milliseconds.
+
+His workaround was to batch-compute results hourly, push them into DynamoDB, and serve from there. Again, it worked, but it meant maintaining two systems, a batch pipeline and a separate key-value serving layer, and the data was always at least an hour stale. “It was a bit flaky, and I was never very proud of it,” he adds.
+
+ClickHouse made the DynamoDB layer unnecessary. Queries return in milliseconds, so Bullet now calls ClickHouse directly from their API layer with no caching needed. “I was kind of blown away at how fast it was,” Tristan says. “You can just make a query on ClickHouse and it takes like 10 milliseconds. We don’t even need a serving layer anymore.”
+
+For heavier calculations, Bullet uses ClickHouse’s [refreshable materialized views](https://clickhouse.com/docs/materialized-view/refreshable-materialized-view), which let you schedule a view to recompute on a fixed interval rather than triggering on every insert. The trading leaderboard is a good example. Calculating P&L rankings requires joining account snapshots with deposit and withdrawal histories, accounting for the fact that deposited money shouldn’t count toward returns. The query spans six common table expressions with window functions across multiple joins.
+
+In Databricks, this query ran as a 60-minute cron job and took 20-30 minutes to execute, meaning leaderboard data was up to 90 minutes stale by the time it updated. “It was a massive headache,” Tristan says. “For a real-time trading application, that made it kind of boring and not very engaging for a lot of people,” he adds.
+
+In ClickHouse, the equivalent refreshable materialized view runs every 10 minutes, and could be pushed to every minute if needed. As Tristan says, “It’s easy to maintain, and it just works very well out of the box.”
+
+## The results: faster data, fewer moving parts
+
+In the end, switching from Databricks to ClickHouse Cloud cut query latency from 10-15 seconds to milliseconds, a roughly 10,000x improvement. “If you care about building real-time applications or doing real-time analytics, this is where ClickHouse really shines,” Tristan says. “You can query stuff insanely fast. Instead of using things like Spark, which take a long time, you’re getting stuff within milliseconds.”
+
+Data freshness, meanwhile, went from 1-2 hours to less than 5 seconds, meaning traders see their leaderboard positions, referral rewards, and P&L charts in near-real-time. The monthly cost is comparable to Databricks, but ClickHouse now handles 1,000x more data across staging, testnet, and mainnet environments. “It’s not a fair comparison,” Tristan says.
+
+For a lean data engineering team, ClickHouse Cloud has removed a lot of the maintenance burden associated with managing infrastructure. “Being a fast-growing startup, it was nice to offload as much of that work as possible,” he says. “I don’t want to be sitting there running clusters and tuning things and doing all this stuff as well as hiring people and running the company.”
+
+With [ClickHouse Cloud](https://clickhouse.com/cloud), Tristan and the team have simplified their entire data stack, replacing a fragile multi-system architecture with a single database that handles ingestion, analytics, and monitoring at scale. They can focus on building the fastest, most feature-rich trading exchange in DeFi, without a data engineering team of one being the bottleneck.
+
+
+---
+
+## Get started today
+
+Interested in seeing how ClickHouse works on your data? Get started with ClickHouse Cloud in minutes and receive $300 in free credits.
+
+[Sign up](https://console.clickhouse.cloud/signUp?loc=blog-cta-1318-get-started-today-sign-up&utm_blogctaid=1318)
+
+---
+
+---
+
+## @clickhouse/rowbinary: when your library is also a parser compiler
+Published: 2026-07-14T00:00:00+00:00
+URL: https://clickhouse.com/blog/clickhouse-rowbinary-library-parser-compiler
+
+---
+title: "@clickhouse/rowbinary: when your library is also a parser compiler"
+date: "2026-07-14T20:59:26.414Z"
+author: "Peter Leonov"
+category: "Engineering"
+excerpt: "We've released @clickhouse/rowbinary a Node.js reader and writer for ClickHouse's RowBinary formats. You can import it and call its generic parser like any other library. But it also ships as an Agent Skill: point a coding agent at the bundled `SKILL.md` "
+---
+
+# @clickhouse/rowbinary: when your library is also a parser compiler
+
+We've released [@clickhouse/rowbinary](https://www.npmjs.com/package/@clickhouse/rowbinary), a Node.js reader and writer for ClickHouse's [RowBinary](https://clickhouse.com/docs/interfaces/formats/RowBinary), RowBinaryWithNames, and RowBinaryWithNamesAndTypes formats. You can import it and call its generic parser like any other library. But it also ships as an Agent Skill: point a coding agent at the bundled `SKILL.md` and, instead of calling the library, the agent reads it and writes a parser specialized to your query's exact column types. Those generated parsers run 1.5–3.4x faster than composing the library's functions in a loop, cost about $0.20 each to generate, and avoid the silent data-corruption bugs that models produce when they write binary decoders from memory.
+
+## Why we built it
+
+RowBinary is one of the most efficient ways to get data out of ClickHouse, and one of the most annoying formats to consume from JavaScript. The wire format itself is simple: little-endian primitives, [LEB128](https://en.wikipedia.org/wiki/LEB128) varints for variable widths, no per-row overhead. The pain is on the reader side. Every leaf type has its own read pattern. `Nullable`, `Array`, `Map`, `Tuple`, and `LowCardinality` nest arbitrarily. `DateTime64` needs precision-aware scaling and an optional timezone. The `Variant`, `Dynamic`, and `JSON` types are self-describing and recursive: each value carries its own type tag and dispatches back into the same parsing machinery.
+
+So most applications fall back to JSON formats, which cost real CPU time and, worse, silently round `UInt64` values past `Number.MAX_SAFE_INTEGER` to `float64` unless you take the slow stringify-then-reparse path. Teams that do adopt RowBinary end up with a generic, type-dispatched parser: one function per type, dispatched per cell at runtime. It's easy to maintain and hard to make fast, because every cell pays a dispatch and V8's inliner gives up on the [megamorphic](https://people.dsv.su.se/~beatrice/python/dls15_large_images.pdf) call sites. What you actually want at high QPS is a parser [monomorphized](https://en.wikipedia.org/wiki/Monomorphization) to your query: the right read operations inlined in the right order for your exact columns, with no dispatch at all. Nobody writes these by hand, per query, for every query they ship.
+
+That's the gap this package closes. The library gives you correct, tested reading primitives for the whole ClickHouse type system. The skill teaches a coding agent to assemble those primitives into the hand-tuned, query-specific parser you'd never write yourself.
+
+## What it is and how to use it
+
+The package has two layers.
+
+The first is a library of type-specific reading primitives: one small function per leaf type, plus composable wrappers for `Nullable`, `Array`, `Map`, `Tuple`, and the rest of the type algebra, in full-buffer and chunked-stream variants. Each primitive is written to be monomorphizable (small, single-purpose, free of megamorphic dispatch) so it can be inlined into a query-specific parser without defeating V8's optimizer. This layer is a perfectly usable library on its own: import it, call `parseRowBinary(...)`, get correct results. It also exports writers, streaming in both directions, and a dynamic RowBinaryWithNamesAndTypes pipeline built on [@clickhouse/datatype-parser](https://www.npmjs.com/package/@clickhouse/datatype-parser).
+
+The second layer is the [SKILL.md](https://github.com/ClickHouse/clickhouse-js/blob/main/skills/clickhouse-js-node-rowbinary/SKILL.md). Rather than describing how to call the API, it teaches a coding agent the policy for assembling the primitives into a bespoke parser for a given query's column types. The comments in the library source explain why each block looks the way it does and which axes are safe to change: buffer ownership, `BigInt` vs `number` for 64-bit integers, `Date` mapper hooks, `Decimal` scale handling, `Array` materialization strategy, fast paths for fixed-width columns. The library is the reference implementation, the comments are the design rationale, and the `SKILL.md` is the codegen policy.
+
+To install:
+
+```shell
+npm i @clickhouse/rowbinary
+```
+
+The skill is registered in the package's `agents.skills` field, so any agent that scans `node_modules` for skills finds it automatically. You can also add it directly:
+
+```shell
+npx skills add ClickHouse/clickhouse-js --skill clickhouse-js-node-rowbinary
+```
+
+### What the agent generates
+
+Take the orders schema from our benchmarks:
+
+```sql
+id     UInt8
+uid    UUID
+price  Decimal64(2)
+status Enum8('new' = 1, 'shipped' = 2, 'done' = 3)
+```
+
+Composing the library's public API gives you a correct parser, and it's the obvious thing to write:
+
+```ts
+export const readOrderRow: Reader<OrderRow> = (s) => ({
+  id: readUInt8(s),
+  uid: formatUUID(readUUID(s)),
+  price: readDecimal64(2)(s),   // closure rebuilt every row
+  status: readInt8(s),
+});
+```
+
+But every field does its own bounds check, `readDecimal64(2)` builds a fresh closure per row, and `formatUUID` goes through `BigInt`. With the skill loaded, the agent notices that every column is fixed-width and emits this instead:
+
+```ts
+export const readOrderRowFast: Reader<OrderRow> = (s) => {
+  const { buf, view } = s;
+  // Every column is fixed-width: 1 + 16 + 8 + 1 = 26 bytes.
+  // One bounds check for the whole row, then read at constant offsets.
+  const o = advance(s, 26);
+  const id = buf[o]!;
+  const uid = formatUUIDTable(buf.subarray(o + 1, o + 17)); // table, not BigInt
+  const price: DecimalValue = [view.getBigInt64(o + 17, true), 2];
+  const status = view.getInt8(o + 25);
+  return { id, uid, price, status };
+};
+```
+
+One bounds check for the whole 26-byte row, reads at constant offsets, the Decimal scale baked in, and a lookup-table UUID formatter. The output is byte-identical to the composed version and 3.41x faster.
+
+Because the parser is specialized anyway, `.map()`-style transformations are free: rename a column, derive a field, or drop one you never use, and the transformation moves into the read loop at zero extra cost, with zero extra options added to the library.
+
+A few properties worth knowing before you adopt it:
+
+- **The generated parser is a regular piece of code.** A human commits it, and it's reviewed, tested, and benchmarked like any other module. The skill produces source you read, not a binary you trust. The library ships a comprehensive test suite you can borrow to cover the now app-owned reader.  
+- **The skill is auditable.** It's a markdown file plus densely commented, tested TypeScript, all in the npm tarball.  
+- **The generic reader still works.** Skip the agent entirely and call `parseRowBinary(...)` for a known-good path. The skill is multiplicative, not a replacement.  
+- **It works best with a model that can read the whole library** and follow multi-step reference instructions. Small models degrade, but with focused sub-agents they remain viable: Haiku's pass rate jumped from 52% to 86%.
+
+## How we got here
+
+### The conventional answer is a compiler
+
+Schema-driven binary formats have a standard playbook for producing monomorphized parsers: build a codegen compiler. That's the shape `protoc`, `flatc`, and Cap'n Proto all adopted: take a schema, run a compiler, emit specialized code per target language. It works, but a codegen compiler is a real piece of software, with a parser for the schema language, an IR, a backend per target language, an options matrix, a release cadence, and a maintainer queue. Every degree of customization a user wants (a different decimal library, a custom `Date` mapper, `BigInt` vs `number` for `Int64`, eager vs lazy `Array` materialization, a string-interning table for `LowCardinality`) has to be designed as a flag, named, documented, kept stable across versions, and tested against every other flag.
+
+We could have built one for RowBinary in JavaScript. Instead, we decomposed the compiler into artifacts an agent can read and recombine at inference time: densely commented primitives and a markdown file. The customization surface stops being a fixed list of flags and becomes a conversation with a model that has read your library. If you want `Decimal128` mapped to a custom big-decimal library, or `DateTime64(9)` as nanoseconds-in-`BigInt`, or `LowCardinality(String)` materialized through a string-interning table, those aren't flags we have to ship. The agent handles them in a few hundred tokens because it understands the comments in `decimal.ts`. 
+
+### What the eval told us
+
+We benchmarked three decode paths on 50k rows per schema: the correct JSON path (server-side stringification of wide integers, client-side re-parse to `BigInt`), the generic RowBinary reader composed from the library API, and the agent-generated monomorphic parser. Hardware and versions are listed at the end of the post.
+
+RowBinary beats JSON by 3.3x on a wide-integer financial ledger schema on an Apple M4 Max ([benchmark source](https://github.com/ClickHouse/clickhouse-js/blob/8c51d9a12e67e82ef431e8158d5b77ce26e40e3a/skills/clickhouse-js-node-rowbinary/tests/ledger.bench.ts)) and by 2.5x on a 4-core AMD EPYC 7763 in CI ([run](https://github.com/ClickHouse/clickhouse-js/actions/runs/28439460847/job/84273435913#step:9:40)). The gap widens with newer hardware because RowBinary's work is pointer arithmetic and contiguous memory reads, while JSON's is branchy tokenization and `BigInt` allocation. An IoT schema holds a steadier ~2.1x on both machines. Note that these numbers compare against the *correct* JSON path. Bare `JSONEachRow` looks closer at 1.8x, but it silently rounds every `UInt128`, `Int128`, and any `UInt64` past `Number.MAX_SAFE_INTEGER` to `float64`. The decode succeeds, the numbers are wrong, and nothing complains until you compare totals against the server.
+
+The agent-generated parser then beats the composed reader by another 1.5–3.4x:
+
+| Schema | Shape | Speedup vs composed reader |
+| :---- | :---- | :---- |
+| Financial ledger | Wide integers (`UInt128`, `Int128`) | 1.55x |
+| IoT telemetry | `Float64` / integers | 2.46x |
+| Orders | Fixed-width, denormalized | 3.41x |
+
+Every numeric-heavy schema we tested came in at 1.5x or better. RowBinary doesn't win everywhere, though. On a string-heavy log schema, `JSONCompactEachRow` beats even the optimized RowBinary reader, and the skill's own guidance says not to use RowBinary there. The skill knows its own boundaries.
+
+Generation cost, averaged across four numeric-heavy schemas with Claude Sonnet 4.6: ~230k tokens in (almost all served from the prompt cache across the agent loop; the unique skill footprint per call is ~28k), ~2.1k tokens out, **$0.20 per parser** with caching and $0.72 as an uncached upper bound. Regenerating per deploy is well within budget.
+
+The eval also showed why the skill matters beyond speed. RowBinary stores a UUID as two little-endian `UInt64` halves, each byte-reversed relative to the text form. Asked to write that decoder purely from memory, with no documentation, tools, or test-and-fix loop, Sonnet 4.6 got the byte order wrong in 3 of 5 runs, each time producing the same silently corrupt output: the 16 wire bytes hexed in order, formatted as a perfectly plausible UUID string. Opus 4.8 was reliable at 5 of 5. With the skill loaded, every run is correct by construction, because the reference primitive sits in the library two function calls away from where the agent is reading.
+
+That failure mode is why we care about this more than the speedup. ClickHouse users run these parsers against billions of rows. A JSON path that rounds `UInt128` to `float64` produces totals that are off by a little across millions of records, and someone notices six weeks later when a finance report doesn't balance. A UUID decoder that hexes the wire bytes in source order produces strings that pass schema validation and quietly break join predicates. These are the bugs that make teams refuse to put AI-generated code on the data path at all. The skill addresses them by making the generated parser a recombination of the official, tested, code-reviewed primitives we maintain. When you review the generated parser in a PR, you're reviewing code assembled from code we wrote.
+
+### What the skill cost to produce
+
+A fair objection is that a capable enough coding agent should be able to write this parser without any skill at all. It can, and that's how the skill got built. Claude Code with Opus, given the RowBinary spec and the ClickHouse source as reference, produced a working reader. It took a few million tokens, roughly a day of continuous prompting, several rounds of test-writing and benchmark-tweaking, and a human reviewing each iteration.
+
+The skill is the compiled artifact of that day. It bakes in the accumulated lessons (LEB128 reads, Decimal scale handling, which integer widths need `BigInt`, how V8 inlines and doesn't) that a model would otherwise rediscover from scratch every time. A compiler is amortized engineering in the same way: someone spent months teaching it the type system and the codegen rules so that every user downstream gets specialized output cheaply. Here the investment was a day of human-AI collaboration, frozen into markdown and commented code, and everyone downstream gets it for a $0.20 inference call.
+
+### Where this fits
+
+Agent Skills landed as a format in October 2025 and became an open standard in December 2025. The most common pattern so far is *ship a `SKILL.md` alongside your npm package so the agent calls your API correctly*: Vercel Labs's `skills` CLI, antfu's `skills-npm`, `npm-agentskills`, and similar. Those are useful, and we already ship one of that shape: [clickhouse-js-node-troubleshooting](https://github.com/ClickHouse/clickhouse-js/tree/main/skills/clickhouse-js-node-troubleshooting), a runbook the agent consults when something breaks.
+
+`@clickhouse/rowbinary` is a different shape: library-as-reference rather than library-as-API. Instead of treating the library as a black box to call, the agent treats it as a transparent reference implementation to fork per query. That changes how you should write code if you're authoring a skill like this. Code meant to be called needs an honest description. Code meant to be read needs dense comments, internal consistency, and no cleverness that doesn't reproduce.
+
+We expect the pattern to generalize. Anywhere you'd have reached for a codegen compiler (narrow, schema-driven, performance-sensitive output), there's now an alternative that costs a markdown file and an inference call. If you find places where the skill produces bad output, the comments in the library are where fixes go; please [file an issue](https://github.com/ClickHouse/clickhouse-js/issues).
+
+### Benchmark environment
+
+Local: Apple M4 Max, Node v24.6.0, macOS 26.5.1, ClickHouse 26.1.1.200. CI: AMD EPYC 7763 (4 vCPU), Node v24.17.0, ClickHouse 26.6.1.1193 ([bench workflow](https://github.com/ClickHouse/clickhouse-js/blob/8c51d9a12e67e82ef431e8158d5b77ce26e40e3a/.github/workflows/bench-skill-rowbinary.yml), [latest run](https://github.com/ClickHouse/clickhouse-js/actions/runs/28439460847)). Source pinned at [`8c51d9a`](https://github.com/ClickHouse/clickhouse-js/tree/8c51d9a12e67e82ef431e8158d5b77ce26e40e3a). 50k rows per schema via `npm run bench`.  
+
+---
+
+## How we configure huge pages in ClickHouse Managed Postgres
+Published: 2026-07-14T00:00:00+00:00
+URL: https://clickhouse.com/blog/huge-pages-clickhouse-managed-postgres
+
+---
+title: "How we configure huge pages in ClickHouse Managed Postgres"
+date: "2026-07-14T14:59:25.235Z"
+author: "Kaushik Iska"
+category: "Engineering"
+excerpt: "How ClickHouse Managed Postgres reserves, enforces, and sizes huge pages so shared_buffers avoids the per-connection page-table tax that eats RAM and stalls reads on 4KB pages."
+---
+
+# How we configure huge pages in ClickHouse Managed Postgres
+
+What are huge pages, and why do they matter for Postgres? The OS hands out memory in 4KB pages, and the CPU keeps a small cache of virtual-to-physical translations, the TLB. A huge page is the same memory in much bigger units, 2MB or 1GB, so one page-table entry covers up to 262,144x more ground.
+
+Postgres is unusually sensitive to page size. Its cache, shared_buffers, is one big shared-memory segment, and every backend process maps it through its own page tables. At 4KB pages, a 100GB cache costs each backend about 200MB of page-table entries, so 100 connections burns 20GB of RAM on page tables alone; with 2MB huge pages, tens of MB. And a TLB holds a few thousand translations, which covers just a few MB of that cache at 4KB, so each 2MB page gives a slot 512x the reach, the hot working set stays in the TLB, and reads stop stalling on page-table walks.
+
+In ClickHouse Managed Postgres every server runs its buffer cache on huge pages. Getting that to hold reliably takes three pieces: reserving the pages early, refusing to run without them, and sizing shared_buffers so the whole shared memory segment lands on the reserved pool exactly.
+
+![](https://clickhouse.com/uploads/hugepages_postgres_jul2026_image1_e990803005.png)
+
+## Reserving the pages {#reserving_the_pages}
+
+A quarter of the machine's memory is reserved as huge pages, mirroring the `shared_buffers` = 25% of RAM rule in the base configuration. The reservation runs before Postgres ever starts, and it flushes caches and compacts memory first so the kernel can still find contiguous 2MB blocks:
+
+<pre><code type='click-ui' language='bash'>
+echo 'vm.nr_hugepages = <target>' > /etc/sysctl.d/10-hugepages.conf
+sync
+echo 3 > /proc/sys/vm/drop_caches
+echo 1 > /proc/sys/vm/compact_memory
+sysctl --system
+</code></pre>
+
+The allocation is then verified against `HugePages_Total` in `/proc/meminfo`, and provisioning fails if the kernel comes up short. Huge pages can only be reserved reliably while memory is unfragmented; on a machine that has been under load, the same request routinely fails.
+
+## Refusing to run without them {#refusing_to_run_without_them}
+
+Postgres is pinned to `huge_pages = 'on'`, so it either gets its pages or refuses to start. The default, `'try'`, silently falls back to 4KB pages with nothing in the logs, and every property described above quietly disappears. A refusal at startup is diagnosable; a silent fallback is discovered months later, usually by a profiler.
+
+There is a runtime check, too. The postmaster's `/proc/<pid>/status` records how much of its address space sits on hugetlb pages; on the demo box below it reads:
+
+<pre><code type='click-ui' language='bash'>
+$ grep HugetlbPages /proc/<postmaster pid>/status
+HugetlbPages:   700416 kB
+</code></pre>
+
+`HugetlbPages: 0` on a server that should be using huge pages means the fallback happened.
+
+## Sizing shared_buffers to the page {#sizing_shared_buffers_to_the_page}
+
+Postgres's shared memory segment is bigger than shared_buffers: it also carries buffer descriptors, WAL buffers, and lock tables. On the demo box below, `shared_buffers = 32GB` produces a 32.75GB segment, about 750MB of overhead. If shared_buffers alone filled the reserved pool, the full segment would not fit, and `'on'` would refuse to boot. The sizing works in two passes. First point shared_buffers at the entire pool, then ask the binary what the full segment would actually cost, without starting the server:
+
+<pre><code type='click-ui' language='bash'>
+postgres -D <datadir> -C shared_memory_size
+</code></pre>
+
+Subtract the difference back out of shared_buffers, round down to whole 8KB blocks, and write the result:
+
+<pre><code type='click-ui' language='bash'>
+# conf.d/002-hugepages.conf
+huge_pages = 'on'
+huge_page_size = 0        # use the system default, 2MB
+shared_buffers = <measured fit>kB
+</code></pre>
+
+The overhead is measured rather than assumed because it shifts with version and settings, and measuring at the larger size errs a few pages under the reservation. The reserved pool and the rest of memory are then accounted separately: huge pages do not count toward the kernel's commit limit, so memory overcommit is tuned against the remaining 75% of RAM.
+
+## Seeing it on real hardware {#seeing_it_on_real_hardware}
+
+We put the claim about page tables on a single EC2 box: an `r7i.4xlarge` (16 vCPU, 128GB), Postgres 16 with `shared_buffers = 32GB`, and a pgbench dataset whose 15.6GB accounts table is loaded fully into the cache with `pg_prewarm`. Each test connection then runs one full sequential scan of that table, which makes its backend touch every cached page and build its complete page-table mapping, and holds the connection open. We sampled the kernel's `PageTables` counter from `/proc/meminfo` at 25, 50, 100, and 200 connections, once with 4KB pages and once with 2MB huge pages. Same box, same data, same access pattern; the only variable is the page size.
+
+![](https://clickhouse.com/uploads/hugepages_postgres_jul2026_image2_d02cfccbc0.png)
+
+With 4KB pages, page tables grow by 31.1MB per connection, matching the arithmetic (15.6GB of touched cache / 4KB pages x 8 bytes per entry = 31.2MB), and reach 6.1GB at 200 connections, kernel memory spent on bookkeeping for 15.6GB of data. With 2MB huge pages the same 200 connections cost 111MB, about 0.5MB per connection.
+
+| Connections | PageTables, 4KB | PageTables, 2MB huge pages |
+| ----: | ----: | ----: |
+| 0 | 48 MB | 5 MB |
+| 25 | 789 MB | 18 MB |
+| 50 | 1.53 GB | 31 MB |
+| 100 | 3.06 GB | 58 MB |
+| 200 | 6.12 GB | 111 MB |
+
+The `huge_pages = 'on'` behavior is equally visible. With no pool reserved, Postgres refuses to start and says why:
+
+<pre><code type='click-ui' language='bash'>
+FATAL:  could not map anonymous shared memory: Cannot allocate memory
+HINT:  This error usually means that PostgreSQL's request for a shared
+memory segment exceeded available memory, swap space, or huge pages.
+</code></pre>
+
+Throughput moves too, though less dramatically than the memory: select-only pgbench at 100 clients ran 373,083 TPS on 4KB pages and 418,087 TPS on 2MB huge pages, a 12% difference on an otherwise identical box. The structural change is in the memory: page tables that scale linearly with connections versus page tables that stay flat.
+
+## The takeaway {#the_takeaway}
+
+Huge pages turn shared_buffers from a per-connection page-table tax into a flat, translation-friendly cache. Reserving the pool before fragmentation, running `huge_pages = 'on'` so a broken setup fails at boot instead of degrading silently, and sizing the segment to the reservation with the numbers the postgres binary itself reports are what make the configuration hold in production rather than only on a fresh box.
+
+---
+
+## Try Postgres managed by ClickHouse
+
+ClickHouse + Postgres has become the unified data stack for applications that scale. With Managed Postgres now available in ClickHouse Cloud, this stack is a day-1 decision.
+
+[Sign up](https://clickhouse.com/cloud/postgres?loc=blog-cta-1323-try-postgres-managed-by-clickhouse-sign-up&utm_blogctaid=1323)
+
+---
 
 ---
 

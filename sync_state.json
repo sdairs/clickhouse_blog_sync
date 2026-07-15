@@ -1,5 +1,5 @@
 {
-  "last_sync": "2026-07-14T08:05:46.944195Z",
+  "last_sync": "2026-07-15T08:11:01.323497Z",
   "processed_blogs": {
     "https://clickhouse.com/blog/clickhouse-raises-400-million-series-d-acquires-langfuse-launches-postgres": {
       "title": "ClickHouse raises $400M Series D led by Dragoneer to accelerate expansion across analytics and AI infrastructure",
@@ -5406,9 +5406,27 @@
       "pub_date": "2026-07-13T00:00:00+00:00",
       "file_path": "blogs/2026-07-13-how-insider-one-uses-clickhouse-cloud-to-power.md",
       "processed_at": "2026-07-14T08:05:46.841721Z"
+    },
+    "https://clickhouse.com/blog/bullet-real-time-analytics": {
+      "title": "How Bullet uses ClickHouse Cloud to give DeFi's fastest exchange real-time analytics",
+      "pub_date": "2026-07-15T00:00:00+00:00",
+      "file_path": "blogs/2026-07-15-how-bullet-uses-clickhouse-cloud-to-give-defi-s.md",
+      "processed_at": "2026-07-15T08:11:00.918718Z"
+    },
+    "https://clickhouse.com/blog/clickhouse-rowbinary-library-parser-compiler": {
+      "title": "@clickhouse/rowbinary: when your library is also a parser compiler",
+      "pub_date": "2026-07-14T00:00:00+00:00",
+      "file_path": "blogs/2026-07-14-clickhouse-rowbinary-when-your-library-is-also-a.md",
+      "processed_at": "2026-07-15T08:11:01.054400Z"
+    },
+    "https://clickhouse.com/blog/huge-pages-clickhouse-managed-postgres": {
+      "title": "How we configure huge pages in ClickHouse Managed Postgres",
+      "pub_date": "2026-07-14T00:00:00+00:00",
+      "file_path": "blogs/2026-07-14-how-we-configure-huge-pages-in-clickhouse-managed.md",
+      "processed_at": "2026-07-15T08:11:01.220630Z"
     }
   },
-  "total_blogs": 901,
+  "total_blogs": 904,
   "failed_blogs": [
     {
       "url": "https://clickhouse.com/jp/blog/clickhouse-gcp-japan-availability",
