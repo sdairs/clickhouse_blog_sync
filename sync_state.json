@@ -1,5 +1,5 @@
 {
-  "last_sync": "2026-07-15T08:11:01.323497Z",
+  "last_sync": "2026-07-16T08:14:30.832563Z",
   "processed_blogs": {
     "https://clickhouse.com/blog/clickhouse-raises-400-million-series-d-acquires-langfuse-launches-postgres": {
       "title": "ClickHouse raises $400M Series D led by Dragoneer to accelerate expansion across analytics and AI infrastructure",
@@ -5424,9 +5424,21 @@
       "pub_date": "2026-07-14T00:00:00+00:00",
       "file_path": "blogs/2026-07-14-how-we-configure-huge-pages-in-clickhouse-managed.md",
       "processed_at": "2026-07-15T08:11:01.220630Z"
+    },
+    "https://clickhouse.com/blog/trainy-postgres-managed-by-clickhouse": {
+      "title": "Why Trainy migrated from Amazon RDS Postgres to ClickHouse Managed Postgres",
+      "pub_date": "2026-07-15T00:00:00+00:00",
+      "file_path": "blogs/2026-07-15-why-trainy-migrated-from-amazon-rds-postgres-to.md",
+      "processed_at": "2026-07-16T08:14:30.560225Z"
+    },
+    "https://clickhouse.com/blog/historical-ticker-data": {
+      "title": "Replacing the HDB: ClickHouse for historical ticker data",
+      "pub_date": "2026-07-15T00:00:00+00:00",
+      "file_path": "blogs/2026-07-15-replacing-the-hdb-clickhouse-for-historical.md",
+      "processed_at": "2026-07-16T08:14:30.756415Z"
     }
   },
-  "total_blogs": 904,
+  "total_blogs": 906,
   "failed_blogs": [
     {
       "url": "https://clickhouse.com/jp/blog/clickhouse-gcp-japan-availability",
