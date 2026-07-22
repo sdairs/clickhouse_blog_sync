@@ -1,5 +1,5 @@
 {
-  "last_sync": "2026-07-21T08:29:47.194889Z",
+  "last_sync": "2026-07-22T08:29:49.303817Z",
   "processed_blogs": {
     "https://clickhouse.com/blog/clickhouse-raises-400-million-series-d-acquires-langfuse-launches-postgres": {
       "title": "ClickHouse raises $400M Series D led by Dragoneer to accelerate expansion across analytics and AI infrastructure",
@@ -5448,9 +5448,21 @@
       "pub_date": "2026-07-21T00:00:00+00:00",
       "file_path": "blogs/2026-07-21-clickhouse-announced-as-principal-partner-and.md",
       "processed_at": "2026-07-21T08:29:47.094519Z"
+    },
+    "https://clickhouse.com/blog/datadog-receiver-opentelemetry-collector": {
+      "title": "Migrate Datadog telemetry with the OpenTelemetry Collector",
+      "pub_date": "2026-07-21T00:00:00+00:00",
+      "file_path": "blogs/2026-07-21-migrate-datadog-telemetry-with-the-opentelemetry.md",
+      "processed_at": "2026-07-22T08:29:49.035089Z"
+    },
+    "https://clickhouse.com/blog/postgresbench-ha": {
+      "title": "PostgresBench: Measuring the impact of High Availability on Managed Postgres performance",
+      "pub_date": "2026-07-21T00:00:00+00:00",
+      "file_path": "blogs/2026-07-21-postgresbench-measuring-the-impact-of-high.md",
+      "processed_at": "2026-07-22T08:29:49.197398Z"
     }
   },
-  "total_blogs": 908,
+  "total_blogs": 910,
   "failed_blogs": [
     {
       "url": "https://clickhouse.com/jp/blog/clickhouse-gcp-japan-availability",

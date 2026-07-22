@@ -1,6 +1,6 @@
 # ClickHouse Blogs
-Last updated: 2026-07-21 08:29:47 UTC
-Total blogs: 908
+Last updated: 2026-07-22 08:29:49 UTC
+Total blogs: 910
 
 ---
 
@@ -67,6 +67,341 @@ Last season, Fulham FC’s men’s first team finished in 11th position in the P
 ### Women’s First Team:
 
 Fulham FC Women’s Team completed the 2025/26 campaign in Tier 4 of the FA Women’s National League Division One South-East as Champions and were undefeated throughout the campaign. This impressive achievement marked a full two seasons of an unbeaten league run. Head Coach, Steve Jaye and his side will be competing in Tier 3 FA Women’s National League Southern Premier Division in 2026/27.
+
+
+---
+
+## Migrate Datadog telemetry with the OpenTelemetry Collector
+Published: 2026-07-21T00:00:00+00:00
+URL: https://clickhouse.com/blog/datadog-receiver-opentelemetry-collector
+
+---
+title: "Migrate Datadog telemetry with the OpenTelemetry Collector"
+date: "2026-07-21T18:01:08.450Z"
+author: "Mike Shi"
+category: "User stories"
+excerpt: "Recent improvements to the OpenTelemetry Collector's Datadog receiver let teams reroute telemetry from their existing Datadog agents and SDKs to ClickStack. or any OTel destination making migrations and evaluations simpler than ever."
+---
+
+# Migrate Datadog telemetry with the OpenTelemetry Collector
+
+## A faster way to start a Datadog migration {#a_faster_way_to_start_a_datadog_migration}
+
+Migrating an observability platform can involve much more than changing where your data is stored. Datadog agents and SDKs may already be deployed across thousands of applications, hosts, virtual machines, and Kubernetes pods. Replacing all of that instrumentation before evaluating another backend creates a substantial project at the start of a migration.
+
+With recent improvements to the Datadog receiver for the OpenTelemetry Collector, applications can keep their existing Datadog SDKs, while deployed agents can be reconfigured to send telemetry to the receiver using Datadog’s native protocols. The receiver translates logs, traces, and metrics into the OpenTelemetry data model and passes them through the standard Collector pipeline.
+
+Once in that pipeline, the telemetry can be filtered, transformed, batched, and exported to any supported destination. Teams can keep the collection infrastructure they already operate while evaluating another observability backend or beginning a wider migration.
+
+![](https://clickhouse.com/uploads/datadog_otel_jul2026_image6_eed07b574a.png)
+
+In this post, we’ll look at the improvements to the Datadog receiver and how they simplify migration to destinations supported by the OpenTelemetry Collector, using ClickStack as a worked example.
+
+## Why teams move telemetry out of Datadog {#why_teams_move_telemetry_out_of_datadog}
+
+For many teams, the reason to move observability data out of Datadog is cost. Log and trace volumes rise as applications grow and more services are instrumented. At scale, teams are left choosing between higher spend and retaining less of the telemetry they produce.
+
+Cost constraints then shape what is available during an investigation. Teams may sample traces, leave logs unindexed, roll up metrics, or shorten retention. Each of these controls reduces the context that engineers can query when they need to understand what happened.
+
+[ClickStack](https://clickhouse.com/clickstack) provides one example of how a different storage architecture changes this calculation. It is the out-of-the-box, open-source observability platform built on ClickHouse, combining an OpenTelemetry-native ingestion pipeline with a purpose-built interface for logs, metrics, and traces. It provides search, dashboards, alerting, trace exploration, and AI-assisted investigations. For large log and tracing workloads, ClickStack can be over 100x more cost-efficient than Datadog. This allows teams to set retention according to their operational requirements and keep the events they may need later.
+
+> Full-fidelity telemetry is especially useful for agentic investigations. An agent cannot reason about an event that was discarded before the investigation began. It also needs sufficient history to compare a current incident with earlier failures, behavioral changes, and longer-running patterns.
+
+Clever’s migration illustrates the difference. Its 400 services and 200 AWS Lambda functions generate around 150 TB of uncompressed logs each month. With Datadog, Clever indexed 10% of those logs and retained them for three days. After moving the workload to ClickHouse Cloud, it indexed all of its logs, increased retention to 60 days, and achieved a 10x compression ratio. Its engineers gained 200 times more searchable log data with no increase in cost.
+
+> “With ClickHouse, we see a compression ratio of 10x... These logs are easily accessible to all engineers; they don't have to think about whether to go to Grafana, Athena, Datadog, or whatnot. And all of this came at a 0% increase in cost.”
+> 
+> Jake Gutierrez, Senior Software Engineer at Clever
+
+## The hidden cost of changing observability platforms {#the_hidden_cost_of_changing_observability_platforms}
+
+While the economics may be compelling, reaching them can look daunting. A large organization may have hundreds of applications instrumented with Datadog SDKs and thousands of Datadog agents deployed across hosts, Kubernetes clusters, and virtual machines. Replacing this with instrumentation and an OpenTelemetry-based collection layer can become a substantial project of its own.
+
+This involves more than replacing one agent with another. Teams may need to deploy and configure OpenTelemetry Collectors, update application instrumentation, recreate log processing and routing rules, and verify that fields and correlations survive the change. Application and infrastructure teams often work to different release schedules, making a coordinated migration difficult to complete quickly.
+
+For teams already committed to standardizing on OpenTelemetry, this work is worthwhile. For others, it may be too much to take on alongside a platform migration. Teams should also be able to evaluate a new observability platform before making that commitment. Separating the collection-layer migration from the platform migration lets them evaluate the platform quickly, then decide independently whether to adopt OpenTelemetry or continue using their existing collection infrastructure.
+
+## Keep your Datadog agents while you evaluate a new stack {#keep_your_datadog_agents_while_you_evaluate_a_new_stack}
+
+In a typical OpenTelemetry deployment, telemetry is sent to an OpenTelemetry Collector before it is stored in the target data store or observability solution. The Collector receives data from agent-mode Collectors, such as those collecting Kubernetes metrics and logs, or OpenTelemetry SDKs instrumenting applications. The collector applies any required filtering or transformations, batches events, and sends these to the target destination.
+
+![](https://clickhouse.com/uploads/datadog_otel_jul2026_image8_c6ecef19ff.png)
+
+> Collectors can be deployed in different ways. An agent-mode Collector can run close to an application or host, while centralized gateway Collectors receive data from many agents over OTLP. At larger scales, this gateway layer provides a central place to manage processing, routing, and batching. 
+
+The [Datadog receiver](https://github.com/open-telemetry/opentelemetry-collector-contrib/tree/main/receiver/datadogreceiver) adds another input to this architecture. The receiver has been part of the OpenTelemetry Collector Contrib distribution for some time and exposes an endpoint that understands the protocols used by Datadog agents and SDKs. It converts the incoming Datadog payloads into the OpenTelemetry data model, after which they pass through the normal Collector pipeline.
+
+Existing Datadog agents can therefore be reconfigured to send logs and traces to the receiver running on a centralized OpenTelemetry Collector. Applications can keep their existing Datadog SDKs, and the agents already deployed across the infrastructure remain in place.
+
+![](https://clickhouse.com/uploads/datadog_otel_jul2026_image5_8ebfe7a260.png)
+
+Once Datadog telemetry enters the Collector pipeline, it can be processed and exported to any supported destination. Teams can keep their existing Datadog agents and SDKs while changing the storage and analysis backend. This can remain their collection path or support an incremental move to OpenTelemetry instrumentation over time.
+
+The same setup makes evaluation easier. A Collector pipeline can use multiple exporters, allowing teams to send the same telemetry to their existing platform and a new destination, such as ClickStack, in parallel. They can compare both platforms using the same data before deciding whether to migrate.
+
+![](https://clickhouse.com/uploads/datadog_otel_jul2026_image3_67d0c982ce.png)
+
+## Worked example with ClickStack {#worked_example_with_clickstack}
+
+<iframe width="768" height="432" src="https://www.youtube.com/embed/i4wj8C8yqYw" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe>
+
+In the example below, we use ClickStack to show how telemetry from existing Datadog agents and SDKs can be migrated to another observability backend. 
+
+For this, we use the ClickStack distribution of the OpenTelemetry Collector, published as `clickhouse/clickhouse-otel-collector`. We maintain this distribution with defaults optimized for ClickHouse, and it includes the Datadog receiver configured to listen on port 8126.
+
+ClickStack secures ingestion using the ingestion API key provided in the HyperDX interface. We pass this value to the Datadog agent/SDK as its API key, allowing the ClickStack Collector to authenticate incoming telemetry before accepting it. 
+
+The following example shows how to start the Collector, configure the Datadog agent, and send logs and traces into ClickStack. 
+
+This demo will use the [Hacker News demo app](https://github.com/ClickHouse/hn-news-analyzer). If you want to follow along, you’ll need to clone the `datadog-instrumentation` branch:
+
+<pre><code type='click-ui' language='bash'>
+git clone --branch datadog-instrumentation https://github.com/ClickHouse/hn-news-analyzer.git
+</code></pre>
+
+You’ll then need to follow the [instructions in the README](https://github.com/ClickHouse/hn-news-analyzer/tree/datadog-instrumentation) to run the app.
+
+![HackerNews Analyzer _ ClickStack OTel Demo · 5.07pm · 07-21.jpeg](https://clickhouse.com/uploads/Hacker_News_Analyzer_Click_Stack_O_Tel_Demo_5_07pm_07_21_74690d468d.jpeg)
+
+*A screenshot of the HackerNews app*
+
+
+Once you’ve done that, launch ClickStack, using the [all-in-one image](https://clickhouse.com/docs/use-cases/observability/clickstack/deployment/all-in-one). This image includes both ClickHouse, the ClickStack UI (HyperDX), and the ClickStack distribution of the Open Telemetry collector:
+
+<pre><code type='click-ui' language='bash'>
+docker run --name clickstack \
+  -p 8080:8080 \
+  -p 8123:8123 \
+  -p 4317:4317 \
+  -p 4318:4318 \
+  -p 127.0.0.1:18126:8126 \
+  -e ENABLE_DATADOG_RECEIVER=true \
+clickhouse/clickstack-all-in-one:latest
+</code></pre>
+
+Here, we map port 8126 on the Collector container to port 18126 on the host. The Datadog receiver is therefore available at [http://127.0.0.1:18126](http://127.0.0.1:18126). We also need to enable the Datadog receiver with the environment variable `ENABLE_DATADOG_RECEIVER`.
+
+Next, we’ll [install the Datadog agent](https://docs.datadoghq.com/agent/?tab=Host-based). On a Mac, you can do this by running the following command:
+
+<pre><code type='click-ui' language='bash'>
+DD_SITE="datadoghq.com" bash -c "$(curl -L https://install.datadoghq.com/scripts/install_mac_os.sh)"
+</code></pre>
+
+Once that’s downloaded, we’ll update `/opt/datadog-agent/etc/datadog.yaml` to send traces and logs to the ClickStack OTel collector.
+
+<pre><code type='click-ui' language='bash'>
+api_key: "&lt;YOUR_CLICKSTACK_INGESTION_KEY&gt;"
+
+# Metrics destination
+dd_url: "http://127.0.0.1:18126"
+
+# ClickStack currently supports the Datadog v2 metrics intake.
+use_v3_api:
+  series:
+    enabled: false
+
+# Trace destination
+apm_config:
+  enabled: true
+  apm_dd_url: "http://127.0.0.1:18126"
+
+# Log destination
+logs_enabled: true
+
+logs_config:
+  logs_dd_url: "http://127.0.0.1:18126"
+  force_use_http: true
+
+# These require Datadog's backend, which we aren't using, so we disable them.
+remote_updates: false
+
+remote_configuration:
+  enabled: false
+</code></pre>
+
+We can get the API key by navigating to the ClickStack UI, selecting our user in the bottom-left corner, going to `Team Settings` > `API and Agents,` and copying the `Ingestion API Key`.
+
+![Untitled Design 1999x1130.png](uploads/Untitled_Design_1999x1130_4583d3d24f.png)
+
+Once we’ve updated that config, we’ll need to restart the Datadog agent:
+
+<pre><code type='click-ui' language='bash'>
+sudo launchctl kickstart -k system/com.datadoghq.agen
+</code></pre>
+
+We can then navigate back to the ClickStack UI and explore traces, logs, and metrics captured by the Datadog agent.
+
+
+![](https://clickhouse.com/uploads/datadog_otel_jul2026_image1_879224e089.png)
+
+![](https://clickhouse.com/uploads/datadog_otel_jul2026_image2_84a4edc6ed.png)
+
+![](https://clickhouse.com/uploads/datadog_otel_jul2026_image4_aad8fadc5a.png)
+
+## Contributing improvements {#contributing_improvements}
+
+When we evaluated the existing receiver against real Datadog migration workloads, we found several gaps that affected logs and traces. Most of the work focused on translating Datadog payloads into the correct OpenTelemetry representation so that downstream systems could interpret, correlate, and query the data without needing Datadog-specific logic.
+
+The improvements included:
+
+* **Correct OpenTelemetry log records.** Previously, fields were written as string attributes, and the log timestamp was not set, causing records to appear at the Unix epoch. The receiver now converts Datadog’s millisecond timestamps to nanoseconds and populates the OpenTelemetry timestamp, observed timestamp, body, severity, and resource fields.  
+* **Resource attributes and severity.** Datadog statuses such as `info`, `warn`, and `error` now map to the corresponding OpenTelemetry `SeverityNumber` and `SeverityText`. Hostnames, service names, environments, and known container, cloud, and Kubernetes tags are promoted to standard resource attributes. Logs are then grouped by their resource.  
+* **Trace and log correlation.** The `dd.trace_id` and `dd.span_id` fields now populate the OpenTelemetry record’s actual trace and span identifiers. The receiver also reconstructs full 128-bit trace IDs from Datadog’s split representation. This behavior is enabled by default, allowing Datadog-sourced logs and spans to correlate with services instrumented using OpenTelemetry.  
+* **Structured JSON logs.** Datadog agents forward application JSON logs as an opaque string because JSON preprocessing normally happens in the Datadog backend. The receiver now provides a `decode_json_message`  option, enabled by default, that performs this processing in the Collector. It extracts the body, timestamp, severity, trace identifiers, resource fields, and remaining log attributes.  
+* **Compatibility with current Datadog agents.** Datadog Agent 7.59 and later compresses HTTP payloads with Zstandard by default. The receiver now supports Zstandard alongside gzip, allowing current agents to connect without their payloads being rejected.
+
+Together, these changes allow a Datadog agent to send correlated, OpenTelemetry-native logs, metrics and traces to an OpenTelemetry Collector.
+
+We have included the updated receiver in the ClickStack OpenTelemetry Collector distribution. All of these improvements were also contributed to the upstream OpenTelemetry Collector Contrib project, making them available to anyone using the standard Contrib distribution.
+
+## What you can migrate today {#what_you_can_migrate_today}
+
+The Datadog receiver remains an alpha component in OpenTelemetry Collector Contrib and is thus also marked as experimental in the ClickStack Collector distribution - requiring a feature flag to enable it. There is still work to do before we recommend it as the basis for large-scale production migrations.
+
+We have tested the updated receiver extensively with log and trace workloads and are comfortable recommending it for evaluating ClickStack, while metrics require further testing and development. The receiver currently supports Datadog’s v1 and v2 metrics intake endpoints. Agent deployments using newer protocol versions must be configured explicitly to send metrics through a supported endpoint. We plan to continue improving this coverage through the upstream OpenTelemetry project.
+
+For now, the receiver provides a quick way to evaluate ClickStack or another observability platform when your applications already use Datadog SDKs or your infrastructure runs Datadog agents. A Collector pipeline can send the same logs and traces to Datadog and the platform being evaluated, allowing both telemetry pipelines to run in parallel. Teams can validate how their data is represented and queried in the new platform while their existing Datadog pipeline remains in place, then decide whether to proceed with a wider migration. If the evaluation demonstrates clear benefits, the same architecture can support a gradual migration, keeping existing Datadog instrumentation in place while services move to OpenTelemetry over time.
+
+## Conclusion {#conclusion}
+
+With these improvements, we believe the Datadog receiver is ready for broader use across observability platforms. We’re pleased to make it available in ClickStack’s distribution of the OpenTelemetry Collector, and we’ve contributed the changes upstream for anyone using the standard Contrib distribution.
+
+---
+
+## Get started today
+
+Interested in seeing how ClickHouse works on your data? Get started with ClickHouse Cloud in minutes and receive $300 in free credits.
+
+[Sign up](https://console.clickhouse.cloud/signUp?loc=blog-cta-1356-get-started-today-sign-up&utm_blogctaid=1356)
+
+---
+
+---
+
+## PostgresBench: Measuring the impact of High Availability on Managed Postgres performance
+Published: 2026-07-21T00:00:00+00:00
+URL: https://clickhouse.com/blog/postgresbench-ha
+
+---
+title: "PostgresBench: Measuring the impact of High Availability on Managed Postgres performance"
+date: "2026-07-21T16:13:25.605Z"
+author: "Lionel Palacin, Sai Srirampur and Andrey Chudnovskiy"
+category: "Engineering"
+excerpt: "PostgresBench now includes HA benchmarks, comparing the performance of managed Postgres services under production-style HA configurations. This post explains the architectures behind each service and analyzes the trade-offs between availability guarantees"
+---
+
+# PostgresBench: Measuring the impact of High Availability on Managed Postgres performance
+
+A few months ago, [we released PostgresBench](https://clickhouse.com/blog/postgresbench), an open source benchmark that compares managed Postgres performance across vendors with a [transparent, reproducible methodology](https://github.com/ClickHouse/PostgresBench/). It was well received by the [Postgres community](https://news.ycombinator.com/item?id=48611942), and the most common piece of feedback we heard was why we hadn't benchmarked any high availability configurations. Today, we've addressed that, and we're sharing results for HA configurations across those same vendors.
+
+One important clarification: this isn't a complete high-availability comparison across vendors. It measures only the performance cost of achieving comparable levels of availability and data durability across various Postgres managed services.
+
+![postgresbench-ha-screenshot.png](https://clickhouse.com/uploads/postgresbench_ha_screenshot_3bcf16f181.png)
+
+---
+
+## Get started with ClickHouse Managed Postgres today
+
+Interested in seeing how ClickHouse Managed Postgres works on your data? Get started with ClickHouse Cloud in minutes and receive $300 in free credits.
+
+[Sign up](https://console.clickhouse.cloud/signUp?loc=blog-cta-1353-get-started-with-clickhouse-managed-postgres-today-sign-up&utm_blogctaid=1353)
+
+---
+
+## HA Setup across Postgres services
+
+Managed Postgres services typically use two different architectures to provide high availability. 
+
+**Shared-nothing** services (ClickHouse Managed Postgres, AWS RDS, and Crunchy Bridge) use isolated compute and single-tenant storage deployments for each customer instance, and rely on native PostgreSQL replication, with one or more physical streaming standbys and automatic failover if the primary becomes unavailable. 
+
+**Shared-storage** services (AWS Aurora and Neon, both forks of Postgres) separate compute and storage, achieving durability by writing multiple copies of the WAL to a replicated storage layer on the commit path, and replacing failed compute nodes without relying on traditional streaming replicas.
+
+For this comparison, we've defined high availability as the system's claim to recover after a primary failure within 2 minutes and zero data loss guarantees. We selected the closest comparable HA configuration offered by each managed service while keeping the comparison as fair as possible. The sections below describe the configuration we benchmarked for each vendor.
+
+We matched the primary compute resources (CPU and RAM) as closely as possible across all vendors to ensure a fair comparison. For the shared-storage services this is not the full picture: hardware profiles and redundancy configuration on the storage backends are not publicly disclosed, though they contribute to system performance and reliability.
+
+### ClickHouse Managed Postgres
+
+**ClickHouse Managed Postgres** is a local NVMe-backed Postgres service optimized for high-performance OLTP workloads. Because local NVMe storage is ephemeral in the event of compute failures, the service offers [multiple high-availability (HA) configurations](https://clickhouse.com/docs/cloud/managed-postgres/high-availability) with different durability levels.
+
+The single-standby configuration uses asynchronous replication and is ideal for workloads that can tolerate a small recovery point objective (RPO) i.e. accepting a few milli-seconds of lost transactions. The two-standby configuration uses synchronous quorum replication to provide zero data loss (RPO \= 0). Because all durability and high availability come from PostgreSQL replication and WAL upload rather than replicated disks, zero data loss with cross-AZ high availability today requires this quorum of 3 instances; we're working on a similar durability guarantee without the 3rd instance.
+
+This was an intentional design choice to provide customers with the control and flexibility to choose their preferred HA configuration (0, 1, or 2 standbys) based on the mission-criticality of their workload. Both configurations are designed for fast failover, with hot standbys that minimize recovery time (RTO) when the primary becomes unavailable.
+
+### Crunchy Bridge
+
+Crunchy Bridge (Snowflake Postgres) provide [high availability](https://docs.crunchybridge.com/concepts/high-availability) using a single physical streaming standby replica. By default, replication is asynchronous. We were unable to configure synchronous replication (tweaking `synchronous_commit`) and did not find an option to guarantee a zero RPO. If we overlooked a supported configuration or setting, please let us know, we're happy to update this post accordingly.
+
+### AWS RDS Postgres
+
+AWS RDS (and Crunchy Bridge) rely on replicated managed disks for in-AZ durability, and hot standby PostgreSQL instances for high availability and cross-AZ durability. RDS supports one or two standbys, and both options always replicate synchronously, so there's no data loss on failover. We tested both: [Multi-AZ DB instance (one standby)](https://docs.aws.amazon.com/AmazonRDS/latest/UserGuide/Concepts.MultiAZSingleStandby.html) and [Multi-AZ DB cluster (two standbys, quorum)](https://docs.aws.amazon.com/AmazonRDS/latest/UserGuide/multi-az-db-clusters-concepts.html).
+
+### AWS Aurora Postgres
+
+Aurora Postgres is an AWS-maintained fork of Postgres that provides high availability through a shared storage architecture rather than native Postgres streaming replication. Data is synchronously replicated across multiple storage nodes across multiple Availability Zones, and reader instances share the same storage volume as the writer. Hot standbys in shared-storage systems are not required for durability, while still beneficial for faster failovers or read traffic scale-out; AWS [recommends](https://docs.aws.amazon.com/AmazonRDS/latest/AuroraUserGuide/Concepts.AuroraHighAvailability.html) deploying at least one Aurora Replica (reader) for High Availability. The replica enables automatic failover and fast recovery if the primary instance becomes unavailable. We benchmarked a cluster with one writer and one Aurora Replica.
+
+### Neon
+
+Neon is also a fork of Postgres that follows a separation of storage and compute architecture. Read throughput relies on a combination of local caches on the compute instances and remote reads from separate distributed systems usually referred to as "page servers". Neon goes further with multi-tenancy in the platform, with serverless compute clusters and connection gateways; those components introduce further trade-offs for business-critical workloads ([reference](https://clickhouse.com/blog/socialpruf#addressing-reliability-issues-and-network-costs-with-neon-postgres)), while adding flexibility and potential cost savings.
+
+Neon positions its [high availability (HA)](https://neon.com/docs/introduction/high-availability) around eliminating the need for a standby node by bringing up a new compute node very quickly during a failover and attaching it to the existing storage. The company presents this as a cost advantage. The claim that a standby node is not required is questionable given Neon's track record of [availability and reliability issues](https://clickhouse.com/blog/socialpruf#addressing-reliability-issues-and-network-costs-with-neon-postgres) affecting many customers. However, for the purposes of this benchmark, we evaluate Neon's HA based on its documented architecture and positioning.
+
+
+
+## Benchmark results
+
+We benchmarked each configuration across a range of database instance sizes and dataset sizes, and every result is available on [PostgresBench](https://postgresbench.clickhouse.com/). Below, we present results for the largest instance size (16 vCPU, 64 GB RAM) and the largest dataset (500 GB), with each test running for 10 minutes. We report average transactions per second (TPS) and p99 transaction latency. 
+
+The table below also includes a Single node row for each vendor, the single-node baseline already published in the first round of PostgresBench. Aurora and Neon results in this table are basically their single node deployment. 
+
+| Vendor | Configuration | Avg TPS | TPS vs own Single node | Avg latency | Avg latency vs own Single node | p99 latency | p99 vs own Single node |
+| :---- | :---- | :---- | :---- | :---- | :---- | :---- | :---- |
+| ClickHouse Managed Postgres | Single node | 26,328 | 100% | 9.70 ms | 100% | 13.20 ms | 100% |
+| ClickHouse Managed Postgres | 1 standby, async | 24,667 | 94% | 10.37 ms | 107% | 24.17 ms | 183% |
+| ClickHouse Managed Postgres | 2 standbys, sync (quorum) | 20,720 | 79% | 12.34 ms | 127% | 33.49 ms | 254% |
+| Crunchy Bridge | Single node | 11,113 | 100% | 23.00 ms | 100% | 41.68 ms | 100% |
+| Crunchy Bridge | HA (1 standby, async) | 11,135 | 100% | 23.00 ms | 100% | 41.89 ms | 101% |
+| RDS by AWS | Single node | 4,399 | 100% | 58.14 ms | 100% | 130.15 ms | 100% |
+| RDS by AWS | Multi-AZ instance (1 sync) | 4,461 | 101% | 57.35 ms | 99% | 221.69 ms | 170% |
+| RDS by AWS | Multi-AZ cluster (2 sync, quorum) | 4,659 | 106% | 54.92 ms | 94% | 816.63 ms | 627% |
+| AWS Aurora  | Single node | 9,238 | 100% | 27.69 ms | 100% | 39.81 ms | 100% |
+| AWS Aurora  | HA (1 standby, async) | 9,520 | 103% | 26.87 ms | 97% | 39.92 ms | 100% |
+| Neon | Single node | 7,802 | 100% | 32.80 ms | 100% | 56.30 ms | 100% |
+
+### Shared-nothing architecture
+
+For the vendors that rely on standby replicas, comparing at matched compute and comparable durability levels:
+
+1. **RDS Postgres:** For 0 RPO setup with fast failover (seconds-to-minutes RTO), ClickHouse Managed Postgres with 2 synchronous standbys (quorum) shows \~4× higher TPS, \~3× lower p50 latency, and \~7× lower p99 latency than Amazon RDS Multi-AZ with both single and two replicas.  
+2. **Crunchy Bridge:** Against Crunchy Bridge's closest comparable HA configuration (1 asynchronous standby, fast failover with a small non-zero RPO), ClickHouse Managed Postgres (1 asynchronous standby) shows \~2.2× higher TPS, \~3.5× lower p50 latency, and \~1.75× lower p99 latency, while also providing stronger durability guarantees.
+
+### Shared-storage architecture
+
+For the shared-storage services, comparing at matched primary compute size:
+
+3. **Aurora Postgres:** ClickHouse Postgres demonstrates a 2×+ throughput and latency advantage with a similarly configured PostgreSQL primary compute size with 1 standby.  
+4. **Neon:** ClickHouse Postgres demonstrates a 3×+ throughput and latency advantage with a similarly configured PostgreSQL primary compute size.
+
+## Conclusion
+
+We’re happy to have added HA support. It better reflects a production-ready managed Postgres deployment and helps users understand the performance impact of different data durability implementations.
+
+We’re not done yet, and we have plenty of ideas for where to take PostgresBench next. Areas we plan to invest in include adding more managed Postgres providers, making benchmark duration configurable, introducing additional workloads such as TPC-C and TPROC-C, and exposing more configuration options, including PostgreSQL configuration parameters. We also plan to analyze the cost-performance trade-offs across managed Postgres providers, similar to what we’ve been doing with [CostBench](https://clickhouse.com/blog/costbench-data-warehouse-cost-performance) for ClickHouse. Your feedback will help shape what comes next as we work toward making PostgresBench the default, fully reproducible benchmark for managed Postgres services.
+
+[PostgresBench](https://github.com/ClickHouse/PostgresBench/) is open source and available on GitHub. Please review the methodology, reproduce the benchmarks, and contribute support for additional vendors.
+
+---
+
+## Get started with ClickHouse Managed Postgres today
+
+Interested in seeing how ClickHouse Managed Postgres works on your data? Get started with ClickHouse Cloud in minutes and receive $300 in free credits.
+
+[Sign up](https://console.clickhouse.cloud/signUp?loc=blog-cta-1354-get-started-with-clickhouse-managed-postgres-today-sign-up&utm_blogctaid=1354)
+
+---
+
+
+
 
 
 ---
