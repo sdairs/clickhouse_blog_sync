@@ -1,5 +1,5 @@
 {
-  "last_sync": "2026-07-22T08:29:49.303817Z",
+  "last_sync": "2026-07-23T08:31:03.975059Z",
   "processed_blogs": {
     "https://clickhouse.com/blog/clickhouse-raises-400-million-series-d-acquires-langfuse-launches-postgres": {
       "title": "ClickHouse raises $400M Series D led by Dragoneer to accelerate expansion across analytics and AI infrastructure",
@@ -5460,9 +5460,21 @@
       "pub_date": "2026-07-21T00:00:00+00:00",
       "file_path": "blogs/2026-07-21-postgresbench-measuring-the-impact-of-high.md",
       "processed_at": "2026-07-22T08:29:49.197398Z"
+    },
+    "https://clickhouse.com/blog/agentic-infrastructure-clickhousectl-distributed-clickstack": {
+      "title": "Agentic infrastructure with clickhousectl: a distributed ClickStack across three continents",
+      "pub_date": "2026-07-22T00:00:00+00:00",
+      "file_path": "blogs/2026-07-22-agentic-infrastructure-with-clickhousectl-a.md",
+      "processed_at": "2026-07-23T08:31:03.726446Z"
+    },
+    "https://clickhouse.com/blog/benchmarking-the-clickstack-mcp-server-with-hdx-evals": {
+      "title": "Benchmarking the ClickStack MCP Server with hdx-evals",
+      "pub_date": "2026-07-22T00:00:00+00:00",
+      "file_path": "blogs/2026-07-22-benchmarking-the-clickstack-mcp-server-with-hdx.md",
+      "processed_at": "2026-07-23T08:31:03.896593Z"
     }
   },
-  "total_blogs": 910,
+  "total_blogs": 912,
   "failed_blogs": [
     {
       "url": "https://clickhouse.com/jp/blog/clickhouse-gcp-japan-availability",
