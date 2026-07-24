@@ -1,6 +1,68 @@
 # ClickHouse Blogs
-Last updated: 2026-07-23 08:31:03 UTC
-Total blogs: 912
+Last updated: 2026-07-24 08:27:56 UTC
+Total blogs: 914
+
+---
+
+## ClickHouse achieves AWS Small and Medium Business Competency
+Published: 2026-07-23T00:00:00+00:00
+URL: https://clickhouse.com/blog/achieves-aws-smb-competency
+
+---
+title: "ClickHouse achieves AWS Small and Medium Business Competency"
+date: "2026-07-23T18:54:44.595Z"
+author: "Aditya Chidurala"
+category: "Company and culture"
+excerpt: "ClickHouse has achieved the AWS Small and Medium Business Competency, joining a select group of AWS Partners recognized for deep expertise in real-time analytics for small and medium businesses."
+---
+
+# ClickHouse achieves AWS Small and Medium Business Competency
+
+## Summary
+
+ClickHouse has achieved the AWS Small and Medium Business Competency, joining a select group of AWS Partners recognized for deep expertise in real-time analytics for small and medium businesses.
+
+We're excited to announce that ClickHouse has achieved the AWS Small and Medium Business (SMB) Competency
+
+The designation recognizes AWS Partners with validated technical expertise and demonstrated customer success serving small and medium businesses, which AWS defines as companies with annualized revenue under $100 million. Partners must show a sustained base of more than 100 active SMB customers on their AWS-hosted SaaS product.
+
+Earning it means AWS has reviewed our production architectures, our security and operational practices, and our customer outcomes, and it reflects the work we've done with lean teams that punch far above their weight on ClickHouse Cloud.
+
+
+## Meeting the unique demands of SMB data
+
+Almost every SMB analytics story starts the same way. The product launches on PostgreSQL, the business grows, and the analytical queries that returned in milliseconds at launch now take minutes. The usual answers don't fit a small company: hiring a data engineering team is expensive, pre-aggregating throws away the raw data the business will want later, and running an analytics cluster yourself trades one operational burden for another. 
+
+ClickHouse Cloud is built for teams in that position. It's a fully managed service, so there's no database to install, patch, or capacity plan, and [ClickPipes](https://clickhouse.com/cloud/clickpipes) replicates PostgreSQL data through change data capture in a few clicks, so the operational database keeps doing its job while analytics move to an engine designed for them. [Compute-compute separation](https://clickhouse.com/docs/cloud/reference/warehouses) isolates ingestion from customer-facing queries on shared storage, so each workload pays only for what it uses. Pricing starts with a $300 free trial and scales pay-as-you-go. Procurement runs through [AWS Marketplace](https://aws.amazon.com/marketplace/pp/prodview-p4gwofrqpkltu), where SMBs can apply existing AWS commitments and keep billing consolidated, moving to a committed contract only when the numbers justify it. And for teams that would rather run one platform than two, ClickHouse Cloud also offers Postgres managed by ClickHouse, so the transactional database that starts the story and the analytics engine that scales it live side by side, with CDC built in.
+
+---
+
+## Get started today
+
+Interested in seeing how ClickHouse works on your data? Get started with ClickHouse Cloud in minutes and receive $300 in free credits.
+
+[Sign up](https://console.clickhouse.cloud/signUp?loc=blog-cta-1383-get-started-today-sign-up&utm_blogctaid=1383)
+
+---
+
+## Customer success from sewer pipes to newsletters
+
+[SewerAI](https://clickhouse.com/blog/sewerai-sewer-management-at-scale) uses computer vision to detect defects in sewer and stormwater inspection footage for cities, water utilities, and engineering firms. Its analytics run on ClickHouse Cloud, with ClickPipes replicating Amazon RDS for PostgreSQL through change data capture and refreshable materialized views joining more than 40 tables into a single denormalized table holding hundreds of billions of rows. Municipal queries that took minutes on Postgres now return in seconds, and when data volume tripled and read and write operations grew tenfold over three months, compute usage stayed flat. "We didn't have any more failing updates. Because of that, we didn't have backlogs. Our analytics were up to date, and our customers were happy," says Sabrina Kell, Senior Software Engineer at SewerAI.
+
+[Rapid Delivery Analytics](https://clickhouse.com/blog/rda-tracks-real-time-cpg-performance-with-clickhouse), a digital-shelf analytics platform for quick commerce, runs a team of under 25 people serving CPG brands like PepsiCo and Unilever across more than 40 delivery apps in over 100 countries. ClickHouse Cloud on AWS ingests more than 500 GB of raw data a day, search queries return in under a second, and daily aggregations across billions of rows complete in under an hour. "ClickHouse Cloud is the core of our solution. It gives us the kind of capabilities and infrastructure you'd expect from a much bigger, better-known corporation, while still letting us stay lean," says co-founder and CEO Andrey Dyatlov.
+
+[m3ter](https://clickhouse.com/blog/why-m3ter-clickhouse-cloud), the usage-based billing platform, has a requirement most databases can't meet: store every raw usage event without pre-aggregating, because customers change pricing mid-cycle and rerate their bills, then aggregate hundreds of millions of events a month fast enough for near-real-time invoices. On ClickHouse Cloud, queries average under 100 ms, compression runs at 11.4x, and the database cost for its rating workload dropped roughly 85% against the previous solution. Storage offloads to Amazon S3, AWS PrivateLink keeps billing data off the public internet, and the whole deployment was purchased through AWS Marketplace.
+
+[beehiiv](https://clickhouse.com/blog/data-hive-the-story-of-beehiivs-journey-from-postgres-to-clickhouse), the newsletter platform sending billions of emails a month, moved analytics off PostgreSQL when its team spent more time fighting scalability fires than shipping features. Amazon MSK now streams every send, open, click, and web session into ClickHouse Cloud, with Postgres CDC ClickPipes syncing operational context alongside. Publishers who once waited hours after an email blast see performance data in seconds, median query latency sits at 22 ms, and the main analytics table has grown past 177 billion rows.
+
+The pattern repeats across the SMB base. [Padlet](https://clickhouse.com/blog/padlet) ingested nearly 8 billion classroom events in a single month on ClickHouse Cloud with a median latency of 45 ms. [Mintlify](https://clickhouse.com/blog/mintlify) replaced PostHog with ClickHouse Cloud, cut dashboard load times to under a second at 60% lower cost, and estimates a 30% NPS improvement. You'll find more in our [user stories on AWS](https://clickhouse.com/user-stories?cloudProvider=aws).
+
+
+## Looking ahead
+
+SMBs are adopting AI faster than they're hiring data teams, and the two trends only work together if the data layer holds up. We're continuing to invest here, from ClickPipes and Postgres CDC ingestion to the [ClickHouse MCP server](https://clickhouse.com/ai) that lets AI agents query business data directly, all on a service that starts at $300 in credits and grows to a committed contract without a replatform. If you're a small team with a big data problem on AWS, we'd love to work with you.
+
+[Get started](https://clickhouse.cloud/signUp?loc=blog-cta-footer&utm_source=clickhouse&utm_medium=web&utm_campaign=blog) with ClickHouse Cloud today and receive $300 in credits. At the end of your 30-day trial, continue with a pay-as-you-go plan, or [contact us](https://clickhouse.com/company/contact?loc=blog-cta-footer) to learn more about our volume-based discounts. Visit our [pricing page](https://clickhouse.com/pricing?loc=blog-cta-header) for details.
 
 ---
 
@@ -11403,6 +11465,152 @@ The leadership expansion comes amid a period of exceptional momentum for ClickHo
 <div align="center">
   <img src="/uploads/ed_lenta_headshot_7c4a3d6abe.jpg" alt="Ed Lenta" width="400" />
 </div>
+
+---
+
+## What's new in clickhousectl v0.3.0
+Published: 2026-06-09T00:00:00+00:00
+URL: https://clickhouse.com/blog/clickhousectl-v0-3-0
+
+---
+title: "What's new in clickhousectl v0.3.0"
+date: "2026-07-23T17:10:28.201Z"
+author: "Al Brown"
+category: "Product"
+excerpt: "clickhousectl v0.3.0 brings a raft of improvements for the agentic experience, more ways to install, OAuth support for Query Endpoints, and custom configs."
+---
+
+# What's new in clickhousectl v0.3.0
+
+[`clickhousectl`](https://github.com/ClickHouse/clickhousectl) is the CLI for ClickHouse, local and cloud, built to help both humans and AI agents develop with ClickHouse.
+
+[v0.2.0](https://clickhouse.com/blog/clickhousectl-v0-2-0-postgres-clickpipes-more) brought managed Postgres, ClickPipes for eight data sources, and SQL-over-HTTP. v0.3.0 brings a raft of improvements for the agentic experience, more ways to install, OAuth support for Query Endpoints, and custom configs.
+
+If you already have it installed, update in place:
+
+```bash
+clickhousectl update
+```
+
+If not, install it using your favorite method below:
+
+```bash
+curl https://clickhouse.com/cli | sh
+pip install clickhousectl
+uv tool install clickhousectl
+npm i -g clickhousectl
+cargo install clickhousectl
+```
+
+## A global `clickhouse` on your PATH
+
+When you select a default ClickHouse version with `clickhousectl local use latest`, this now puts ClickHouse on your path at `~/.local/bin/clickhouse`. It's similar to doing `./clickhouse install` with the binary itself, but allows you to manage the version globally with `clickhousectl`. This means you can shell directly to the `clickhouse` binary to use its myriad of subcommands (`local`, `benchmark`, `format`, etc,.)
+
+## Improving the agent experience
+
+### Structured output by default for agents
+
+In v0.3.0, `clickhousectl` can detect when it's running inside various coding agents, and optimise its behavior automatically. For example, it will now default to JSON output on stdout when running inside an agent.
+
+This detection depends on agents self-declaring via non-sensitive environment variables (`AGENT`, `AI_AGENT` and some agent-specific variables that have not standardised yet).
+
+### Meaningful error codes
+
+Alongside this, exit codes now follow [`gh`](https://cli.github.com/) conventions, so agents and scripts can branch on why a command failed.
+
+| Code | Meaning                                                      |
+| ---- | ------------------------------------------------------------ |
+| `0`  | Success                                                      |
+| `1`  | Error (anything not classified below)                       |
+| `2`  | Cancelled (user aborted)                                    |
+| `4`  | Auth required (no credentials, 401/403, OAuth-only writes)  |
+
+## `.env` support for Cloud credentials
+
+`clickhousectl` now reads a `.env` file in your working directory for `CLICKHOUSE_` environment variables. Add your Cloud API credentials in there and any `cloud` command will pick them up:
+
+```env
+CLICKHOUSE_CLOUD_API_KEY=your-key
+CLICKHOUSE_CLOUD_API_SECRET=your-secret
+```
+
+## Query ClickHouse Cloud services with OAuth
+
+`cloud service query` runs SQL against a Cloud service over HTTP. Previously, it only supported using API keys for auth and required provisioning a Query Endpoint. v0.3.0 adds support for querying services with OAuth. When using OAuth, you do not need to first provision a Query Endpoint.
+
+```bash
+clickhousectl cloud auth login
+clickhousectl cloud service query --name my-service --query "SELECT 1"
+```
+
+Querying an idled service wakes it automatically. A stopped service is never woken and fails with a hint to run `clickhousectl cloud service start`.
+
+## Custom config files for local servers
+
+Local servers start with sensible defaults, but sometimes you need to flip a setting. v0.3.0 lets you drop a config into `~/.clickhouse/configs/` and apply it by name:
+
+```bash
+mkdir -p ~/.clickhouse/configs
+cat > ~/.clickhouse/configs/analytics.xml <<'EOF'
+<clickhouse>
+    <query_log>
+        <database>system</database>
+        <table>query_log</table>
+    </query_log>
+</clickhouse>
+EOF
+
+# See which configs are available
+clickhousectl local server configs
+
+# Start a server with one applied
+clickhousectl local server start --config-file analytics
+```
+
+The named file is overlaid on top of ClickHouse's built-in defaults, so it only needs to contain the settings you want to change, no need to reproduce a full config. Files can be `.xml`, `.yaml`, or `.yml`, and you can reference them by name with or without the extension.
+
+## More install options
+
+`clickhousectl` already ships via the install script, `cargo binstall`, npm, and crates.io. v0.3.0 adds the Python packaging ecosystem:
+
+```bash
+pip install clickhousectl
+# or
+pipx install clickhousectl
+# or
+uv tool install clickhousectl
+```
+
+## Postgres in `local init`
+
+`local init` scaffolds a standard folder structure for your ClickHouse project files. With managed and local Postgres now part of `clickhousectl`, `init` also lays down a `postgres/` tree alongside the `clickhouse/` one:
+
+```bash
+clickhousectl local init
+```
+
+```
+clickhouse/
+├── tables/
+├── materialized_views/
+├── queries/
+└── seed/
+postgres/
+├── tables/
+├── views/
+├── functions/
+├── queries/
+└── seed/
+```
+
+## Faster, offline-friendly version resolution
+
+When you ask for a version spec like `stable` or `26.5`, `clickhousectl` now checks your already-installed versions *before* reaching out to the network. If you've got a match locally, commands like `clickhousectl local use 26.5` resolve instantly and work offline, only falling back to a remote lookup when there's nothing suitable installed.
+
+## Deprecated fields removed
+
+Deprecated API fields are now hidden from CLI output to prevent confusing agents.
+
 
 ---
 
