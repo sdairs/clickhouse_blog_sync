@@ -1,5 +1,5 @@
 {
-  "last_sync": "2026-07-28T08:34:19.668610Z",
+  "last_sync": "2026-07-29T08:41:10.673069Z",
   "processed_blogs": {
     "https://clickhouse.com/blog/clickhouse-raises-400-million-series-d-acquires-langfuse-launches-postgres": {
       "title": "ClickHouse raises $400M Series D led by Dragoneer to accelerate expansion across analytics and AI infrastructure",
@@ -5490,9 +5490,21 @@
       "pub_date": "2026-07-27T00:00:00+00:00",
       "file_path": "blogs/2026-07-27-clickhouse-docs-relaunch.md",
       "processed_at": "2026-07-28T08:34:19.566272Z"
+    },
+    "https://clickhouse.com/blog/strict-memory-overcommit-for-postgres": {
+      "title": "Why strict memory overcommit matters for Postgres",
+      "pub_date": "2026-07-28T00:00:00+00:00",
+      "file_path": "blogs/2026-07-28-why-strict-memory-overcommit-matters-for-postgres.md",
+      "processed_at": "2026-07-29T08:41:10.399095Z"
+    },
+    "https://clickhouse.com/blog/fetch-agentic-analytics": {
+      "title": "How Fetch built its flexible agentic analytics tool on ClickHouse Cloud",
+      "pub_date": "2026-07-28T00:00:00+00:00",
+      "file_path": "blogs/2026-07-28-how-fetch-built-its-flexible-agentic-analytics.md",
+      "processed_at": "2026-07-29T08:41:10.566449Z"
     }
   },
-  "total_blogs": 915,
+  "total_blogs": 917,
   "failed_blogs": [
     {
       "url": "https://clickhouse.com/jp/blog/clickhouse-gcp-japan-availability",
