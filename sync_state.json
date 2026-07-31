@@ -1,5 +1,5 @@
 {
-  "last_sync": "2026-07-30T08:27:03.116923Z",
+  "last_sync": "2026-07-31T08:50:05.097542Z",
   "processed_blogs": {
     "https://clickhouse.com/blog/clickhouse-raises-400-million-series-d-acquires-langfuse-launches-postgres": {
       "title": "ClickHouse raises $400M Series D led by Dragoneer to accelerate expansion across analytics and AI infrastructure",
@@ -5508,9 +5508,33 @@
       "pub_date": "2026-07-29T00:00:00+00:00",
       "file_path": "blogs/2026-07-29-instrumenting-my-espresso-machine-with.md",
       "processed_at": "2026-07-30T08:27:03.015251Z"
+    },
+    "https://clickhouse.com/blog/open-secure-ai-alliance": {
+      "title": "ClickHouse joins the Open Secure AI Alliance",
+      "pub_date": "2026-07-30T00:00:00+00:00",
+      "file_path": "blogs/2026-07-30-clickhouse-joins-the-open-secure-ai-alliance.md",
+      "processed_at": "2026-07-31T08:50:04.331259Z"
+    },
+    "https://clickhouse.com/blog/jump-trading-uses-clickhouse-with-iceberg": {
+      "title": "How Jump Trading uses ClickHouse with Iceberg for analytics",
+      "pub_date": "2026-07-30T00:00:00+00:00",
+      "file_path": "blogs/2026-07-30-how-jump-trading-uses-clickhouse-with-iceberg-for.md",
+      "processed_at": "2026-07-31T08:50:04.533122Z"
+    },
+    "https://clickhouse.com/blog/choosing-between-clickstack-and-grafana-for-clickhouse-observability": {
+      "title": "Choosing Between ClickStack and Grafana for ClickHouse Observability",
+      "pub_date": "2026-07-30T00:00:00+00:00",
+      "file_path": "blogs/2026-07-30-choosing-between-clickstack-and-grafana-for.md",
+      "processed_at": "2026-07-31T08:50:04.717469Z"
+    },
+    "https://clickhouse.com/blog/benchmarking-nvme-managed-postgres-planetscale-vs-clickhouse": {
+      "title": "Benchmarking NVMe-backed Managed Postgres: PlanetScale and ClickHouse",
+      "pub_date": "2026-07-30T00:00:00+00:00",
+      "file_path": "blogs/2026-07-30-benchmarking-nvme-backed-managed-postgres.md",
+      "processed_at": "2026-07-31T08:50:04.999410Z"
     }
   },
-  "total_blogs": 918,
+  "total_blogs": 922,
   "failed_blogs": [
     {
       "url": "https://clickhouse.com/jp/blog/clickhouse-gcp-japan-availability",

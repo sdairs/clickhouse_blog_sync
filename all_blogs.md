@@ -1,6 +1,464 @@
 # ClickHouse Blogs
-Last updated: 2026-07-30 08:27:03 UTC
-Total blogs: 918
+Last updated: 2026-07-31 08:50:05 UTC
+Total blogs: 922
+
+---
+
+## ClickHouse joins the Open Secure AI Alliance
+Published: 2026-07-30T00:00:00+00:00
+URL: https://clickhouse.com/blog/open-secure-ai-alliance
+
+---
+title: "ClickHouse joins the Open Secure AI Alliance"
+date: "2026-07-30T19:44:40.842Z"
+author: "ClickHouse"
+category: "Company and culture"
+excerpt: "ClickHouse is joining the Open Secure AI Alliance alongside NVIDIA and other industry leaders to help build open tools that keep AI agents secure."
+---
+
+# ClickHouse joins the Open Secure AI Alliance
+
+## Summary
+
+* ClickHouse is joining the Open Secure AI Alliance alongside NVIDIA and other industry leaders to help build open tools that keep AI agents secure.
+* Langfuse is our open-source, MIT-licensed platform for agent tracing, evaluations, and guardrail monitoring. It works with any model and harness, runs air-gapped on your own infrastructure, and stores every trace in ClickHouse, which is also open-source under Apache 2.0.
+* Agents need open audit trails. In the alliance, we're building open instrumentation for agent forensics, open evaluation pipelines for detecting anomalous agent behavior, and reference architectures for air-gapped agent observability.
+
+![osaia-logo-garden_press-kit_3840x2160.png](https://clickhouse.com/uploads/osaia_logo_garden_press_kit_3840x2160_35e084e721.png)
+
+This month, an AI agent escaped its sandbox and gained access to Hugging Face's production servers. Containing the intrusion meant reconstructing what the agent actually did: reviewing more than 17,000 actions with an open-weight model running on Hugging Face’s own infrastructure, after safety guardrails on hosted closed models blocked their first forensic attempts.
+
+The incident became one of the founding lessons of the [Open Secure AI Alliance](https://blogs.nvidia.com/blog/open-secure-ai-alliance/). The alliance builds and shares open models, harnesses, tools, and techniques so defenders can inspect, adapt, and run AI security systems on their own infrastructure. ClickHouse is joining alongside NVIDIA and other industry leaders to help build open tools that keep AI agents secure.
+
+
+## Agent security runs on evidence 
+
+When an agent gets compromised, the investigation comes down to the record of what it actually did: every model call, tool invocation, retrieval, and intermediate decision. The same is true when an agent simply misbehaves. That record is the evidence layer of agent security, and it should be open, inspectable, and accessible to every team that needs it, from the engineers running the agent to security and compliance.
+
+
+## Langfuse: the open audit layer for AI agents 
+
+[Langfuse](https://langfuse.com) is our open-source, [MIT-licensed](https://github.com/langfuse/langfuse) platform for agent tracing, evaluations, and guardrail monitoring. Engineering teams use it to see, score, and prove what their LLM applications and agents do in production. More than 100,000 engineers build on Langfuse, including teams at 21 of the Fortune 50, and the platform processes over 10 billion observations a month. The open-source project has 32,000 GitHub stars and more than 300 contributors.
+
+**Any model:** Langfuse traces agents built on open-weight models you run yourself and on closed APIs, in one audit plane. When an incident forces a model switch mid-response, the evidence layer stays put.
+
+**Any harness:** Native instrumentation covers LangChain, LlamaIndex, the Vercel AI SDK, and the OpenAI SDK. Everything else connects through OpenTelemetry.
+
+**Guardrails you can measure:** Evaluations run on live traffic and score every output, so teams see when a guardrail fires, drifts, or fails. Langfuse monitors guardrail pipelines built with popular libraries, including [NVIDIA NeMo Guardrails, LLM Guard, and other libraries](https://langfuse.com/docs/security-and-guardrails#1-run-time-security-measures), so teams can compare checks on real traffic and prove which ones actually catch attacks. Organizations in highly regulated industries also use Langfuse traces as their record-keeping layer to meet compliance obligations, including those under the EU AI Act.
+
+**Your infrastructure:** Langfuse runs in an air-gapped environment on your own infrastructure. Traces never have to leave the network on which they were created.
+
+
+## Open at every layer
+
+Langfuse stores every trace in ClickHouse. Agent traces are analytical data at scale: Langfuse alone writes more than 10 billion observations a month into ClickHouse, spans, tool calls, and evaluation scores that responders need to query in seconds while an incident unfolds. That is the workload ClickHouse was built for.
+
+ClickHouse is an open-source project under the Apache 2.0 license, with hundreds of millions of downloads over the past decade. Security teams already run some of their heaviest workloads on it. [Cisco Talos runs its threat intelligence reputation service on ClickHouse Cloud](https://clickhouse.com/blog/cisco), classifying file hashes so researchers can make fast security decisions. Cloudflare has publicly written about [running ClickHouse within its bot management platform](https://blog.cloudflare.com/cloudflare-bot-management-machine-learning-and-more/), logging every detection on a network that averages 11 million requests per second.  Both are fellow alliance members. [ClickStack](https://clickhouse.com/clickstack), our open-source observability stack, brings OpenTelemetry-native logs, metrics, and traces into a single engine.
+
+
+## Contributing to the open domain
+
+NVIDIA’s [announcement](https://blogs.nvidia.com/blog/open-secure-ai-alliance/) of the Open Secure AI Alliance names the full agent stack that security depends on: identity, permissions, harnesses, guardrails, logs, and evaluation. Our contribution focuses on :
+
+
+
+* **Open instrumentation and trace schemas for agent forensics,** built on OpenTelemetry, so incident responders can reconstruct agent behavior across harnesses instead of per vendor.
+* **Open evaluation pipelines for detecting anomalous agent behavior,** runnable with open-weight models as judges on infrastructure you control.
+* **Reference architectures for air-gapped agent observability,** so regulated and sovereign environments get the same audit capability as everyone else.
+
+
+## What comes next
+
+Attackers already use frontier AI. Defenders need to see what their agents are doing, prove it afterward, and run that capability on infrastructure they control. Agent security runs on evidence, and traces are that evidence, which is why the audit layer for AI agents should be as open as the models they run on.  The time is now, and that is exactly why ClickHouse joined the alliance to help build open and trusted auditing for AI and agents.  
+
+Self-host [Langfuse](https://langfuse.com/) and you run the whole stack yourself, from the tracing UI down to the database, and you can read the source for every layer.
+
+---
+
+## How Jump Trading uses ClickHouse with Iceberg for analytics
+Published: 2026-07-30T00:00:00+00:00
+URL: https://clickhouse.com/blog/jump-trading-uses-clickhouse-with-iceberg
+
+---
+title: "How Jump Trading uses ClickHouse with Iceberg for analytics"
+date: "2026-07-30T19:24:18.868Z"
+category: "User stories"
+excerpt: "Jump Trading captures petabyte-scale financial trading logs on a self-managed ClickHouse platform, where zero data loss and low latency are critical requirements."
+---
+
+# How Jump Trading uses ClickHouse with Iceberg for analytics
+
+## Summary
+
+
+* Jump Trading captures financial trading logs at the petabyte scale in a self-managed ClickHouse platform, where zero data loss and low latency are industry requirements. 
+* ClickHouse cluster ingests hundreds of TB a day at a sub-20-second p99, serving real-time analytics across hundreds of billions of daily events
+* Jump extended the platform with a parallel Iceberg pipeline to separate the batch analytics (reporting, research, etc…) from their real-time cluster for their business-critical use cases
+
+“People think logs are only for observability,” says Arnaud Adant, database team lead at [Jump Trading](https://www.jumptrading.com/), a Chicago-based trading firm, “but in our case, it’s much more than that.”
+
+Jump is a leading data and research-driven trading business based in Chicago, with offices all over the world. The company’s logging platform is less a debugging tool and acts more as the business system of record.
+
+At [Open House SF 2026](https://clickhouse.com/openhouse/san-francisco), Arnaud shared how Jump built a self-managed ClickHouse platform, and how demand for full-scale batch exports pushed them to extend it with Apache Iceberg, without giving up the fast, familiar experience users had come to rely on.
+
+[Watch on YouTube](https://youtube.com/watch?v=UqN1y_ZLMcI)
+
+## Low Latency Lossless logging at petabyte scale
+
+At Jump, retaining an enormous amount of logging is critical for many research and operational purposes, but scale can be a challenge. A single partition takes hundreds of TB a day uncompressed. The largest table alone stores the order of 100 billion events a day. Jump keeps a long history online for analytics, resulting in petabytes of compressed data.
+
+The platform also has to be fast. Jump maintains a p99 of under 20 seconds, meaning 99% of events reach the database within that window. And because nothing can go missing, the logs are reconciled daily against their sources. 
+
+
+## A successful 7+ years with ClickHouse
+
+For over seven years, Jump has enjoyed the open-source benefits of ClickHouse. The steady drumbeat of performance improvements from ClickHouse, with the new data types like [DateTime64](https://clickhouse.com/docs/sql-reference/data-types/datetime64) and features like [Bloom filters](https://clickhouse.com/docs/optimize/skipping-indexes#bloom-filter-types) have been impactful at Jump. “ClickHouse is not only fast,” he says, “but its development is getting faster over time, and we see that with the advent of AI.”
+
+
+>"ClickHouse is open-source and super-fast. When you get good performance out of technology, you save a lot of money, because you can do more with less hardware.” 
+>— Arnaud Adant, Database Team Lead, JumpTrading
+
+In addition to being ClickHouse users, the Jump team is an active contributor to the ClickHouse open-source project, having upstreamed quite a few improvements over the years. “We couldn’t do that with commercial alternatives,” Arnaud says, noting that they’ve tailored ClickHouse to their needs while giving back to the [ClickHouse community](https://clickhouse.com/community).
+
+
+## A “textbook case for real-time analytics”
+
+Jump runs an on-prem ClickHouse cluster with tens of large nodes, a textbook case for real-time analytics. The team gets low latency ingest by default while taking full advantage of their hardware, including fast NVMe storage, CPUs with SIMD instructions, and high-speed memory. “You don’t get that with other databases like Postgres or MySQL,” Arnaud says.
+
+He highlights two ClickHouse features: [distributed tables](https://clickhouse.com/docs/engines/table-engines/special/distributed), which handle sharding for the high-volume fact tables; and [replicated tables](https://clickhouse.com/docs/engines/table-engines/mergetree-family/replication), which keep reference data available on each node in the cluster.
+
+Raw data lands in a Redpanda cluster, fed by logs from thousands of nodes. A fleet of sharded, bare metal ingestors read from that stream and write into the corresponding ClickHouse shard. On the read side, users go through a load balancer that picks up a node at random and runs their queries against it. 
+
+The diagram below sketches Jump’s ClickHouse implementation: Redpanda feeds sharded ingestors that write to ClickHouse, reads are routed through a load balancer, and Keeper handles replication and node registration.
+
+![jump-clickhouse-implementation 1.jpg](https://clickhouse.com/uploads/jump_clickhouse_implementation_1_1c06fd00a1.jpg)
+
+## Expanding data requirements across Jump
+
+That architecture worked well for real-time analytics, but new export requirements pushed it beyond its original scope. Teams needed the data available to other readers in real time, including batch jobs and high-performance computing workloads running on Jump’s HPC infrastructure.
+
+Serving those workloads from the same real-time cluster was not the right fit. To scale, Jump needed to separate compute from storage by moving to Parquet files on object storage, allowing each layer to scale independently.
+
+The platform now supports two distinct workloads. Real-time analytics with fast readers and writers, ingestion peaks of 10 million rows per second, and a sub-20-second p99. And batch processing with slower, heavier readers pulling massive results set at high outgoing throughput, with greater tolerance for latency.
+
+
+## Why Iceberg
+
+The addition of that second workload led Jump to Iceberg. As an open table format built on Parquet, Iceberg offered scalable, long-term retention and made the data accessible to multiple readers, including Spark, Polars, and DuckDB.
+
+Iceberg was particularly appealing for Jump’s use case because it behaves like a ClickHouse server. Tables live in a REST API catalog and feature familiar concepts like partitions, sort keys, statistics, deletes, and Bloom filters, with similar compression.
+
+Jump’s team wanted to keep their new architecture simple. Taking inspiration from [Netflix’s double-write pipeline](https://clickhouse.com/blog/netflix-petabyte-scale-logging), it keeps Kafka as the single-entry point, branching into parallel paths with one set of consumers writing into the real-time ClickHouse cluster, and another writing Iceberg Parquet files out to object storage.
+
+Much of that Iceberg-writing path is handled by ClickHouse itself. For example, [clickhouse-local](https://clickhouse.com/docs/operations/utilities/clickhouse-local) and ClickHouse Server can emit Parquet files directly to S3. And because [ClickHouse fully supports reading Iceberg](https://clickhouse.com/docs/engines/table-engines/integrations/iceberg), the same cluster that handles low latency ingest can also query the Iceberg tables, giving users a unified view of the data.
+
+The next diagram shows Jump’s double-write pipeline: Kafka feeds parallel consumers writing to Iceberg and ClickHouse, with ClickHouse also reading Iceberg directly.
+
+![jump-double-write-pipeline 1.jpg](https://clickhouse.com/uploads/jump_double_write_pipeline_1_35ef929405.jpg)
+
+That unification was a hard requirement. Jump wanted teams to switch between Iceberg and ClickHouse seamlessly, running the same queries on both systems while having different latency and performance characteristics depending on the business requirements. 
+
+
+>“With ClickHouse, all its best features carry over into Iceberg.” 
+>— Arnaud Adant, Database Team Lead, JumpTrading
+
+By integrating Iceberg with ClickHouse, Jump could still use core ClickHouse capabilities such as [Keeper](https://clickhouse.com/docs/guides/sre/keeper/clickhouse-keeper), [replication](https://clickhouse.com/docs/architecture/replication), [dictionaries](https://clickhouse.com/docs/dictionary), and [distributed tables](https://clickhouse.com/docs/engines/table-engines/special/distributed). Iceberg tables could be sharded and exposed through a single distributed view when needed. [Access control](https://clickhouse.com/docs/operations/access-rights) remained consistent across both systems with the same users, roles, and row policies. ClickHouse’s [system tables](https://clickhouse.com/docs/operations/system-tables) and [observability](https://clickhouse.com/docs/use-cases/observability) features carried over as well.
+
+
+
+<video autoplay="1" muted="1" loop="1" controls="1">
+  <source src="https://clickhouse.com/uploads/demo_openhouse_2026_2_8b20892ae0.mp4" type="video/mp4" />
+</video>
+
+The demo shows how Jump runs queries in both ClickHouse and ClickHouse reading Iceberg. At the top, it shows Jump running ClickHouse clusters with 18 trillion rows and 40 nodes. At the bottom, it shows ClickHouse running with the latest Iceberg version and 20 nodes.
+
+## ClickHouse is fast, and its development is getting faster
+
+In one experiment on a 20-node Iceberg setup, a `GROUP BY` query (deliberately not using metadata shortcuts) processed 376 billion rows, 109.5 TB of data, in 9.6 seconds, which is about 40 billion rows per second.
+
+The benchmarks also confirmed Jump’s experience that  ClickHouse gets faster over time. Across cold and hot runs on a variety of queries, successive versions of ClickHouse trended steadily downward in elapsed time. On a quantile query, for example, performance improved from 13.5 seconds on [ClickHouse 25.12](https://clickhouse.com/blog/clickhouse-release-25-12) to 8.5 seconds on 26.2. That roadmap offers a glimpse of what’s possible by [combining ClickHouse and Iceberg](https://clickhouse.com/blog/climbing-the-iceberg-with-clickhouse), both now and in the future. 
+
+
+>“Querying Iceberg from ClickHouse is very performant. What ClickHouse is doing in a single process today, we believe it can do in a distributed fashion over Iceberg. That’s going to be fantastic, because Iceberg is a standard that’s adopted everywhere.” 
+— Arnaud Adant, Database Team Lead, JumpTrading
+
+*See why data-driven teams like Jump Trading are pairing ClickHouse and Iceberg for real-time analytics and batch workloads. [Try ClickHouse Cloud free for 30 days](https://clickhouse.com/cloud).*
+
+
+---
+
+## Get started today
+
+Interested in seeing how ClickHouse works on your data? Get started with ClickHouse Cloud in minutes and receive $300 in free credits.
+
+[Sign up](https://console.clickhouse.cloud/signUp?loc=blog-cta-1464-get-started-today-sign-up&utm_blogctaid=1464)
+
+---
+
+---
+
+## Choosing Between ClickStack and Grafana for ClickHouse Observability
+Published: 2026-07-30T00:00:00+00:00
+URL: https://clickhouse.com/blog/choosing-between-clickstack-and-grafana-for-clickhouse-observability
+
+---
+title: "Choosing Between ClickStack and Grafana for ClickHouse Observability"
+date: "2026-07-30T14:32:50.201Z"
+author: "Alex Fedotyev and David Ryder"
+category: "Engineering"
+excerpt: "Using ClickHouse for observability and wondering which interface best fits your workflows? We explore ClickStack, Grafana, and when it makes sense to use both."
+---
+
+# Choosing Between ClickStack and Grafana for ClickHouse Observability
+
+## TL;DR
+
+Choose ClickStack when ClickHouse is your primary observability store, and you want a unified experience across logs, traces, metrics, sessions, and investigations, and are embracing a philosophy of building your own SRE agents. Choose Grafana when ClickHouse is one part of a broader, heterogeneous monitoring estate spanning multiple systems and data sources. However, many teams also use both, with Grafana for cross-data-source visualization and ClickStack providing an integrated ClickHouse observability experience, with the MCP layer powering their own SRE agents and investigation workflows.
+
+As the ClickHouse database has become an increasingly popular choice for observability data, the conversation has shifted. For many teams, the decision about the storage engine has already been made thanks to ClickHouse’s combination of high ingestion rates, industry-leading compression, fast analytical queries, and the ability to retain raw telemetry for long periods without relying on aggressive sampling or rollups.
+
+The next question is which interface to build on top of it. Historically, that meant just choosing a visualization layer. Increasingly, it also means choosing the platform that powers emerging agentic workflows. 
+
+For ClickHouse users, two options have emerged as the most common: Using Grafana with the ClickHouse plugin or ClickStack, an observability platform built specifically for ClickHouse.
+In this post, we’ll look at the strengths of each approach, the different philosophies behind their design, and when each is the right tool for the job.
+
+> This blog assumes you’ve already selected ClickHouse as your observability backend. The question is no longer which storage engine to use, but which experience best fits your engineers. We compare ClickStack and Grafana (using the ClickHouse plugin) as the user and agentic interfaces for ClickHouse, not ClickStack versus the broader Grafana LGTM ecosystem, which has its own strengths and tradeoffs.
+
+## Philosophical differences
+
+It can be helpful to understand how the two tools start from different assumptions about how engineers work. 
+
+> Throughout the comparisons in this blog, Grafana refers specifically to the core Grafana OSS experience when connected to ClickHouse through the ClickHouse data source plugin, including dashboards, visualizations, Explore, and alerting. It does not refer to the broader Grafana Cloud platform and the associated LGTM stack, which offer additional capabilities and have their own strengths and tradeoffs.
+
+Grafana follows a broad “big tent” philosophy, providing a common interface across many data sources and operational systems. Its roots are in monitoring-first workflows, where an alert from Prometheus metrics directs an engineer to a dashboard, which then leads to traces, logs, profiles, or other signals to isolate the cause of an issue.
+
+![grafana_connections.png](https://clickhouse.com/uploads/grafana_connections_1257eccee8.png)
+
+_Grafana supports a wide range of data sources through its plugin architecture_
+
+The monitoring-first model works well when the failure mode is already understood and represented in a dashboard or alert. It is less effective during an unfamiliar 3 a.m. incident, where an unexpected latency spike falls outside predefined views and thresholds.
+
+ClickStack is built for these unknowns with an investigation-first philosophy. Rather than assuming the relevant question, dashboard, or signal path has already been defined, it encourages engineers to begin with the telemetry itself, search for patterns, test hypotheses, and follow the data until the root cause becomes clear. This is particularly well-suited to ClickHouse, where logs, traces, metrics, sessions, and wider application context can be queried and correlated within a single analytical engine.
+
+![clickstack_correlation.png](https://clickhouse.com/uploads/clickstack_correlation_0a215217d3.png)
+
+_ClickStack exposes logs, metrics, and traces as a correlated signal_
+
+
+
+---
+
+## Get started today
+
+Interested in seeing how ClickStack works on your observability data? Get started with ClickHouse Cloud and Managed ClickStack in minutes and receive $300 in free credits.
+
+[Sign up](https://console.clickhouse.cloud/signUp?intent=o11y&loc=blog-cta-1459-get-started-today-sign-up&utm_blogctaid=1459)
+
+---
+
+## Shared data, different experiences
+
+It is important to emphasize that the choice of interface does not determine how telemetry is delivered to ClickHouse. While OpenTelemetry is the standard path for many teams, ClickHouse can also receive data through agents and pipelines such as Fluent Bit, Fluentd, Logstash, and Vector, using OpenTelemetry formats or native ClickHouse integrations.
+
+Once the data is in ClickHouse, both ClickStack and Grafana can work with standard OpenTelemetry schemas or custom tables. The difference lies in how each interface exposes that data to the user.
+
+Grafana’s "big tent" philosophy allows it to support many different data sources through a common interface. This flexibility is one of its greatest strengths, but it also means more explicit configuration is often required. Correlations, dashboard variables, and query behavior must be defined within Grafana’s general-purpose abstractions, with users often needing to use SQL or the query-building capabilities available through dashboards and Explore.
+
+Grafana does build deeper, purpose-built experiences around its own data stores, but the ClickHouse plugin is constrained by Grafana’s general-purpose data source framework and the capabilities it exposes through dashboards and Explore. 
+
+> We [continue to invest in the ClickHouse Grafana plugin](https://clickhouse.com/blog/grafana-plugin-vision) to make the workflows available through Grafana’s data source framework smoother and reduce the amount of SQL users need to write. This includes more native filtering, exploration, variables, annotations, and query-building experiences across dashboards and Explore.
+
+![grafana_query_builder.png](https://clickhouse.com/uploads/grafana_query_builder_3f01836bbf.png)
+
+_The Grafana ClickHouse plugin’s new compact query mode is designed to reduce the need to write SQL._
+
+Conversely, ClickStack is built specifically for ClickHouse and can therefore optimize the experience around its data model and analytical capabilities. It provides purpose-built experiences for logs, traces, metrics, and sessions, with correlations handled as a native part of the product. Search-first and click-driven workflows abstract much of the underlying SQL, while still allowing users to write SQL when they need more advanced analysis.
+
+Ultimately, this makes the decision relatively low risk. The data remains in ClickHouse, the ingestion pipeline does not need to change, and adding the second interface later does not require duplicating storage.
+
+## When to choose ClickStack
+
+Choose ClickStack when engineers spend most of their time investigating observability data, rather than consuming predefined dashboards or following predetermined workflows from alerts into logs and traces.
+
+This is reflected in the fact that its primary workflow is search, with additional data analysis tools such as [Event Deltas](/docs/clickstack/features/event-deltas) and [Event patterns](/docs/clickstack/features/event-patterns) complementing this. 
+
+![clickstack_search.png](https://clickhouse.com/uploads/clickstack_search_ab89556697.png)
+
+_ClickStack offers an investigative first experience with searching a prominent workflow_
+
+Engineers can begin with familiar Lucene-style syntax, filter and group events, inspect value distributions, compare time ranges, move between logs and traces, and create visualizations as the investigation develops. SQL remains available for advanced analysis, but it is not required for every step.
+
+ClickStack is also the stronger choice when ClickHouse is the primary or sole observability store. Because it is optimized for a single engine, it can combine logs, metrics, traces, and sessions into a correlated experience, while generating optimized ClickHouse queries, applying filters automatically, targeting optimized schemas, and exposing database-specific capabilities without fitting them into a generic data source abstraction.
+
+ClickStack is designed for an [open agentic future](/blog/the-future-of-observability-not-one-proprietary-ai-agent-thousands-by-teams) with a “bring-your-own-agent” philosophy. Teams can bring observability into the coding assistants, IDEs, internal agents, chat tools, and automation frameworks they already use, rather than adopting a prescribed proprietary agent. 
+
+To enable this, it provides an [MCP server](/docs/clickstack/mcp) that exposes higher-level observability tools for searching logs, traces, and metrics, identifying patterns, investigating regressions, and managing ClickStack resources. Agents can work through these purpose-built operations rather than constructing every investigation directly in SQL - this results in more accurate evaluations, greater tool efficiency, and higher consistency.
+
+![clickstack_sre_stack.png](https://clickhouse.com/uploads/clickstack_sre_stack_e064da8317.png)
+
+This open model creates a collaboration challenge: investigations may take place across different assistants, IDEs, and local tools, making their reasoning and evidence difficult to preserve and share. [ClickStack AI notebooks](/blog/observability-mcp-server-ai-notebooks) provide a common surface where the sequence of queries, hypotheses, evidence, and conclusions can be captured. The result is not only an answer, but a reusable investigation that engineers and future agents can review and extend.
+
+
+<video autoplay="1" muted="1" loop="1" controls="0">
+  <source src="https://clickhouse.com/uploads/ai_notebook_68c9c66d8e.mp4" type="video/mp4" />
+</video>
+
+Grafana provides its own proprietary AI assistant and an architecture that can integrate with MCP servers. When ClickHouse is the underlying observability store, it defaults to using the [Grafana MCP server](https://grafana.com/docs/grafana-cloud/machine-learning/assistant/configure/cloud-mcp/#clickhouse) to query the data directly with SQL. Teams can instead deploy ClickStack alongside Grafana as a headless agentic layer and connect its higher-level observability MCP tools.
+
+In summary, lean towards ClickStack when you need a search-first investigative experience, native correlation across telemetry signals, session replay, or a ClickHouse-native interface that abstracts common SQL workflows. It is also the stronger fit when you want to build agentic SRE workflows around your own models, assistants, and tools rather than adopt a prescribed AI experience.
+
+## When to choose Grafana with the ClickHouse plugin
+
+Choose Grafana for ClickHouse when your main requirement is a consistent interface across a heterogeneous environment.
+
+Many organizations already use Grafana as the shared dashboarding layer for infrastructure, applications, cloud services, business metrics, and operational tools. In these environments, ClickHouse is one important data source among many. The ClickHouse plugin allows teams to introduce ClickHouse without replacing the dashboards, alerting workflows, and operational practices they already use.
+
+Grafana remains particularly strong for complex dashboard estates. Teams can build highly customized views, combine panels from different backends, manage alerting policies, and extend the platform through a broad plugin ecosystem. It is also a natural choice for Prometheus-centric organizations with established PromQL workflows.
+
+> PromQL support in ClickHouse and ClickStack remains experimental. At the time of writing, compatibility covers roughly 65% of the PromQL test suite and continues to improve. As the implementation matures, we expect more Prometheus metric workloads requiring PromQL workloads to run directly on ClickHouse, potentially reducing the need to retain Grafana solely for these use cases.
+
+Lean towards Grafana when you need a common dashboarding layer across several databases and vendors, depend on Prometheus-driven alerting workflows, or already operate a significant Grafana estate. It is also the stronger option when teams want to combine telemetry with operational or business data that may live outside ClickHouse.
+
+Grafana’s architecture is deliberately multi-engine. Its strength lies in presenting data from different systems through a common framework. The tradeoff is that ClickHouse must operate within the same general-purpose abstractions as every other data source, limiting how far the experience can be optimized around ClickHouse itself. The plugin can provide query builders, dashboards, Explore, and alerting, but the surrounding experience must remain consistent with the rest of Grafana.
+
+Neither model is universally better: Grafana's multi-engine design prioritizes flexibility across a broad technology estate, while ClickStack’s single-engine design enables tighter integration, simpler correlation, and deeper optimization around ClickHouse.
+
+## Many teams use both
+
+For many organizations, the best answer is to use both tools.
+
+Grafana can remain the home for highly curated dashboards, cross-system monitoring, Prometheus workflows, and established alerting. ClickStack can provide a deeper investigative environment for full-fidelity telemetry stored in ClickHouse, while also acting as the agentic interface, with its MCP interface and notebooks, for sharing investigations.
+
+![mixed_clickstack_grafana.png](https://clickhouse.com/uploads/mixed_clickstack_grafana_aab934917c.png)
+
+> A common deployment model for teams to retain Grafana as their dashboarding layer while deploying ClickStack headlessly and connecting Grafana to the ClickStack MCP server. This preserves the familiar Grafana experience while using ClickStack as the agentic investigation layer.
+
+Since both interfaces can operate over the same underlying data, teams do not need separate ingestion pipelines or duplicate storage. 
+
+## Some practical decision rules
+
+Choose ClickStack when observability is the primary workload, and ClickHouse is the main telemetry store, especially when engineers need search-first investigation, native correlation, session replay, and support for open agentic workflows.
+
+Choose Grafana when you already operate a broad observability datastore estate, need to combine ClickHouse with several other systems, or maintain a large number of cross-system dashboards that depend on Prometheus and shared alerting workflows.
+
+> The Prometheus recommendation is likely to change over time as PromQL and Prometheus support continue to develop in ClickHouse and ClickStack. Check the latest product documentation when making this decision.
+
+Alternatively, use both when Grafana already serves your monitoring estate, but your engineers need a more specialized environment for investigating ClickHouse telemetry and are looking for a platform on which to build their agentic SRE workflows. 
+
+## Conclusion
+
+The interface decision should follow the way your team works. Grafana with the ClickHouse plugin is the stronger fit for multi-engine environments that value a common visualization, monitoring, and alerting layer across many systems. ClickStack is the stronger fit when ClickHouse is the center of the observability architecture, and engineers need a cohesive environment for investigation, correlation, and build your own agent-led analysis.
+
+The choice is also adaptable and can change over time. Your telemetry remains in ClickHouse, and the same data can support both experiences. Start with the interface that matches your current operating model, then add the other if your requirements expand.
+
+
+---
+
+## Benchmarking NVMe-backed Managed Postgres: PlanetScale and ClickHouse
+Published: 2026-07-30T00:00:00+00:00
+URL: https://clickhouse.com/blog/benchmarking-nvme-managed-postgres-planetscale-vs-clickhouse
+
+---
+title: "Benchmarking NVMe-backed Managed Postgres: PlanetScale and ClickHouse"
+date: "2026-07-30T14:30:07.727Z"
+author: "Sai Srirampur"
+category: "Engineering"
+excerpt: "We ran ClickHouse Managed Postgres and PlanetScale on the same hardware. ClickHouse delivered up to 54% higher throughput with lower latency."
+---
+
+# Benchmarking NVMe-backed Managed Postgres: PlanetScale and ClickHouse
+
+We launched [PostgresBench](https://clickhouse.com/blog/postgresbench), a fully reproducible, open-source benchmark for managed PostgreSQL services, a few months ago. It was well received, and we received valuable [feedback](https://clickhouse.com/blog/postgresbench-ha) from the community on how to evolve it. 
+
+One of the most common requests was to include locally NVMe-backed PostgreSQL services such as PlanetScale Postgres alongside ClickHouse Managed Postgres. Based on that feedback, we recently added PlanetScale Postgres (their Metal offering) to PostgresBench.
+
+This blog presents the benchmark results and analyzes why the two services performed differently, even though both ClickHouse Managed Postgres and PlanetScale Postgres are built on similar NVMe-backed infrastructure.
+
+![blog-screenshot.png](https://clickhouse.com/uploads/blog_screenshot_fb1e854de4.png)
+
+## **Benchmark**
+
+PostgresBench uses **pgbench**, PostgreSQL's standard benchmarking tool, with a TPC-B-like workload consisting of short, highly concurrent transactions with frequent inserts, updates, and deletes. To ensure the benchmark is not network-bound, we use PostgreSQL databases with **100 GB** and **500 GB** of data. Below is the `pgbench` command used for the benchmark.
+
+The benchmark uses the following command:
+
+```bash
+pgbench -c 256 -j 16 -T 600 -M prepared -P 30 \
+  -s $SCALE_FACTOR \
+  -h $PGHOST -p $PGPORT -U $PGUSER -d $PGDATABASE
+```
+
+## **Hardware**
+
+To ensure a fair comparison, both services were benchmarked using **identical hardware**.
+
+
+* **AWS r8gd.xlarge** and **r8gd.4xlarge** instances
+* Local **NVMe** storage
+* One primary with **two synchronous standbys** using quorum replication for high availability
+* **us-west-2** AWS region
+
+The benchmark client ran on a dedicated **16 vCPU, 64 GB** instance in the same region, ensuring the client was never the bottleneck.
+
+**In short, both services were tested on the same VM family, instance sizes, region, and benchmark configuration.**
+
+## Results
+
+
+### ~100 GB dataset (scale 6849)
+
+| System                      | Machine           | TPS       | Avg latency (ms) | P95 (ms) | P99 (ms) |
+|-----------------------------|-------------------|----------:|-----------------:|---------:|---------:|
+| PlanetScale Metal           | 16vCPU, 128GB RAM | 16,887.23 |           15.144 |   25.729 |   32.894 |
+| ClickHouse Managed Postgres | 16vCPU, 128GB RAM | 25,429.48 |           10.073 |   20.228 |   29.146 |
+| PlanetScale Metal           | 4vCPU, 32GB RAM   |  4,675.85 |           54.714 |   81.073 |  103.579 |
+| ClickHouse Managed Postgres | 4vCPU, 32GB RAM   |  6,242.29 |           41.050 |   80.137 |  115.215 |
+
+The results show that ClickHouse Managed Postgres consistently outperformed PlanetScale Metal across both instance sizes. On the **16 vCPU / 128 GB** configuration, ClickHouse delivered **25,429 TPS**, about **51% higher throughput** than PlanetScale's **16,887 TPS**, while reducing average latency from **15.1 ms** to **10.1 ms**, **~33% lower**.
+
+On the **4 vCPU / 32 GB** configuration, ClickHouse achieved **6,242 TPS** vs **4,676 TPS**, a ~34% higher throughput and reduced average latency from **54.7 ms** to **41.1 ms** (~25% lower).
+
+Tail latencies (P95/P99) were comparable on the smaller instance and consistently lower on the larger instance.
+
+
+### ~500 GB dataset (scale 34247)
+
+| System                      | Machine           | TPS       | Avg latency (ms) | P95 (ms) | P99 (ms) |
+|-----------------------------|-------------------|----------:|-----------------:|---------:|---------:|
+| PlanetScale Metal           | 16vCPU, 128GB RAM | 14,046.42 |           18.239 |   30.756 |   38.608 |
+| ClickHouse Managed Postgres | 16vCPU, 128GB RAM | 21,693.71 |           11.809 |   23.859 |   31.369 |
+
+The same trend continued with the larger **500 GB** dataset. On the **16 vCPU / 128 GB** configuration, ClickHouse Managed Postgres delivered **21,694 TPS**, compared to **14,046 TPS** for PlanetScale Metal, a **54% improvement in throughput**. At the same time, average latency dropped from **18.2 ms** to **11.8 ms**, with P95 and P99 latencies also consistently lower. 
+
+
+## Why is ClickHouse Managed Postgres faster than PlanetScale Postgres?
+
+The difference isn't the hardware. Both services were benchmarked on identical AWS r8gd instances with local NVMe storage, configured with one primary and two synchronous standbys using quorum replication. Both also acknowledge commits after one standby confirms the write (`ANY 1`), with `synchronous_commit` enabled. 
+ 
+The performance difference comes from how the services are engineered around PostgreSQL. 
+ 
+ClickHouse Managed Postgres applies several system-level optimizations that reduce CPU, memory, and I/O overhead. For example, it reserves memory using 2 MB huge pages, which reduces page-table overhead under highly concurrent workloads. On identical hardware, we [measured](https://clickhouse.com/blog/huge-pages-clickhouse-managed-postgres) this optimization alone improving throughput by about 12%. 
+ 
+The write path is also optimized. We enable `wal_compression = lz4` and configure `max_wal_size` based on the instance size (up to 256 GB), reducing WAL volume and checkpoint frequency. This lowers the amount of data written to local NVMe and synchronously replicated to standbys. 
+ 
+Based on the PostgreSQL settings exposed by PlanetScale Metal, we observed that `huge_pages` and `wal_compression` are disabled, and `max_wal_size` is set to 8 GB. There may be additional implementation differences that are not externally visible through `pg_settings`. 
+ 
+Every subsystem gets the same treatment: wal-g is configured per machine, with upload concurrency and S3 part sizes computed from the vCPUs, memory, and NVMe layout it lands on; backups read the disk with direct I/O so the page cache stays with Postgres; writes are throttled when WAL archiving falls behind so the disk never fills. We have written up some of this so far: [huge pages](https://clickhouse.com/blog/huge-pages-clickhouse-managed-postgres), [strict memory overcommit](https://clickhouse.com/blog/strict-memory-overcommit-for-postgres), [the PgBouncer fleet](https://clickhouse.com/blog/pgbouncer-clickhouse-managed-postgres), [WAL-RUS](https://clickhouse.com/blog/walrus-postgres-backups-in-rust). There is more coming. Keep an eye on the [ClickHouse blog](https://clickhouse.com/blog). 
+ 
+These results are based on the PostgresBench workload. While we expect the same engineering optimizations to benefit many real-world OLTP workloads, every application is different. We recommend validating performance with your own workload as part of a proof of concept.
+
+
+
+
+---
+
+## Get started with ClickHouse Managed Postgres today
+
+Interested in seeing how ClickHouse Managed Postgres works on your data? Get started with ClickHouse Cloud in minutes and receive $300 in free credits.
+
+[Sign up](https://console.clickhouse.cloud/signUp?intent=pg&loc=blog-cta-1458-get-started-with-clickhouse-managed-postgres-today-sign-up&utm_blogctaid=1458)
+
+---
 
 ---
 
