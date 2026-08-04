@@ -1,5 +1,5 @@
 {
-  "last_sync": "2026-08-03T09:46:13.888750Z",
+  "last_sync": "2026-08-04T08:36:49.164093Z",
   "processed_blogs": {
     "https://clickhouse.com/blog/clickhouse-raises-400-million-series-d-acquires-langfuse-launches-postgres": {
       "title": "ClickHouse raises $400M Series D led by Dragoneer to accelerate expansion across analytics and AI infrastructure",
@@ -5544,9 +5544,21 @@
       "pub_date": "2026-08-03T00:00:00+00:00",
       "file_path": "blogs/2026-08-03-i-created-a-playground-for-110-database-systems.md",
       "processed_at": "2026-08-03T09:46:13.784449Z"
+    },
+    "https://clickhouse.com/blog/andy-pavlo-founding-clickhouse-labs": {
+      "title": "ClickHouse launches ClickHouse Labs with Andy Pavlo as VP of Database Research",
+      "pub_date": "2026-08-03T00:00:00+00:00",
+      "file_path": "blogs/2026-08-03-clickhouse-launches-clickhouse-labs-with-andy.md",
+      "processed_at": "2026-08-04T08:36:48.950713Z"
+    },
+    "https://clickhouse.com/blog/andy-pavlo-joins-clickhouse": {
+      "title": "Andy Pavlo joins ClickHouse to establish ClickHouse Labs",
+      "pub_date": "2026-08-03T00:00:00+00:00",
+      "file_path": "blogs/2026-08-03-andy-pavlo-joins-clickhouse-to-establish.md",
+      "processed_at": "2026-08-04T08:36:49.063453Z"
     }
   },
-  "total_blogs": 924,
+  "total_blogs": 926,
   "failed_blogs": [
     {
       "url": "https://clickhouse.com/jp/blog/clickhouse-gcp-japan-availability",

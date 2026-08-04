@@ -1,6 +1,6 @@
 # ClickHouse Blogs
-Last updated: 2026-08-03 09:46:13 UTC
-Total blogs: 924
+Last updated: 2026-08-04 08:36:49 UTC
+Total blogs: 926
 
 ---
 
@@ -184,6 +184,102 @@ Check related projects:
 - [sql.clickhouse.com](https://sql.clickhouse.com/) - an open read-only ClickHouse instance with even more large datasets on ClickHouse Cloud
 - [ADSB.exposed](https://adsb.exposed/) - an open service for analytics on huge geospatial datasets
 
+
+---
+
+## ClickHouse launches ClickHouse Labs with Andy Pavlo as VP of Database Research
+Published: 2026-08-03T00:00:00+00:00
+URL: https://clickhouse.com/blog/andy-pavlo-founding-clickhouse-labs
+
+---
+title: "ClickHouse launches ClickHouse Labs with Andy Pavlo as VP of Database Research"
+date: "2026-08-03T13:34:03.899Z"
+author: "ClickHouse"
+category: "Company and culture"
+excerpt: "Renowned database researcher will lead a new group dedicated to advancing foundational database technology and sharing its work openly with the broader community."
+---
+
+# ClickHouse launches ClickHouse Labs with Andy Pavlo as VP of Database Research
+
+*Renowned database researcher will lead a new group dedicated to advancing foundational database technology and sharing its work openly with the broader community*
+
+SAN FRANCISCO, August 3, 2026: ClickHouse today announced the launch of ClickHouse Labs, a new research group led by Andy Pavlo, one of the database industry’s most prominent researchers. Dr. Pavlo joins ClickHouse as Vice President of Database Research and will build a team dedicated to advancing the state of the art in database systems.
+
+Pavlo is an award-winning database researcher and professor at Carnegie Mellon University’s Computer Science Department. He is known throughout the database community for his work on autonomous databases, transaction processing, and large-scale data analytics. At ClickHouse, he will bring that expertise to some of the most ambitious and consequential challenges facing modern data systems, as AI reshapes the demands placed on all data-intensive workloads.
+
+“At ClickHouse, we are interested in finding new and innovative ways of processing data, exploring efficient data structures and algorithms, and pushing computer hardware to its limits,” said Alexey Milovidov, CTO of ClickHouse. “I’m thrilled that Andy Pavlo is joining ClickHouse as VP of Database Research and will lead our new research group, ClickHouse Labs.”
+
+### Advancing database technology in the open
+
+ClickHouse Labs will pursue foundational research across database and data architectures, query processing, systems performance, and infrastructure, for both ClickHouse and PostgreSQL databases. Advances in these underlying technologies will power the next generation of real-time analytics, data warehousing, observability, and AI applications.
+
+“The most exciting database research does more than describe a new idea in a paper. It demonstrates what is possible by building and testing real systems,” said Pavlo. “ClickHouse has an exceptional engineering culture, a strong open-source community, and workloads that push database technology to its limits. ClickHouse Labs gives us an opportunity to take on difficult problems, evaluate them in real-world scenarios, and share what we discover with the broader community and ecosystem.”
+
+### Research that changes what is possible
+
+Before co-founding the company, Yury Izrailevsky, ClickHouse President of Product and Technology, served as VP of Engineering at Google, which has a long history of turning foundational research into industry-defining technology. Some of the clearest examples come from research that began with Google’s own most demanding technical challenges.
+
+Google’s [Spanner paper](https://research.google/pubs/spanner-googles-globally-distributed-database-2/) introduced a new model for globally distributed databases, demonstrating that systems could operate at global scale while still supporting strongly consistent transactions. Years later, [Attention Is All You Need](https://research.google/pubs/attention-is-all-you-need/?utm_source=chatgpt.com) introduced the Transformer architecture, laying the foundation for modern large language models and today’s paradigm-shifting era of AI. In both cases, research conducted within a company did more than solve an internal problem: it changed what was technically possible and gave the broader industry a new foundation to build on.
+
+ClickHouse Labs is founded on the same belief. By combining ambitious research with hands-on systems development, the team aims to advance ClickHouse and PostgreSQL while contributing new ideas and technologies to the broader database ecosystem.
+
+Researchers will build and test their ideas against demanding real-world workloads, work closely with ClickHouse engineers, and publish their findings in leading research venues so others can evaluate, extend, and build upon them.
+
+“Because ClickHouse is open source, ideas developed here can be tested, challenged, and extended by teams around the world,” said Yury Izrailevsky, President of Product and Technology at ClickHouse. “ClickHouse Labs, under Andy’s leadership, will spearhead our investment in foundational research, helping shape both the future of ClickHouse and the broader database industry.”
+
+### About Andy Pavlo
+
+Andy Pavlo is an Associate Professor with Indefinite Tenure in the Computer Science Department at Carnegie Mellon University. Since  2013, he has led the Carnegie Mellon Database Research Group. His work has received several of the database community’s highest honors, including the IEEE TCDE Ramez Elmasri Database Education Award, VLDB Early Career Award, NSF CAREER Award, Sloan Research Fellowship, and ACM SIGMOD Jim Gray Best Dissertation Award in Databases. Pavlo previously co-founded and served as CEO of OtterTune, which applied machine learning to database optimization. 
+
+At ClickHouse, Pavlo will serve as VP of Database Research and lead the development of ClickHouse Labs, its research agenda, and its team.
+
+### About ClickHouse
+
+ClickHouse is a fast, open-source columnar database built for real-time data processing and analytics at scale. ClickHouse Cloud delivers the query speed and concurrency that applications demanding instant insight from large volumes of data require. As AI agents become more embedded in software, generating higher query volumes at tighter latency, ClickHouse provides a high-throughput, low-latency engine purpose-built for that workload. Customers include Sony, Tesla, Anthropic, Memorial Sloan Kettering, Lyft, and Instacart. More at [clickhouse.com](https://clickhouse.com/?utm_medium=referral&utm_source=press&utm_campaign=andy-pavlo-clickhouse-labs).
+
+---
+
+## Andy Pavlo joins ClickHouse to establish ClickHouse Labs
+Published: 2026-08-03T00:00:00+00:00
+URL: https://clickhouse.com/blog/andy-pavlo-joins-clickhouse
+
+---
+title: "Andy Pavlo joins ClickHouse to establish ClickHouse Labs"
+date: "2026-08-03T13:33:44.646Z"
+author: "Andy Pavlo"
+category: "Company and culture"
+excerpt: "I am excited to announce that I am joining ClickHouse, Inc. to establish and lead a new research team at ClickHouse Labs."
+---
+
+# Andy Pavlo joins ClickHouse to establish ClickHouse Labs
+
+I am excited to announce that I am joining ClickHouse to establish and lead a new research team called **ClickHouse Labs**. I want to share how it came about and what we plan to do.
+
+## How It Started
+
+I started as a professor in the Computer Science Department at Carnegie Mellon University in 2013\. I have spent my career seeking to understand the science of modern database management system (DBMS) internals. I make it a priority to [track every new system](https://dbdb.io) that comes along, both in industry and academia, to understand their implementations.
+
+I have known about the ClickHouse DBMS since it was [first announced as open-source software](https://news.ycombinator.com/item?id=11908254) in June 2016\. My initial reaction to this news was that it had to be vaporware because it seemed too good to be true. ClickHouse had features that at the time were only found in a handful of closed-source, commercial analytical DBMSs. For example, ClickHouse was written in C++ and supported vectorized query execution using SIMD in 2016\. Most prominent open-source analytical DBMSs in 2016 were JVM-based and did not support SIMD optimizations until years later.
+
+Since then, I have followed ClickHouse's development closely. It has always been a leading system that was highly relevant to our academic research projects. You can even see me wearing my original ClickHouse shirt in [my first remote lectures in 2020](https://youtu.be/Fr0CkACLBM4?t=44), when the pandemic forced us to move our database courses online.
+
+Given this history, I was honored when the ClickHouse co-founders invited me to establish this new research group at ClickHouse. The chance to work with one of the strongest engineering teams on the next generation of database technology was an opportunity that I could not pass up. This will be a next-level collaboration like when [Killer Mike hooked up with El-P](https://www.youtube.com/watch?v=4dOoFWpKPj4) to create a hip-hop supergroup.
+
+## What Is ClickHouse Labs?
+
+The goal of ClickHouse Labs is to establish a best-in-class industry research organization focused on databases. It will not operate as an isolated research organization that throws ideas over the wall to engineering. Instead, we will work closely with ClickHouse engineers, customers, collaborators, and industry partners to develop and disseminate new ideas that keep ClickHouse at the bleeding edge.
+
+We will also work with ClickHouse's PostgreSQL team to help establish its burgeoning managed service as a market leader in performance and reliability. PostgreSQL and ClickHouse serve different workload requirements, but the combination gives us a broad foundation for investigating both transactional and analytical database problems.
+
+Our objective is straightforward but ambitious: conduct research with scientific value and then help transform the best ideas into technology that matters to users. I want to achieve the same level of impact associated with pioneering industry research organizations, such as [IBM Research](https://doi.org/10.1145/126482.126493) and [Microsoft Research](https://www.microsoft.com/en-us/research/group/datasystems/). Those groups demonstrated that industry laboratories can simultaneously advance fundamental computer science, influence commercial products, and train generations of database researchers. That is the tradition we want to continue.
+
+## What is Next?
+
+The ClickHouse team already has an exceptional record of publishing deep technical material about its work. Since the establishment of the company in 2021, its engineers have produced [detailed articles](https://clickhouse.com/blog?category=engineering) that explain the DBMS's implementation. There is also the [2024 VLDB paper](https://doi.org/10.14778/3685800.3685802) that describes ClickHouse's core architecture. These works are so thorough that I assign them as readings to my students at Carnegie Mellon. At the same time, there is a backlog of interesting ideas and optimizations that the ClickHouse engineering team has explored but has not yet had the time to validate fully and push into production. One of my immediate priorities is to help accelerate this process. We will then use that as a springboard to explore new ideas that push ClickHouse even further.
+
+One larger question we will investigate is how DBMSs like ClickHouse and PostgreSQL fit into emerging AI and agentic technologies. There are two sides to this problem. The first is determining what a DBMS should look like to better support agents. The second side is determining how agents can improve and automate the development of DBMSs themselves. Everything is on the table: new hardware, new algorithms, new data structures, new execution strategies, and new ways of building and operating DBMS software. Although I do not have answers to these problems yet (this is why it is research), the one thing I am certain about is that ClickHouse's solid relational model foundation positions it well to evolve alongside these data-intensive workloads.
+
+I have spent my career studying how database systems are built and helping train the people who build them. With ClickHouse Labs, we now have the opportunity to create an organization devoted to advancing both.  
 
 ---
 
