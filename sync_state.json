@@ -1,5 +1,5 @@
 {
-  "last_sync": "2026-08-04T08:36:49.164093Z",
+  "last_sync": "2026-08-05T08:36:11.341008Z",
   "processed_blogs": {
     "https://clickhouse.com/blog/clickhouse-raises-400-million-series-d-acquires-langfuse-launches-postgres": {
       "title": "ClickHouse raises $400M Series D led by Dragoneer to accelerate expansion across analytics and AI infrastructure",
@@ -5556,9 +5556,21 @@
       "pub_date": "2026-08-03T00:00:00+00:00",
       "file_path": "blogs/2026-08-03-andy-pavlo-joins-clickhouse-to-establish.md",
       "processed_at": "2026-08-04T08:36:49.063453Z"
+    },
+    "https://clickhouse.com/blog/mercado-libre-observability-on-clickhouse-cloud": {
+      "title": "How Mercado Libre rebuilt its observability platform on ClickHouse Cloud with 50x faster trace queries",
+      "pub_date": "2026-08-04T00:00:00+00:00",
+      "file_path": "blogs/2026-08-04-how-mercado-libre-rebuilt-its-observability.md",
+      "processed_at": "2026-08-05T08:36:11.020745Z"
+    },
+    "https://clickhouse.com/blog/making-clickhouse-cloud-autoscaling-more-reactive": {
+      "title": "Fixed cadence to seconds: making ClickHouse Cloud autoscaling more reactive",
+      "pub_date": "2026-08-04T00:00:00+00:00",
+      "file_path": "blogs/2026-08-04-fixed-cadence-to-seconds-making-clickhouse-cloud.md",
+      "processed_at": "2026-08-05T08:36:11.238597Z"
     }
   },
-  "total_blogs": 926,
+  "total_blogs": 928,
   "failed_blogs": [
     {
       "url": "https://clickhouse.com/jp/blog/clickhouse-gcp-japan-availability",

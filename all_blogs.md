@@ -1,6 +1,364 @@
 # ClickHouse Blogs
-Last updated: 2026-08-04 08:36:49 UTC
-Total blogs: 926
+Last updated: 2026-08-05 08:36:11 UTC
+Total blogs: 928
+
+---
+
+## How Mercado Libre rebuilt its observability platform on ClickHouse Cloud with 50x faster trace queries
+Published: 2026-08-04T00:00:00+00:00
+URL: https://clickhouse.com/blog/mercado-libre-observability-on-clickhouse-cloud
+
+---
+title: "How Mercado Libre rebuilt its observability platform on ClickHouse Cloud with 50x faster trace queries"
+date: "2026-08-04T19:10:00.369Z"
+category: "User stories"
+excerpt: "How Mercado Libre rebuilt its observability platform on ClickHouse Cloud, cutting trace query times from over five minutes to about four seconds (a 50x speedup) with up to 89% compression while ingesting 400 million spans per minute."
+---
+
+# How Mercado Libre rebuilt its observability platform on ClickHouse Cloud with 50x faster trace queries
+
+## Summary
+
+- Mercado Libre runs its observability platform, O11y events, on ClickHouse Cloud to answer granular, business-level questions like why a specific payment failed.
+- The team built O11y events to take troubleshooting from days to minutes, with full business-flow visibility and high-cardinality filtering on identifiers like payment and user IDs.
+- Migrating to ClickHouse Cloud increased query performance by 50x and delivered up to 89% data compression, enabling them to scale from 7 million spans per minute to 400 million and growing in ClickHouse.
+
+[Mercado Libre](https://www.mercadolibre.com/) is Latin America’s leading commerce and fintech platform, operating in 18 countries with a regional market share of around 35% (compared to 4% for Amazon). It’s a highly complex environment that spans multiple languages, stacks, regulations, and logistics. The same telemetry that keeps systems running is what the team uses to ship changes, monitor, and improve the experience customers have inside the platform.
+
+At [Open House SF 2026](https://clickhouse.com/openhouse/san-francisco), technical leader Daniel Da Rosa and software expert Francislei Reis shared how Mercado Libre rebuilt its observability platform on [ClickHouse Cloud](https://clickhouse.com/cloud) on AWS, taking troubleshooting from days to minutes, speeding up queries by 50x, and compressing data by up to 89%.
+
+## The need for a new tracing platform
+
+In the first quarter of 2026, Mercado Libre served 126 million unique buyers, delivered 2.7 billion items, and processed $87 billion in payments. The company’s five core business units (commerce, advertising, logistics, acquiring, fintech services) run on the same platform, which also powers Mercado Pago, its payments and banking arm.
+
+All of that runs on the company’s internal developer platform, Fury, which powers more than 35,000 microservices written across Go, Java, Python, JavaScript, native code, and increasingly AI workloads.
+
+> Every click, every dollar, every package produces telemetry data. At Mercado Libre’s scale, we support 10,000 deployments and 7,000 pull requests each day, and handle over 15 billion requests per second.
+>
+> — Daniel Da Rosa, Technical Leader of Observability, Mercado Libre
+
+At Mercado Libre’s scale, a simple-sounding question becomes hard to answer. Why did a certain payment ID fail? Why did a specific user hit an error at checkout? “Maybe for a small business flow with 30 services, we could spend some minutes or hours looking into logs, metrics, and traces,” Daniel says. “But as the architecture grows, it takes longer to solve this kind of problem… we need a complete view of our request.”
+
+They decided tracing was the missing piece in their observability puzzle. Traces could give the team end-to-end visibility of a business flow, with measurable flow health and bottlenecks rather than the health of one service at a time, and let them embed business context directly in the data. With that context, tracing could turn incident response from “service X has an elevated P99” into “this specific payment failed because this specific service timed out,” and lay a foundation for process mining and optimization down the line.
+
+The team set four requirements for the new platform. The first was to reduce troubleshooting from days to minutes. The second was full business-flow visibility, to see the entire flow across services in production. The third was high-cardinality filters (the ability to filter on payment IDs, user IDs, and the many other identifiers the team needs to search by). The fourth was sustainable scale, so the cost of observability wouldn’t be tied to the growth of the business.
+
+> The cost of slow observability isn’t only infrastructure, it’s the customer experience.
+>
+> — Daniel Da Rosa, Technical Leader of Observability, Mercado Libre
+
+The result was a platform the observability team calls O11y events. It samples 100% of traffic for critical applications, so nothing critical is missed, and keeps retention cost-efficient at that volume. It’s built on OpenTelemetry, with business-flow attributes baked into the instrumentation. And as Daniel describes, it was designed from the start for analytics, data governance, and AI, alongside the trend analysis, anomaly detection, and performance monitoring you’d expect from an observability platform at Mercado Libre’s scale.
+
+## Outgrowing their previous observability platform
+
+The first version of O11y events followed a standard OpenTelemetry production pattern. Applications sent telemetry through an internal SDK to an OTel collector, into a stream, through a consumer, and into their cloud storage layer, with dashboards and external integrations reading from that storage layer. That design helped the team get to 70 million spans per minute.
+
+![](https://clickhouse.com/uploads/mercado_libre_0_0534379e52.jpg)
+
+*Mercado Libre’s previous architecture*
+
+“But when we scaled the application,” Francislei says, “we got a lot of blockers.” The problem, he explains, was that heavy operations like transforming, filtering, and aggregation ran on the client side at query time, against the storage layer.
+
+![](https://clickhouse.com/uploads/mercado_libre_1_1918cc3620.jpg)
+
+*Mercado Libre’s previous architecture storage layer, with heavy operations performed by clients*
+
+Queries ran for over five minutes and costs rapidly grew. Indexing new attributes was difficult, data aggregation was expensive, and generating metrics from spans was unfeasible given the high cost. While engineers could fetch spans by any transactional ID, pull aggregated views, and derive metrics from spans, they couldn’t do those things fast or cheaply enough for the platform to meet Mercado Libre’s four requirements. So the team went looking for a new storage layer.
+
+## Moving the heavy work inside ClickHouse Cloud
+
+In the next evolution, the team chose [ClickHouse Cloud](https://clickhouse.com/cloud) on AWS as the storage layer and kept the rest of the ingestion pipeline intact. Applications, SDK, OpenTelemetry collector, stream, and consumer all stayed where they were. On the read path, the team added a proxy in front of ClickHouse to handle rate limiting and access control, since they were also building an O11y MCP server to expose the data to AI tooling. “Basically, what changed is where the data lands and who does the work,” Francislei says.
+
+![](https://clickhouse.com/uploads/mercado_libre_2_02f27e3875.jpg)
+
+*Mercado Libre’s current architecture, with a read proxy and O11y MCP server in front of ClickHouse*
+
+In the new setup, the heavy operations moved off the clients and into the database. Transforming, filtering, and aggregation now run inside ClickHouse through [materialized views](https://clickhouse.com/docs/materialized-views). Where the previous architecture complexity scaled with the total number of users multiplied by the total number of spans, the current architecture scales with the number of users alone.
+
+The storage itself is organized in layers with different retention. Raw data lands first and is kept for a single day. Materialized views read from that raw table and populate the span tables (trace summary, spans, lookup attributes), all retained for 30 days. A separate set of materialized views feeds the metric tables, retained for 90 days, because percentiles become more useful when compared across a longer historical window. Once raw events arrive, Francislei says, “ClickHouse does the rest” through the schema and materialized views.
+
+![](https://clickhouse.com/uploads/mercado_libre_3_92e818e5a9.jpg)
+
+*Mercado Libre’s current architecture storage layer, with heavy operations performed by ClickHouse*
+
+![](https://clickhouse.com/uploads/mercado_libre_4_8231147f2d.jpg)
+
+*Mercado Libre’s layered table structure: raw data lands at a one-day TTL, then materialized views populate the span tables (30-day retention) and metric tables (90-day retention)*
+
+## Querying traces at high cardinality
+
+The team’s most difficult problem, Francislei says, was high-cardinality filtering. They solved it with a dedicated lookup table rather than asking one schema to do everything.
+
+The lookup table, `span_events_attributes`, uses ClickHouse’s [ReplacingMergeTree engine](https://clickhouse.com/docs/engines/table-engines/mergetree-family/replacingmergetree). The design lives in its [ORDER BY clause](https://clickhouse.com/docs/sql-reference/statements/select/order-by), which leads with the attribute key, then timestamp buckets at hour and minute granularity, then the attribute value, then the trace ID. A [Bloom filter](https://clickhouse.com/docs/optimize/skipping-indexes#bloom-filter-types) sits on the attribute value as a [skip index](https://clickhouse.com/docs/optimize/skipping-indexes). Together these let the table return results in around five seconds regardless of the range or the parameter being filtered.
+
+Querying a trace then becomes a two-step operation. The query first filters on a high-cardinality attribute (a session ID or product ID, for example) against the lookup table, then resolves the matching traces by trace ID and timestamp against the trace summary table, which is built on [AggregatingMergeTree](https://clickhouse.com/docs/engines/table-engines/mergetree-family/aggregatingmergetree).
+
+The schema choices that made this work generalize into a handful of key points. [Primary keys](https://clickhouse.com/docs/best-practices/choosing-a-primary-key) should be query-oriented and favor low-cardinality columns. Compression uses [ZSTD](https://clickhouse.com/docs/data-compression/compression-in-clickhouse), which the team found effective. A Bloom filter skip index handles high-cardinality attributes cheaply. AggregatingMergeTree, [materialized views](https://clickhouse.com/docs/materialized-views), and [aggregate functions](https://clickhouse.com/docs/sql-reference/aggregate-functions/reference) serve as the analytics engine. And the clusters are segmented into separate services for reading, writing, and merging, rather than running everything on one.
+
+## 50x faster queries at petabyte scale
+
+Comparing Mercado Libre’s previous setup to their current one on [ClickHouse Cloud](https://clickhouse.com/cloud), the difference is clear. Queries that used to run for over five minutes now return in about four seconds, a 50x speedup. High-cardinality attributes are now efficiently indexed, materialized views arrive pre-aggregated, and engineers can filter on those attributes directly.
+
+The data volumes Francislei shared give a sense of the scale ClickHouse is absorbing. The spans table holds 9.55 trillion rows, compressing 4.34 PiB down to about 621 TiB, an 86% reduction. The lookup attributes table holds 4.9 trillion rows, and the trace summary holds 870 billion. The raw table compresses 181 TiB down to about 20 TiB, an 89% reduction.
+
+And those numbers represent only part of the picture. To date, the team has migrated around 30% of its critical applications to ClickHouse Cloud, and that 30% already produces 400 million spans per minute. Logs and metrics are still to come.
+
+## Six lessons from the migration
+
+Daniel shared six lessons from their migration to ClickHouse Cloud. The first is to profile and benchmark first under real conditions rather than in a development environment. “We need to benchmark the same workload under the same conditions to produce real results,” he says.
+
+The second is that index design is iterative. “Primary keys are one of the most important choices in the schema,” Daniel says, noting that the team expects to revisit them, and that they test every skip index before trusting it.
+
+The third lesson is to monitor clusters relentlessly, using the metrics and logs in ClickHouse system tables and the metrics exposed over its HTTP API to drive alerting. The fourth is to tune for your own volume. “Batch size is not a simple setting,” Daniel says, “but it is critical.” The team tuned batching and [async insert](https://clickhouse.com/docs/optimize/asynchronous-inserts) behavior together to avoid creating too many parts.
+
+The fifth lesson is to segment storage and compute. The team began with a single cluster for reads, writes, and merges, hit problems with too many parts, and moved to dedicated clusters, including a merge cluster with around 50 threads to make better use of CPU. They sized those clusters by mirroring production traffic into a test environment, then scaled vertically before scaling horizontally, following ClickHouse’s recommendation.
+
+The sixth lesson is that schema and query are as important as hardware. “I will keep saying that until somebody hands me a microphone for a different talk,” Daniel says with a smile.
+
+## What’s next for observability at Mercado Libre
+
+Looking ahead, the team is exploring an observability backend for their AI telemetry, using [Langfuse](https://langfuse.com/), the open-source LLM observability and evals platform [acquired by ClickHouse in 2026](https://clickhouse.com/blog/clickhouse-acquires-langfuse-open-source-llm-observability). “Our agents are increasing, and we need to understand what’s happening inside these communications,” Daniel says.
+
+They’re also adding a new layer of intelligence for proactive insights that correlates events like deploys with tracing data, implementing [text indexes](https://clickhouse.com/docs/engines/table-engines/mergetree-family/textindexes) (also known as inverted indexes), and working to allow filtering and aggregation by any attribute in the span attributes map.
+
+Finally, they’re exploring semantic queries using [vector search](https://clickhouse.com/docs/knowledgebase/vector-search), so an engineer could ask to see traces that look like a given incident. “The future of observability is not a dashboard conversation,” Daniel says. “The database must be ready for that.”
+
+
+---
+
+## Get started today
+
+Interested in seeing how ClickHouse works on your data? Get started with ClickHouse Cloud in minutes and receive $300 in free credits.
+
+[Sign up](https://console.clickhouse.cloud/signUp?loc=blog-cta-1469-get-started-today-sign-up&utm_blogctaid=1469)
+
+---
+
+---
+
+## Fixed cadence to seconds: making ClickHouse Cloud autoscaling more reactive
+Published: 2026-08-04T00:00:00+00:00
+URL: https://clickhouse.com/blog/making-clickhouse-cloud-autoscaling-more-reactive
+
+---
+title: "Fixed cadence to seconds: making ClickHouse Cloud autoscaling more reactive"
+date: "2026-08-04T13:19:15.606Z"
+author: "Marvin Beckers"
+category: "Engineering"
+excerpt: "How we rebuilt ClickHouse Cloud's autoscaling orchestration on Kubernetes' controller-runtime and a ClickHouse-powered signals table, adding a reactive fast path that scales services up in seconds instead of waiting for the next scheduled pass."
+---
+
+# Fixed cadence to seconds: making ClickHouse Cloud autoscaling more reactive
+
+ClickHouse Cloud vertically autoscales services for you. Behind the scenes, a recommendation service watches how each service behaves and decides how much CPU and memory it should have. When your workload grows, it scales up. When your workload quiets down, it scales back down so you are not paying for capacity you no longer use. These decisions are driven by our [two-window recommender](https://clickhouse.com/blog/smarter-auto-scaling).
+
+For a long time, that recommendation service did its work on a fixed schedule. It woke up on a timer, looked at every service (slotting the full list of services across the time window), produced recommendations, and went back to sleep until the next tick. That design is simple and predictable, but a fixed schedule meant that we weren't able to scale up services immediately if they needed it.
+
+To solve this problem, we rebuilt the orchestration layer on top of a production-proven library that software engineers associate strictly with Kubernetes, controller-runtime. In doing so, we got reactivity, deduplication, backoff, and concurrency control without writing any of them ourselves. And when it came time to feed that machinery with near real-time signals, we reached for the obvious choice: ClickHouse itself.
+
+## Noticeable latency on a schedule {#noticeable_latency_on_a_schedule}
+
+Think of a service that suddenly gets hit with a heavy query workload at the start of an hour. It needs more memory, but the recommender already ran a few minutes ago and is not scheduled to run again for a while. Until the next tick, the service is undersized for what it is being asked to do. Queries are slower and might even be rejected due to lack of available memory.
+
+Autoscaling would eventually kick in and issue a recommendation addressing the resource shortage. The problem is purely latency. For the events that matter most, for example an out-of-memory event, waiting for the next scheduled pass is suboptimal.
+
+We had two requirements for evolving our recommendation logic:
+
+1. Keep the periodic, timer-based pass, because a steady, predictable sweep over every service is a safety net you do not want to give up. Usage patterns need to be continuously verified and resources adjusted. This is especially important for scaling down, which is not something that is *urgent*, but something we want to still do as soon as reasonable to optimize our customers' spending on resources they no longer use.
+2. Add a fast path, so that when a service clearly needs attention right now, it gets a recommendation in seconds rather than waiting for the next scheduled run.
+
+![clickhouse-reactive-source-timeline 1.png](https://clickhouse.com/uploads/clickhouse_reactive_source_timeline_1_23aac62f0a.png)
+
+## The starting point {#the_starting_point}
+
+The original recommender was a self-contained binary with a bespoke control loop. A timer fired, the loop iterated over services, and the work (combining data from different sources) happened as part of that loop. That design is sufficient for a periodic pass at creating recommendations.
+
+But this makes adding the "fast path" hard as it wasn't part of the original design. As soon as work can arrive from more than one trigger, you inherit a list of problems that have nothing to do with autoscaling and everything to do with building a job processor:
+
+- If the periodic pass and the fast path both decide that a service needs attention at nearly the same moment, you shouldn't process it twice.
+- If producing a recommendation fails, you want to retry, but not instantly and not forever. You want to back off.
+- You cannot let an unbounded number of recommendations run at once, or you risk overwhelming the systems you read metrics from.
+- You need clean startup and shutdown and handover of responsibilities between old and new instances of the job process.
+
+These aren't particularly exotic problems, in fact it is the same machinery every queue-based worker system needs. We did not want to write it, test it, and own it by building on our existing implementation. Hand-rolled versions of this machinery are where subtle production bugs tend to exist.
+
+## controller-runtime is an events engine already {#controller_runtime_is_an_events_engine_already}
+
+ClickHouse Cloud runs on Kubernetes, and our platform code already leans heavily on controller-runtime, the library that sits underneath most third-party Kubernetes controllers and operators. If you have written an operator, you know the general process: you watch some resources and a reconcile function is called to drive the world toward the state you want.
+
+However, underneath the Kubernetes-specific surface, controller-runtime can be used as a general-purpose event-processing engine. Without the Kubernetes-specific terminology, it boils down to:
+
+1. One or more sources produce items that need attention.
+2. Those items land in a rate-limited work queue.
+3. A reconciler pulls items off the queue, one logical item at a time, and does the work.
+
+The work queue in controller-runtime isn't really tied to Kubernetes. It deduplicates by key, so the same item queued twice while it is still waiting is processed once. It rate-limits and applies exponential backoff, so a failing item is retried later rather than hammered immediately. It supports bounded concurrency, so you decide how many items are processed in parallel instead of hoping for the best. And it integrates with leader election and metrics that the library already provides.
+
+Translating our previous implementation to Kubernetes language, the reconcile function answers one question for one service: given everything we know about it right now, what size should it be? Defining that function as the single, idempotent unit of work makes it clear that controller-runtime is a solid fit for this. In addition, we solve all of the problems mentioned above by using battle-tested solutions to them.
+
+## Sources are general purpose watchers {#sources_are_general_purpose_watchers}
+
+Our "triggers" are (not only) Kubernetes objects — thankfully, controller-runtime is easily extensible. In controller-runtime, a source is just something that starts putting items into a given queue. The library ships sources that watch the Kubernetes API, but nothing about the interface for a source requires that.
+
+Breaking it down, the interface for a source consists of a single method:
+
+<pre><code type='click-ui' language='go'>
+type Source interface {
+    Start(context.Context, workqueue.TypedRateLimitingInterface[reconcile.Request]) error
+}
+</code></pre>
+
+That is the whole implementation of a source: given a queue, start putting requests into it. A minimal polling source, for instance, could look like this:
+
+<pre><code type='click-ui' language='go'>
+// pollingSource enqueues whatever needsAttention reports, on a fixed interval.
+type pollingSource struct {
+    interval       time.Duration
+    needsAttention func(context.Context) ([]reconcile.Request, error)
+}
+
+func (s *pollingSource) Start(ctx context.Context, q workqueue.TypedRateLimitingInterface[reconcile.Request]) error {
+    go func() {
+        ticker := time.NewTicker(s.interval)
+        defer ticker.Stop()
+        for {
+            select {
+            case <-ctx.Done():
+                return
+            case <-ticker.C:
+                reqs, err := s.needsAttention(ctx)
+                if err != nil {
+                    continue
+                }
+                for _, req := range reqs {
+                    q.Add(req) // dedup, backoff and rate limiting are the queue's job
+                }
+            }
+        }
+    }()
+    return nil
+}
+</code></pre>
+
+Both of our triggers (a periodic sweep of all services and the reactive "fast-path") are this shape. They differ only in what `needsAttention` actually does. That let us express both of our triggers as sources feeding one shared queue, with one shared reconciler behind it.
+
+![Rate-limited reconciliation pipeline](https://clickhouse.com/uploads/Click_House_Rate_Limited_Reconciliation_Pipeline_1_7bcd5c4d95.jpg)
+
+The queue in the middle is where deduplication, backoff, and bounded concurrency live, so neither source has to know the other exists.
+
+The first source is the **periodic one,** the periodic recommendation loop. It is the renewed implementation of the old timer: Each service is assigned a slot deterministically and then enqueued when it's time for that particular slot, so the periodic load is smoothed out rather than a spike at the top of every cycle.
+
+The second source is the **reactive one,** and it is basically why we started all of this work in the first place. It watches a stream of signals that indicate a service needs attention right now, the kinds of events described earlier. When such a signal appears, the source enqueues that service immediately. The reconciler runs within seconds, and the recommendation that used to wait for the next tick happens almost as soon as the triggering event does.
+
+But where should that stream of signals live? We did not want to invent a bespoke message bus or bolt on yet another queue. The signals are simply rows in a ClickHouse table. As services across the fleet breach a signal threshold (such as running out of memory) those events are written as rows, each tagged with which service it belongs to and when it happened. The reactive source does nothing more than run a small query against that table on a short interval, asking a standard analytical question: which services have produced a relevant signal in the last few minutes?
+
+The important thing is that neither of these sources is a Kubernetes watch. Both are plain triggers built on the same contract, one driven by a clock and one by a ClickHouse query. And yet, they fit well into controller-runtime.
+
+## ClickHouse reacting to ClickHouse {#clickhouse_reacting_to_clickhouse}
+
+The system that keeps ClickHouse Cloud services right-sized is, at its reactive core, of course powered by ClickHouse.
+
+Events stream into a table continuously from across the entire fleet. Every few seconds, the source runs a query over a short, recent time window and asks which services need attention. This is a solid example of real-time analytics: high-rate event ingestion on one side, low-latency windowed queries on the other, with the answer expected in milliseconds even as the table grows.
+
+![ClickHouse Cloud autoscaling recommendation flow](https://clickhouse.com/uploads/Click_House_Cloud_Autoscaling_Recommendation_2_3a5d76c408.jpg)
+
+This is exactly what ClickHouse is built for, and the shape of the data leans into that. The reactive source reads from a small, purpose-built table that holds nothing but signal rows:
+
+<pre><code type='click-ui' language='sql'>
+CREATE TABLE recommendation_signals
+(
+    scrape_ts    DateTime,
+    service_name  LowCardinality(String),
+    metric_name  LowCardinality(String),
+    metric_value Float64
+)
+ENGINE = SharedMergeTree
+ORDER BY (scrape_ts, service_name)
+TTL scrape_ts + INTERVAL 1 HOUR;
+</code></pre>
+
+There is nothing exotic here (which is the whole point, after all). The table is ordered by `scrape_ts`, so the only query the source ever runs is a tight time-range scan that touches roughly a single granule, and a one-hour TTL keeps it from growing unbounded.
+
+Next is the query that the reactive source runs against this table:
+
+<pre><code type='click-ui' language='sql'>
+SELECT DISTINCT service_name, metric_name
+FROM recommendation_signals
+WHERE scrape_ts > now() - INTERVAL 5 MINUTE;
+</code></pre>
+
+That five-minute window is the source's lookback, and it is the entire reactive query. Each `service_name` it returns becomes an item enqueued for reconciliation.
+
+The one piece of ClickHouse finesse is how rows get into that table. We already ingest a firehose of Prometheus metrics into a much larger table, ordered for the access patterns it was built for, roughly `(service_name, metric_name, scrape_ts)`. A fleet-wide poll that filters only on `scrape_ts` cannot use that primary key and would scan an entire partition on every tick. So rather than query the firehose directly, a materialized view does the filtering once, at insert time, and writes only breach rows into the small signals table:
+
+<pre><code type='click-ui' language='sql'>
+CREATE MATERIALIZED VIEW recommendation_signals_mv
+TO recommendation_signals
+AS
+SELECT
+    scrape_ts,
+    service_id,
+    metric_name,
+    metric_value
+FROM prometheus_metrics
+WHERE metric_name IN ('soft_memory_rejections')  -- more signal types go here
+  AND metric_value > 0;
+</code></pre>
+
+The materialized view helps a lot for several reasons:
+
+1. The expensive filtering happens incrementally as data arrives, not on every poll.
+2. The read side stays a cheap, granule-sized scan over a table that only ever holds recent breaches.
+3. Adding a new kind of signal later is easy. A memory OOM, a CPU threshold, anything expressed in data fed into our pipeline is one more entry in that `IN` list, with no change to the read path and none to the source. The SQL deliberately carries no recommendation logic: it decides what counts as a signal, and the source decides what to do about it.
+
+The reactive source can afford to poll every few seconds because, by the time it asks the question in form of a query, the data is already shaped for the question.
+
+The source only considers signals inside the recent window, so it reacts to what is happening now rather than querying a long historical time window, which is naturally expressed as a time predicate on the query. And in addition, our recommendation logic is optimized for speed and can be run several times in succession, producing deterministic results. Those two rules keep the fast path responsive without turning it into a source of noise.
+
+The recursion is quite neat: The product is best in class for real-time analytics; the mechanism that makes the product elastic is, itself, real-time analytics. When we needed a fast, continuously updated view of which services were in trouble, the answer was the same one we give our customers: put the events in ClickHouse and query them.
+
+## Strengths of building on controller-runtime {#strengths_of_building_on_controller_runtime}
+
+Because both sources feed the same queue and the same reconciler, the hard parts are handled in one place, by code refined by a global community of Kubernetes practitioners. And as it is open source, we can contribute any improvements right back into it.
+
+**Deduplication** is a "side effect" of migrating to controller-runtime. When the periodic source and the reactive source both decide the same service needs attention at nearly the same time, the queue collapses them into a single unit of work. We never built a coordination mechanism between the two triggers, because the queue makes it not necessary.
+
+**Backoff** and **retries** are handled the same way. If a recommendation cannot be produced because a dependency is briefly unavailable, the item goes back into the queue with an increasing delay instead of being lost or retried in a tight loop. Bounded concurrency means we cap how many recommendations run at once, which protects the systems we read metrics from regardless of how many signals arrive in a burst.
+
+We did not rewrite the orchestration (instead, we built on top of the existing library primitives) and we did not touch the logic that decides what size a service should be. We added a new source, wired it to the existing queue, and the reactive path inherited deduplication, backoff, concurrency limits, and metrics on day one. The next signal type we want to react to is (by virtue of following the established pattern) just another source or just an update to the existing Materialized View.
+
+Reactivity also changes the rollout decision process in our favor. A new source can be introduced cautiously, in an observe-only mode, so we can watch what it would do before letting it actually drive scaling. Because the source is cleanly separated from the reconcile logic, that kind of staged rollout is a simple configuration switch to flip later on.
+
+## Lessons Learned {#lessons_learned}
+
+controller-runtime is a strong choice if your software already interacts with Kubernetes anyway, even if you reach beyond Kubernetes event sources.
+
+If you have a system whose job is to process things that periodically and reactively need attention, you have what controller-runtime was built for. The reconcile pattern, an idempotent function that takes one item and drives it toward a desired state, is not Kubernetes-specific. The work queue, with its deduplication, backoff, and bounded concurrency, is a genuinely good general-purpose queue. By expressing your triggers as sources over that queue, you get a well-understood, battle-tested foundation for free, and you get to spend your own effort on the logic that is actually unique to your problem.
+
+controller-runtime is not, however, a data pipeline, and it is worth being clear about that and its limitations. Its work queue lives in memory, inside a single process (unless you shard it). There is no durability and no replay: an item is deduplicated only while it sits in the queue, and if the manager restarts, whatever was queued is simply gone. It is a level-triggered reconcile engine, not a stream processor, so it has no notion of event-time windows, joins, or aggregation across events. Logic like "react only if an OOM and a sustained CPU breach happen within the same ten minutes" has to live in our query or our reconciler code obviously.
+
+Our reactive source polls a table rather than subscribing to a push stream, so the poll interval is the floor on how fast it can react. If a reactive enqueue is dropped because the process restarted, nothing is permanently lost. The next source query against the events table enqueues the service again.
+
+Obviously there are other ways to build this. Our signal volume is modest in comparison to data pipelines usually wired up to ClickHouse, recommendations are idempotent and cheap to recompute, and the periodic reconcile covers any gaps. The day a signal needs guaranteed delivery, strict ordering, or correlation across a stateful window is the day we will likely move that part of the path onto a data streaming platform built for it.
+
+We reached for controller-runtime because we already ran it in production, our team knew it, and the reconcile model fits autoscaling quite well: idempotent work driven toward a desired state, with a periodic pass that makes the whole thing self-correcting. The learning from this was discovering how little of it was actually tied to Kubernetes.
+
+## Where we are headed {#where_we_are_headed}
+
+The reactive path is rolling out with a safety-first posture: the periodic sweep remains the main driver, and reactive triggers are being brought online deliberately, starting in an observe-only mode so we can validate them against the steady state before they drive real decisions. From here, the work is mostly additive. More signal types become more sources. Each one tightens the gap between what a service is provisioned for and what its workload actually demands.
+
+Our goal from the beginning was straightforward: right-size at the speed of the workload, not at the speed of a timer. Critical events (such as OOM) will soon immediately trigger a scale-up instead of waiting on the next scheduled run of our recommendation pipeline. Same recommendations but much faster, making ClickHouse Cloud autoscaling an even better experience.
+
+
+---
+
+## Get started today
+
+Interested in seeing how ClickHouse works on your data? Get started with ClickHouse Cloud in minutes and receive $300 in free credits.
+
+[Sign up](https://console.clickhouse.cloud/signUp?loc=blog-cta-1468-get-started-today-sign-up&utm_blogctaid=1468)
+
+---
 
 ---
 
