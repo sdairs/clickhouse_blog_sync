@@ -1,5 +1,5 @@
 {
-  "last_sync": "2026-08-06T08:36:19.989727Z",
+  "last_sync": "2026-08-07T07:16:00.644174Z",
   "processed_blogs": {
     "https://clickhouse.com/blog/clickhouse-raises-400-million-series-d-acquires-langfuse-launches-postgres": {
       "title": "ClickHouse raises $400M Series D led by Dragoneer to accelerate expansion across analytics and AI infrastructure",
@@ -5574,9 +5574,27 @@
       "pub_date": "2026-08-05T00:00:00+00:00",
       "file_path": "blogs/2026-08-05-what-is-wal-backpressure-and-why-does-clickhouse.md",
       "processed_at": "2026-08-06T08:36:19.887700Z"
+    },
+    "https://clickhouse.com/blog/physical-intelligence-rds-to-clickhouse-managed-postgres": {
+      "title": "How Physical Intelligence unified its robotics data stack with Postgres managed by ClickHouse",
+      "pub_date": "2026-08-06T00:00:00+00:00",
+      "file_path": "blogs/2026-08-06-how-physical-intelligence-unified-its-robotics.md",
+      "processed_at": "2026-08-07T07:16:00.305835Z"
+    },
+    "https://clickhouse.com/blog/managed-postgres-notifications-observability-backups": {
+      "title": "What's new in ClickHouse Managed Postgres: Customer notifications, better observability, faster backups, extensions, and more",
+      "pub_date": "2026-08-06T00:00:00+00:00",
+      "file_path": "blogs/2026-08-06-what-s-new-in-clickhouse-managed-postgres.md",
+      "processed_at": "2026-08-07T07:16:00.412591Z"
+    },
+    "https://clickhouse.com/blog/clickhouse-release-26-07": {
+      "title": "ClickHouse Release 26.7",
+      "pub_date": "2026-08-06T00:00:00+00:00",
+      "file_path": "blogs/2026-08-06-clickhouse-release-26-7.md",
+      "processed_at": "2026-08-07T07:16:00.541024Z"
     }
   },
-  "total_blogs": 929,
+  "total_blogs": 932,
   "failed_blogs": [
     {
       "url": "https://clickhouse.com/jp/blog/clickhouse-gcp-japan-availability",
