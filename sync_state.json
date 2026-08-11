@@ -1,5 +1,5 @@
 {
-  "last_sync": "2026-08-10T07:41:53.730581Z",
+  "last_sync": "2026-08-11T07:07:34.413847Z",
   "processed_blogs": {
     "https://clickhouse.com/blog/clickhouse-raises-400-million-series-d-acquires-langfuse-launches-postgres": {
       "title": "ClickHouse raises $400M Series D led by Dragoneer to accelerate expansion across analytics and AI infrastructure",
@@ -5592,9 +5592,21 @@
       "pub_date": "2026-08-06T00:00:00+00:00",
       "file_path": "blogs/2026-08-06-clickhouse-release-26-7.md",
       "processed_at": "2026-08-07T07:16:00.541024Z"
+    },
+    "https://clickhouse.com/blog/whats-new-in-clickstack-june-2026": {
+      "title": "Whats new in ClickStack - June + July",
+      "pub_date": "2026-08-10T00:00:00+00:00",
+      "file_path": "blogs/2026-08-10-whats-new-in-clickstack-june-july.md",
+      "processed_at": "2026-08-11T07:07:34.186904Z"
+    },
+    "https://clickhouse.com/blog/musinsa-customer-data-platform": {
+      "title": "How Musinsa scaled its audience engine with ClickHouse Cloud and reduced TCO by 71.4%",
+      "pub_date": "2026-08-09T00:00:00+00:00",
+      "file_path": "blogs/2026-08-09-how-musinsa-scaled-its-audience-engine-with.md",
+      "processed_at": "2026-08-11T07:07:34.312693Z"
     }
   },
-  "total_blogs": 932,
+  "total_blogs": 934,
   "failed_blogs": [
     {
       "url": "https://clickhouse.com/jp/blog/clickhouse-gcp-japan-availability",
