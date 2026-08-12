@@ -1,5 +1,5 @@
 {
-  "last_sync": "2026-08-11T07:07:34.413847Z",
+  "last_sync": "2026-08-12T07:24:49.170702Z",
   "processed_blogs": {
     "https://clickhouse.com/blog/clickhouse-raises-400-million-series-d-acquires-langfuse-launches-postgres": {
       "title": "ClickHouse raises $400M Series D led by Dragoneer to accelerate expansion across analytics and AI infrastructure",
@@ -5604,9 +5604,21 @@
       "pub_date": "2026-08-09T00:00:00+00:00",
       "file_path": "blogs/2026-08-09-how-musinsa-scaled-its-audience-engine-with.md",
       "processed_at": "2026-08-11T07:07:34.312693Z"
+    },
+    "https://clickhouse.com/blog/pg_clickhouse-whats-new-july-2026": {
+      "title": "What's new in pg_clickhouse v0.10.0: Subqueries, TPC-H Speedups, C Driver, and Aggregates",
+      "pub_date": "2026-08-11T00:00:00+00:00",
+      "file_path": "blogs/2026-08-11-what-s-new-in-pg-clickhouse-v0-10-0-subqueries.md",
+      "processed_at": "2026-08-12T07:24:48.894940Z"
+    },
+    "https://clickhouse.com/blog/bitdrift-clickhouse-mobile-observability-for-clickstack": {
+      "title": "bitdrift brings ClickHouse-powered mobile observability to ClickStack",
+      "pub_date": "2026-08-11T00:00:00+00:00",
+      "file_path": "blogs/2026-08-11-bitdrift-brings-clickhouse-powered-mobile.md",
+      "processed_at": "2026-08-12T07:24:49.069130Z"
     }
   },
-  "total_blogs": 934,
+  "total_blogs": 936,
   "failed_blogs": [
     {
       "url": "https://clickhouse.com/jp/blog/clickhouse-gcp-japan-availability",
