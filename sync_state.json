@@ -1,5 +1,5 @@
 {
-  "last_sync": "2026-08-12T07:24:49.170702Z",
+  "last_sync": "2026-08-13T07:26:51.161387Z",
   "processed_blogs": {
     "https://clickhouse.com/blog/clickhouse-raises-400-million-series-d-acquires-langfuse-launches-postgres": {
       "title": "ClickHouse raises $400M Series D led by Dragoneer to accelerate expansion across analytics and AI infrastructure",
@@ -5616,9 +5616,15 @@
       "pub_date": "2026-08-11T00:00:00+00:00",
       "file_path": "blogs/2026-08-11-bitdrift-brings-clickhouse-powered-mobile.md",
       "processed_at": "2026-08-12T07:24:49.069130Z"
+    },
+    "https://clickhouse.com/blog/ifood-agentic-security-platform": {
+      "title": "How iFood built its agentic security platform on ClickHouse Cloud",
+      "pub_date": "2026-08-12T00:00:00+00:00",
+      "file_path": "blogs/2026-08-12-how-ifood-built-its-agentic-security-platform-on.md",
+      "processed_at": "2026-08-13T07:26:51.085756Z"
     }
   },
-  "total_blogs": 936,
+  "total_blogs": 937,
   "failed_blogs": [
     {
       "url": "https://clickhouse.com/jp/blog/clickhouse-gcp-japan-availability",
