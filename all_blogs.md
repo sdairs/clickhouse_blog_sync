@@ -1,6 +1,238 @@
 # ClickHouse Blogs
-Last updated: 2026-08-13 07:26:51 UTC
-Total blogs: 937
+Last updated: 2026-08-14 07:24:42 UTC
+Total blogs: 939
+
+---
+
+## What’s new in the ClickHouse Grafana plugin
+Published: 2026-08-13T00:00:00+00:00
+URL: https://clickhouse.com/blog/clickhouse-grafana-plugin-4-20
+
+---
+title: "What’s new in the ClickHouse Grafana plugin"
+date: "2026-08-13T16:14:40.296Z"
+author: "Alex Fedotyev"
+category: "Engineering"
+excerpt: "ClickHouse Grafana plugin 4.20 brings compact query mode, click-to-filter log investigation, guided variable and annotation editors, and OpenTelemetry dashboards"
+---
+
+# What’s new in the ClickHouse Grafana plugin
+
+
+In the spring, I wrote about [where we wanted to take the ClickHouse Grafana plugin](https://clickhouse.com/blog/grafana-plugin-vision). A good share of that has now shipped. The recent work, which was done in close partnership with Grafana Labs, has focused on making the common cases of finding a log line, narrowing to one service, or detecting a deployment, faster without SQL, while always ensuring full SQL is just one click away for more advanced needs.
+
+## Contributors {#contributors}
+
+As always, thank you to our open source contributors and users who help improve the plugin for everyone.
+
+[aangelisc](https://github.com/aangelisc), [adamyeats](https://github.com/adamyeats), [akkikumar72](https://github.com/akkikumar72), [alyssajoyner](https://github.com/alyssajoyner), [bossinc](https://github.com/bossinc), [fabrizio-grafana](https://github.com/fabrizio-grafana), [fleon](https://github.com/fleon), [hkrutzer](https://github.com/hkrutzer), [itsgareth](https://github.com/itsgareth), [itsmylife](https://github.com/itsmylife), [iwysiu](https://github.com/iwysiu), [karl-power](https://github.com/karl-power), [katebrenner](https://github.com/katebrenner), [lwandz13](https://github.com/lwandz13), [MattiasMTS](https://github.com/MattiasMTS), [mattvella07](https://github.com/mattvella07), [Orenico10](https://github.com/Orenico10), [SaiPrasanna9](https://github.com/SaiPrasanna9), [stackempty](https://github.com/stackempty), [Tarasusrus](https://github.com/Tarasusrus)
+
+When working on the user experience, our efforts are focused on optimizing for the common adoption path that we see our users take - sending OpenTelemetry logs and traces into ClickHouse, as well as increasingly metrics, using the [ClickHouse exporter for the OpenTelemetry Collector](https://github.com/open-telemetry/opentelemetry-collector-contrib/tree/main/exporter/clickhouseexporter), before reaching for Grafana to investigate. 
+
+The query builder has always been part of the plugin since v1, but for someone new, or for a user looking to quickly filter events, design inefficiencies meant it was often faster to drop into writing ClickHouse SQL by hand. The recent work has focused on making the common cases of finding a log line, narrowing to one service, or detecting a deployment, faster without SQL, while always ensuring full SQL is just one click away for more advanced needs. We’ve linked the pull request behind each feature so you can dig in.
+
+## Search first, SQL one click away {#search_first_sql_one_click_away}
+
+If you’ve just got a table with logs in it, configuring the datasource shouldn’t be complicated. Single-table mode ([#1832](https://github.com/grafana/clickhouse-datasource/pull/1832)) is designed for exactly that use case. Point the datasource at your table, confirm its columns, and the editor gets out of your way - giving you a simpler, more focused experience.
+
+![grafana_aug2026_image6.png](https://clickhouse.com/uploads/grafana_aug2026_image6_4cbd16c154.png)
+
+<p style='text-align: center; font-style: italic;'>Single table configuration mode</p>
+
+With single-table mode configured, compact query mode ([#1841](https://github.com/grafana/clickhouse-datasource/pull/1841)) replaces the full builder with a more focused experience: type a log message and the plugin writes the query for you, while type-aware filters, query history, and a live SQL preview help you refine it. The generated SQL is always available to copy or edit directly.
+
+While the compact editor is currently scoped to single-table configurations, this aligns perfectly with common Grafana patterns where users create dedicated data sources for specific log or trace streams. For example, you could easily create "Logs - Prod", "Logs - Staging" and so on. This approach not only provides a focused experience; to try it, simply create a targeted datasource for your specific table, open Explore, and let us know how it works for your workflow.
+
+![grafana_aug2026_image4.png](https://clickhouse.com/uploads/grafana_aug2026_image4_8e21d4030f.png)
+
+<p style='text-align: center; font-style: italic;'>Compact query mode in Explore, with the search box, type-aware filters, query history, and the live SQL preview</p>
+
+*Note*: Early users provided feedback that they would like the ability to show custom fields/columns for their logs in the compact mode, whether for those using the OpenTelemetry or custom schema e.g. Query logs. This has been addressed by a new improvement under PR [#2108](https://github.com/grafana/clickhouse-datasource/pull/2108), and will be included in the next plugin build.
+
+## Investigate by clicking, not typing {#investigate_by_clicking_not_typing}
+
+Most investigations are iterative: you start with a search, inspect the results, and then narrow or widen them by applying and removing filters. The latest plugin improvements let you follow that flow by clicking, without needing to edit the SQL. 
+
+Expanded log rows now organize OpenTelemetry attributes into collapsible Resource, Scope, and Log sections ([#1829](https://github.com/grafana/clickhouse-datasource/pull/1829)). From there, you can filter for or filter out any value; applied filters are highlighted, and clicking one again removes it ([#1824](https://github.com/grafana/clickhouse-datasource/pull/1824)). You can also select text within a log message and filter on that substring directly ([#1738](https://github.com/grafana/clickhouse-datasource/pull/1738)).
+
+![grafana_aug2026_image3.png](https://clickhouse.com/uploads/grafana_aug2026_image3_3ed6aa15e5.png)
+
+<p style='text-align: center; font-style: italic;'>Filter on the text highlight to filter</p>
+
+Additionally, for dashboards, ad hoc filters can now discover keys and values within ClickHouse Map columns and can apply filters across multiple tables ([#1793](https://github.com/grafana/clickhouse-datasource/pull/1793), [#1757](https://github.com/grafana/clickhouse-datasource/pull/1757)). Aliases and OpenTelemetry Map keys are resolved consistently whether you add a filter by clicking or through the query builder.
+
+![grafana_aug2026_image5.png](https://clickhouse.com/uploads/grafana_aug2026_image5_a1ac926f0c.png)
+
+## Out-of-the-box dashboards - useful the moment you connect {#outofthebox_dashboards_useful_the_moment_you_connect}
+
+As OpenTelemetry rises as the industry standard for collecting and storing logs and traces, ClickHouse has been uniquely tuned to handle that data at scale. To ensure you can derive immediate value from this data, the plugin now includes three OpenTelemetry dashboards out of the box ([#1869](https://github.com/grafana/clickhouse-datasource/pull/1869)): a Logs Explorer, a Traces Explorer, and a per-service deep dive that ties logs and traces together. 
+
+These panels are fully interactive with filters, annotations, log samples panels per each service and similarly KPIs and top errors for traces and service dashboards.
+
+![grafana_aug2026_image2.png](https://clickhouse.com/uploads/grafana_aug2026_image2_8cae5f8d2c.png)
+
+## Less SQL for dashboard scaffolding {#less_sql_for_dashboard_scaffolding}
+
+Building richer dashboards often means adding variables and annotations, but until now both required users to write the underlying SQL. That added unnecessary complexity to common tasks such as making a dashboard filterable or marking deployments on a chart.
+
+The new annotation editor ([#1922](https://github.com/grafana/clickhouse-datasource/pull/1922)) provides a guided experience: select a column to monitor, such as `service.version`, and the plugin generates the change-detection SQL automatically. This allows both changes and reversions to be easily detected, allowing deployments and rollbacks to appear as separate markers. The guided variable editor ([#1868](https://github.com/grafana/clickhouse-datasource/pull/1868)) works similarly: choose a column, including a key within a Map column, and it generates the SQL needed to retrieve its distinct values. In both editors, the generated SQL remains visible and editable, and any changes you make take precedence.
+
+![grafana_aug2026_image7.png](https://clickhouse.com/uploads/grafana_aug2026_image7_25d8a06d13.png)
+
+<p style='text-align: center; font-style: italic;'>The annotation editor’s change-detection preset and the guided variable editor</p>
+
+---
+
+## Get started today
+
+Interested in seeing how ClickHouse works on your data? Get started with ClickHouse Cloud in minutes and receive $300 in free credits.
+
+[Sign up](https://console.clickhouse.cloud/signUp?loc=blog-cta-1537-get-started-today-sign-up&utm_blogctaid=1537)
+
+---
+
+
+## Try it {#try_it}
+
+To try the plugin, make sure you're on version 4.20 or later of the [ClickHouse data source](https://grafana.com/grafana/plugins/grafana-clickhouse-datasource/) (install or update it from the Grafana plugin catalog), then point a data source at your OpenTelemetry tables. 
+
+The principle behind all of these improvements is the same one we set out in the spring: common tasks shouldn’t require SQL, but SQL should always be one click away when you need it. If you use ClickHouse with Grafana, the most valuable feedback you can give us is where the experience still gets in your way. Compact query mode is intentionally starting with single-table data sources so we can learn from real-world usage before taking it further.
+
+## Appendix: everything else that shipped {#appendix_everything_else_that_shipped}
+
+Not every improvement warrants a headline. Many of these changes are small on their own, but together they make the plugin faster, more reliable, and easier to use.
+
+1. **A smarter builder.** Conventional log columns are detected automatically ([#1791](https://github.com/grafana/clickhouse-datasource/pull/1791)); tooltips link directly to relevant documentation ([#1790](https://github.com/grafana/clickhouse-datasource/pull/1790)); and a shared schema picker now powers the builder, variable editor, and annotation editor ([#1828](https://github.com/grafana/clickhouse-datasource/pull/1828)). Time columns are also combined into a single `ORDER BY` ([#1695](https://github.com/grafana/clickhouse-datasource/pull/1695)) for better primary key usage. Explore can show raw log samples beneath metrics charts ([#1744](https://github.com/grafana/clickhouse-datasource/pull/1744)), and attribute columns can use JSON as well as Map types ([#1866](https://github.com/grafana/clickhouse-datasource/pull/1866)).  
+2. **Better performance.** Schema introspection is cached per datasource ([#1787](https://github.com/grafana/clickhouse-datasource/pull/1787)), while fast trace-ID lookup is no longer tied to OpenTelemetry mode ([#1786](https://github.com/grafana/clickhouse-datasource/pull/1786)).  
+3. **Grafana 13 readiness.** Compatibility work clears the path to Grafana 13 without changing behaviour on Grafana 11.6 or 12.x ([#1861](https://github.com/grafana/clickhouse-datasource/pull/1861), [#1863](https://github.com/grafana/clickhouse-datasource/pull/1863)).  
+4. **Greater reliability.** Span links open the correct linked trace ([#1890](https://github.com/grafana/clickhouse-datasource/pull/1890)), and SQL validation now uses a port of ClickHouse's own lexer ([#1778](https://github.com/grafana/clickhouse-datasource/pull/1778)).  
+5. **Self-observability.** The plugin backend is instrumented with OpenTelemetry, with a machine-readable contract for its spans ([#1734](https://github.com/grafana/clickhouse-datasource/pull/1734), [#1735](https://github.com/grafana/clickhouse-datasource/pull/1735)).  
+6. **Attribution and identity.** When header forwarding is enabled, queries can carry the Grafana user’s identity into ClickHouse for row policies, quotas, and query-log attribution ([#1797](https://github.com/grafana/clickhouse-datasource/pull/1797)). This release also adds foundational support for Grafana’s SQL abstractions ([#1756](https://github.com/grafana/clickhouse-datasource/pull/1756)).
+
+
+---
+
+## ClickStack and Hud bring runtime intelligence to AI-powered development
+Published: 2026-08-13T00:00:00+00:00
+URL: https://clickhouse.com/blog/clickstack-hud-runtime-intelligence
+
+---
+title: "ClickStack and Hud bring runtime intelligence to AI-powered development"
+date: "2026-08-13T12:53:04.085Z"
+category: "Engineering"
+excerpt: "ClickStack and Hud now share trace IDs, pairing service-level observability with function-level runtime forensics so coding agents can assess risky changes before they ship, catch regressions right after deploy, and fix them with real production context."
+---
+
+# ClickStack and Hud bring runtime intelligence to AI-powered development
+
+
+AI now generates or assists with [42% of the code developers ship, and that share is expected to reach 65% by 2027](https://www.sonarsource.com/blog/state-of-code-developer-survey-report-the-current-reality-of-ai-coding/). ClickHouse, via its open source observability stack ClickStack, tells teams when and where something broke. Hud’s runtime code sensor tells them why, how to fix it, and whether a risky change should be allowed into production in the first place.
+
+Today, ClickHouse and Hud are announcing an integration that closes the loop across the AI software development lifecycle. Coding agents can generate changes in minutes, but human review and traditional testing cannot always determine how those changes will behave in the real world. 
+
+The hard problem has moved: not producing code, but knowing which changes are safe to ship, detecting problems once they are live, and giving both engineers and agents enough context to resolve them quickly. Together, ClickStack and Hud provide the stack modern engineering teams need to build and ship with AI confidently, with ClickStack providing service-level observability and Hud complementing it with the function-level runtime context needed to identify issues in code before they reach production.
+
+This post covers how AI-forward engineering teams can implement this approach by connecting the ClickStack and Hud MCP servers to a single coding agent and using shared trace IDs to correlate service-level observability with function-level runtime context across pre-deployment checks, release monitoring, and incident response.
+
+## Two layers, stronger together
+
+ClickStack and Hud operate at different layers, which is exactly why they work well together.
+
+ClickStack uses OpenTelemetry data to give teams broad visibility across complex distributed systems and infrastructure. It helps localize an issue to a service, deployment, and endpoint, at scale.
+
+Hud operates at the code layer. Its Runtime Code Sensor captures function-level metrics and deep forensic context, connecting production behavior to the source code and changes behind it. **It requires no manual instrumentation, and it runs with low overhead in production.**
+
+Instrumenting every function in an application with OpenTelemetry is impractical. Once ClickStack narrows the search space, Hud provides the fine-grained context needed to understand exactly what happened inside the code.
+
+This is also what separates Hud from OpenTelemetry auto-instrumentation. 
+
+Auto-instrumentation hooks the libraries and frameworks an application already uses, so it covers the boundaries: incoming requests, outgoing calls, and database queries. It does not reach the functions your team and your coding agents write, because those are not library calls. Hud covers that layer automatically, with no spans to add by hand and no per-function volume to pay for.
+
+In customer-configured workflows, Hud can assess code changes before deployment against production runtime behavior and flag risky changes for review. After deployment, ClickStack uses service-level telemetry to localize issues to the affected service, deployment, or endpoint, while Hud identifies the function-level behavior and code changes behind them. Together, they give engineers and coding agents the context needed to decide whether to roll back or fix the code.
+
+![clickstack_hud_aug2026_image3.png](https://clickhouse.com/uploads/clickstack_hud_aug2026_image3_a89c8abeb9.png)
+
+"Like every modern engineering organization, a growing share of our code is now written with AI. We write code much faster, but the challenge has shifted to shipping just as quickly while maintaining confidence that new code won’t cause harm. ClickHouse gives us the wide operational picture at scale, while Hud gives us the runtime intelligence and next-level introspection needed to evaluate and ship AI-generated code confidently. When issues do arise, combining ClickHouse and Hud allows us to triage and resolve them quickly. For a company building with AI, that combination is the obvious choice."
+
+*Rom Kadria,Senior Software Engineer, monday.com*
+
+## Connecting ClickStack and Hud with trace IDs
+
+The two datasets stay correlated through a deliberately boring mechanism: trace IDs. The forensics Hud captures are enriched with the same trace IDs that ClickStack stores with its traces and logs. That single shared key is what makes the combined system more than two products side by side.
+
+
+<video autoplay="1" muted="1" loop="1" controls="0">
+  <source src="https://clickhouse.com/uploads/Hud_issue_Hyper_DX_1_52a90d860b.mp4" type="video/mp4" />
+</video>
+
+
+When Hud identifies a failing or regressed function, its forensics pinpoint the exact traces involved and link directly to the corresponding logs in ClickHouse. This takes engineers straight to the relevant signals, without forcing them to scan low-signal data or manually narrow the investigation by timeframe. The integration also works in reverse: when ClickStack detects an issue, the agent can query Hud for the code-level context needed to understand and fix it.
+
+## Alerts that arrive with their root cause
+
+Many regressions start small: a query slows down, a code path consumes more resources, a function misbehaves under one specific workload. These shifts show up in function-level data before they are visible in service-level metrics or user reports.
+
+Hud’s Runtime Code Sensor detects these issues and flags them alongside the code-level root cause of the failure or performance regression.
+
+"Our users already trust ClickHouse to store and query their Open Telemetry data at scale. The shift now underway is from simply watching systems or investigating issues to using that data to make day-to-day engineering decisions. Hud connects observability data to the code and changes behind it, making the entire stack more useful for teams building and shipping software with AI."
+
+*Mike Shi, Head of Observability, ClickHouse*
+
+---
+
+## See runtime intelligence in action with Hud and ClickStack
+
+Discover how ClickStack and Hud help your team ship AI-generated code faster—and with confidence. Book a demo today.
+
+[Book a demo](https://clickhouse.com/company/contact?loc=blog-cta-1528-see-runtime-intelligence-in-action-with-hud-and-clickstack-book-a-demo&utm_blogctaid=1528)
+
+---
+
+
+## Build the agentic workflows to unlock true agentic engineering
+
+With ClickStack and Hud, teams can build agentic coding workflows that bring more runtime context into the SDLC. The integration supports bring-your-own-agent workflows, including:
+
+1. Auto-triage and auto-fix workflows for errors and performance degradations  
+2. Release monitoring workflows that flag regressions immediately upon a new release compared to previous versions, with rollback mechanisms and a code-level fix produced from Hud’s root cause data.  
+3. Pre-deploy risk assessment that scores PRs against real runtime behavior from production.
+
+
+
+![](https://clickhouse.com/uploads/clickstack_hud_aug2026_image1_8818d57a84.png)
+
+![](https://clickhouse.com/uploads/clickstack_hud_aug2026_image4_5ae2610e6f.png)
+
+
+Runtime intelligence can be used to help streamline agentic coding by focusing on the bottleneck: how the team can safely ship AI-generated code to production. An AI-generated change gets evaluated against how the affected functions actually behave in production before it ships, taking real forensic data of parameters and behavior to compare against \- so risky changes are held for review, testing, or correction. 
+
+With ClickStack and Hud, the agent is not only reasoning over isolated alerts or static code, but over real, recent operational data with function-level context, and the history of how the application behaves \- this is what makes autonomous engineering safe enough to trust.
+
+"AI is accelerating how quickly teams can generate code, but safely shipping it with high confidence requires production context. Hud and ClickHouse bring real production behavior at an unparalleled breadth and depth, so teams can build a production-aware AI SDLC: Gating before it ships, proactive verification once it is deployed, and fix issues as they arise \- all using real runtime truth. Together with ClickHouse, we are bringing that intelligence across the entire AI SDLC."
+
+*Roee Adler, CEO, Hud*
+
+## Getting started
+
+As AI writes more software, ClickHouse and Hud are building toward a production-aware engineering stack where runtime intelligence is available at every stage of the AI SDLC. 
+
+We’re excited to hear about your experience as we expand on this integration. 
+
+To try it, install the Hud SDK and connect it to your ClickStack account. Runtime intelligence starts flowing alongside the OpenTelemetry data you already collect. You can [read the docs](https://docs.hud.io/docs/clickhouse-clickstack-integration) to get set up.  
+
+
+
+
+
+---
+
+## Try it today
+
+Discover how ClickStack and Hud help your team ship AI-generated code faster—and with confidence. Book a demo today.
+
+[Book a demo](https://clickhouse.com/company/contact?loc=blog-cta-1529-try-it-today-book-a-demo&utm_blogctaid=1529)
+
+---
 
 ---
 

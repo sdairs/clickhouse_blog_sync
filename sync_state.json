@@ -1,5 +1,5 @@
 {
-  "last_sync": "2026-08-13T07:26:51.161387Z",
+  "last_sync": "2026-08-14T07:24:42.835052Z",
   "processed_blogs": {
     "https://clickhouse.com/blog/clickhouse-raises-400-million-series-d-acquires-langfuse-launches-postgres": {
       "title": "ClickHouse raises $400M Series D led by Dragoneer to accelerate expansion across analytics and AI infrastructure",
@@ -5622,9 +5622,21 @@
       "pub_date": "2026-08-12T00:00:00+00:00",
       "file_path": "blogs/2026-08-12-how-ifood-built-its-agentic-security-platform-on.md",
       "processed_at": "2026-08-13T07:26:51.085756Z"
+    },
+    "https://clickhouse.com/blog/clickhouse-grafana-plugin-4-20": {
+      "title": "What’s new in the ClickHouse Grafana plugin",
+      "pub_date": "2026-08-13T00:00:00+00:00",
+      "file_path": "blogs/2026-08-13-what-s-new-in-the-clickhouse-grafana-plugin.md",
+      "processed_at": "2026-08-14T07:24:42.558636Z"
+    },
+    "https://clickhouse.com/blog/clickstack-hud-runtime-intelligence": {
+      "title": "ClickStack and Hud bring runtime intelligence to AI-powered development",
+      "pub_date": "2026-08-13T00:00:00+00:00",
+      "file_path": "blogs/2026-08-13-clickstack-and-hud-bring-runtime-intelligence-to.md",
+      "processed_at": "2026-08-14T07:24:42.731996Z"
     }
   },
-  "total_blogs": 937,
+  "total_blogs": 939,
   "failed_blogs": [
     {
       "url": "https://clickhouse.com/jp/blog/clickhouse-gcp-japan-availability",
