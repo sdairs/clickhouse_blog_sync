@@ -1,5 +1,5 @@
 {
-  "last_sync": "2026-08-18T06:42:21.186121Z",
+  "last_sync": "2026-08-19T06:42:43.327861Z",
   "processed_blogs": {
     "https://clickhouse.com/blog/clickhouse-raises-400-million-series-d-acquires-langfuse-launches-postgres": {
       "title": "ClickHouse raises $400M Series D led by Dragoneer to accelerate expansion across analytics and AI infrastructure",
@@ -5640,9 +5640,21 @@
       "pub_date": "2026-08-14T00:00:00+00:00",
       "file_path": "blogs/2026-08-14-announcing-support-for-clickstack-in-the.md",
       "processed_at": "2026-08-15T06:38:14.690817Z"
+    },
+    "https://clickhouse.com/blog/sony-liv-real-time-analytics": {
+      "title": "How Sony LIV uses ClickHouse Cloud to deliver live streaming analytics at billion-row scale",
+      "pub_date": "2026-08-18T00:00:00+00:00",
+      "file_path": "blogs/2026-08-18-how-sony-liv-uses-clickhouse-cloud-to-deliver.md",
+      "processed_at": "2026-08-19T06:42:43.072220Z"
+    },
+    "https://clickhouse.com/blog/postgres-19-monitoring-whats-new": {
+      "title": "What's New with Monitoring in PostgreSQL 19",
+      "pub_date": "2026-08-18T00:00:00+00:00",
+      "file_path": "blogs/2026-08-18-what-s-new-with-monitoring-in-postgresql-19.md",
+      "processed_at": "2026-08-19T06:42:43.269404Z"
     }
   },
-  "total_blogs": 940,
+  "total_blogs": 942,
   "failed_blogs": [
     {
       "url": "https://clickhouse.com/jp/blog/clickhouse-gcp-japan-availability",
