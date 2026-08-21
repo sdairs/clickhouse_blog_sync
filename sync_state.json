@@ -1,5 +1,5 @@
 {
-  "last_sync": "2026-08-20T06:45:30.437903Z",
+  "last_sync": "2026-08-21T06:47:26.614113Z",
   "processed_blogs": {
     "https://clickhouse.com/blog/clickhouse-raises-400-million-series-d-acquires-langfuse-launches-postgres": {
       "title": "ClickHouse raises $400M Series D led by Dragoneer to accelerate expansion across analytics and AI infrastructure",
@@ -5652,9 +5652,21 @@
       "pub_date": "2026-08-18T00:00:00+00:00",
       "file_path": "blogs/2026-08-18-what-s-new-with-monitoring-in-postgresql-19.md",
       "processed_at": "2026-08-19T06:42:43.269404Z"
+    },
+    "https://clickhouse.com/blog/posette-talk-recap-postgres-isnt-slow-your-storage-is": {
+      "title": "POSETTE Talk Recap - Postgres Isn't Slow. Your Storage Is",
+      "pub_date": "2026-08-20T00:00:00+00:00",
+      "file_path": "blogs/2026-08-20-posette-talk-recap-postgres-isn-t-slow-your.md",
+      "processed_at": "2026-08-21T06:47:26.322289Z"
+    },
+    "https://clickhouse.com/blog/shopify-observability-at-global-scale": {
+      "title": "Shopify powers observability for global-scale commerce with ClickHouse",
+      "pub_date": "2026-08-20T00:00:00+00:00",
+      "file_path": "blogs/2026-08-20-shopify-powers-observability-for-global-scale.md",
+      "processed_at": "2026-08-21T06:47:26.537199Z"
     }
   },
-  "total_blogs": 942,
+  "total_blogs": 944,
   "failed_blogs": [
     {
       "url": "https://clickhouse.com/jp/blog/clickhouse-gcp-japan-availability",

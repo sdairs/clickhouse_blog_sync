@@ -1,6 +1,258 @@
 # ClickHouse Blogs
-Last updated: 2026-08-20 06:45:30 UTC
-Total blogs: 942
+Last updated: 2026-08-21 06:47:26 UTC
+Total blogs: 944
+
+---
+
+## POSETTE Talk Recap - Postgres Isn't Slow. Your Storage Is
+Published: 2026-08-20T00:00:00+00:00
+URL: https://clickhouse.com/blog/posette-talk-recap-postgres-isnt-slow-your-storage-is
+
+---
+title: "POSETTE Talk Recap - Postgres Isn't Slow. Your Storage Is"
+date: "2026-08-20T16:11:08.619Z"
+author: "ClickHouse"
+category: "Engineering"
+excerpt: "A recap of Sai Srirampur's POSETTE 2026 talk on storage performance in Postgres, with a local NVMe vs. EBS benchmark and the production setup behind it."
+---
+
+# POSETTE Talk Recap - Postgres Isn't Slow. Your Storage Is
+
+
+At [POSETTE 2026](https://posetteconf.com/2026/talks/postgres-isn-t-slow-your-storage-is/), Sai Srirampur presented "Postgres Isn’t Slow. Your Storage Is." a talk examining how storage affects PostgreSQL performance at scale. This post recaps the benchmark, what the results revealed, and the architecture proposed for running PostgreSQL on local NVMe in production. You can watch the full talk in the video linked below.
+
+<iframe width="768" height="432" src="https://www.youtube.com/embed/h7by8IKtJG0" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe>
+
+The talk starts with several symptoms teams running Postgres at scale may recognize: ingestion slows down, P95 read latency becomes unpredictable, autovacuum falls behind, checkpoints compete with your actual workload for resources, or logical replication accumulates lag. These problems do not always share the same cause, but they can have a common one that is easy to overlook: storage performance.
+
+To understand why, Sai ran a benchmark comparing the same 3.3-billion-row PostgreSQL workload on baseline gp3 EBS and local NVMe. We will walk through the setup and what Sai discovered when analyzing the results, then close with the production patterns proposed for running Postgres on local NVMe.
+
+## Five scaling symptoms {#five_scaling_symptoms}
+
+There are five common issues that often appear once a PostgreSQL workload reaches hundreds of gigabytes or terabytes and is running with real concurrency and throughput.
+
+1. **Slow ingestion.** The first one is ingestion pipelines heavy on UPDATEs and UPSERTs. Jobs that once finished in seconds can stretch into minutes as the volume of data underneath them grows.
+
+2. **Inconsistent read latency.** Next one appears in workloads where most queries remain fast but a few become dramatically slower. P95 latency moves from milliseconds to seconds, dashboards time out, and the uneven slowdown makes the cause harder to isolate.
+
+3. **VACUUM falling behind.** A third issue is autovacuum falling behind as UPDATE and UPSERT throughput grows, with table bloat accumulating from gigabytes into terabytes.
+
+4. **Slower checkpoints.** Checkpoints can also take longer and compete with the client workload for I/O and CPU, turning an operation that used to be invisible into a recurring latency spike.
+
+5. **Logical replication lag.** The last symptom appears when PostgreSQL data is streaming to systems such as Kafka or ClickHouse. WAL decoding can be slow and a growing replication slot can compound the problem.
+
+## How do these symptoms connect to storage {#how_do_these_symptoms_connect_to_storage}
+
+As the working set outgrows the memory available to PostgreSQL and the operating-system page cache, more data read require physical I/O. On slower storage, the higher cost and queuing of those reads can increase both average and tail latency.
+
+Client queries and background maintenance also use the same storage budget. Heap and index writes, WAL synchronization, checkpoints, VACUUM, and logical-decoding spills compete for bandwidth, IOPS, and queue capacity.
+
+Once storage reaches one of those limits, operations begin delaying one another. That is how slow storage can be the root cause of several apparently unrelated PostgreSQL problems.
+
+## What changes with local NVMe {#what_changes_with_local_nvme}
+
+The case for local NVMe is not that it eliminates I/O, but that it can sharply reduce its cost. The comparison contrasts millisecond-scale operations on network-attached storage with operations that may complete in tens of microseconds on local NVMe. Cache misses, WAL flushes, and maintenance I/O still happen, but they simply don’t impact the overall system as much. 
+
+
+## The benchmark: Local NVMe vs. EBS {#the_benchmark_local_nvme_vs_ebs}
+
+To better understand why this is the case, Sai set up a simple experiment to compare a similar workload on PostgreSQL running on EBS and local NVMe.
+
+### Setup
+
+To isolate storage as the variable, the benchmark used eight identical PostgreSQL clusters: four using instance-store NVMe and four using baseline gp3 EBS provisioned at 3,000 IOPS. Each cluster ran on an m6id.4xlarge instance with 16 vCPUs, 64 GiB of RAM, and 16 GiB of shared_buffers. We used multiple instances for each storage type to normalize variability across benchmark runs. 
+
+The setup used a 482 GiB `pgbench_accounts` heap containing 3.3 billion rows. Each cluster then ran the same highly concurrent random-UPDATE workload for five minutes, with 64 clients and 16 worker threads:
+
+<pre><code type='click-ui' language='sql'>
+\set aid random(1, 3300000000)
+UPDATE pgbench_accounts SET abalance = abalance + 1 WHERE aid = :aid;
+</code></pre>
+
+In short, the only difference between the two groups was the storage class.
+
+### What the benchmark showed
+
+The benchmark produced a median 16,030 TPS for the NVMe clusters, compared with 1,734 TPS on EBS—a 9.24× difference in this test. Median transaction latency fell from 36.9 ms to 4.0 ms.
+
+For different operations, NVMe completed a VACUUM over 10 GB of bloat in 366 seconds, compared with 964 seconds on EBS, and drained a 10 GB logical-replication backlog in 139 seconds instead of 238 seconds.
+
+One qualification matters: these results apply to this workload and these storage configurations. The EBS side used baseline gp3 provisioned at 3,000 IOPS, different EBS setup would most likely produce different results.
+
+
+### Explaining the gap
+
+The throughput gap becomes easier to understand by looking at where the 37 ms of EBS transaction latency went.
+
+![postgres-ebs-vs-nvme-latency-clickhouse-style.png](https://clickhouse.com/uploads/postgres_ebs_vs_nvme_latency_clickhouse_style_1_1_b2c54fa1db.png)
+
+In this benchmark, page reads accounted for about 19 ms on EBS, compared with 0.3 ms on NVMe. WAL `fsync` at commit added another 11 ms on EBS versus 1.5 ms on NVMe, while lock and scheduler overhead contributed about 5 ms versus 0.2 ms. CPU work itself was roughly the same—about 2 ms in both cases.
+
+In other words, most of the additional EBS latency came from waiting on storage, not from PostgreSQL doing more CPU work.
+
+A mid-run `pg_stat_activity` snapshot showed the same pattern from another angle. Of the 64 backends, 29 on EBS were waiting on `IO:DataFileRead`, compared with nine on NVMe—roughly 45% versus 14%. This was a point-in-time snapshot rather than an average across the run, but it illustrates how many more EBS sessions were stalled on reads at that moment.
+
+![postgres-nvme-vs-ebs-cpu-profile-top20-blog.png](https://clickhouse.com/uploads/postgres_nvme_vs_ebs_cpu_profile_top20_blog_1_4ae47e0f49.png)
+
+The CPU profile then adds a counterintuitive observation. Over a profiling window of roughly 240 seconds, the NVMe host accumulated 2,253 CPU-seconds—about 9.4 cores busy—while the EBS host accumulated only 251 CPU-seconds, or about one core busy. Some PostgreSQL functions appeared proportionally hotter on EBS, but the absolute CPU time showed that EBS processes were spending far more time off-CPU waiting for storage.
+
+The NVMe host kept more of its CPU capacity busy doing useful work. That helps explain the much higher throughput: cache misses, WAL flushes, and maintenance I/O still occurred, but they completed faster and left PostgreSQL spending less time blocked on storage.
+
+## The durability question {#the_durability_question}
+
+After the performance results, the talk turns to the obvious objection: instance-store NVMe is tied to the lifetime of a machine, so the local data disappears with the node. The operational question is whether PostgreSQL can combine NVMe latency with production-grade availability and recovery.
+
+The short answer is yes, given durability is provided at the cluster level rather than by any individual Postgres node.
+
+## Running NVMe-backed Postgres on production {#running_nvmebacked_postgres_on_production}
+
+Running PostgreSQL on local NVMe in production means designing around storage that is fast but tied to the lifetime of a machine. Losing a node means losing its local copy of the data; instance-store volumes cannot be snapshotted through the EBS API; and available capacity depends on the selected instance type.
+
+The production architecture presented in the talk addresses this through three main requirements: replicate the database so the service can survive node loss, maintain backups and recovery data outside the individual machines, and plan capacity around the NVMe available on each instance type. Together, these patterns make it possible to run NVMe-backed PostgreSQL confidently in production.
+
+### High availability with two standbys 
+
+The first pattern is quorum-based synchronous replication with two standby candidates. With a configuration such as `ANY 1 (standby1, standby2)`, a transaction can commit after either standby durably acknowledges its WAL rather than waiting for the slower of the two. Placing the nodes across availability zones protects against an AZ failure.
+
+### Continuous backups to Object Storage for durability 
+
+For durability outside the database nodes, open-source tools such as WAL-G can provide physical base backups and continuous WAL archiving. With low-latency WAL shipping, this architecture can target an RPO measured in seconds and support point-in-time recovery within the retention window.
+
+Backups and WAL should also be kept in a separate failure domain, with another regional copy when the recovery plan needs to survive a full regional outage.
+
+### Backups as the recovery foundation
+
+Base backups and archived WAL are more than an emergency mechanism: the same recovery history can support point-in-time restores, isolated branches, deployment resizing, read-replica seeding, and disaster recovery.
+
+Backups and replication solve different problems. In the architecture described in the talk, standbys provide rapid failover, while backups protect against corruption, operator error, and cluster-wide failure; both recovery paths need regular testing.
+
+### Examples from production
+
+This pattern is not only theoretical, the talk cites public examples from Instacart, which [has described PostgreSQL on NVMe](https://tech.instacart.com/how-instacart-built-a-modern-search-infrastructure-on-postgres-c528fa601d54) for a latency-sensitive search workload, and Datadog, which [has discussed local-NVMe PostgreSQL instances for workloads](https://postgresql.us/events/pgconfus2025/sessions/session/2064/slides/204/) that need them. The recurring pattern is local storage for performance, synchronous replication for availability, and independently stored base backups and WAL archives for recovery.
+
+## The main takeaway {#the_main_takeaway}
+
+The talk closes with a diagnostic suggestion: when PostgreSQL appears to stop scaling, inspect the database and storage together. Slow ingestion, unpredictable read latency, vacuum pressure, disruptive checkpoints, and replication lag can be signals that the storage layer has reached a limit.
+
+The bottom line is deliberately narrower than the title: local NVMe can sharply reduce the I/O penalty for storage-bound workloads, but it comes with a different operating model. The architecture outlined in the talk uses quorum-based replication for availability and independently stored base backups plus archived WAL for recovery.
+
+
+---
+
+## Get started with ClickHouse Managed Postgres today
+
+Interested in seeing how ClickHouse Managed Postgres works on your data? Get started with ClickHouse Cloud in minutes and receive $300 in free credits.
+
+[Sign up](https://console.clickhouse.cloud/signUp?intent=pg&loc=blog-cta-1611-get-started-with-clickhouse-managed-postgres-today-sign-up&utm_blogctaid=1611)
+
+---
+
+---
+
+## Shopify powers observability for global-scale commerce with ClickHouse
+Published: 2026-08-20T00:00:00+00:00
+URL: https://clickhouse.com/blog/shopify-observability-at-global-scale
+
+---
+title: "Shopify powers observability for global-scale commerce with ClickHouse"
+date: "2026-08-20T10:17:25.319Z"
+author: "ClickHouse"
+category: "User stories"
+excerpt: "Shopify unified global-scale observability on ClickHouse, achieving up to 30x faster queries while ingesting 100 million events per second at peak."
+---
+
+# Shopify powers observability for global-scale commerce with ClickHouse
+
+## Summary
+
+- Shopify replaced fragmented observability vendors with Observe, its own unified platform for metrics, logs, traces, and exceptions, built on ClickHouse.
+- Moving to ClickHouse delivered a 16x query improvement out of the box, spiking past 30x, while bringing previously unpredictable vendor costs under control.
+- At Black Friday–Cyber Monday peak, the platform ingests around 100 million events per second (roughly 110 GB/s of telemetry) and keeps it queryable in under a minute.
+
+
+[Shopify](https://www.shopify.com/ca) is one of the largest commerce platforms on Earth, operating on five continents with around 500 Kubernetes clusters and 1.5 million pods running at any moment. Traffic flows constantly from Ruby, Go, and TypeScript services, mobile apps, edge logs, databases, and other sources. As engineering director Elijah McPherson puts it, “Commerce never sleeps, and neither does Shopify.”
+
+That demand peaks every year around Black Friday, Cyber Monday (BFCM). “This is our Super Bowl,” Elijah says. Last year during BFCM, Shopify stored 90 PB of data across its fleet, served 2.2 trillion requests at the edge, and ran 14.8 trillion queries against its databases. At peak load, the platform processes up to $5.1 million in transactions per minute.
+
+CALL OUT QUOTE: "During this past Black Friday and Cyber Monday, a minute of downtime can cost our merchants $5.1 million. That's why observability is critical, we need to detect issues and prevent any downtime." — Elijah McPherson, Engineering Director, Shopify
+
+At [Open House SF 2026](https://clickhouse.com/openhouse/san-francisco), Elijah shared how Shopify built its own observability platform for global-scale commerce: why they chose self-hosted ClickHouse; how unifying logs, traces, and exceptions on one engine helped cut cost and complexity; and why, if they were doing it all over again, he’d likely reach for [ClickHouse Cloud](https://clickhouse.com/cloud) instead.
+
+## A disjointed, unpredictable setup
+
+Elijah joined Shopify in 2021 to rebuild its observability infrastructure. At the time, the setup was siloed across vendors: one for metrics, another for logs, another for traces. Bills were scaling faster than the fleet itself, and the team couldn’t forecast them.
+
+“I came in specifically because our observability platform was disjointed across multiple vendors,” Elijah says. “The cost was growing astronomically high, and we couldn't predict it.”
+
+That fragmentation impacted the team’s roadmap. Tooling that had become core production infrastructure was locked into external roadmaps Shopify didn’t control, which meant signals that belonged together lived in systems that didn’t talk to each other. Asking a single question across metrics, logs, and traces meant manually stitching answers across vendors.
+
+Taking stock of the situation, what the team needed was clear: Build something that’s cohesive, make it affordable, make it specific for Shopify, and make it scale.
+
+## Observability built by Shopify, for Shopify
+
+The answer was an internal platform the team calls Observe. The idea is a single place to look across every signal and answer developers’ questions: What’s happening in production *right now*? Is checkout healthy? Did a deploy change behavior? What happened during an incident? How are we performing during BFCM? Can I deploy with confidence?
+
+It didn't happen all at once. The Shopify team started with metrics, where the pain was sharpest and they could have the largest impact. After moving metrics off a costly observability vendor and onto ClickHouse, they consolidated logs, traces, profiles, and exceptions onto the same engine. Recognizing that all of these signals were the same primitive (structured, time-ordered, high-dimensional events), they built one platform for search and analytics across all of them. Today Shopify runs metrics, logs, traces, exceptions, and profiles on ClickHouse.
+
+The requirements were demanding. Ingest runs at around 50 million events per second at steady state and 100 million at BFCM peak, roughly 110 GB/s of uncompressed telemetry at peak, from hundreds of teams and constantly evolving schemas. “Our engineers really depend on this data being available, and they also want to query this data in under a minute,” Elijah says. Those queries arrive in every shape, from broad analytics to needle-in-a-haystack lookups across 30 days.
+
+## Choosing ClickHouse as the engine
+
+The team tried several solutions, and ClickHouse came out on top. “ClickHouse was what won for us, primarily due to it being fast, being able to handle our load, and being open-source, which meant we can contribute and understand the source code,” Elijah says.
+
+He calls ClickHouse “very unique in that it’s an open-source project that scales.” It gave Shopify control over its costs and roadmap, with no per-byte pricing model to outgrow. On top of that, the database keeps improving as the ClickHouse team and wider community invest in it. “A rising tide lifts all boats,” Elijah says.
+
+While no product is perfectly turnkey at Shopify’s scale, Elijah says ClickHouse got them “pretty far down that road” and is “performant out of the box.” It was built for high-volume columnar inserts and interactive analytics over petabytes rather than batch jobs, and its flexible schema model gave the team room to build on.
+
+CALL OUT QUOTE: “We saw around a 16x improvement out of the box with ClickHouse once we had it deployed, and at peak performance over 30x. And for us, less compute is money.”
+— Elijah McPherson, Engineering Director, Shopify
+
+## Lessons from running ClickHouse at scale
+
+Picking ClickHouse was just the start. After running ClickHouse as the backbone of Shopify’s observability platform for a few years, Elijah had a few lessons to share at Open House about improving performance, cost efficiency, and reliability.
+
+The first was about durability. ClickHouse prefers large batches over many small inserts, but as Elijah says, “wait for a big batch” means high latency, and Shopify can’t afford to lose data in the meantime. The solution was a pipeline that buffers telemetry in Kafka, then commits large synchronous writes, acknowledging a batch only after ClickHouse has durably stored it.
+
+Next was flexible schemas. Hundreds of teams at Shopify emit hundreds of event shapes that change daily, so the schema can’t be fixed in advance. To keep queries fast anyway, Elijah and the team use [materialized views](https://clickhouse.com/docs/materialized-views). A metadata view tracks which fields exist and what values they hold, making autocomplete queries return in 50-100 milliseconds. The team also promotes hot keys out of [`Map(String, String)`](https://clickhouse.com/docs/sql-reference/data-types/map) into typed columns, so queries stop converting types at read time. This runs roughly 30% faster than the all-string baseline and compresses better.
+
+And materialized views solve a second problem: correlation. When something breaks, an engineer needs every event tied to a single request, scattered across logs, traces, queries, and profiles. Shopify maintains a materialized view that records which datasets each high-value identifier touched and when, so hitting that lookup first turns a fleet-wide search into a few targeted scans, amounting to a 10x speedup. “If someone wants to say ‘show me all logs, all events, all traces for this job,’ we can do that,” Elijah says.
+
+## Operating it day to day in production
+
+Today, Shopify’s observability platform with ClickHouse runs across roughly 20 tenants, each with its own ingest sources, schema, and query mix. Something is migrating every week (schema changes, ClickHouse updates, Kubernetes upgrades, incompatible node types), and ingestion can’t pause.
+
+To manage that, the team wrote an in-house Kubernetes operator, giving them a declarative schema manager that turns migrations and topology changes across all the tenants into reviewable diffs instead of one-off manual work.
+
+Running open-source ClickHouse also means owning every performance and cost trade-off directly. “Everything is a knob for us,” Elijah says. At scale, things like disk bandwidth, IOPS, CPU, part-merge throughput, and object-storage bills add up to a constant balancing act.
+
+[Compression](https://clickhouse.com/docs/data-compression/compression-in-clickhouse) is a recurring win, since every byte saved means less bandwidth, fewer IOPS, and a smaller bill. One meaningful change was sorting map keys at write time, which gave the team 20-40% disk savings.
+
+## What’s next for Shopify and ClickHouse
+
+For Elijah and the team, the work is never done. They’re currently shifting toward tiered storage with NVMe for the hot path, SSD for the warm window, and object storage for cold history, paired with ARM-based compute. On the schema side, they’re moving past `Map(String, String)` and promoted columns to bucketed maps or [ClickHouse’s native JSON type](https://clickhouse.com/docs/sql-reference/data-types/newjson) for better compression and query plans with less migration work. They’re also rebuilding the ingestion pipeline in Rust, with a per-message acknowledgment model and event-loop scheduling. As Elijah notes, ingest volume tends to double from one BFCM to the next, making the collection pipeline “the hottest of the hot paths.” The rewrite is meant to stay ahead of that.
+
+The same engine that powers internal observability is now expanding into adjacent domains. Shopify runs profiling continuously across its fleet and writes it to ClickHouse alongside logs, traces, and exceptions, which lets the team query CPU flamegraphs over billions of samples. Because all of that data sits in one place, it can also feed an “AI agent layer that anyone at Shopify can talk to, and that’s all backed and queried through ClickHouse,” Elijah says.
+
+The next step is merchant-facing analytics, things like checkout funnels, product views, and conversion insights. “ClickHouse seemed like a natural fit,” Elijah says. “If we can ingest all of the telemetry data and query it for ourselves, this in practice would work really well for our merchants as well.”
+
+## DIY ClickHouse vs. ClickHouse Cloud
+
+Elijah acknowledges that Shopify built their observability platform on self-hosted ClickHouse because, at the time, [ClickHouse Cloud](https://clickhouse.com/cloud) didn’t exist. That means taking on the operational burden themselves. “If I were to go back and ask, ‘Do I really need to do this myself?’ the answer is probably not,” he says. “I think we would choose something like ClickHouse Cloud.”
+
+He notes that while self-hosting offers certain advantages like full control over your roadmap, SLAs, and cost curve, ClickHouse’s managed service delivers faster time-to-value, with [separated storage and compute](https://clickhouse.com/docs/guides/separation-storage-compute), upgrades, and scaling out of the box. “They handle a lot of this for you,” he says. “You can separate ingest from query compute, and it actually turns out you don’t need as many replicas of the data, and that saves money.”
+
+What’s more, Shopify independently arrived at many of the same optimizations the [ClickStack](https://clickhouse.com/clickstack) team has implemented. As the two teams continue to learn from each other’s work, improvements driven by users like Shopify are folded back into ClickStack, allowing the wider open-source community to benefit from the same attention to detail in performance and usability.
+
+
+---
+
+## Get started today
+
+Interested in seeing how ClickHouse works on your data? Get started with ClickHouse Cloud in minutes and receive $300 in free credits.
+
+[Sign up](https://console.clickhouse.cloud/signUp?loc=blog-cta-1603-get-started-today-sign-up&utm_blogctaid=1603)
+
+---
 
 ---
 
