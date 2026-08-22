@@ -1,5 +1,5 @@
 {
-  "last_sync": "2026-08-21T06:47:26.614113Z",
+  "last_sync": "2026-08-22T06:39:51.314999Z",
   "processed_blogs": {
     "https://clickhouse.com/blog/clickhouse-raises-400-million-series-d-acquires-langfuse-launches-postgres": {
       "title": "ClickHouse raises $400M Series D led by Dragoneer to accelerate expansion across analytics and AI infrastructure",
@@ -5664,9 +5664,21 @@
       "pub_date": "2026-08-20T00:00:00+00:00",
       "file_path": "blogs/2026-08-20-shopify-powers-observability-for-global-scale.md",
       "processed_at": "2026-08-21T06:47:26.537199Z"
+    },
+    "https://clickhouse.com/blog/protect-postgres-from-supporting-processes": {
+      "title": "What else runs on your Postgres server, and how do we stop it from taking the database down?",
+      "pub_date": "2026-08-21T00:00:00+00:00",
+      "file_path": "blogs/2026-08-21-what-else-runs-on-your-postgres-server-and-how-do.md",
+      "processed_at": "2026-08-22T06:39:51.046726Z"
+    },
+    "https://clickhouse.com/blog/202608-newsletter": {
+      "title": "August 2026 newsletter",
+      "pub_date": "2026-08-21T00:00:00+00:00",
+      "file_path": "blogs/2026-08-21-august-2026-newsletter.md",
+      "processed_at": "2026-08-22T06:39:51.210263Z"
     }
   },
-  "total_blogs": 944,
+  "total_blogs": 946,
   "failed_blogs": [
     {
       "url": "https://clickhouse.com/jp/blog/clickhouse-gcp-japan-availability",
