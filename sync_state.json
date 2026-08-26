@@ -1,5 +1,5 @@
 {
-  "last_sync": "2026-08-25T06:48:18.788547Z",
+  "last_sync": "2026-08-26T06:50:03.296780Z",
   "processed_blogs": {
     "https://clickhouse.com/blog/clickhouse-raises-400-million-series-d-acquires-langfuse-launches-postgres": {
       "title": "ClickHouse raises $400M Series D led by Dragoneer to accelerate expansion across analytics and AI infrastructure",
@@ -5682,9 +5682,27 @@
       "pub_date": "2026-08-24T00:00:00+00:00",
       "file_path": "blogs/2026-08-24-ensuring-reliable-opentelemetry-ingestion-at-scale.md",
       "processed_at": "2026-08-25T06:48:18.685892Z"
+    },
+    "https://clickhouse.com/blog/suprema-gaming-agent-ready-platform": {
+      "title": "How Suprema Gaming made its data platform agent-ready with ClickHouse Cloud",
+      "pub_date": "2026-08-25T00:00:00+00:00",
+      "file_path": "blogs/2026-08-25-how-suprema-gaming-made-its-data-platform-agent.md",
+      "processed_at": "2026-08-26T06:50:02.570407Z"
+    },
+    "https://clickhouse.com/blog/postgresql-19-wait-for-read-your-writes": {
+      "title": "Read your writes: WAIT FOR in PostgreSQL 19",
+      "pub_date": "2026-08-25T00:00:00+00:00",
+      "file_path": "blogs/2026-08-25-read-your-writes-wait-for-in-postgresql-19.md",
+      "processed_at": "2026-08-26T06:50:02.797155Z"
+    },
+    "https://clickhouse.com/blog/clickgap-autonomous-qa-for-clickhouse": {
+      "title": "ClickGap: Autonomous QA for ClickHouse",
+      "pub_date": "2026-08-25T00:00:00+00:00",
+      "file_path": "blogs/2026-08-25-clickgap-autonomous-qa-for-clickhouse.md",
+      "processed_at": "2026-08-26T06:50:03.191737Z"
     }
   },
-  "total_blogs": 947,
+  "total_blogs": 950,
   "failed_blogs": [
     {
       "url": "https://clickhouse.com/jp/blog/clickhouse-gcp-japan-availability",

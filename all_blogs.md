@@ -1,6 +1,523 @@
 # ClickHouse Blogs
-Last updated: 2026-08-25 06:48:18 UTC
-Total blogs: 947
+Last updated: 2026-08-26 06:50:03 UTC
+Total blogs: 950
+
+---
+
+## How Suprema Gaming made its data platform agent-ready with ClickHouse Cloud
+Published: 2026-08-25T00:00:00+00:00
+URL: https://clickhouse.com/blog/suprema-gaming-agent-ready-platform
+
+---
+title: "How Suprema Gaming made its data platform agent-ready with ClickHouse Cloud"
+date: "2026-08-25T18:52:53.704Z"
+author: "ClickHouse"
+category: "User stories"
+excerpt: "Suprema Gaming migrated its analytics platform from Snowflake to ClickHouse Cloud to power a company-wide shift toward agentic operations. "
+---
+
+# How Suprema Gaming made its data platform agent-ready with ClickHouse Cloud
+
+## Summary
+
+- Suprema Gaming migrated its analytics platform from Snowflake to ClickHouse Cloud to power a company-wide shift toward agentic operations. 
+- The migration cut warehouse costs by 62% while reducing query latency from minutes to milliseconds and improving data freshness from four hours to real time. 
+- Every metric was validated to the cent against the reference source before cutover, giving the business the confidence to let AI agents answer directly off the warehouse. 
+- Today Suprema runs an early production deployment of ClickHouse Agents, with specialized agents serving teams across the group.
+
+
+[Suprema Gaming](https://supremagaming.com.br/en) is one of Latin America’s largest gaming companies. Founded in 2019 by three poker enthusiasts and headquartered in Sorocaba, Brazil, it has grown out of [Suprema Poker](https://supremapoker.com.br/en), the world’s largest B2B poker league, into a portfolio of brands whose licensed technology reaches over 500,000 players in more than 70 countries.
+
+In 2025, the freshest data anyone could look at was already four hours old. For a business where thousands of players are active, that lag prevented the team from running investigations, diagnosing incidents, or understanding user behavior at the moment it happens.
+
+“We had the mission to bring modernization to the entire process,” Edilson Junior, Data Platform Architect says. That mission was entrusted to both Edilson and Aluizio Cidral Junior, data engineer. For Suprema, that meant consolidating the group’s fragmented data picture into a single real-time analytics platform while ensuring security and governance.
+
+Behind that mandate was a broader vision: co-founder and CEO Fernando Almeida wanted Suprema to become an agentic-first business, where people use AI agents, not static dashboards, to ask questions and act on the answers. 
+
+“What was missing to make it all work,” Edilson says, “was ClickHouse.”
+
+## Why they needed to go beyond Snowflake
+Suprema’s old stack ran on Snowflake. Data flowed from source systems into S3, through SQS and Snowpipe, and into what Edilson describes as a solid, mature database. “Although it was balanced and working well,” he says, “but we realized some things were missing.”
+
+The first was query speed. On Snowflake, queries regularly took minutes, too slow for the real-time, interactive experience the team wanted to deliver to its end users. This was the difference, as Edilson puts it, between “waiting for the report” and “real-time analysis.”
+
+The second was recurring dbt effort. The dbt pipeline was heavy enough that a full rebuild could only be run once a day, so the freshest data was always hours behind. “We didn’t have the possibility of live data,” Edilson says. “It was very much after the fact.”
+
+The third was cost. With Snowflake, cost scaled with every new warehouse and consumer. This made the vision of putting data in front of the whole Suprema group (internal teams, products, partners) expensive to even consider. Snowflake might have been able to get them further, Edilson says, but only by spending considerably more money.
+
+## Choosing ClickHouse Cloud for an agentic future
+When Edilson joined Suprema, in 2025, Snowflake was the production analytics platform, and it was working. In 2026, to explore what an AI-native operation would require without disturbing production, Fernando spun oﬀ a small internal team to validate the model.
+
+The move toward ClickHouse was driven by several converging signals. The team already knew the engine firsthand: one of Suprema’s technology partners ran its database on ClickHouse, giving the team direct access to the system—and its speed consistently impressed them. Suprema’s data leadership had also become familiar with ClickHouse through industry events.
+
+As confidence grew, Edilson led a formal evaluation of ClickHouse, Databricks, and Snowflake, comparing latency, cost, and AI readiness. ClickHouse came out ahead on every criterion. The team then built a complete proof of concept themselves. Edilson handled ingestion and the agent layer, using LibreChat on EC2 with trace evaluation through Langfuse, while Aluizio built the full dbt transformation layer. 
+
+The decisive moment came months later, when Fernando took the lead on the agentic initiative. The need was clear: agents require fast access to fresh data. By then, the results of the team’s work had reached him through multiple voices. The final call was his, and he made it with a clear vote of confidence: “Edilson, if you say it’s going to be ClickHouse, I trust your team.” And Suprema went ahead and migrated from Snowflake to [ClickHouse Cloud](https://clickhouse.com/cloud) on AWS.
+
+![01-batch-reporting-to-agentic-operations 1.jpg](https://clickhouse.com/uploads/01_batch_reporting_to_agentic_operations_1_d1cdb8e6f5.jpg)
+
+## Architecting a real-time platform
+“One of the best decisions in this transition,” Edilson says, “was the way Aluizio designed the real-time treatment of the data. The architecture gave us the map, but someone still had to define how the data would be handled as it moved through the system.”
+
+When an event occurs in a source system, it moves through a pipeline the team builds only once. dbt, integrated with GitHub Actions, deploys the entire structure in a single pass; from there, the engine takes over. There are no external cron jobs, no separate orchestrator, and no Airflow in the pipeline. The team only needs to revisit the pipeline when the design of the layer architecture changes. 
+
+Data moves across the warehouse layers in seconds, with a p95 lag of roughly one minute. On the consumption side, direct reads from the marts were measured at 27x faster than their previous solution. That speed allows users to check a number through a conversational BI agent without interrupting the flow of the conversation. 
+
+Ingestion was rebuilt around real time as well, along two separate paths. For sources ClickHouse supports natively, [ClickPipes](https://clickhouse.com/cloud/clickpipes) streams changes straight into the warehouse through change data capture. For sources it doesn’t, the team uses Debezium and Kafka, the latter of which doubles as a reusable feed for external clients. Where Suprema once staged everything through S3 and loaded it in batches, the migrated sources now arrive second by second, right after each event happens.
+
+![02-design-structure-once-data-flows 1.jpg](https://clickhouse.com/uploads/02_design_structure_once_data_flows_1_0e1628aa7d.jpg)
+
+## Security and governance: The foundation of trusted AI agents
+Opening the warehouse to products, partners, and external data feeds only works if the underlying data remains protected. Aluizio integrated ClickHouse’s native security and governance capabilities into the architecture, recreating in dbt the controls previously used in Snowflake: [role-based access](https://clickhouse.com/docs/operations/access-rights) tailored to each consumer and [PII masked](https://clickhouse.com/docs/cloud/guides/data-masking) at query time, all without relying on external tools.
+
+The balance between accessibility and protection is deliberate. Data engineering works closely with Suprema’s data protection officer, Leonardo Kimura, to define the controls, embedding governed access, traceability, least privilege, and information protection directly into the architecture.
+
+>“Our goal was never just to protect personal data. From the start, we set out to build a platform where information security, privacy and governance are part of the architecture. This creates the foundation for AI agents to evolve on real data without compromising confidentiality, compliance or trust. — Leonardo Kimura, Data Protection Officer, Suprema Gaming
+
+Governance at Suprema goes beyond regulatory compliance; it is a core enabler of the company’s AI strategy. Agents are treated as governed consumers and held to the same standards as every other user of the platform, including access control, data minimization, PII masking, traceability, and auditing. As new agents enter the ecosystem, the controls evolve alongside them, allowing Suprema to innovate without compromising trust in its data.
+
+The warehouse is organized by business unit, with a unified, cross-product customer view layered on top. Built by Aluizio in dbt, this modeling approach is what makes Senna’s “company 360” view possible. The group’s companies are not separate silos that an agent must piece together; their databases are designed from the outset to be analyzed as a single, connected system.
+
+
+---
+
+## Get started today
+
+Interested in seeing how ClickHouse works on your data? Get started with ClickHouse Cloud in minutes and receive $300 in free credits.
+
+[Sign up](https://console.clickhouse.cloud/signUp?loc=blog-cta-1649-get-started-today-sign-up&utm_blogctaid=1649)
+
+---
+
+## Numbers the business can trust
+
+Speed would not count for much if Suprema could not trust the numbers. The heart of the migration, Edilson says, is parity, with every metric proven to the cent against the reference source before it goes into production. Whatever number the business reads is the same one the back office shows. For every domain migrated so far, the team audited results month by month until they matched exactly, and on the rare occasion a figure did not line up, they traced it to a specific cause.
+
+To scale that without creating a manual bottleneck, Aluizio designed an iterative validation system. AI agents compare results from the new platform against the reference source, flag discrepancies, and refine the underlying rules until the metrics align. Each validated rule is then captured as a version-controlled dbt test. Every migrated domain passed through this loop before cutover, turning the once-manual task of proving it to the cent into a repeatable process.
+
+The validation process also turned up problems that had been invisible before, such as ingestion gaps and test accounts skewing metrics. Each one became a traceable fix in code. 
+
+Because ClickHouse answers queries in milliseconds, this checking can happen conversationally, in a chat window, instead of in some slow, separate reporting cycle. Most companies start by connecting an LLM to data that was never designed to support an agent. Suprema built its foundation in the opposite order, with each architectural choice addressing a common failure mode of AI over data.
+
+The data is canonical, reducing the risk of the agent producing inconsistent answers. It is real time, so responses reflect what is happening now rather than what happened yesterday. Queries return in milliseconds, keeping the conversation fluid. And governance is built in, with PII masked at query time and least-privilege access defined for each consumer, allowing agents to serve partners without exposing sensitive information.
+
+## Powering Suprema’s shift to agentic operations
+Senna is the visible face of Suprema’s agentic system. It gives business users a conversational way to ask questions, check numbers, and act on insights, but behind it is a fleet of 10 specialized agents, each responsible for a distinct function, from data modeling and dbt development to validation, and freshness monitoring.
+
+![03-ai-built-foundation 1.jpg](https://clickhouse.com/uploads/03_ai_built_foundation_1_2936e382f0.jpg)
+
+Their knowledge does not live in a collection of loose prompts. It is encoded in six version-controlled skills, one for each domain, and maintained in the repository as code. When a mart changes, the corresponding skill is updated in the same pull request. This ensures that each agent routes questions to the correct structure rather than improvising, because its knowledge is governed by the same version-control process as the pipeline itself.
+
+What makes Suprema’s approach especially distinct is that Senna, the agentic platform now serving the business, was itself built with agents. The migration from Snowflake to ClickHouse, including the layer architecture, ingestion pipelines, and specification of every dbt model, was carried out with agents that had direct access to ClickHouse Cloud throughout development.'
+
+The work followed a spec-driven approach across each track. Aluizio led dbt modeling and transformations, while Edilson focused on ingestion. The result is a platform built with agents to support a growing ecosystem of specialized agents. That continuity, with AI helping create the foundation on which other AI systems operate, is what Suprema means by “agentic-first.”
+
+The system is also fully observable. Every conversation generates controlled traces in Langfuse, including latency, cost, and the SQL behind each answer. This makes the agentic layer just as auditable as the data pipeline.
+
+>“How can I use AI to say, ‘Analyze this’ or ‘I recommend taking action here,’ if I do not have a complete view of the company’s data? Senna, powered by ClickHouse, brings together management information from across the entire business, connecting finance and accounting with marketing, growth, and people management. It gives us a standardized, 360-degree view of the company and turns that data into practical insights for the people making decisions every day. Ultimately, it amplifies my managers’ ability to make better decisions.” 
+— Fernando Almeida, co-founder and CEO, Suprema Gaming
+
+Perhaps the most novel piece, Edilson adds, is a “self-reinforcing feedback loop” that runs through the chat itself. A business user asks an agent a question and gets an answer anchored in live data. They compare it against their back office; if a number looks off, they screenshot it back into the agent, which has the context to check the calculation and flag what needs to change. The user shares that conversation with Edilson’s team, who fix it at the right target, and the improvement flows back into the platform. The data team isn’t paged for every request; the answers come from the system, while the loop makes the system better each time.
+
+![04-parity-to-the-cent-repeatable 1.jpg](https://clickhouse.com/uploads/04_parity_to_the_cent_repeatable_1_e674929b33.jpg)
+
+That agentic-first mindset is taking hold across the whole group. “We create more and more of this community mindset around agentic analytics, where not only internal teams work more with us, but product teams start to have this agentic world too,” Edilson says. “We can create dynamics, build warehouses, and give decision-makers new paths based on real numbers—and now give partners the ability to consume this data with ClickHouse, via API.”
+
+## The results: faster, fresher, and 62% cheaper
+One of the biggest areas Suprema looked to improve when they switched from Snowflake to ClickHouse Cloud was query speed. The results bear that out. As Edilson says, “We stopped talking in minutes and started talking in milliseconds.” Data freshness has also seen a massive boost. The data that once took four hours to surface now lands in real time, and the pipeline keeps it current to within about a minute.
+
+And all of it costs far less. As Edilson notes, moving to ClickHouse Cloud has cut Suprema’s warehouse spend by roughly 62%. Importantly, that cost no longer climbs with every new warehouse or consumer the business adds, like it did under the previous setup.
+
+>“Before, I spent 20% of my time planning and 80% executing because I had to start delivering immediately to meet the deadline. Today, that ratio has reversed. I spend 80% of my time planning thoughtfully and understanding the business in detail, then use AI tools to accelerate execution in the remaining 20%.”  
+— Fernando Almeida, co-founder and CEO, Suprema Gaming
+
+Today, Suprema has moved the vast majority of its workloads to ClickHouse. The method is now a repeatable playbook: map the source and business rule, port the transformation, validate to the cent, cut over, automate, and then run it again for the next domain. Several of the group’s products have already completed the full cycle in production, proving the process works. That is why the next wave is no longer a bet, but a schedule. The data source may change, but the method remains the same.
+The transformation also extends beyond the data platform. Every company in the Suprema group is moving toward the agentic world with the same approach and mindset. As each one joins, Senna’s cross-product view expands and the agents gain a deeper understanding of the business.
+
+Led by Edilson, with backing from Fernando and the rest of the leadership team, what began as a push for lower latency and lower cost ended up reshaping how the group works, turning Suprema into a business run on AI agents, ready for what comes next.
+
+
+
+---
+
+## Read your writes: WAIT FOR in PostgreSQL 19
+Published: 2026-08-25T00:00:00+00:00
+URL: https://clickhouse.com/blog/postgresql-19-wait-for-read-your-writes
+
+---
+title: "Read your writes: WAIT FOR in PostgreSQL 19"
+date: "2026-08-25T12:36:23.272Z"
+author: "Gülçin Yıldırım Jelínek"
+category: "Engineering"
+excerpt: "PostgreSQL 19's new `WAIT FOR` command enables read-your-writes consistency on asynchronous replicas by letting individual reads wait for a specific WAL position."
+---
+
+# Read your writes: WAIT FOR in PostgreSQL 19
+
+PostgreSQL 19 introduces a new SQL command, [`WAIT FOR`](https://www.postgresql.org/docs/19/sql-wait-for.html), that lets a session block until WAL has reached a specific position. This gives us read-your-writes consistency on asynchronous replicas without paying the synchronous replication tax.
+
+<pre><code type='click-ui' language='sql'>
+WAIT FOR LSN 'lsn'
+    [ WITH ( option [, ...] ) ];
+
+where option can be:
+
+    MODE 'mode'
+    TIMEOUT 'timeout'
+    NO_THROW
+
+and mode can be:
+
+    standby_replay | standby_write | standby_flush | primary_flush
+
+</code></pre>
+
+***Disclaimer:** PostgreSQL 19 is still in beta as I write this, so some of the details below may change before the final release. The [release notes](https://www.postgresql.org/docs/19/release-19.html) will be the final word once 19.0 goes GA.*
+
+## The stale read problem
+
+With asynchronous streaming replication, a commit on the primary is not immediately visible on a standby. There is always some replication lag, often just milliseconds, but enough to cause stale reads.
+
+Let’s think of a simple example: an application creates an order on the primary and then immediately reads that order from a replica. If the replica has not replayed the relevant WAL yet, the `SELECT` query may return no rows. Nothing is actually broken here, the write has committed and replication is working. The replica simply hasn't caught up yet. What we need is a way to tell the replica: **wait until you've seen this write before running the read**.
+
+Before `WAIT FOR`, we had a few options (that I can think of): 
+
+* `synchronous_commit = remote_apply`: The primary blocks every commit until the standbys have replayed it. This guarantees the replica is up to date, but adds replication latency to every commit and makes writes depend on the standby.  
+* Application-side polling: Record the LSN after the write, then repeatedly check `pg_last_wal_replay_lsn()` on the replica until it catches up. It works, but requires applications to implement their own polling and retry logic.  
+* Just read from the primary: Well, it works, but it means giving up the benefit of replicas for scaling reads 😀
+
+## What WAIT FOR does
+
+I will try to explain how we can use `WAIT FOR`, using the example from [PG19 docs](https://www.postgresql.org/docs/19/sql-wait-for.html). The pattern is simple: after a write, get the current WAL position from the primary (using [`pg_current_wal_insert_lsn()`](https://www.postgresql.org/docs/19/functions-admin.html#FUNCTIONS-ADMIN-BACKUP)) and pass that LSN to the session that will read from the standby. There, `WAIT FOR` blocks until the standby has replayed WAL up to that position, then you run the read.
+
+On the primary:
+
+<pre><code type='click-ui' language='sql'>
+UPDATE movie SET genre = 'Dramatic' WHERE genre = 'Drama';
+
+SELECT pg_current_wal_insert_lsn();
+ pg_current_wal_insert_lsn
+---------------------------
+ 0/306EE20
+</code></pre>
+
+On the standby:
+
+<pre><code type='click-ui' language='sql'>
+WAIT FOR LSN '0/306EE20';
+ status
+---------
+ success
+
+SELECT * FROM movie WHERE genre = 'Drama';
+ genre
+-------
+(0 rows)
+</code></pre>
+
+Once `WAIT FOR` returns `success`, everything up to that LSN is guaranteed to be applied, and the read reflects the primary's write. There is no application-side polling and no snapshot is held while waiting; the backend sleeps on a latch and the startup process wakes it as soon as replay reaches its LSN.
+
+> **Note:** `WAIT FOR` compares LSN positions without understanding timelines, so after a promotion, a `success` may refer to WAL from a different timeline than the one your write went to. Treat it with appropriate suspicion.
+
+There are a few insights here. The reason docs use the `pg_current_wal_insert_lsn()` function is because it is the most conservative choice, it covers even not-yet-flushed WAL of just-committed transactions when `synchronous_commit` is `off`.
+
+Another advantage is that unlike `synchronous_commit = remote_apply`, the write stays asynchronous. Only a read that needs this guarantee waits for the standby, and it waits only until the replica catches up.
+
+## WAIT FOR syntax
+
+`WAIT FOR` supports different wait modes and a few configuration options. A runnable example of the command looks like below:
+
+<pre><code type='click-ui' language='sql'>
+WAIT FOR LSN '0/306EE20' WITH (MODE 'standby_flush', TIMEOUT '100ms', NO_THROW);
+</code></pre>
+
+Only the LSN is required. The mode picks which stage of WAL progress you are waiting on:
+
+| Mode | Waits until the LSN is | Runs on |
+| :---- | :---- | :---- |
+| `standby_replay` (default) | **replayed**, so reads on the standby can see the changes | standby |
+| `standby_flush` | **flushed to disk on the standby** (durable there, not yet visible) | standby |
+| `standby_write` | **written on the standby** (may still sit in OS buffers) | standby |
+| `primary_flush` | **flushed to disk on the primary** | primary |
+
+On a standby, WAL moves through these stages: **written → flushed → replayed**. PostgreSQL 19 also exposes these stages through the `WaitForWalWrite`, `WaitForWalFlush`, and `WaitForWalReplay` wait events in `pg_stat_activity`, so you can see where sessions are waiting. (*You can read more about these changes in my previous blog post: [What's New with Monitoring in PostgreSQL 19](https://clickhouse.com/blog/postgres-19-monitoring-whats-new)*)
+
+`TIMEOUT` limits how long to wait and if it is omitted or set to zero, `WAIT FOR` waits indefinitely. By default, a timeout raises an error. With `NO_THROW`, it returns a status instead:
+
+<pre><code type='click-ui' language='sql'>
+WAIT FOR LSN '0/306EE20' WITH (TIMEOUT '100ms', NO_THROW);
+ status
+---------
+ timeout
+</code></pre>
+
+The possible statuses are `success`, `timeout`, and `not in recovery`. `not in recovery` can occur when using a standby mode on a primary, or when a standby is promoted while waiting. If the requested LSN had already been replayed before promotion, `WAIT FOR` still returns `success` on the promoted node.
+
+## Why it must be a top-level command
+
+This is my favorite part because it explains why earlier attempts at this feature ran into problems. If you’re interested in the history, it took about 10 years for `WAIT FOR` to make it into PostgreSQL. [The first proposal](https://www.postgresql.org/message-id/0240c26c-9f84-30ea-fca9-93ab2df5f305%40postgrespro.ru) was in 2016, and the feature was reverted three times along the way.
+
+`WAIT FOR` cannot run inside a function, procedure, or `DO` block, or in transactions above `READ COMMITTED`. The reason is snapshots, as the [commit message](https://git.postgresql.org/gitweb/?p=postgresql.git;a=commitdiff;h=447aae13b) explains:
+
+> WAIT FOR needs to wait without any snapshot held.  Otherwise, the snapshot could prevent the replay of WAL records, implying a kind of self-deadlock.
+
+A session holding a snapshot can block WAL replay on a standby. For example, replaying a vacuum record may need to remove rows that an old snapshot can still see. Postgres resolves this conflict by pausing replay, and eventually by cancelling the session holding the snapshot.
+
+Now imagine that same session is waiting for WAL replay to reach a specific LSN. Replay is stuck behind its snapshot, and the session will not release the snapshot until replay reaches its target. That’s the ***"self-deadlock"*** mentioned in the commit message.
+
+To avoid this, `WAIT FOR` must run without holding a snapshot at all. A SQL function runs as part of a query and therefore always has a snapshot, so that path was never going to work. Instead, `WAIT FOR` is a utility command that runs snapshot-free at the top level, in the spirit of `VACUUM` or `CHECKPOINT`.
+
+Ivan Kartyshov's [original 2016 proposal](https://www.postgresql.org/message-id/0240c26c-9f84-30ea-fca9-93ab2df5f305%40postgrespro.ru) already recognized this problem and the version landed in PostgreSQL 19 is built on that same insight:
+
+> To avoid trouble with snapshots, WAITLSN was implemented as a utility statement, this allows us to circumvent the snapshot-taking mechanism.
+
+## Conclusion
+
+What I like about `WAIT FOR` is that it keeps asynchronous replication asynchronous. Instead of making every write wait for a replica, the cost is paid only when a read actually needs the read-your-writes guarantee.
+
+Most applications will probably not call `WAIT FOR` directly and that’s fine. The docs say [*the LSN of the last modification should be stored on the client application side or the connection pooler side*](https://www.postgresql.org/docs/19/sql-wait-for.html) which makes poolers and protocol-aware proxies natural adopters. With a sticky session, a proxy could capture the LSN after a write and inject `WAIT FOR` before the next read it routes to a replica making read-your-writes transparent to the application.
+
+Hope you enjoyed reading this blog post! If you’d like to hear more about PostgreSQL 19, I’ll be talking about its observability improvements, including the new wait events that ship alongside this feature at [PostgreSQL Conference Europe](https://www.postgresql.eu/events/pgconfeu2026/schedule/session/8182-whats-new-with-monitoring-in-postgresql-19/) in October.
+
+
+---
+
+## Get started with ClickHouse Managed Postgres today
+
+Interested in seeing how ClickHouse Managed Postgres works on your data? Get started with ClickHouse Cloud in minutes and receive $300 in free credits.
+
+[Sign up](https://console.clickhouse.cloud/signUp?intent=pg&loc=blog-cta-1640-get-started-with-clickhouse-managed-postgres-today-sign-up&utm_blogctaid=1640)
+
+---
+
+---
+
+## ClickGap: Autonomous QA for ClickHouse
+Published: 2026-08-25T00:00:00+00:00
+URL: https://clickhouse.com/blog/clickgap-autonomous-qa-for-clickhouse
+
+---
+title: "ClickGap: Autonomous QA for ClickHouse"
+date: "2026-08-25T12:19:59.369Z"
+author: "Lareb Zafar"
+category: "Engineering"
+excerpt: "ClickGap reviews merged ClickHouse changes, executes reproducers, rejects false positives, and attributes regressions to specific commits."
+---
+
+# ClickGap: Autonomous QA for ClickHouse
+
+ClickHouse merges between 50 and 100 pull requests on a typical working day. Each one lands in a performance-critical C++ database running in production. Any merge can introduce a wrong result, trigger a crash in an untested feature combination, or make a query quietly run 30 percent slower.
+
+Pointing an AI agent at the problem seems obvious, but it is also a fast route to becoming a cautionary tale. 
+
+curl recently ended the bug bounty it had operated since 2019 after a flood of AI-generated reports, which its maintainer described as "slop". Producing a plausible bug report is nearly free; triaging one costs an engineer. Our maintainers did not sign up to babysit a chatbot.
+
+We built one anyway. It received a one-line cameo in [Agentic coding at ClickHouse](https://clickhouse.com/blog/agentic-coding); this post is the long version. 
+
+[ClickGap](https://github.com/clickgapai) is an autonomous QA agent that reviews every pull request merged into ClickHouse. It designs and executes tests against real builds, bisects regressions to the commit that introduced them, and files issues and pull requests in the public tracker without a human approving the send button.
+
+Five months after launch, [ClickGap’s GitHub account](https://github.com/ClickHouse/ClickHouse/issues?q=is%3Aissue+author%3Aclickgapai) has filed roughly 500 issues and opened around 200 pull requests, adding coverage for code paths that had merged without it. More than half of the issues are already closed, overwhelmingly as completed rather than dismissed, and over 200 were closed with a linked fix PR. ClickGap reviews each pull request after it merges because merged code is what ships. Findings arrive within hours, well before a release could carry the defect to users.
+
+In this blog post, we're going to go through some of the challenges of building ClickGap, and how we got to the point that when that bot says, “This is broken,” the maintainer believes it.
+
+## A database that is already tested to death {#a_database_that_is_already_tested_to_death}
+
+ClickHouse CI executes tests tens of millions of times each day: stateless SQL suites, integration clusters, sanitizer builds, stress tests, fuzzers, and statistical performance comparisons. Nothing merges without a human maintainer’s approval, and every pull request is also inspected by an in-house reviewer, [clickhouse-gh\[bot\]](https://github.com/apps/clickhouse-gh), which reads the diff and requests changes with file-and-line findings. It catches a meaningful share of defects before merge. 
+
+Yet some defects still survive the human reviewer, the machine reviewer, and the test wall. CI proves only that written tests continue to pass; it says nothing about behavior, no test exercises. Newly merged code is especially exposed because pull requests routinely introduce changed lines the test suite never reaches. Those gaps account for ClickGap’s roughly 200 coverage PRs.
+
+Other defects are invisible to result assertions because correctness remains unchanged while execution cost rises. A skip index can be built, consume disk, and never skip a single row. Every query still returns the right result while wasting the resources the index was supposed to save.
+
+## What it found in ClickHouse {#what_it_found_in_clickhouse}
+
+The public tracker spans roughly 35 component labels, from the query analyzer and MergeTree to replication. Its findings cluster into four recurring categories.
+
+**The smuggled semantics change** ([#113763](https://github.com/ClickHouse/ClickHouse/issues/113763)). A pull request adding the `gini` aggregate function also changed the result types and values of a broad family of existing `<agg>If<Combinator>(x, NULL)` expressions. Nothing in the title, description, or changelog disclosed that impact. This class of defect is easy to miss when review remains bound by the pull request’s stated purpose: the change may correctly implement what it announces while silently breaking things it does not mention.
+
+**The resource-safety hole** ([#114987](https://github.com/ClickHouse/ClickHouse/issues/114987)). The learning phase of a new adaptive aggregator returned before reaching the external-spill branch. Under the affected configuration, a query that previously spilled to disk could instead hit its memory limit. The report did not merely speculate about an OOM. It measured spill-part counts across three configurations (46, then 7, then 0\) and compared memory consumption between the old and new paths.
+
+What followed was a two-bot relay. [groeneai](https://github.com/groeneai), another ClickHouse bot, reproduced the counters and narrowed the blast radius: the failure required a raised tuning threshold rather than the default configuration. ClickGap publicly accepted the correction instead of defending its original severity, and the [fix](https://github.com/ClickHouse/ClickHouse/pull/115038) was merged within a day.
+
+**The silent performance bugs** ([#114990](https://github.com/ClickHouse/ClickHouse/issues/114990), [#114105](https://github.com/ClickHouse/ClickHouse/issues/114105)). Neither defect crashes the server or corrupts results. Both quietly make queries more expensive.
+
+In #114990, a skip index was built, stored on disk, and then ignored. A query that previously read one of sixteen granules now read all sixteen while returning identical results. Result assertions cannot detect that failure; they see the same answer, but don’t see that it’s now doing sixteen times the work.
+
+In #114105, an unconditional `std::adjacent_find` added another scan to a hot constructor, slowing array-heavy queries by 14.6 to 30.9 percent. Performance claims demand stronger evidence because CI timings naturally fluctuate. This report separated signal from noise: across more than a thousand measurements, master varied by only a fraction of a percent while the change produced double-digit regressions. It also identified the exact code path and cited the source comment contradicted by the measurements. “Correct but slower” is a defect class of its own, and catching it requires statistics rather than assertions.
+
+**The coverage business** ([#114766](https://github.com/ClickHouse/ClickHouse/pull/114766), one of roughly 200). Machine-written tests commonly fail in two ways: they execute the new code without detecting whether its behavior is broken, or they duplicate coverage the existing suite already provides.
+
+Every ClickGap coverage finding must clear both bars. The analysis must identify an exact single-line source mutation that would make the new test fail and explain what the test covers that the reviewed pull request’s own tests do not. If it cannot answer either question, the finding is dropped.
+
+For the strongest claims, ClickGap runs the experiment. It deliberately breaks the behavior under test, builds the modified server, and demonstrates that the new test fails while the tests submitted with the original pull request remain green.
+
+## How it works {#how_it_works}
+
+ClickGap is a single daemon watching the merge stream. Eligibility is decided once, at intake. Reverts, re-ports of previously reviewed changes, and pull requests too large to analyze are skipped; everything else enters the pipeline. For each eligible pull request, the daemon syncs the source, provisions a binary verified to contain the merge commit (downloading a fresh CI artifact when possible and building from source otherwise) and prepares an isolated worktree with a warmed server.
+
+Two analysts run against that environment. The bug analyst forms hypotheses, but each must be converted into an executed test. A hypothesis advances only when the observed behavior disagrees with the expected contract. The coverage analyst runs second, seeded with line-level coverage for the changed code. It is skipped when those lines are already covered.
+
+Each candidate finding first faces an adversarial reviewer whose sole job is to reject it. Anything that survives must then clear ten gates enforced by the pipeline:
+
+1. **Concrete consequences.** The defect must produce an observable impact: a wrong result, data loss, a crash, a security flaw, rejection of valid input, a measured slowdown, or lost CI signal. “This code is dead” is not enough.  
+2. **Valid citations.** Every referenced file and line must exist in the current source tree.  
+3. **Complete-file review.** The analyst must read each changed file in full, not only the diff.  
+4. **Caller analysis.** The analyst must inspect the code paths that invoke the changed code.  
+5. **Existing-test search.** The test suite must be searched in at least three distinct ways. Few mistakes destroy trust faster than reporting a “missing test” that already exists.  
+6. **Executed reproducer.** The proving test must run against a real binary.  
+7. **Evidence matches the claim.** A bug finding must include the observed failure. A coverage finding must produce the proposed test as a real file on disk.  
+8. **Coverage kill-tests.** Coverage claims face targeted challenges: is the gap real, and does the proposed test detect the behavior it claims to protect?  
+9. **Reviewer approval.** The adversarial reviewer’s verdict must be recorded as a pass.  
+10. **No known false-positive match.** Each finding is compared with past mistakes corrected by maintainers. An error learned once cannot be filed twice.
+
+Eight gates are implemented entirely as ordinary code. Only the coverage kill-tests and adversarial verdict require model judgment.
+
+After all ten gates pass, the pipeline chooses an external action. A coverage gap becomes a test-only pull request. A locally reproduced bug becomes an issue. A bug with a runnable test that cannot be confirmed locally becomes a proof pull request, allowing ClickHouse CI to act as the prover. Most candidates produce no external action at all.
+
+Ownership continues after filing. ClickGap monitors CI for every submission and classifies each failure as its own test, a known flaky test, or infrastructure. If ClickGap caused the failure, it reads the logs and pushes a repair, with a maximum of five attempts before escalating to a human. Every repair passes its own gates, including two consecutive local runs, because one passing run may only indicate flakiness.
+
+Review feedback enters the same closed loop. When a reviewer requests changes, ClickGap updates the submission, reruns validation, and replies with evidence. A separate daemon-side verifier then executes the tests independently. No analyst can certify its own success.
+
+![](https://clickhouse.com/uploads/clickgap_aug2026_agentic_bug_review_memory_b038927b7c.jpg)  
+
+From merged PR to filed artifact. Every finding must survive execution, adversarial review, and ten gates enforced in code before any issue or pull request is filed; the archive bin, not the tracker, is where most findings end.
+
+## Where the findings actually come from {#where_the_findings_actually_come_from}
+
+The gates explain why maintainers can trust what ClickGap files. They do not explain how it finds anything worth filing. Detection rests on four advantages.
+
+**First, it reads beyond the diff.** The gates require the analyst to read every changed file in full, inspect each caller, and follow equivalent logic into sibling code paths. That reach exposed the earlier `gini` regression ([#113763](https://github.com/ClickHouse/ClickHouse/issues/113763)): the root cause involved six sibling overrides and a consumer the original diff never touched. The same pattern recurs across the tracker: a pull request repairs an invariant in one branch while leaving an equivalent neighboring branch unchanged.
+
+**Second, it works from a checklist rather than intuition.** The review prompt contains roughly twenty ClickHouse-specific defect patterns, covering areas such as join edge cases, concurrency hazards, and lifetime errors. Each pattern specifies what to inspect and where to search. The list grows from evidence. A separate process has analyzed nearly 2000 confirmed ClickHouse bugs and converted their lessons into memories for future reviews. When a bug matches no existing pattern, the system drafts a new checklist entry.
+
+**Third, coverage gaps are measured rather than inferred.** LLVM line coverage identifies the exact changed lines that no test executes. Even then, an uncovered line counts only if the analyst can name a mutation that the proposed test would kill and explain the user-visible risk.
+
+**Fourth, economics favors breadth.** Hypotheses are cheap, a complete review costs a couple of dollars in model usage, and local validation takes minutes. The analyst can explore many candidates for each pull request and retain only those whose executed tests disagree with expected behavior. Every review also begins with roughly thirty recalled lessons from prior findings.
+
+Detection itself is continuously tested. The benchmark starts with real bugs that ClickGap previously found and maintainers confirmed. For each one, the repository is rewound to the moment the reviewed pull request merged, while the defect was still present, and the analyst reviews that state again from scratch. The question is binary: does it rediscover the bug?
+
+Every proposed efficiency change, such as shortening the prompt, runs against the same corpus under both the old and new configurations. If the cheaper configuration misses bugs the existing one catches, it does not ship.
+
+## Cheap on purpose, measured for it {#cheap_on_purpose_measured_for_it}
+
+A couple of dollars per pull request reviewed. The recall benchmark above is its guardrail: a cost reduction that weakens bug detection does not ship. A cheap reviewer that catches nothing is not efficient; it is merely lower-cost noise. Within that constraint, savings come from four places.
+
+**Plain code consumes no model time.** Work with an exact contract runs as ordinary code: repairing issue bodies to match the upstream template, detecting duplicate filings by comparing files and overlapping titles against ClickGap’s history, and rendering the self-review checklist. These operations cost no tokens and cannot drift.
+
+**Smaller models handle recoverable work.** One condenses long CI logs before the primary analyst reads them. Another runs mutation tests against coverage claims. A third provides a second opinion on whether a bisected commit could plausibly have caused the failure before anyone is mentioned publicly. In each case, an incorrect result is either caught downstream or survivable by design. The expensive model with extended reasoning is reserved for the two judgments the system depends on: finding bugs and rejecting weak findings.
+
+**Work unlikely to justify its cost is skipped.** Well-covered changes bypass the coverage analyst. Ineligible pull requests never enter the pipeline. Finding classes that maintainers consistently ignore are automatically suppressed.
+
+**Every optimization must preserve recall.** When we shortened the analyst’s prompt, the candidate version had to pass a paired benchmark against the full prompt using the same confirmed-bug seeds. It matched the baseline: its only paired miss rediscovered the bug on both reruns, indicating run-to-run variance rather than a repeatable regression. It also found one bug the full prompt missed while reducing cost by 11 percent and session time by 17 percent. Only then did it become the default.
+
+There is a second economy here, much larger than the bot’s own bill: the engineering cost avoided by catching defects early. A bug reported within hours of its merge is usually fixed with a follow-up commit. The diff is still fresh in the author’s mind, nothing has shipped, no users are affected, and the fix lands only on master.
+
+Once the same defect reaches a release, the cost multiplies. Someone must determine which released versions are affected, bisect the regression to its introducing commit, and backport the fix to every affected release branch. Each bug caught between merge and release avoids that entire bill. That is the real return on reviewing at merge time.
+
+## Never name the wrong PR {#never_name_the_wrong_pr}
+
+A report that says, “This regressed in 26.4, this commit introduced it, and these supported branches still carry it,” is worth ten reports that merely say, “This is broken.” 
+
+The affected-version matrix is deterministic code. For every ClickHouse release still under support, it downloads the real binary, executes the reproducer, and records the outcome. The reproducer is intentionally narrow: a small script receives a binary and exits `1` when the bug appears or `0` when it does not. A timeout counts as neither result. It also runs without secrets in its environment because reproducers are shaped by issue reporters and cannot be treated as fully trusted.
+
+Bisection identifies the introducing commit by testing builds between a known-good and a known-bad point. ClickGap obtains those builds from three sources: official release binaries back to roughly 25.8, per-commit CI artifacts from master, and source builds wherever gaps remain.
+
+Every candidate build is tested up to three times, with timeouts abstaining from the vote. A single flaky result cannot redirect the search. At the final boundary, the suspected commit must still fail while the nearest earlier testable build passes. Confidence decreases for every untestable commit in the range and can never increase to compensate.
+
+Before any pull request is named, a final causal check asks whether its change could plausibly produce the observed failure. It vetoes the attribution only when the answer is clearly no. The governing rule is simple: naming the wrong pull request is worse than naming none. The ledger shows that ClickGap follows it. The bisector abstains because a defect is too old or the evidence gaps are too wide, roughly three times as often as it identifies a culprit.
+
+## The part nobody plans for: earning trust {#the_part_nobody_plans_for_earning_trust}
+
+The commit history tells this part of the story better than any retrospective could.
+
+Day one includes a commit titled “Increase filing limits to 10 (PRs, issues, daily, concurrent).” We assumed throughput would be the bottleneck. For three days—until the first crash report and first coverage pull request landed—the evidence even seemed to support us. The next five months taught the opposite lesson.
+
+The low point arrived about six weeks in, when ClickGap published its private reasoning as a comment on a real pull request instead of posting an answer. The fix appears in the history as “Stop bot from posting LLM-reasoning-as-reply spam.” A second commit followed the same day: “refuse to post LLM-meta-reasoning-as-reply spam (final layer).” The first layer, unsurprisingly, had not been final.
+
+We then audited every path capable of publishing a message under “Close residual spam vectors.” That audit also revealed duplicate alerts flooding our own Slack. The next day, we built the control that should have existed from the start. It tracks the previous thirty days of filed issues. If fewer than 25 percent receive any maintainer response, ClickGap stops filing lower-confidence findings until engagement recovers.
+
+Filing volume stopped being a configuration value we controlled. It became a privilege maintainers continuously grant.
+
+Measurement forced the next humiliation. We took one thirty-day window and asked a simple question: of the findings the bot proposed, how many did maintainers actually accept? A third of coverage findings; half of bug reports. That number is the reason the consequence gate exists, and the reason the bot now files far fewer bug reports than its analysts propose.
+
+Some of the hardest failures came from components returning valid-looking answers after doing no useful work. The affected-versions check was initially agent-driven. Its chosen download helper supported only amd64, while ClickGap ran on aarch64. Every fetch failed, so every version came back `unknown`. Because `unknown` is valid when a build genuinely cannot be fetched, the failure looked like conservative reporting rather than complete loss of coverage. We replaced the check with deterministic code that distinguishes a tested version from a failed fetch.
+
+A similar failure occurred in CI log summarization. ClickHouse’s test runner prints a ✅ or ❌ for each test. A small model interpreted that pattern as a code-review prompt and emitted `Final Verdict: ✅ Approve`. The downstream parser treated `Approve` as a passing test result, leaving a real failure unhandled. Review-shaped summaries are now rejected before they reach the parser.
+
+Both incidents reinforced the same rule: plausible state is not evidence of successful execution. A standing reconciler now walks every in-flight item and checks its recorded state against the underlying artifacts and external systems.
+
+The maintainer-facing output changed just as much as the pipeline. The commit history records the progression: “issue bodies to maintainer spec — TLDR, code links, folds, author cc, no banner,” followed by “Trim every remaining maintainer-facing surface to the point” and “Stop silencing human maintainers behind CI-bot churn.”
+
+A new issue now exposes roughly ten lines by default: a bold symptom, a permalink to the suspected root cause, a one-command reproducer, and expected versus actual behavior. Supporting analysis is collapsed into detailed blocks, including an “Open risks” section that separates verified facts from unresolved assumptions.
+
+Replies are limited to five per thread and reviewed before posting. The reviewer may rewrite a response, but it cannot discard a reply to a maintainer. That restriction exists because suppressing an imperfect answer looks indistinguishable from ignoring the person who reported the problem.
+
+![](https://clickhouse.com/uploads/clickgap_aug2026_image2_9ab359cb5a.png)  
+
+**What a maintainer actually sees when a ClickGap issue opens**: the symptom, the root-cause permalink, a one-command reproducer, and everything else one click away.
+
+And when the bot is wrong, the response is part of the product. Shown a false positive on a self-referential system.processes query, it answered: "You're right, and thanks for the precise diagnosis... I'll add self-referential system.processes.query reads to the oracle's exclusion list so this class doesn't get filed again" ([#110141](https://github.com/ClickHouse/ClickHouse/issues/110141)). That exclusion shipped. Every such verdict lands in a disagreement ledger, and the ledger is what the bot studies.
+
+## Memory, and why Loom exists {#memory_and_why_loom_exists}
+
+ClickGap stores experience at three levels. Case memories record the history and outcome of individual findings. Lessons extract reusable rules from those cases, either through automated learning flows or operator review. A doctrine file holds the smaller set of rules that every analyst and reviewer run must receive; other memories are retrieved only when relevant.
+
+The doctrine file is limited to 150 lines because its entire contents accompany every finding. Admission is strictly evidence-based: each rule must cite a human maintainer’s verdict. The bot’s own conclusions are ineligible. Reviewer-specific preferences may be included only when substantiated by actual review feedback.
+
+Each review records the keys of the memories it retrieved. Once a finding reaches a terminal state, a positive outcome boosts those memories’ future rankings, with the effect decaying on a 90-day half-life. Negative outcomes are retained but do not immediately penalize individual memories. Because a review typically retrieves about 30 lessons, a single bad outcome provides insufficient evidence to determine which memory, if any, contributed to it.
+
+The memory plane began as a local SQLite store. A few months later, it moved to Loom, an internal memory service built at ClickHouse for AI agents. Loom stores typed, tagged memories in ClickHouse and exposes search, provenance, and outcome feedback through an API.
+
+The migration had to clear a retrieval benchmark before it shipped, and it paid off in two ways. First, it corrected our intuition. Restricting recall to memories tagged with the same subsystem as the bug (its area of the codebase: joins, replication, storage) seemed sensible. In blind evaluation, it reduced retrieval quality by 22 percent because the strongest lessons often crossed subsystem boundaries. Treating those same tags as soft ranking signals instead improved quality by 12 percent.
+
+Second, Loom made memory impact measurable. Every retrieval leaves a trace that can be joined with what maintainers ultimately did with the finding. “Did this lesson ever help?” stopped being a matter of intuition and became a query.
+
+## What comes next {#what_comes_next}
+
+ClickHouse development spans both public and private repositories. Recently, a second fully isolated instance, `clickgap-private`, began operating against the private repository and filed its first issues within a day. It immediately faced the cold-start problem: without a history of maintainer verdicts, a new bot is liable to repeat every mistake the public instance has already learned from.
+
+The private instance writes to its own namespace, which began empty, and reads through a one-way join to the public namespace. At query time, it inherits the experience encoded in thousands of public memories, while everything it learns remains private.
+
+The difficult part was making “one-way” absolute. ClickGap issues writes against recalled memories for outcome reinforcement and provenance links. After the join, however, a recalled key may belong to the public namespace. Every write is therefore filtered by key ownership, and the server independently enforces the namespace boundary. A public search can never return a private key. We use two safeguards, because this kind of leak would be silent.
+
+Whether experience transfers across codebases remains an open, measurable question. The same recall-to-outcome instrumentation runs on both sides. Ask us again in a quarter.
+
+![](https://clickhouse.com/uploads/clickgap_aug2026_loom_public_private_memory_dcc80e80b4.jpg)  
+
+How clickgap-private starts from N instead of 0. Reads federate one way across namespaces; writes are filtered by key ownership. Nothing is copied, nothing private flows back: inheritance at query time, not by copy.
+
+## If you want this for your own codebase {#if_you_want_this_for_your_own_codebase}
+
+Most of these principles apply even if you never build a bot. They describe a disciplined QA culture encoded and enforced in software.
+
+1. **Scope it to one codebase, and mean it.** Most of ClickGap’s precision comes from ClickHouse-specific knowledge, not the model.  
+2. **Charge an evidence toll before anything external happens.** Require an executed test, verified citations, and a consequence a user would notice.  
+3. **Use determinism wherever determinism is possible.** Agents drift; `for` loops do not.  
+4. **Treat confident negatives as the most dangerous output.** A false positive wastes an afternoon. A false negative leaves the defect for the next control to catch, and sometimes that next control is a user.  
+5. **Never name an unconfirmed suspect.** “Incomplete range” is better than the wrong author.  
+6. **Design every report for a ten-second scan, then throttle based on outcomes.** If humans stop engaging, automatically file less.  
+7. **Let only human verdicts become doctrine.** Measure whether memory improves outcomes instead of assuming it does.  
+8. **Budget for the grind.** Expect three fixes for every feature, concentrated around trust, state recovery, and correctly interpreting your own CI.
+
+## The point {#the_point}
+
+We built ClickGap because the merge stream had outgrown human review capacity. The results suggest the bet paid off: roughly 500 issues filed, more than 200 closed with a linked fix PR, and around 200 test-coverage PRs, all in public and against a codebase already tested exhaustively.
+
+Most of the machinery was not designed to make the bot smarter. It was designed to make the bot worth listening to, which turned out to be the real product. Its reports enter the same tracker as everyone else’s and stand or fall on the same evidence. 
+
+The numbers in this post are deliberately rounded. Public counts can be reproduced through GitHub searches against the bot’s account.
+
+If building systems that must earn trust in public sounds like your kind of problem, [ClickHouse is hiring](https://clickhouse.com/company/careers).
+
+
+---
+
+## Get started today
+
+Interested in seeing how ClickHouse works on your data? Get started with ClickHouse Cloud in minutes and receive $300 in free credits.
+
+[Sign up](https://console.clickhouse.cloud/signUp?loc=blog-cta-1632-get-started-today-sign-up&utm_blogctaid=1632)
+
+---
 
 ---
 
