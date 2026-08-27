@@ -1,5 +1,5 @@
 {
-  "last_sync": "2026-08-26T06:50:03.296780Z",
+  "last_sync": "2026-08-27T17:23:48.497135Z",
   "processed_blogs": {
     "https://clickhouse.com/blog/clickhouse-raises-400-million-series-d-acquires-langfuse-launches-postgres": {
       "title": "ClickHouse raises $400M Series D led by Dragoneer to accelerate expansion across analytics and AI infrastructure",
@@ -5700,9 +5700,21 @@
       "pub_date": "2026-08-25T00:00:00+00:00",
       "file_path": "blogs/2026-08-25-clickgap-autonomous-qa-for-clickhouse.md",
       "processed_at": "2026-08-26T06:50:03.191737Z"
+    },
+    "https://clickhouse.com/blog/is-clickhouse-winning-the-observability-wars": {
+      "title": "So, is ClickHouse winning the observability wars?",
+      "pub_date": "2026-08-27T16:39:09+00:00",
+      "file_path": "blogs/2026-08-27-so-is-clickhouse-winning-the-observability-wars.md",
+      "processed_at": "2026-08-27T17:23:48.181128Z"
+    },
+    "https://clickhouse.com/blog/whats-new-clickhouse-net-driver-10-to-13": {
+      "title": "What's new in the ClickHouse .NET Driver: the road from 1.0 to 1.3",
+      "pub_date": "2026-08-26T00:00:00+00:00",
+      "file_path": "blogs/2026-08-26-what-s-new-in-the-clickhouse-net-driver-the-road.md",
+      "processed_at": "2026-08-27T17:23:48.394273Z"
     }
   },
-  "total_blogs": 950,
+  "total_blogs": 952,
   "failed_blogs": [
     {
       "url": "https://clickhouse.com/jp/blog/clickhouse-gcp-japan-availability",
