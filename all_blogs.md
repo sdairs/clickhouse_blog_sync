@@ -1,6 +1,138 @@
 # ClickHouse Blogs
-Last updated: 2026-08-27 17:23:48 UTC
-Total blogs: 952
+Last updated: 2026-08-28 18:16:59 UTC
+Total blogs: 954
+
+---
+
+## A new getting started experience for ClickHouse Managed Postgres
+Published: 2026-08-28T12:55:15+00:00
+URL: https://clickhouse.com/blog/clickhouse-managed-postgres-onboarding
+
+---
+title: "A new getting started experience for ClickHouse Managed Postgres"
+date: "2026-08-28T12:55:15.606Z"
+author: "Cristina Albu and Yashpreet Bathla"
+category: "Product"
+excerpt: "See how a four-step onboarding flow helps users move from provisioning ClickHouse Managed Postgres to querying operational data and running real-time analytics with ClickHouse."
+---
+
+# A new getting started experience for ClickHouse Managed Postgres
+
+ClickHouse Managed Postgres isn't just another hosted Postgres. It's one half of a unified data stack: NVMe-backed Postgres for your transactional workload, ClickHouse for real-time analytics, and fully managed replication keeping the two in sync. Two databases, operated as one product. 
+
+We wanted users to experience the value of that combination for themselves. So we asked ourselves: **What's the shortest path from signing up to experiencing the value of the full Postgres + ClickHouse stack on your own data?**
+
+That question exposed a gap in the existing experience.
+
+After creating a Postgres service, users landed on the **Overview** page. The page was designed for an active database, surfacing operational metrics and activity. But for someone just getting started, everything was empty: no activity, no data to explore, and little indication of what to do next.
+
+At the same time, we already had a solid answer for what that journey could look like in our docs. Our CLI [quickstart guide](https://clickhouse.com/docs/products/managed-postgres/quickstart) walks users through the full flow: provision Postgres, load a million rows, set up a CDC ClickPipe, query the replicated tables from ClickHouse and from Postgres via pg_clickhouse. It's precise, scriptable, and it's what we point power users to.
+
+But a documentation quickstart guide is a parallel track. You read in one tab and work in another, while the product itself has no idea where you are in the journey. We wanted that same end-to-end path to live *inside* ClickHouse Cloud — stateful, aware of what users have already done, and able to point them towards the next step that would create value.
+
+## How do people experience the value of a database? {#how_do_people_experience_the_value_of_a_database}
+
+We at ClickHouse think that databases are the best thing ever, but appreciate that they can be a bit boring sometimes. One thing we know from past experience with ClickHouse Cloud is that people don’t experience the value of a database by looking at dashboards. They experience it by working with data. 
+
+That made getting data into Postgres the natural starting point. From there, users could run queries, experience Postgres firsthand, and then see how easily the same data could flow into ClickHouse for real-time analytics. That became the foundation of the onboarding experience. 
+
+![](https://clickhouse.com/uploads/managed_postgres_aug2026_image1_75a272c778.gif)
+
+## The value of the product, in four steps {#the_value_of_the_product_in_four_steps}
+
+Four steps that make the unified data stack real:
+
+| Step | What the user does | What it proves |
+| :---- | :---- | :---- |
+| 1 | Spin up a Postgres service | NVMe Postgres, provisioned in minutes |
+| 2 | Migrate or ingest data | Fully managed Postgres → Postgres migration via ClickPipes |
+| 3 | Run your first query | Raw throughput on your own data, in the SQL Console |
+| 4 | Run analytics with ClickHouse | CDC to ClickHouse + pg_clickhouse as a single query layer |
+
+Finish those and you've used the core value of the product. Everything after that is discovery.
+
+## Step 1 — Spin up a Postgres service {#step_1_spin_up_a_postgres_service}
+
+Provisioning is deliberately the least interesting step and a confirmation that your service has been created successfully. You pick a cloud service provider and region, a size, a Postgres version, and then the service will be up and running in a few minutes. We use NVMe for storage, which is where the performance story starts.
+
+After a few minutes, you have a running database and nothing left to configure. 
+
+![](https://clickhouse.com/uploads/managed_postgres_aug2026_image2_28aa68a27f.png)
+
+## Step 2 — Migrate or ingest data {#step_2_migrate_or_ingest_data}
+
+If there's one step we want every user to complete, it's this one. A database only gets interesting once there's data in it.
+
+Most people should start by [migrating from an existing Postgres](https://clickhouse.com/blog/clickpipes-postgres-to-postgres). Nothing is as convincing as your own tables, your own queries, and your own access patterns.
+
+Because this is the workflow we believe delivers the most value, we made **“Migrate data from your Postgres database”** a first-class citizen of the onboarding experience.
+
+[ClickPipes](https://clickhouse.com/blog/clickpipes-postgres-to-postgres) handles the migration as a fully managed Postgres-to-Postgres workflow: users provide the connection string, and ClickPipes handles the snapshot, the publication, the replication slot, and the ongoing sync.
+
+But not everyone is ready to connect an existing database on day one. Some users want to explore the product first, while others simply want a quick way to experiment. So we provided alternative ways to get data into the system:
+
+* **Connect with your language client** — Postgres is Postgres; use the driver you already have.  
+* **Load a sample dataset** — and start querying in seconds  
+* **Create a table from scratch** — the table creator, for a quick hands-on start.
+
+![](https://clickhouse.com/uploads/managed_postgres_aug2026_image3_504c3099c0.png)
+
+*Several sample datasets are available if you'd rather not connect a database yet.*  
+![](https://clickhouse.com/uploads/managed_postgres_aug2026_image4_53bf7802ef.png)
+
+## Step 3 — Run your first query {#step_3_run_your_first_query}
+
+Once data is in, we take you straight to the SQL Console instead of expecting you to find it yourself. There, you can inspect your tables and run your first query.
+
+This is the first genuine "aha!" moment. It's the point where users stop configuring and start experiencing the product.
+
+If you don’t want to start with a blank editor, our AI Assistant can help generate SQL based on what you’re trying to accomplish. This can be particularly useful when you’ve just migrated your data and aren’t familiar with its schema yet.
+
+![](https://clickhouse.com/uploads/managed_postgres_aug2026_image5_80f5b33c97.png)
+
+## Step 4 — Run analytics with ClickHouse {#step_4_run_analytics_with_clickhouse}
+
+This is the step that no other managed Postgres can offer, where the full unified stack comes together.
+
+![](https://clickhouse.com/uploads/managed_postgres_aug2026_image6_c0566d250c.png)
+
+With a few clicks, you can configure a **Postgres CDC ClickPipe** that first copies your existing Postgres data into ClickHouse, then continuously replicates every change. Within minutes, data is flowing into ClickHouse, with less than a minute of lag between them. You now have one system for operational workloads and one for analytics, kept in sync without having to build and maintain a pipeline yourself.
+
+![](https://clickhouse.com/uploads/managed_postgres_aug2026_image7_1e1bcce0ab.png)
+
+For teams that would rather stay in the Postgres ecosystem entirely, we also surface the [pg_clickhouse extension](https://clickhouse.com/docs/products/managed-postgres/extensions/pg_clickhouse/introduction). It allows users to query ClickHouse using familiar PostgreSQL syntax, giving them a single query layer across both engines.
+
+![](https://clickhouse.com/uploads/managed_postgres_aug2026_image8_0d228d14fe.png)
+
+Import the ClickHouse tables as foreign tables and Postgres becomes a single query layer over both engines — same connection, same SQL, analytical queries executing in ClickHouse. Even on a 1M-row dataset that's [**3–7x faster**](https://clickhouse.com/docs/products/managed-postgres/quickstart#query-clickhouse-from-postgres): five aggregations drop from 555 ms to 164 ms, a JOIN with aggregations from 1,246 ms to 170 ms. The gap widens with scale.
+
+By the end of Step 4 you will have walked through the entire unified stack — transactional writes, managed CDC, analytical reads — without assembling any of it yourself.
+
+## Designing for momentum {#designing_for_momentum}
+
+We intentionally kept the new onboarding process short, visible, and outcome-oriented. Every completed step reinforces a sense of progress, while the remaining steps make the finish line feel achievable.
+
+We also chose to describe each step as an outcome rather than a UI action. Instead of telling users to “Open the SQL Console” or “Configure CDC,” we focus on what we want them to accomplish:
+
+* Spin up a Postgres service  
+* Migrate or ingest data  
+* Run your first query  
+* Run analytics with ClickHouse
+
+We deliberately stopped at four steps. It was tempting to include more, but onboarding isn't documentation. Its job isn't to teach every feature, it's to get users far enough into the product that they can understand its value and continue exploring on their own.
+
+We’re building ClickHouse Managed Postgres to deliver a fast, reliable Postgres experience with the power of ClickHouse analytics just a few steps away. Our new onboarding experience is designed to help you get there faster. Give it a try and let us know what you think — we’d love to hear your feedback and ideas.
+
+
+---
+
+## Get started today
+
+Interested in seeing how ClickHouse works on your data? Get started with ClickHouse Cloud in minutes and receive $300 in free credits.
+
+[Sign up](https://console.clickhouse.cloud/signUp?loc=blog-cta-1688-get-started-today-sign-up&utm_blogctaid=1688)
+
+---
 
 ---
 
@@ -339,6 +471,111 @@ That position depends on more than the original columnar architecture. Full-text
 
 For the storage and query layer, we can acknowledge that ClickHouse is a winning choice. Observability as a whole was never a war one database could win. For us, the work has only just started.
 
+
+---
+
+## A universal interface: How QuintoAndar made ClickHouse plug-and-play with managed Postgres
+Published: 2026-08-27T00:00:00+00:00
+URL: https://clickhouse.com/blog/quintoandar-managed-postgres
+
+---
+title: "A universal interface: How QuintoAndar made ClickHouse plug-and-play with managed Postgres"
+date: "2026-08-28T11:42:30.889Z"
+author: "ClickHouse"
+category: "User stories"
+excerpt: "QuintoAndar unified ~900 million monthly events in ClickHouse Cloud and used ClickHouse Managed Postgres to make that data accessible to Hightouch and any Postgres-compatible tool."
+---
+
+# A universal interface: How QuintoAndar made ClickHouse plug-and-play with managed Postgres
+
+## Summary
+
+- QuintoAndar’s customer data platform runs on ClickHouse Cloud, unifying ~900 million monthly events from 14 million users and serving 300 million API requests.
+- The team replaced a costly two-pipeline setup (one system for fast lookups, another for batch processing in Databricks) by writing events directly into ClickHouse.
+- Hightouch’s Customer Studio feature doesn’t support ClickHouse, so they used ClickHouse Managed Postgres to bridge the gap, making ClickHouse reachable from any Postgres-compatible tool.
+
+[QuintoAndar](https://www.quintoandar.com.br/), founded in 2013, replaced the guarantor with underwriting of its own. Today it’s the largest housing platform in Latin America, offering a direct, simple, and transparent experience for those looking to rent, buy, or sell a property. It closes more than 15,000 new rental contracts and 3,000 sale contracts every month, with over 650,000 visits scheduled monthly.
+
+Bruno Brito is the tech lead manager on the customer data platform (CDP) team responsible for collecting, integrating, and unifying data about tenants, owners, and agents. “We’re collecting over 1 billion events per month from over 14 million users, with almost 900 million monthly raw events into ClickHouse,” he says. That data is then served back out to chatbots and internal services across roughly 300 million API requests a month.
+
+Bruno joined us on a [recent webinar](https://www.youtube.com/watch?v=lw1wM5OlyW0), where he walked through how his team is rebuilding the CDP on [ClickHouse Cloud](https://clickhouse.com/cloud), from the consolidation to the roadblock that nearly stopped it, and how [ClickHouse Managed Postgres](https://clickhouse.com/cloud/postgres) turned out to be the missing piece.
+
+## Problems with the old Lambda architecture
+
+The CDP starts with mobile user tracking events and change data capture from transactional databases, streamed through Kafka. Both flow into an in-house event gateway, where the team applies governance, runs transformations, and enriches events on the way through. All of it is in service of what Bruno calls the team’s “360 vision around the customer.”
+
+The previous architecture then split along classic Lambda lines. A hot layer (another in-house Postgres service, called Datazord) consumed the gateway’s output topics and served user information to chatbots and other internal consumers through its own Postgres database, chosen for low-latency reads. A cold layer used Kafka Connect to dump everything into a landing zone in the data lake, where 24/7 Databricks workflows processed it into a silver layer that analytical ETLs and Hightouch, their user activation tool, could draw from.
+
+![](https://clickhouse.com/uploads/quintoandar_aug2026_image1_84033a1623.png)
+
+*The previous CDP architecture: output topics from the event gateway split into a hot layer, where Datazord served chatbots from Postgres, and a cold layer running 24/7 Databricks workflows.*
+
+As Bruno explains, there were a few problems. First, the team had to maintain two separate codebases, a familiar tax for anyone who has run a Lambda architecture. Second, in the cold path, enormous volumes of duplicate events meant constant `MERGE INTO` operations against Delta tables. “Duplicating all these millions of events every time was getting expensive not only in cost but in time,” Bruno says. And third, the Postgres instance holding the hot layer was starting to look like the wrong tool for the volume of events moving through it.
+
+“As an architecture, it was kind of complicated,” Bruno says. “So we’re thinking, how can we simplify it, make it faster, and have this high-freshness, low-latency architecture that lets us provide all of this information? … And that’s when we found ClickHouse.”
+
+## Consolidating on ClickHouse Cloud
+
+The team’s answer was to stop treating Kafka topics as the output of the pipeline, and to have the event gateway write directly to ClickHouse instead. Walking through the old diagram, Bruno ticks off what changed: “We can get rid of this, get rid of this, get rid of that… and I can use ClickHouse to support all of our analytical queries.”
+
+In the new architecture, Hightouch would query ClickHouse for user activation, and Datazord could serve its API requests from ClickHouse rather than its own Postgres, still returning results in under a second. That would remove the landing zone, the incessant `MERGE INTO` operations, and the need for a second codebase.
+
+Bruno notes that QuintoAndar’s wider data organization runs Superset over Trino. His team wondered whether they were about to wall themselves off from everyone else. In practice, the answer was no. ClickHouse’s connectors meant Trino and Apache Spark could both reach the CDP’s tables, and ClickHouse could read Delta tables in the company’s data lake going the other way. “Integrating with this stack was not a huge problem for us,” he says.
+
+![](https://clickhouse.com/uploads/quintoandar_aug2026_image3_678b99d857.png)
+
+*The new stack the CDP team is implementing: the event gateway writes directly into ClickHouse, with Superset, Trino, and Spark all able to reach the CDP’s tables.*
+
+## The roadblock: “Where’s ClickHouse?”
+
+ClickHouse looked like the perfect fit. But then came the moment Bruno says all engineers have faced at some point: “You choose a new piece for your architecture, you start testing it, it works fantastic, and then you start integrating with all your other third-party tools…”
+
+At QuintoAndar, Hightouch is central to how the marketing organization operates, syncing audience data out to the platforms that run its campaigns. The marketing team wanted to use its Customer Studio feature, which would let them build audiences, segment users, run A/B tests, and assemble multi-step journeys. However, when Bruno’s team went to the docs to check which sources Customer Studio supports—Snowflake, Databricks, BigQuery, Redshift, Athena, Synapse, MS SQL Server, PostgreSQL, Greenplum, Microsoft Fabric—there was one name conspicuously missing from the list.
+
+“Where’s ClickHouse?” Bruno remembers asking. “It seemed like this awesome solution which would work perfectly for all of our use cases, until it didn’t.”
+
+Databricks was the only qualifying engine already in QuintoAndar’s stack, but the central data team had decided to move away from Databricks SQL Warehouse due to its high cost, favoring open-source alternatives such as Trino, while the CDP team wanted to use ClickHouse. However, Trino wasn’t supported either.
+
+That left one option: Postgres. As luck would have it, ClickHouse had just rolled out a [new offering](https://clickhouse.com/cloud/postgres) that lets teams run analytical and transactional workloads in one unified stack. As Bruno recalls, “That’s when we heard about ClickHouse’s managed Postgres service.”
+
+## The missing piece: ClickHouse Managed Postgres
+
+Connecting Hightouch to [ClickHouse Managed Postgres](https://clickhouse.com/cloud/postgres) lets Postgres reach ClickHouse on its behalf. 
+
+> “All the great performance, low latency, everything great we saw in ClickHouse, we were able to make use of that in Hightouch through ClickHouse Managed Postgres. That was the missing piece of our architecture.” — Bruno Brito, Tech Lead Manager, QuintoAndar
+
+The key mechanism is the [pg_clickhouse extension](https://clickhouse.com/blog/introducing-pg_clickhouse). Setup, he explains, was simple: create the extension, create a foreign server pointing at ClickHouse, create a schema, and import the foreign tables. After that, ClickHouse tables are queryable as ordinary Postgres tables, with joins and aggregations pushed down rather than dragged back into Postgres.
+
+![](https://clickhouse.com/uploads/quintoandar_aug2026_image2_818ed9562a.png)
+
+*Hightouch connects to Postgres managed by ClickHouse, which pushes those analytical queries down to ClickHouse, where the event gateway is already writing events directly.*
+
+Asked what effect the round trip from Postgres to ClickHouse and back has on performance, Bruno says it’s negligible: “For the use case of Hightouch, it doesn’t affect it at all.”
+
+And Postgres isn’t only forwarding queries. Hightouch’s Lightning Sync feature keeps state of its own (a planner table and an audit table) so that scheduled syncs push only what has changed rather than the entire audience every time. Those tables live in Postgres, on NVMe-backed storage. One connection ends up doing two jobs. 
+
+> “It’s persisting data in Postgres just like an OLTP database, but it’s actually running the analytical queries in ClickHouse. So we’re making use of the best of both worlds.” — Bruno Brito, Tech Lead Manager, QuintoAndar
+
+## Managed Postgres as a universal interface
+
+For QuintoAndar, one of the biggest benefits of Postgres managed by ClickHouse is a much simpler architecture. “ClickHouse becomes this plug-and-play database where you can connect to any third-party tool that supports Postgres,” Bruno says. 
+
+That simplicity, he adds, doesn’t come at the expense of governance: “It’s not like Postgres is going to be able to access everything you have in ClickHouse. You still have to create users, roles, and give access to what you want when you need it.”
+
+The team also gets full value out of ClickHouse rather than paying for a second warehouse or query engine to satisfy a single integration. As Bruno says, “You can really leverage ClickHouse’s power and get the most out of it.”
+
+Asked if replacing Hightouch was ever on the table, Bruno says the team never had to consider that option; they could stick with the solution they already had. Going forward, any tool that speaks Postgres can reach ClickHouse in the same way. “You can still make use of ClickHouse,” he says, “even if some of your partners don’t support it yet.”
+
+
+---
+
+## Get started today
+
+Interested in seeing how ClickHouse works on your data? Get started with ClickHouse Cloud in minutes and receive $300 in free credits.
+
+[Sign up](https://console.clickhouse.cloud/signUp?loc=blog-cta-1683-get-started-today-sign-up&utm_blogctaid=1683)
+
+---
 
 ---
 

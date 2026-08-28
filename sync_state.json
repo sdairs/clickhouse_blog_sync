@@ -1,5 +1,5 @@
 {
-  "last_sync": "2026-08-27T17:23:48.497135Z",
+  "last_sync": "2026-08-28T18:16:59.622704Z",
   "processed_blogs": {
     "https://clickhouse.com/blog/clickhouse-raises-400-million-series-d-acquires-langfuse-launches-postgres": {
       "title": "ClickHouse raises $400M Series D led by Dragoneer to accelerate expansion across analytics and AI infrastructure",
@@ -5712,9 +5712,21 @@
       "pub_date": "2026-08-26T00:00:00+00:00",
       "file_path": "blogs/2026-08-26-what-s-new-in-the-clickhouse-net-driver-the-road.md",
       "processed_at": "2026-08-27T17:23:48.394273Z"
+    },
+    "https://clickhouse.com/blog/clickhouse-managed-postgres-onboarding": {
+      "title": "A new getting started experience for ClickHouse Managed Postgres",
+      "pub_date": "2026-08-28T12:55:15+00:00",
+      "file_path": "blogs/2026-08-28-a-new-getting-started-experience-for-clickhouse.md",
+      "processed_at": "2026-08-28T18:16:59.374224Z"
+    },
+    "https://clickhouse.com/blog/quintoandar-managed-postgres": {
+      "title": "A universal interface: How QuintoAndar made ClickHouse plug-and-play with managed Postgres",
+      "pub_date": "2026-08-27T00:00:00+00:00",
+      "file_path": "blogs/2026-08-27-a-universal-interface-how-quintoandar-made.md",
+      "processed_at": "2026-08-28T18:16:59.520468Z"
     }
   },
-  "total_blogs": 952,
+  "total_blogs": 954,
   "failed_blogs": [
     {
       "url": "https://clickhouse.com/jp/blog/clickhouse-gcp-japan-availability",
