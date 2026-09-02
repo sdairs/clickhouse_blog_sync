@@ -1,6 +1,729 @@
 # ClickHouse Blogs
-Last updated: 2026-09-01 11:13:54 UTC
-Total blogs: 954
+Last updated: 2026-09-02 10:47:20 UTC
+Total blogs: 958
+
+---
+
+## ClickHouse welcomes RunReveal
+Published: 2026-09-01T22:01:39+00:00
+URL: https://clickhouse.com/blog/clickhouse-welcomes-runreveal
+
+---
+title: "ClickHouse welcomes RunReveal"
+date: "2026-09-01T22:01:39.775Z"
+author: "ClickHouse"
+category: "Company and culture"
+excerpt: "Security is the largest and fastest growing data workload in the enterprise, and today, ClickHouse has acquired RunReveal."
+---
+
+# ClickHouse welcomes RunReveal
+
+<img
+  src="/uploads/CH_Run_Reveal_Dark_b39772abfd.png"
+  alt="ClickHouse + RunReveal"
+  style="max-width: 80%; height: auto;"
+/>
+
+Security is the largest and fastest growing data workload in the enterprise, and today, ClickHouse has acquired <a href="https://runreveal.com/" target="_blank">RunReveal</a>. They built a security data platform on ClickHouse, and now that expertise is coming in-house to make ClickHouse better for everyone in the space. 
+
+### Security is a data problem
+What makes security data hard isn't just volume, but the shape of the workload: cloud audit logs, identity events, endpoint telemetry, network flows. Security data pushes a database harder than almost anything else: continuous high-throughput ingest, retention measured in years, and queries that have to return while an analyst is still looking at the screen.
+
+The power and efficiency of the database underneath decides how much data a team can afford to keep and how quickly an analyst gets an answer. That is why <a href="https://clickhouse.com/user-stories?vertical=7" target="_blank">cyber companies</a> increasingly build their anti-fraud, real-time detection engines, data-loss prevention, and threat intelligence engines on ClickHouse. RunReveal <a href="https://clickhouse.com/blog/runreveal-is-building-the-ridiculously-fast-security-data-platform-on-clickhouse" target="_blank">chose</a> ClickHouse for the same reasons: storage efficiency, query speed at scale, and a flexible data platform across security signals and workflows. 
+
+**For companies already building security products on ClickHouse**. We remain a neutral foundation, we succeed when the companies building security products on us succeed. Bringing security expertise in-house will make us better at supporting you: sharper reference architectures, better guidance on schema and retention design, and a clearer line from your requirements into the database roadmap.
+
+**For security teams evaluating ClickHouse**. RunReveal remains available, via its bring-your-own-database model, where security data lives in a ClickHouse cluster you control. If you would like to look at the combined experience, talk to your account team or <a href="https://clickhouse.com/company/contact" target="_blank">contact us</a>. 
+
+**For RunReveal customers**. This is an acceleration, not a disruption. The platform continues to be supported and your contract terms remain the same. 
+
+### What's next
+As AI agents begin operating across enterprise systems, security data becomes the record of what those agents did and the substrate for defending against machine-speed threats. The work the RunReveal team has done on agentic investigation, including agents that hunt across sources, propose and tune detections, and carry an investigation toward a conclusion, is some of the most interesting we have seen built on ClickHouse. Investigations that took analysts hours need to happen in seconds. We expect that experience to inform how we support agentic analytics across the platform, for our own products and for the companies building theirs on top of us.
+
+Sign up for <a href="https://discover.clickhouse.com/newsletter.html" target="_blank">our newsletter</a> for future updates about our platform.
+
+
+---
+
+## The Agentic Analytics Benchmark: Measuring model accuracy and efficiency in analytical agents
+Published: 2026-09-01T19:15:00+00:00
+URL: https://clickhouse.com/blog/agentic-analytics-benchmark-data-agent-mnist
+
+---
+title: "The Agentic Analytics Benchmark: Measuring model accuracy and efficiency in analytical agents"
+date: "2026-09-01T18:10:34.559Z"
+author: "Eduardo Vellasques and Al Brown"
+category: "Engineering"
+excerpt: "We took 201 real analytics questions from our production data warehouse, benchmarked 28 models on correctness, cost, and speed, and released an open harness so you can run the same test on your own."
+---
+
+# The Agentic Analytics Benchmark: Measuring model accuracy and efficiency in analytical agents
+
+> **TL;DR:**
+>
+> * We are [releasing an open harness, data-agent-mnist, for benchmarking analytics agents](https://github.com/ClickHouse/data-agent-mnist) so you can run against your own data warehouse.
+> * Against our data warehouse, **Claude Fable 5.1 holds the top spot for correctness**, scoring 76.6% across 201 questions.
+> * Claude Fable 5.1 appears to offer a meaningful improvement in performance and cost over Fable 5.
+> * Frontier-level models hold all top 10 positions, 5 of which are open-weight, when scored on correctness alone.
+> * Running our full 201-question benchmark costs $1 with DeepSeek V4 Flash vs. $52 with Fable 5.1, sacrificing 11pp of correctness.
+
+
+We took 201 real analytics questions from the production traffic of [DWAINE](https://clickhouse.com/blog/ai-first-data-warehouse), ClickHouse’s internal analytics agent, and benchmarked 28 models spanning every vendor tier, proprietary and open-weights, against a synthetic-yet-truthful reconstruction of our data warehouse.
+
+Prior work like [Spider](https://github.com/taoyds/spider), [Spider 2.0](https://spider2-sql.github.io), [WikiSQL](https://github.com/salesforce/WikiSQL), [BIRD](https://bird-bench.github.io) focus on measuring a model's ability to translate text to SQL. While useful, it only measures a small part of the problem. A text-to-SQL benchmark can generally proclaim a model as the overall winner, appropriate for anyone. But for agentic analytics, the criteria of the best model is a lot more context-dependent. We believe most recent models are generally more capable in this area. 
+
+While writing this post, Hex released [DataBench](https://hex.tech/blog/databench-agentic-analytics-benchmark/), which aligns very closely with how we see agentic analytics. We highly recommend giving their post a read.
+
+This benchmark aims to not just be a point-in-time snapshot of current model capabilities, but a framework that can be used to benchmark model performance against your own data warehouse, and assess which is appropriate for you.
+
+This post explains how we built it, what we found, and how you can build the same thing from your own data warehouse traffic.
+
+![Figure 1](https://clickhouse.com/uploads/pass_rate_all_models_1910c0d6a2.png)
+
+*Pass Rate of all 28 models. No mid- or small-tier model reaches the top eleven, frontier tier alone does not guarantee it, and an open-weights model leads.* 
+
+[Skip to the results.](#results)
+
+## Agentic analytics vs. text-to-SQL
+
+Text-to-SQL is the translation of a natural-language question into a single SQL query, given the schema. It is one of the most heavily benchmarked tasks in NLP, and a decade of those benchmarks rests on four shared assumptions:
+
+1. the schema is handed to it up front
+2. the model gets one shot
+3. there is a single gold query
+4. scoring is an execution match against that gold quey
+
+However, agentic analytics drastically challenge the assumptions here in real world use cases. The agent must still turn a natural-language question into SQL, but the other three assumptions go: it discovers the schema itself, it takes as many turns as it needs, and there is no gold query to match, because the answer is the result set the annotators agreed on.
+
+Agents are able to explore and discover schemas on their own, build a plan, and run multiple queries to formulate an answer. This style of agentic analytics is now in production in many data platforms, including ClickHouse Cloud, and simple text-to-SQL is no longer representative of real work.
+
+Benchmarking this loop tests some of the more opaque qualities of LLMs and needs a purpose-built benchmark. Here are the three requirements we had when designing the benchmark:
+
+* Personalised There is no single, best model for everyone. The benchmark should support any company using their own questions, their own data and data warehouse.
+* Schema-aware: The difficulty lives in the size and multi-hop join structure of a real data warehouse, not in a compact hand-built schema. A benchmark that abstracts the schema away measures the wrong thing.
+* Replayable: To compare models fairly, the same questions must run against the same warehouse state on demand, which a live production system cannot guarantee.
+
+## Methodology
+
+### The shape of a production-grade data warehouse
+
+Enterprise data wrehouses are rarely a pile of raw tables. Different organisations follow different patterns, use different tools and the level of complexity varies. That’s one reason why we think it’s important to be able to [run the benchmark yourself](https://github.com/ClickHouse/data-agent-mnist).
+
+We’ll walk through the structure of our data warehouse as an example.
+
+Our raw tables are modeled with dbt into curated layers.
+
+The **mart layer** (dbt_marts_general) covers product usage and billing: flat, denormalized tables with one row per entity or entity-period, the JOINs already done, and columns curated. A typical question against it is a filter and an aggregation on a single table. For the benchmark, this layer has 235k rows, 144k of them in usage_history.
+
+The **dimensional layer** (dbt_dds) is sourced from Salesforce and covers the CRM side: accounts, opportunities, leads, contacts, support cases, all in a classic star-schema, entities in dim_* tables, events in fct_* tables. Answering a question using dbt_dds tables requires a multi-hop entity-resolution join: resolve a name to an organization, join to its account by key, and from there to opportunities, cases, or services. dbt_dds has many more tables and columns (746 of the 865 columns) and introduces the difficulty of finding and joining the right tables.
+
+![Figure 2](https://clickhouse.com/uploads/synthetic_warehouse_3327263fc3.png)
+
+*The synthetic data warehouse: flat marts on the left, the dbt_dds dimensional CRM layer on the right, connected only by the organization identifier.*
+
+### Building the synthetic data warehouse for the benchmark
+
+[DWAINE](https://clickhouse.com/blog/ai-first-data-warehouse) (Data Warehouse AI Natural Expert) is our internal analytics assistant. Employees ask business questions in natural language and it answers by querying our data warehouse. On a typical weekday, it handles around 100 messages across 30 to 60 conversations, from a few dozen distinct users.
+
+DWAINE is instrumented with [Langfuse](https://langfuse.com) and we log every interaction: the users’ questions, the SQL the agent ran, the result sets, the final answers. From that, we get a range of real analytics questions at production complexity. 
+
+However, the data warehouse and questions contain sensitive data, like customer names and billing figures, so it can never be released as is.
+
+To ensure privacy, we construct a synthetic data warehouse.
+
+This is a reconstruction of the data warehouse where all entities remain internally-consistent, but anonymous. No real names or figures remain, but relationships and scales are true. Questions are also updated to match the new entities.
+
+With this, we can satisfy the requirements above:
+
+* Personalised: the data and questions represent the real world for our business
+* Schema-aware: the reconstruction keeps the real schema's structure (in our case: 18 tables and 865 columns across two dbt-style layers)
+* Replayable: deterministic seeding means every evaluation runs against the identical warehouse, from a single command.
+
+The construction of this synthetic warehouse is a core part of the benchmark harness. It is intended to be reusable by anyone, so you can apply it to your own questions and warehouse.
+
+### Curation, anonymization and seeding
+
+None of the raw questions from DWAINE can become a benchmark item as is. We pass every candidate through three gates:
+
+1. **Curation** drops traces that are not questions at all: pasted transcripts, HTML dumps, bulk entity rosters. It then drops questions that only make sense in context, using a zero-shot classifier to separate self-contained questions from ones leaning on an earlier turn ("what about those customers?").
+
+2. **Anonymization** replaces structured PII (emails, Salesforce IDs, UUIDs, cloud account identifiers, internal URLs, etc.) with deterministic Faker values. Free-text names have no reliable structure, so we pose them as a zero-shot extraction task, biased deliberately toward over-extraction, and scrub the result against a curated backstop list. Billing figures are scaled by per-question factors that preserve ratios.
+
+3. **Verification** re-scans every anonymized question and hard-fails the build if any real structured token survives. A leak cannot pass silently.
+
+Importantly, anonymized questions still name specific entities (e.g., organization, account ID, email domain). Each question’s referent must exist in the synthetic data warehouse, otherwise the question is unanswerable, yet must not be conspicuous (or finding it is trivial). So we seed by a needle-in-a-haystack construction: plant every entity the questions reference under exactly the identifiers the question uses, then bury the needles in a realistic synthetic population, twelve cloud regions, ten industries, tier-conditioned revenue with eighteen months of daily history, drift, noise, and usage spikes. 
+
+From an initial 501 candidates, we end up with 475 after the curation step. A schema-compatibility gate (is the question answerable from the reconstructed schema alone?) brings this down to 243. The ground-truth committee (described in the next section) cuts it to 204. Finally, a legal review removed three more, leaving the 201 questions we will evaluate.
+
+### Where does the answer come from?
+
+Measuring whether an answer is right requires knowing the right answer, and [data-agent-mnist](https://github.com/ClickHouse/data-agent-mnist) starts without knowing it.
+
+The questions used are from real traffic, and they do not come with a validated answer attached. Instead, three models from three different providers (Claude Opus 4.8, GPT-5.5, Gemini 2.5 Pro) each solve every question independently, running the same full agentic loop against the warehouse. If at least two arrive at the same result by independent paths, that result becomes the ground truth. If all three models end up with different answers, the question is dropped as not reliably answerable (noted in the previous section, committee disagreement resulted in 39 questions being dropped from our set).
+
+However, agreement is not verification, and we have to recognise that this isn’t a perfect solution. Two models can be wrong the same way. Provider diversity reduces that, but doesn’t remove it, since all three share training data and reasoning habits. Just over half our ground truth is unanimous at 51.7%, the rest pass with a two-to-one majority. We do not know how often the committee agrees on something wrong. 
+
+It is a future goal for us to have human-audited answers for all of our questions, and support doing so in the benchmark harness for others who want to do the same.
+
+We also recognise that two answers can agree but not be identical in form. One answer might name a column **total_dollar_usage**, the other **monthly_spend**, for example. A column-linking step provides a mapping that judges can use to ensure equivalence (column linking, row alignment, numeric tolerance). This proved vital, as 84.9% of scored result sets in our test match only through the linked mapping.
+
+### Addressing bias with LLM-as-a-jury
+
+Rather than a single LLM-as-judge, every candidate answer is scored by a three-seat LLM-as-jury panel. One seat each to Anthropic, OpenAI, Google, and the panel excludes the candidate’s own model family, so nothing scores itself. 
+
+Majority vote decides; a three-way split scores as a tie. The same column-linked equivalence check runs on the candidate’s result sets against the ground truth, and its verdict is passed to the judge as an authoritative data signal alongside the model’s written conclusion.
+
+![Figure 3](https://clickhouse.com/uploads/jury_scoring_136c3e4d58.png)
+
+*How is a candidate answer scored? The column-linked equivalence check compares result sets against the ground truth, and its verdict reaches the panel as a data signal alongside the written answers; each seat fields its provider’s strongest judge that is not the candidate, and majority vote decides.*
+
+### Measuring bias in LLM jurors
+
+A fair question is whether one provider’s models might have positive bias towards their own answers. We audited this by comparing the favourable-vote rate of each provider in our panel against answers from a range of different providers.
+
+What we note is that providers tend to differ in their leniency, but don’t show much overall bias. Across the board, OpenAI judges more favourably, while Google is the harshest judge. 
+
+Centering each seat on its own mean and comparing its vote on its own family against the other seats’ votes on that same family, the in-group residuals are +0.9, 0, and +1.2 points. No seat over-credits its own family enough to swing a majority vote. The panel is lenient, not partisan.
+
+![Figure 4](https://clickhouse.com/uploads/juror_bias_b5690c74cb.png)
+
+*Left: favorable-vote rate by judge seat and candidate provider (last column: the seat’s overall leniency). Right: leniency-adjusted in-group residual per seat; the shaded band is ±2 points. Leniency varies far more than in-group bias.*
+
+### Measuring contamination
+
+Benchmarks like [Spider](https://github.com/taoyds/spider) and [WikiSQL](https://github.com/salesforce/WikiSQL) have been public with gold SQL since 2018, and they are demonstrably in training sets (we measure exactly that, below). [Spider 2.0](https://spider2-sql.github.io) also inherits the same contamination pressure as its predecessors.
+
+Frontier models can complete the question from these text-to-SQL benchmarks from memory. Show one the first 60% of a question from Spider and the strongest memorizer completes it at 0.89 word-level similarity, nearly word for word. This presents a challenge: over time, these benchmarks stop testing generalisation and start measuring memorisation.
+
+To test for memorisation of Data Agent MNIST, we probe all 28 models with three instruments:
+
+* **Completion probe.** Show the model the first 60% of a benchmark question, name the dataset, and ask it to complete the question exactly. Word-level similarity between the generation and the true continuation measures memorization.
+
+* **Entity-recovery probe.** The warehouse’s entities are random Faker draws with no world-knowledge prior, so asking for a named organization’s ID can’t be answered from memory. On a public benchmark, a competent model can answer probe questions from memory.
+
+* **Positive control.** A null result is only meaningful if the instrument detects contamination where it exists, so the identical completion probe runs over Spider, public with gold SQL since 2018 and demonstrably memorized.
+
+![Figure 5](https://clickhouse.com/uploads/contamination_exposure_33325f949a.png)
+
+*The exposure gradient: mean completion similarity per model on the three Spider splits and on Data Agent MNIST questions, ordered by how long each has been public. Whatever a model memorized of Spider, every line collapses to the noise floor on Data Agent MNIST. Entity recovery is zero for all 28 models (0 of 650 attempts); the two inline reasoners are excluded from the completion metric.*
+
+The questions, answers and data for Data Agent MNIST are not public. Every model sits at the word-overlap noise floor (fleet mean 0.064; a single one of 1,200 completions reaches 0.5 similarity), and entity recovery is zero across every model and every item: not one of the warehouse’s organization identifiers was ever produced in 650 attempts. 
+
+On Spider dev, the most-quoted public split, the strongest memorizer scores 0.89, and the exposure gradient is clean within a single model (the board leader scores 0.69 on Spider dev, 0.43 on Spider train, 0.17 on the test split that was only released in 2024, and 0.06 on Data Agent MNIST).
+
+We also embed a canary string in our private test set as another possible way to detect if the benchmark ends up in a training corpus. And, because the benchmark is built as a re-usable harness rather than a static entity, we can mint a fresh, non-contaminate instance from new traffic at any time.
+
+## Results
+
+At the time of writing, 28 models were included in the benchmark. All 28 models run with an identical agent harness, prompt and warehouse.
+
+We rank across 4 dimensions:
+
+- **Pass rate**: the percentage of questions answered correctly
+- **Tokens/cost**: the total combined input and output tokens used (+ estimated USD cost at current public API pricing)
+- **Wall-clock time**: median time (in seconds) from prompt to answer
+
+![Figure 6](https://clickhouse.com/uploads/results_overview_6045c2f07e.png)
+
+### Pass rate
+
+In the figure below, models are ranked by their **pass rate**.
+
+![Figure 7](https://clickhouse.com/uploads/pass_rate_ranking_839f221668.png)
+
+### Tokens & cost
+
+In the figure below, models are ranked by their **token usage**. 
+
+![Figure 8](https://clickhouse.com/uploads/token_usage_ranking_558af63907.png)
+
+In the figure below, models are ranked by their **cost** (based on public API pricing direct from model providers, as of August 2026). 
+
+![Figure 9](https://clickhouse.com/uploads/cost_ranking_76388a8087.png)
+
+### Wall-clock time
+
+In the figure below, models are ranked by their median **wall-clock time** per answer. The yellow bar shows the median wall-clock time per answer, while the additional grey line shows the p90 upper bounds for longer running questions.
+
+![Figure 10](https://clickhouse.com/uploads/wall_clock_time_4e2b2ad153.png)
+
+### Finding the tables matters more than joining them
+
+Of 201 questions, 83 need the dimensional CRM layer (dbt_dds). Answering those requires discovering the right tables and resolving a multi-hop join, so we expected this to be where the board separated. It mostly isn't.
+
+In the figure below, models are ordered by their overall pass rate. The yellow bar shows the pass rate for the 83 dimensional CRM layer (dbt_dds) questions. The grey bar shows their pass rate on the other questions (non-dbt_dds). 
+
+![Figure 11](https://clickhouse.com/uploads/dbt_dds_pass_rate_2a7f079b2d.png)
+
+*Left: pass rate on dbt_dds questions versus the rest, per model, with the gap annotated. Right: how often each model’s SQL touches the dbt_dds layer at all on those questions.*
+
+It seems that most recent models handle both flat and normalised table structures equally well. Further down the board, the gap between flat vs normalised widens, with a clear preference for flat tables - most of these models are smaller and/or older, showing a clear generational improvement. 
+
+The failure for these older/smaller models is usually earlier than the join. Models in the top half discover the dbt_dds tables on 87 to 98% of the questions that need them. Models in the bottom half don't reliably find the tables at all. Gemini 2.5 Pro drops 20 points at 55% discovery, and Gemini 2.5 Flash 9 points at 47%.
+
+We see 2 outliers on the board, both from Google. Gemini 3.5 Flash (a low overall performer) reaches for the normalised tables on every question that needs it - the only model on the board with 100% discovery - but doesn’t use them and drops 7 points. Gemini 3.1 Pro nearly has the best flat-table pass rate on the board, has similar normalised-table discovery as its peers, but, again, fails to use them and drops 5 points.
+
+> We think these outliers help to make the case for running your own benchmark on your own data warehouse. We could generalize and say “big, frontier models have the best performance”, or “smaller, mid-tier models have good-enough performance, and much lower cost”, and while these statements are generally true, they don’t mean “just pick any model with that category and you’ll have a good time”. You really need to run it yourself and create a short-list of specific models.
+
+### Planning is the main failure mode
+
+When a model concludes with an answer and we score it wrong, we label the failure with one of five modes: FM1 no attempt, FM2 wrong plan, FM3 wrong data, FM4 wrong implementation, FM5 runtime error.
+
+In the table below each model is a row, and each cell is the percentage of that model's failures falling in one mode, so rows sum to 100. The n column is the number of failures. For example, DeepSeek v4 Pro has 45 failures and 69% (31) of them are type FM2. This helps to show the shape of how models fail.
+
+![Figure 12](https://clickhouse.com/uploads/failure_modes_874a272967.png)
+
+*Each model's failures split across the five failure modes. Rows are percentages of that model's failures, not of its questions, and sum to 100; how often a model fails is the leaderboard's job. Turn-limited runs are excluded here as "ran out of budget."*
+
+FM2 (wrong plan) is by far the most common, at 53 to 82% of failures for every model with a substantial failure count.
+
+FM5 (runtime error) is close to absent. Only four models record any at all, and only Gemma 4 31B exceeds 2%, so modern models rarely write SQL that fails to execute.
+
+FM1 (no attempt) is a different story. It is generally absent, but grows towards the bottom of the board. It reaches 34% for Gemini 2.5 Flash, 27% for Gemini 2.5 Pro and 23% for Qwen3-Coder 30B, all in the bottom third, while seven of the top ten models record none at all. The highest occurrences are with older and/or smaller models, though not exclusively, as GPT-5.5 and 5.6 both have 3 to 5% of failures in this group.
+
+Fable 5.1 (the board leader) stands out for FM3 (wrong data), at 28% of its failures against 19 to 23% for the models around it. That is the highest rate on the board, and it comes with the lowest FM2 share in the top ten at 57%: it plans well and then picks the wrong field or grain.
+
+These results show that SQL syntax and execution are no longer bottlenecks for modern models. For agentic analytics, data modeling and schema context matter far more.
+
+## The right model for the right task
+
+From the results, can we conclude that the frontier models are the best fit for agentic analytics?
+
+On pass rate alone, tier does hold: ranks 1 to 12 are all frontier-tier models, and no mid- or small-tier model reaches them. But tier says nothing about what a model costs. Inside that top group the price per question spans a factor of eight. The model in second place (DeepSeek V4 Pro) is only 2 percentage points (pp) behind the leader (Fable 5.1), yet costs >75% less. 
+
+Outside of the top-tier, consider DeepSeek V4 Flash. It scores 65.7%, which is 11pp behind Fable 5.1, but it costs 52x less ($1 for the full run, vs $52). It’s also faster.
+
+> Running our full 201-question benchmark costs $1 with DeepSeek V4 Flash vs. $52 with Fable 5.1, sacrificing 11pp of correctness.
+
+The choice is not simply frontier vs. frontier, nor frontier vs. mid-tier. You need to assess what level of correctness is tolerable for your use case, and what you are willing to pay for the last few points.
+
+Further, failure-mode analysis points at where performance could be supported outside of the model. Wrong plan is the most common failure for every model, at 53 to 82% of failures, and the cheap models are not meaningfully worse at the rest of the job. If the plan is the universal bottleneck, then buying a good plan and executing it cheaply is the obvious architecture: put the strongest model where the plan is made, and let a low-cost model execute it.
+
+We have not benchmarked split-role architectures yet. It is the follow-up we are most interested in: can we close enough of the gap that a model at one-fiftieth of the cost becomes the production default?
+
+## Run this on your own data warehouse
+
+[data-agent-mnist](https://github.com/ClickHouse/data-agent-mnist) is not intended to be a fixed score for today's models, nor is it tied to usage of ClickHouse. It’s a reusable harness that can be used by anyone to benchmark models against their own environment.
+
+The harness includes an instrumented assistant (any tracing that captures the question, the SQL it ran, and the results), a modeled warehouse schema, and API access to a handful of frontier models for annotation and judging. 
+
+There are multiple stages to reproducing the benchmark for yourself, as discussed in this post: mine and curate the traffic; anonymize with hard-fail verification; reconstruct the schema synthetically and plant every entity the questions reference; recover ground truth by provider-diverse committee; score with a judge panel that never grades its own family. Each stage is a script, and a full evaluation replays from a single command against a deterministic warehouse.
+
+By running the benchmark, the goal is not to say which model is universally the best, but which models will be most appropriate for you to use in production behind your agent, on your workload. Our results show that the discriminator for us is a dimensional CRM layer; your warehouse will have its own discriminator, and only running it yourself will discover what that is. When the next frontier model ships, you can add it as a candidate and grade it against your current selection, knowing that it is comparing apples-to-apples.
+
+## What’s next
+
+Of course, new models are released all the time, and we intended to continue updating the results to see how the picture changes. We aim to follow up with additional testing capabilities for different reasoning levels within a model as well as split-model architectures.
+
+We’ll also be writing a full white-paper on test methodology.
+
+We also [publish the harness](https://github.com/ClickHouse/data-agent-mnist) so you can run the benchmark yourself, we would genuinely love to hear what yours finds. Reach out to us in our [Slack community](http://clickhouse.com/slack) or through the git repo!
+
+
+---
+
+## How Uken Games reduces observability costs by 87% with ClickHouse
+Published: 2026-09-01T15:28:24+00:00
+URL: https://clickhouse.com/blog/uken-games-clickhouse-observability-stack
+
+---
+title: "How Uken Games reduces observability costs by 87% with ClickHouse"
+date: "2026-09-01T15:28:24.755Z"
+author: "ClickHouse"
+category: "User stories"
+excerpt: "Uken Games replaced Datadog with an open-source observability stack built on ClickHouse, cutting costs by 87% while storing every trace on a single node."
+---
+
+# How Uken Games reduces observability costs by 87% with ClickHouse
+
+## Summary
+
+- Uken Games uses ClickHouse as the trace store for its observability platform, monitoring the backend behind its mobile games for millions of players.
+- They replaced Datadog with an open-source, ClickHouse-based stack, reducing observability costs by 87%.
+- A single ClickHouse node holds all of Uken’s traces in about 170 GB, fed by OpenTelemetry collectors alongside SigNoz, Prometheus, and Grafana.
+
+When you’re building games for millions of players and partnering with the world’s biggest brands, one question tops all others: how do you know if players are having fun?
+
+[Uken Games](https://uken.com/) is an independent game studio based in Toronto. Founded in 2009, it has partnered with the likes of Sony Pictures and Apple, built a mobile game embedded in the Tim Hortons app, and sold a game for $100 million to game developer Jam City.
+
+The gaming studio’s success rises and falls on its ability not only to keep players engaged, but also to observe and understand their behavior. Otherwise, players will churn and go to the competition. At a [June 2026 ClickHouse meetup in Toronto](https://clickhouse.com/videos/meetuptorjun0201), Alexei Zenin, who at the time was a Uken software developer, spoke about how they approach answering this question and deciding what to capture.
+
+<iframe width="768" height="432" src="https://www.youtube.com/embed/FiK5ZGE8GNY" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe>
+
+Alexei divides observability into two layers. On top are the product analytics that reveal whether a game is fun: daily active users, levels completed, in-app purchases, session length, and retention. Beneath that is the foundation he calls tech observability: the CPU, RAM, latency, and error signals that confirm the machinery is working at all.
+
+Under the hood, Uken runs services ranging from cloud saves and inventory to push notifications and leaderboards. “People eagerly compete to be number one on a leaderboard,” Alexei says. “They will send in ‘support tickets’ 24/7, 365 days a year, saying, ‘Someone is cheating, I should be number one.’ And most importantly, they will more likely be paying users.” Having the telemetry to back up and prove who is correct becomes invaluable in these cases.
+
+But monitoring an operation of that scale comes at a cost. We spoke with Alexei about why they moved Uken away from Datadog and how rebuilding its observability stack on ClickHouse helped the company reduce annual costs by 87%.
+
+## Challenges with vendor lock-in
+
+For years, Uken monitored its infrastructure—300 containers, 50+ EC2 machines, 100+ disks, dozens of databases, and 100+ service deployments—with Datadog. Alexei says, “It worked well, but even with our best cost reduction efforts, they always kept climbing back unsustainably.”
+
+![](https://clickhouse.com/uploads/uken_games_sep2026_image1_efa0e210ae.jpg)
+
+*Uken’s old stack, with logs sent to CloudWatch and traces and metrics routed through the Datadog agent.*
+
+As an example of the convoluted pricing, he cites Datadog’s container pricing of an additional $0.002 per container per hour, with the option to purchase prepaid containers at $1 per container per month. At the same time, the proprietary Datadog agent was woven so deeply into Uken’s systems, Alexei says, that the vendor held all the leverage. Datadog’s pricing model, for example, started to bleed into architectural decisions, as the price to monitor different technologies, such as serverless versus EC2, would vary significantly.
+
+## A new stack built around ClickHouse
+
+The Uken Games team settled on a plan: “Datadog out, open source in.” They had three goals for the new system: lower cost, an open-source-leaning but flexible architecture, and pragmatic feature parity across the three pillars of observability: metrics, traces, and logs.
+
+The data plane of the new system is OpenTelemetry, which Alexei calls “the new de facto standard” for observability. “Essentially, you’re able to collect your different signals and define them in a standard, vendor-agnostic way,” he says. “OpenTelemetry is the standard, and we don’t have to write it to a specific database. That’s a decision done later down in the pipeline, and that you get to control. That vendor lock-in is no longer there. ClickHouse greatly complements that philosophy with its open-source roots.”
+
+Collection runs through OTel collectors—standalone Go processes configured in YAML—deployed in two layers. A lightweight agent runs on each ECS instance alongside the microservices; the application hands off each trace to it via a quick localhost call, where the agent can apply pre-filtering before forwarding to a gateway layer that autoscales, batches, and buffers the writes to ClickHouse. The split keeps instrumentation cheap at the edge—a fast local handoff that barely touches the running application—while concentrating the heavier work of scaling and buffering in one place the team can tune independently.
+
+For traces, it writes to ClickHouse by way of SigNoz, an open-source APM tool built on ClickHouse. “We were able to get the exact same flavor and feel that we had with Datadog,” Alexei says. “You didn’t have to go into the SigNoz tool and say, ‘This is the payment service, show me these graphs.’ That was all automatically inferred from the telemetry for the cookie-cutter things like error rates, P90, and requests per second.”
+
+![](https://clickhouse.com/uploads/uken_games_sep2026_image2_4ff180e233.jpg)
+
+*Uken’s trace pipeline, with agent collectors on each ECS instance feeding a load-balanced OTel gateway layer that writes to a single ClickHouse node, which SigNoz sits on top of.*
+
+What really impressed Alexei was the database underneath. A single ClickHouse node absorbs every trace the company produces. “All I did was turn ClickHouse on and it just worked, which I loved,” says Alexei. “I had so many other things to re-engineer and build. The fact that it was so easy was a testament to its performance and the engineering behind it.”
+
+Metrics move through the same collector pattern into AWS-managed Prometheus, a deliberate choice since Uken would be on call for whatever it built, and the open Prometheus standard means the team can leave anytime if AWS prices rise. Logs remain in CloudWatch; as Alexei says, “We found it wasn’t the biggest cost sink, and the engineering effort to re-engineer that wasn’t worth it.” Finally, Grafana acts as the connective tissue, querying metrics and closing the loop by alerting Slack and PagerDuty.
+
+The Uken team also automated the alerting itself, writing a custom CloudFormation resource so alerts are provisioned entirely through code. Rather than clicking through Grafana by hand, an engineer defines an alert in YAML, opens a pull request, and, on merge, Jenkins deploys the CloudFormation stack, which provisions the alert in Grafana via its API. “I can instantiate hundreds of alerts through a click of a button,” Alexei says. Grafana now fires roughly 600 queries every minute against ClickHouse, CloudWatch, and Prometheus, escalating to Slack for warnings and PagerDuty for 3 a.m. emergencies.
+
+![](https://clickhouse.com/uploads/uken_games_sep2026_image3_028b343352.jpg)
+
+*Uken’s alerting layer, with Grafana querying ClickHouse, CloudWatch, and managed Prometheus, and escalating to Slack and PagerDuty with alerts defined as code through CloudFormation.*
+
+## Lessons learned along the way
+
+For the Uken team, the migration doubled as a forcing function to cut waste. Teams don’t use 95% of the metrics and attributes they collect, Alexei says, adding, “If I could summarize all our learnings: you ain’t going to need it. Just try to drop as much stuff as you can.”
+
+Traces got a similar rethink. “Do you really need to capture every single trace that succeeded,” Alexei asks, “or do you want just a statistically representative sample, like 5–10%?” The approach they settled on is to keep the traces that matter—for example, errors and high-latency requests—take a representative sample of the rest, and drop the noise. To avoid blind spots, they base alerts on aggregated metrics computed without sampling, so trimming data never dulls the signal.
+
+They also resisted over-engineering. “You don’t really need millisecond response times to load a dashboard if you’re a human trying to debug something,” Alexei says. And with no regulatory reason to keep data for years, they capped retention at two weeks. “That helped to reduce costs,” he adds.
+
+## The results: one ClickHouse node, 87% cheaper
+
+Today, all of Uken’s traces run on a single ClickHouse node using about 170 GB of disk, fed by several OTel collectors. And there was zero downtime as the new system rolled out, a non-trivial achievement for a live service with millions of players around the world.
+
+“We achieved pragmatic feature parity—being able to explore, visualize, and collect all these metrics and traces and still have a functioning video game,” says Alexei. “I’m proud to say that the open-source solution we built only costs about $12,000 per year to run,” Alexei says. “So almost an order-of-magnitude drop in costs.” Because the savings were so large—nearly 87%—the engineering effort paid for itself in under two years. Along with pragmatic parity with Datadog at a fraction of the price, Uken now fully controls the infrastructure, can avoid vendor lock-in, and can evolve the system according to its future needs.
+
+## The case for open-source observability
+
+Alexei closed his talk by noting that the specific stack matters less than the direction of travel. ClickHouse, he says, is a “go-to tool anytime you have lots of data and want to quickly analyze it,” whether used in a hybrid architecture like Uken’s or through all-in-one open-source projects like [ClickStack](https://clickhouse.com/clickstack), which Alexei calls “really easy to set up and run.”
+
+His larger point is that open-source observability tooling has matured to the point of being a serious default rather than a compromise. “It’s time as an industry to start thinking about how we get leverage back from vendors,” he says, “and start embracing open-source tooling more to help us gain confidence in building trust for the code that we write.”
+
+---
+
+## Get started with ClickHouse for observability
+
+Build fast, cost-efficient observability on ClickHouse with OpenTelemetry-native logs, metrics, and traces.
+
+[Explore ClickStack](https://clickhouse.com/clickstack?loc=blog-cta-1695-get-started-with-clickhouse-for-observability-explore-clickstack&utm_blogctaid=1695)
+
+---
+
+---
+
+## New system views in PostgreSQL 19
+Published: 2026-09-01T00:00:00+00:00
+URL: https://clickhouse.com/blog/postgres-19-new-system-views
+
+---
+title: "New system views in PostgreSQL 19"
+date: "2026-09-02T08:10:15.712Z"
+author: "Gülçin Yıldırım Jelínek"
+category: "Engineering"
+excerpt: "PostgreSQL 19 adds four system views that make lock contention, recovery state, autovacuum priorities, and dynamic shared memory allocations easier to inspect."
+---
+
+# New system views in PostgreSQL 19
+
+  While writing about the [monitoring improvements in PostgreSQL 19](https://clickhouse.com/blog/postgres-19-monitoring-whats-new) and preparing my new talk on Postgres observability for [PostgreSQL Conference Europe](https://www.postgresql.eu/events/pgconfeu2026/schedule/session/8182-whats-new-with-monitoring-in-postgresql-19/) in October, I noticed the [system views](https://www.postgresql.org/docs/19/release-19.html#RELEASE-19-SYSTEM-VIEWS) got their own section in this release. The last time they were similarly highlighted was in PG13 and PG14. So I decided the system views need a blog of their own to go through what has changed. PostgreSQL 19 adds four new views, [pg_stat_lock](https://www.postgresql.org/docs/19/monitoring-stats.html#PG-STAT-LOCK-VIEW), [pg_stat_recovery](https://www.postgresql.org/docs/19/monitoring-stats.html#PG-STAT-RECOVERY-VIEW), [pg_stat_autovacuum_scores](https://www.postgresql.org/docs/19/monitoring-stats.html#PG-STAT-AUTOVACUUM-SCORES-VIEW), and [pg_dsm_registry_allocations](https://www.postgresql.org/docs/19/view-pg-dsm-registry-allocations.html), each deserving more than the one-line mention they got in my [monitoring blog](https://clickhouse.com/blog/postgres-19-monitoring-whats-new), so here is the tour.
+
+  ***Disclaimer:** PostgreSQL 19 is still in beta as I write this and this area has already seen columns renamed mid-cycle; things can still change or get reverted before GA. The [release notes](https://www.postgresql.org/docs/19/release-19.html#RELEASE-19-SYSTEM-VIEWS) will be the final word.*
+
+  ## pg_stat_lock {#pg_stat_lock}
+
+  Locks are a special interest of mine 😀 Last year, I spoke at 16 conferences with a talk called "Anatomy of Table-Level Locks in PostgreSQL". If you're interested, some of those talks were recorded and are [available on YouTube](https://www.youtube.com/watch?v=DLwGuv1QVQU). So, you can imagine how excited I was to see a new locks view in PostgreSQL 19\.
+
+  Until now your options for understanding lock contention were [`pg_locks`](https://www.postgresql.org/docs/19/view-pg-locks.html) (a snapshot of *right now*, no history) and `log_lock_waits` output (history, but you have to parse logs to aggregate the logs yourself, though PostgreSQL 19 now turns it on by default, a change I covered in my [monitoring post](https://clickhouse.com/blog/postgres-19-monitoring-whats-new)). 
+
+  PostgreSQL 19 adds `pg_stat_lock` (a patch by Bertrand Drouvot [§](https://postgr.es/c/4019f725f)): cumulative, cluster-wide lock statistics with one row per lock type (`locktype`). The name `locktype` might be a little confusing. It is not the lock mode (such as ACCESS EXCLUSIVE or ROW SHARE) but the kind of lockable object (showing what was being locked) and there are 12 of them: `relation`, `transactionid`, `tuple`, `extend`, `page`, `object`, `advisory`, `virtualxid`, `spectoken`, `applytransaction`, `frozenid`, `userlock`.
+
+  The view itself  is a thin wrapper around the new function `pg_stat_get_lock()`.
+
+  > **Note**
+>
+> The newly introduced pg_stat_get_lock() function does not have a docs page, since like most of the `pg_stat_get_*` functions, it only exists to back the view, but it's there if you want to query it directly.
+
+  ***Table 1:** [pg_stat_lock view](https://www.postgresql.org/docs/19/monitoring-stats.html#MONITORING-PG-STAT-LOCK-VIEW)*
+
+  | Column | Type | Description |
+  | :---- | :---- | :---- |
+  | `locktype` | text | Type of the lockable object. See [`pg_locks`](https://www.postgresql.org/docs/19/view-pg-locks.html) for details. |
+  | `waits` | bigint | Number of times a lock of this type had to wait because of a conflicting lock. Only incremented when the lock was successfully acquired after waiting longer than `deadlock_timeout`. |
+  | `wait_time` | double precision | Total time spent waiting for locks of this type, in milliseconds. Only incremented when the lock was successfully acquired after waiting longer than `deadlock_timeout`. |
+  | `fastpath_exceeded` | bigint | Number of times a lock of this type could not be acquired via fast path because the fast path slot limit was exceeded. Increasing `max_locks_per_transaction` can reduce this number. |
+  | `stats_reset` | timestamp with time zone | Time at which these statistics were last reset.  |
+
+  > **Note**
+>
+> One important detail: `waits` and `wait_time` only count locks that were successfully acquired after waiting longer than `deadlock_timeout` (1 second by default), so `pg_stat_lock` isn't a counter of every lock wait.
+
+  Let's run some queries, I have two psql sessions to demo the lock contention. The first session takes a lock on the demo table and holds it by keeping the transaction open:
+
+  <pre><code type='click-ui' language='sql'>
+  -- session 1
+  BEGIN;
+  LOCK TABLE demo;
+  SELECT pg_sleep(2.5);  -- hold the lock for 2.5 seconds
+  COMMIT;
+  </code></pre>
+
+  The second session tries to lock the same table and cannot acquire the lock (until session 1 commits):
+
+  <pre><code type='click-ui' language='sql'>
+  -- session 2
+  LOCK TABLE demo;   -- waits here until session 1 commits
+  </code></pre>
+
+  After the 2.5 seconds, session 1 commits and session 2 finally gets its lock. Since that wait lasted longer than the default `deadlock_timeout` of 1s and ended in a successful acquisition, it gets counted. To see that, let’s query the view:
+
+  Before starting the demo, I reset the lock statistics with `pg_stat_reset_shared('lock')`, so the numbers below come from only this scenario. 
+
+  > **Note**
+>
+> [`pg_stat_reset_shared()`](https://www.postgresql.org/docs/19/monitoring-stats.html#MONITORING-STATS-FUNCTIONS) resets cluster-wide statistics for a given target, such as `'wal'`, `'io'` or `'bgwriter'`. The `'lock'` target is new in PostgreSQL 19, added together with the pg_stat_lock view.
+
+  <pre><code type='click-ui' language='sql'>
+  SELECT waits, wait_time
+  FROM pg_stat_lock
+  WHERE locktype = 'relation';
+  </code></pre>
+
+  <pre><code type='click-ui' language='bash'>
+  waits | wait_time
+  -------+-----------
+      1 |  2201.783
+  (1 row)
+  </code></pre>
+
+  This result shows that session 2 had to wait 2.2 seconds (out of 2.5 second session 1 hoarded the table) to acquire the lock. The 0.3 second difference reflects session 2 asking for the lock, a moment after session 1 took it.
+
+  On a real system, we won’t be chasing a single wait, so we’ll have to query lock types together with waits:
+
+  <pre><code type='click-ui' language='sql'>
+  SELECT locktype, waits, wait_time,
+        round(wait_time::numeric / NULLIF(waits, 0), 1) AS avg_wait_ms
+  FROM pg_stat_lock
+  WHERE waits > 0
+  ORDER BY wait_time DESC;
+  </code></pre>
+
+  <pre><code type='click-ui' language='bash'>
+  locktype | waits | wait_time | avg_wait_ms
+  ----------+-------+-----------+-------------
+  relation |     1 |  2201.783 |      2201.8
+  (1 row)
+  </code></pre>
+
+  > **Query insight**
+>
+> pg_stat_lock view always returns all 12 lock types, `WHERE waits > 0` filters out those without recorded contention. We then order by total wait time and calculate the average wait per lock type. A high total wait time can point to a frequently contended lock type, while a high average can reveal fewer but longer stalls.
+
+  ### fastpath_exceeded
+
+  I thought the `fastpath_exceeded` counter in the `pg_stat_lock` view was worth digging into, so I gave it its own section 🙂 For speed, each backend keeps a small set of fast-path slots for the most common locks that rarely conflict with anything. When a query needs more locks than the slot can hold, the extras fall back to the slower shared lock table and this counter ticks (every time,  no `deadlock_timeout` threshold here).  
+
+  `fastpath_exceeded` can be particularly interesting for partition-heavy workloads, where a single query may need to lock many relations. 
+
+  > **Note**
+>
+> If the `fastpath_exceeded` counter grows on your partition-heavy workload, that's a direct hint to raise `max_locks_per_transaction`. Starting from PostgreSQL 18, the fast-path slot count derives from it (before that it was fixed at 16; Christophe Pettus has [an excellent write-up of that era](https://thebuild.com/blog/sixteen-locks-ought-to-be-enough-for-anybody/)). PostgreSQL 19 doubled the default `max_locks_per_transaction` from 64 to 128 (Heikki Linnakangas [§](https://postgr.es/c/79534f906)).
+
+  To make the demo easy, let's create a partitioned table with more partitions than the fast-path slots can cover. I chose 140 partitions, more than the new default 128\. (Postgres's own regression test uses the same trick, creating `max_locks_per_transaction` + 10 partitions.)
+
+  <pre><code type='click-ui' language='sql'>
+  CREATE TABLE part_demo (id int) PARTITION BY RANGE (id);
+
+  DO $$
+  BEGIN
+    FOR i IN 1..140 LOOP
+      EXECUTE format(
+        'CREATE TABLE part_demo_%s PARTITION OF part_demo
+        FOR VALUES FROM (%s) TO (%s)',
+        i, (i-1)*1000, i*1000);
+    END LOOP;
+  END $$;
+  </code></pre>
+
+  Then reset the counters again for a clean read, and scan the table once; a plain `SELECT count(*)` has to lock the parent and every partition:
+
+  <pre><code type='click-ui' language='sql'>
+  SELECT pg_stat_reset_shared('lock');
+  SELECT count(*) FROM part_demo;
+  </code></pre>
+
+  Now, let’s query our view:
+
+  <pre><code type='click-ui' language='sql'>
+  SELECT locktype, fastpath_exceeded
+  FROM pg_stat_lock
+  WHERE fastpath_exceeded > 0;
+  </code></pre>
+
+  <pre><code type='click-ui' language='bash'>
+  locktype | fastpath_exceeded
+  ----------+-------------------
+  relation |               422
+  (1 row)
+
+  </code></pre>
+
+  The count exceeds 140 because Postgres counts every over-limit lock acquisition attempt, and partitions can be locked during both planning and execution. The exact number may vary between runs; what matters is that it is non-zero, this workload spills out of the fast path.
+
+  ## pg_stat_recovery {#pg_stat_recovery}
+
+  If you have ever built a standby health check, you have probably used some or all of these functions to check the standby state: `pg_is_in_recovery()`, `pg_last_wal_replay_lsn()`, `pg_last_xact_replay_timestamp()`, `pg_get_wal_replay_pause_state()`. Each of these functions reads the shared recovery state under its own lock, at a slightly different moment. Even if you wrap them in a single view, which is what we DBAs used to do, the values are not guaranteed to be consistent with each other because replay keeps advancing between the calls.
+
+  `pg_stat_recovery` (Xuneng Zhou [§](https://postgr.es/c/01d485b14), with a fix by Shinya Kato [§](https://postgr.es/c/2d4ead6f4)) assembles all this information in one row, read as a single atomic snapshot, so all fields are consistent with each other.
+
+  ***Table 2:** [pg_stat_recovery view](https://www.postgresql.org/docs/19/monitoring-stats.html#MONITORING-PG-STAT-RECOVERY-VIEW)*
+
+  | Column | Type | Description |
+  | :---- | :---- | :---- |
+  | `promote_triggered` | boolean | True if a promotion has been triggered. |
+  | `last_replayed_read_lsn` | pg_lsn | Start write-ahead log location of the last successfully replayed WAL record. |
+  | `last_replayed_end_lsn` | pg_lsn | End write-ahead log location, plus one, of the last successfully replayed WAL record. |
+  | `last_replayed_tli` | integer | Timeline of the last successfully replayed WAL record. |
+  | `replay_end_lsn` | pg_lsn | Write-ahead log location of the record currently being replayed (end position plus one). When no record is being actively replayed, equals `last_replayed_end_lsn`. |
+  | `replay_end_tli` | integer | Timeline of the WAL record currently being replayed. When no record is being actively replayed, equals `last_replayed_tli`. |
+  | `recovery_last_xact_time` | timestamptz | Timestamp of the last transaction commit or abort record replayed during recovery. This is the time at which the commit or abort WAL record for that transaction was generated on the primary. |
+  | `current_chunk_start_time` | timestamptz | Time when the startup process observed that replay had caught up with the latest WAL chunk received from streaming replication. Used in recovery-conflict timing and replay/apply-lag diagnostics. NULL if streaming WAL has not yet been received or the time is not available. |
+  | `pause_state` | text | Recovery pause state. Possible values: `not paused`, `pause requested`, `paused`. |
+
+  <pre><code type='click-ui' language='sql'>
+  SELECT last_replayed_end_lsn, last_replayed_tli,
+        recovery_last_xact_time, pause_state, promote_triggered
+  FROM pg_stat_recovery;
+  </code></pre>
+
+  <pre><code type='click-ui' language='bash'>
+  last_replayed_end_lsn | last_replayed_tli |    recovery_last_xact_time    | pause_state | promote_triggered
+  -----------------------+-------------------+-------------------------------+-------------+-------------------
+  0/03001E20            |                 1 | 2026-08-31 15:43:27.762621+02 | not paused  | f
+  (1 row)
+  </code></pre>
+
+  > **💡**
+>
+> The `pg_stat_recovery` view also exposes information that previously had no SQL interface: the start LSN of the last replayed record, the replay timelines, the end position of the record currently being replayed, and whether a promotion has been triggered. Previously, SQL could only tell you when a promotion had completed through `pg_is_in_recovery()` returning `false`, not that one was already underway.
+
+  A few practical notes:
+
+  * The view returns no rows on a primary, so you’ll need to query it on a standby.  
+  * You need the `pg_read_all_stats` privilege to see the data.  
+  *  The old functions are still there, this is purely additive. 
+
+  If you maintain HA tooling, this is a good time to update it. If you run health checks every few seconds, getting a consistent view of the recovery state with one query instead of several is a small but nice win.
+
+  ## pg_stat_autovacuum_scores {#pg_stat_autovacuum_scores}
+
+  I will cover two changes in this section: a new autovacuum behaviour and a view (`pg_stat_autovacuum_scores`) to watch it.
+
+  First, the behavior. PostgreSQL 19 changes ***how autovacuum decides what to work on first***. Before PostgreSQL 19, autovacuum processed tables in the order it found them in `pg_class`. Now, each worker calculates a score for every table based on how close it is to (or how far past) its autovacuum thresholds: XID age, multixact age, dead tuples, inserts and analyze staleness. The highest score wins, so tables needing attention most are processed first.
+
+  Five new `autovacuum_*_score_weight` parameters (all defaulting to `1.0`) let you set weights for the components. Setting all of them to `0.0` restores the pre-19 ordering. Nathan Bossart’s commit calls this ["a baby step towards smarter autovacuum workers"](https://postgr.es/c/d7965d65f).
+
+  The second change surfaces these stats: `pg_stat_autovacuum_scores` (Sami Imseih [§](https://postgr.es/c/87f61f0c8)) exposes these scores per table (including TOAST tables and system catalogs) in the current database, revealing what tables autovacuum prioritizes.
+
+  ***Table 3:** [pg_stat_autovacuum_scores view](https://www.postgresql.org/docs/19/monitoring-stats.html#MONITORING-PG-STAT-AUTOVACUUM-SCORES-VIEW)*
+
+  | Column | Type | Description |
+  | :---- | :---- | :---- |
+  | `relid` | oid | Oid of the table. |
+  | `schemaname` | name | Name of the schema that the table is in. |
+  | `relname` | name | Name of the table. |
+  | `score` | double precision | Maximum value of all component scores. This is the value that autovacuum would use to sort the list of tables to process. |
+  | `xid_score` | double precision | Transaction ID age component score. Scores greater than or equal to `autovacuum_freeze_score_weight` indicate that autovacuum would vacuum the table for transaction ID wraparound prevention. |
+  | `mxid_score` | double precision | Multixact ID age component score. Scores greater than or equal to `autovacuum_multixact_freeze_score_weight` indicate that autovacuum would vacuum the table for multixact ID wraparound prevention. |
+  | `vacuum_score` | double precision | Vacuum component score. Scores greater than or equal to `autovacuum_vacuum_score_weight` indicate that autovacuum would vacuum the table (unless autovacuum is disabled). |
+  | `vacuum_insert_score` | double precision | Vacuum insert component score. Scores greater than or equal to `autovacuum_vacuum_insert_score_weight` indicate that autovacuum would vacuum the table (unless autovacuum is disabled). |
+  | `analyze_score` | double precision | Analyze component score. Scores greater than or equal to `autovacuum_analyze_score_weight` indicate that autovacuum would analyze the table (unless autovacuum is disabled). |
+  | `do_vacuum` | boolean | Whether autovacuum would vacuum the table. Note that even if the component scores indicate that autovacuum would vacuum the table, this may be false if autovacuum is disabled. |
+  | `do_analyze` | boolean | Whether autovacuum would analyze the table. Note that even if the component scores indicate that autovacuum would analyze the table, this may be false if autovacuum is disabled. |
+  | `for_wraparound` | boolean | Whether autovacuum would vacuum the table for wraparound prevention. |
+
+  Let’s run a few queries to see it working. I created a 1000 row table, analyzed it and deleted 400 rows:
+
+  <pre><code type='click-ui' language='sql'>
+  CREATE TABLE av_demo AS
+    SELECT g AS id, md5(g::text) AS payload FROM generate_series(1, 1000) g;
+  ANALYZE av_demo;
+  DELETE FROM av_demo WHERE id <= 400;
+
+  </code></pre>
+
+  Then asked the `pg_stat_autovacuum_scores` view what autovacuum thinks of my tables:
+
+  <pre><code type='click-ui' language='sql'>
+  SELECT relname, round(score::numeric,2) AS score,
+        do_vacuum, do_analyze, for_wraparound
+  FROM pg_stat_autovacuum_scores
+  WHERE schemaname = 'public' AND (do_vacuum OR do_analyze)
+  ORDER BY score DESC;
+  </code></pre>
+
+  <pre><code type='click-ui' language='bash'>
+  relname | score | do_vacuum | do_analyze | for_wraparound
+  ---------+-------+-----------+------------+----------------
+  av_demo |  2.67 | t         | t          | f
+  (1 row)
+
+  </code></pre>
+
+  Where does 2.67 come from? Autovacuum decides when to act using [thresholds](https://www.postgresql.org/docs/19/routine-vacuuming.html#AUTOVACUUM) computed from the table's row count. For analyze, the default is 50 + 0.1 × rows →  for our 1000 row table, that's 150\. We changed 400 rows, so the analyze score is  400 / 150 \= 2.67. 
+
+  The deletes crossed the vacuum threshold too: 50 + 0.2 × 1000 \= 250, giving 400 / 250 \= 1.60. Since the overall score is the highest component, `av_demo` gets 2.67 and qualifies for both vacuum and analyze.
+
+  `for_wraparound` derives from a different calculation entirely, not row changes, but age. As in, how far the table's oldest unfrozen transaction ID has drifted toward `autovacuum_freeze_max_age` (200 million transactions by default). Our freshly created table is nowhere near that threshold, so it is false.
+
+  > **Note**
+>
+> `pg_stat_autovacuum_scores` computes scores from *current* statistics while autovacuum workers score the tables whenever they wake up. The two moments can differ, so treat the view as a strong hint of what autovacuum will prioritize, not a guarantee.
+
+  ## pg_dsm_registry_allocations {#pg_dsm_registry_allocations}
+
+  A smaller one: extensions increasingly allocate shared memory through the DSM registry, which spares them from needing `shared_preload_libraries` (and a restart) just to get shared memory. Until now that memory wasn't visible from SQL.
+
+  > **What is the DSM registry?**
+>
+> DSM stands for dynamic shared memory: shared memory created at runtime, unlike the main shared memory area, which is allocated once at server start (which is why extensions needing shared state traditionally required `shared_preload_libraries` and a restart). The DSM registry, added in PostgreSQL 17 (Nathan Bossart [§](https://postgr.es/c/8b2bcf3f2)), lets backends create, find and attach to these shared memory segments by name. This means extensions get shared state with a plain `CREATE EXTENSION`, no restart. More in the docs: [Requesting Shared Memory After Startup](https://www.postgresql.org/docs/19/xfunc-c.html#XFUNC-SHARED-ADDIN-AFTER-STARTUP).
+
+  This new `pg_dsm_registry_allocations` view (Florents Tselai [§](https://postgr.es/c/167ed8082), extended by Nathan Bossart [§](https://postgr.es/c/f894acb24)) lists each registry entry with its name, type (`segment`, `area` or `hash`) and size. A `NULL` size means the entry failed to initialize.
+
+  ***Table 4:** [pg_dsm_registry_allocations view](https://www.postgresql.org/docs/19/view-pg-dsm-registry-allocations.html#VIEW-PG-DSM-REGISTRY-ALLOCATIONS)*
+
+  | Column | Type | Description |
+  | :---- | :---- | :---- |
+  | `name` | text | The name of the allocation in the DSM registry. |
+  | `type` | text | The type of allocation. Possible values are `segment`, `area`, and `hash`, which correspond to dynamic shared memory segments, areas, and hash tables, respectively. |
+  | `size` | int8 | Size of the allocation in bytes. NULL for entries that failed initialization. |
+
+  ## Outro {#outro}
+
+  Thanks for reading this far! I hope the new system views excite you as much as they do me. We’re all counting down the days to PostgreSQL 19 and I’m already wishing everyone happy upgrades!
+
+  I will be talking about PostgreSQL 19 observability at [PostgreSQL Conference Europe](https://2026.pgconf.eu/) in October, and several of the topics I covered here will make an appearance. Come say hi if you plan to be in Valencia! 👋
+
+
+---
+
+## Get started with ClickHouse Managed Postgres today
+
+Interested in seeing how ClickHouse Managed Postgres works on your data? Get started with ClickHouse Cloud in minutes and receive $300 in free credits.
+
+[Sign up](https://console.clickhouse.cloud/signUp?intent=pg&loc=blog-cta-1711-get-started-with-clickhouse-managed-postgres-today-sign-up&utm_blogctaid=1711)
+
+---
 
 ---
 

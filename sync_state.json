@@ -1,5 +1,5 @@
 {
-  "last_sync": "2026-09-01T11:13:54.435039Z",
+  "last_sync": "2026-09-02T10:47:20.294608Z",
   "processed_blogs": {
     "https://clickhouse.com/blog/clickhouse-raises-400-million-series-d-acquires-langfuse-launches-postgres": {
       "title": "ClickHouse raises $400M Series D led by Dragoneer to accelerate expansion across analytics and AI infrastructure",
@@ -5724,9 +5724,33 @@
       "pub_date": "2026-08-27T00:00:00+00:00",
       "file_path": "blogs/2026-08-27-a-universal-interface-how-quintoandar-made.md",
       "processed_at": "2026-08-28T18:16:59.520468Z"
+    },
+    "https://clickhouse.com/blog/postgres-19-new-system-views": {
+      "title": "New system views in PostgreSQL 19",
+      "pub_date": "2026-09-01T00:00:00+00:00",
+      "file_path": "blogs/2026-09-01-new-system-views-in-postgresql-19.md",
+      "processed_at": "2026-09-02T10:47:19.735077Z"
+    },
+    "https://clickhouse.com/blog/clickhouse-welcomes-runreveal": {
+      "title": "ClickHouse welcomes RunReveal",
+      "pub_date": "2026-09-01T22:01:39+00:00",
+      "file_path": "blogs/2026-09-01-clickhouse-welcomes-runreveal.md",
+      "processed_at": "2026-09-02T10:47:19.889909Z"
+    },
+    "https://clickhouse.com/blog/agentic-analytics-benchmark-data-agent-mnist": {
+      "title": "The Agentic Analytics Benchmark: Measuring model accuracy and efficiency in analytical agents",
+      "pub_date": "2026-09-01T19:15:00+00:00",
+      "file_path": "blogs/2026-09-01-the-agentic-analytics-benchmark-measuring-model.md",
+      "processed_at": "2026-09-02T10:47:20.033452Z"
+    },
+    "https://clickhouse.com/blog/uken-games-clickhouse-observability-stack": {
+      "title": "How Uken Games reduces observability costs by 87% with ClickHouse",
+      "pub_date": "2026-09-01T15:28:24+00:00",
+      "file_path": "blogs/2026-09-01-how-uken-games-reduces-observability-costs-by-87.md",
+      "processed_at": "2026-09-02T10:47:20.192240Z"
     }
   },
-  "total_blogs": 954,
+  "total_blogs": 958,
   "failed_blogs": [
     {
       "url": "https://clickhouse.com/jp/blog/clickhouse-gcp-japan-availability",
