@@ -1,5 +1,5 @@
 {
-  "last_sync": "2026-09-02T10:47:20.294608Z",
+  "last_sync": "2026-09-03T10:47:30.358625Z",
   "processed_blogs": {
     "https://clickhouse.com/blog/clickhouse-raises-400-million-series-d-acquires-langfuse-launches-postgres": {
       "title": "ClickHouse raises $400M Series D led by Dragoneer to accelerate expansion across analytics and AI infrastructure",
@@ -5748,9 +5748,15 @@
       "pub_date": "2026-09-01T15:28:24+00:00",
       "file_path": "blogs/2026-09-01-how-uken-games-reduces-observability-costs-by-87.md",
       "processed_at": "2026-09-02T10:47:20.192240Z"
+    },
+    "https://clickhouse.com/blog/mysql-cdc-connector-for-clickpipes-is-now-generally-available": {
+      "title": "MySQL CDC connector for ClickPipes is now Generally Available",
+      "pub_date": "2026-09-02T14:03:04+00:00",
+      "file_path": "blogs/2026-09-02-mysql-cdc-connector-for-clickpipes-is-now.md",
+      "processed_at": "2026-09-03T10:47:30.256508Z"
     }
   },
-  "total_blogs": 958,
+  "total_blogs": 959,
   "failed_blogs": [
     {
       "url": "https://clickhouse.com/jp/blog/clickhouse-gcp-japan-availability",
