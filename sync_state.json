@@ -1,5 +1,5 @@
 {
-  "last_sync": "2026-09-04T10:46:43.119527Z",
+  "last_sync": "2026-09-05T10:04:20.647867Z",
   "processed_blogs": {
     "https://clickhouse.com/blog/clickhouse-raises-400-million-series-d-acquires-langfuse-launches-postgres": {
       "title": "ClickHouse raises $400M Series D led by Dragoneer to accelerate expansion across analytics and AI infrastructure",
@@ -5766,9 +5766,21 @@
       "pub_date": "2026-09-02T00:00:00+00:00",
       "file_path": "blogs/2026-09-02-from-neon-postgres-to-clickhouse-managed-postgres.md",
       "processed_at": "2026-09-04T10:46:42.910023Z"
+    },
+    "https://clickhouse.com/blog/clickhouse-streaming-http-api": {
+      "title": "ClickHouse as a streaming HTTP API",
+      "pub_date": "2026-09-05T00:00:00+00:00",
+      "file_path": "blogs/2026-09-05-clickhouse-as-a-streaming-http-api.md",
+      "processed_at": "2026-09-05T10:04:20.402790Z"
+    },
+    "https://clickhouse.com/blog/pipelined-sql-26.8": {
+      "title": "Pipelined SQL in ClickHouse 26.8",
+      "pub_date": "2026-09-04T12:16:04+00:00",
+      "file_path": "blogs/2026-09-04-pipelined-sql-in-clickhouse-26-8.md",
+      "processed_at": "2026-09-05T10:04:20.567468Z"
     }
   },
-  "total_blogs": 961,
+  "total_blogs": 963,
   "failed_blogs": [
     {
       "url": "https://clickhouse.com/jp/blog/clickhouse-gcp-japan-availability",
