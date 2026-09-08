@@ -1,5 +1,5 @@
 {
-  "last_sync": "2026-09-07T11:46:34.451742Z",
+  "last_sync": "2026-09-08T10:44:42.498194Z",
   "processed_blogs": {
     "https://clickhouse.com/blog/clickhouse-raises-400-million-series-d-acquires-langfuse-launches-postgres": {
       "title": "ClickHouse raises $400M Series D led by Dragoneer to accelerate expansion across analytics and AI infrastructure",
@@ -5778,9 +5778,21 @@
       "pub_date": "2026-09-04T12:16:04+00:00",
       "file_path": "blogs/2026-09-04-pipelined-sql-in-clickhouse-26-8.md",
       "processed_at": "2026-09-05T10:04:20.567468Z"
+    },
+    "https://clickhouse.com/blog/costbench-real-time-performance-per-dollar": {
+      "title": "Measuring real-time performance per dollar under continuous load: CostBench’s first end-to-end results",
+      "pub_date": "2026-09-08T07:38:02+00:00",
+      "file_path": "blogs/2026-09-08-measuring-real-time-performance-per-dollar-under.md",
+      "processed_at": "2026-09-08T10:44:42.063502Z"
+    },
+    "https://clickhouse.com/blog/mcp-toolbox-clickhouse-vectors": {
+      "title": "How MCP Toolbox turns agent text into ClickHouse vectors",
+      "pub_date": "2026-09-07T09:00:00+00:00",
+      "file_path": "blogs/2026-09-07-how-mcp-toolbox-turns-agent-text-into-clickhouse.md",
+      "processed_at": "2026-09-08T10:44:42.419814Z"
     }
   },
-  "total_blogs": 963,
+  "total_blogs": 965,
   "failed_blogs": [
     {
       "url": "https://clickhouse.com/jp/blog/clickhouse-gcp-japan-availability",
