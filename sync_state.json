@@ -1,5 +1,5 @@
 {
-  "last_sync": "2026-09-08T10:44:42.498194Z",
+  "last_sync": "2026-09-09T10:52:20.106389Z",
   "processed_blogs": {
     "https://clickhouse.com/blog/clickhouse-raises-400-million-series-d-acquires-langfuse-launches-postgres": {
       "title": "ClickHouse raises $400M Series D led by Dragoneer to accelerate expansion across analytics and AI infrastructure",
@@ -5790,9 +5790,21 @@
       "pub_date": "2026-09-07T09:00:00+00:00",
       "file_path": "blogs/2026-09-07-how-mcp-toolbox-turns-agent-text-into-clickhouse.md",
       "processed_at": "2026-09-08T10:44:42.419814Z"
+    },
+    "https://clickhouse.com/blog/clickhouse-vs-snowflake-real-time-performance-per-dollar": {
+      "title": "ClickHouse Cloud vs. Snowflake: What drives the real-time performance-per-dollar gap",
+      "pub_date": "2026-09-10T00:00:00+00:00",
+      "file_path": "blogs/2026-09-10-clickhouse-cloud-vs-snowflake-what-drives-the.md",
+      "processed_at": "2026-09-09T10:52:19.754848Z"
+    },
+    "https://clickhouse.com/blog/introducing-chdb-postgres": {
+      "title": "Introducing chdb Postgres extension: High-performance imports from cloud storage",
+      "pub_date": "2026-09-08T15:42:52+00:00",
+      "file_path": "blogs/2026-09-08-introducing-chdb-postgres-extension-high.md",
+      "processed_at": "2026-09-09T10:52:20.002902Z"
     }
   },
-  "total_blogs": 965,
+  "total_blogs": 967,
   "failed_blogs": [
     {
       "url": "https://clickhouse.com/jp/blog/clickhouse-gcp-japan-availability",
