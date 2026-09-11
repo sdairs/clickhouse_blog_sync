@@ -1,5 +1,5 @@
 {
-  "last_sync": "2026-09-10T10:47:53.589432Z",
+  "last_sync": "2026-09-11T10:44:39.873312Z",
   "processed_blogs": {
     "https://clickhouse.com/blog/clickhouse-raises-400-million-series-d-acquires-langfuse-launches-postgres": {
       "title": "ClickHouse raises $400M Series D led by Dragoneer to accelerate expansion across analytics and AI infrastructure",
@@ -5808,9 +5808,27 @@
       "pub_date": "2026-09-09T00:00:00+00:00",
       "file_path": "blogs/2026-09-09-announcing-clickhouse-managed-postgres-on-google.md",
       "processed_at": "2026-09-10T10:47:53.482517Z"
+    },
+    "https://clickhouse.com/blog/introducing-walshadow": {
+      "title": "Introducing WalShadow: Sub-second Postgres replication to ClickHouse from physical WAL",
+      "pub_date": "2026-09-10T15:53:42+00:00",
+      "file_path": "blogs/2026-09-10-introducing-walshadow-sub-second-postgres.md",
+      "processed_at": "2026-09-11T10:44:39.227357Z"
+    },
+    "https://clickhouse.com/blog/chatgpt-data-plugin": {
+      "title": "ClickHouse is a launch partner for the Data agent in ChatGPT Work",
+      "pub_date": "2026-09-10T15:13:26+00:00",
+      "file_path": "blogs/2026-09-10-clickhouse-is-a-launch-partner-for-the-data-agent.md",
+      "processed_at": "2026-09-11T10:44:39.497390Z"
+    },
+    "https://clickhouse.com/blog/on-demand-compute": {
+      "title": "Announcing On-Demand Compute: Instant compute for your most intensive workloads",
+      "pub_date": "2026-09-10T14:22:58+00:00",
+      "file_path": "blogs/2026-09-10-announcing-on-demand-compute-instant-compute-for.md",
+      "processed_at": "2026-09-11T10:44:39.767847Z"
     }
   },
-  "total_blogs": 968,
+  "total_blogs": 971,
   "failed_blogs": [
     {
       "url": "https://clickhouse.com/jp/blog/clickhouse-gcp-japan-availability",

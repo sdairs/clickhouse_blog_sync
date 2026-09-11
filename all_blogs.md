@@ -1,6 +1,366 @@
 # ClickHouse Blogs
-Last updated: 2026-09-10 10:47:53 UTC
-Total blogs: 968
+Last updated: 2026-09-11 10:44:39 UTC
+Total blogs: 971
+
+---
+
+## Introducing WalShadow: Sub-second Postgres replication to ClickHouse from physical WAL
+Published: 2026-09-10T15:53:42+00:00
+URL: https://clickhouse.com/blog/introducing-walshadow
+
+---
+title: "Introducing WalShadow: Sub-second Postgres replication to ClickHouse from physical WAL"
+date: "2026-09-10T15:53:42.134Z"
+author: "Sai Srirampur"
+category: "Product"
+excerpt: "WalShadow replicates Postgres data directly from physical WAL into ClickHouse, delivering around 200 ms latency and 289,000 rows per second in benchmarks."
+---
+
+# Introducing WalShadow: Sub-second Postgres replication to ClickHouse from physical WAL
+
+Today, we’re announcing [WalShadow](https://github.com/ClickHouse/walshadow), an open-source engine that replicates Postgres data to ClickHouse directly from physical WAL. 
+
+In our benchmarks, transactions committed in Postgres became visible in ClickHouse in around 200 ms, while WalShadow sustained 289K rows/sec, effectively keeping pace with the source Postgres instance.
+
+Unlike traditional CDC based systems, WalShadow doesn’t use Postgres logical replication. It consumes the same physical WAL stream used by Postgres replicas, decodes it outside the source database, and writes ClickHouse-native blocks directly into ClickHouse. The result is a replication architecture that gets close to the latency and throughput of a Postgres physical standby, while making the data immediately available for analytics in ClickHouse.
+
+WalShadow supports the complete replication lifecycle, including initial load, continuous replication, schema evolution, restart recovery, and planned source switchovers.
+
+By consuming physical WAL directly, WalShadow eliminates the need for logical replication slots, removes much of the operational overhead associated with logical replication, and significantly reduces resource consumption on the source Postgres instance. It also supports complex schema changes such as `ADD COLUMN`, `RENAME COLUMN`, `DROP COLUMN`, and `CREATE TABLE`.
+
+WalShadow is fully open source and available today on [GitHub](https://github.com/ClickHouse/walshadow).
+
+## Bringing WalShadow to ClickHouse Managed Postgres {#bringing_walshadow_to_clickhouse_managed_postgres}
+
+For a fully managed experience, we’re also launching WalShadow in private preview for [ClickHouse Managed Postgres](https://clickhouse.com/cloud/postgres/walshadow). 
+
+
+<iframe width="768" height="432" src="https://www.youtube.com/embed/RK0yBeK2OPw?si=GpnP-JZyUlqLmW1e" title="YouTube video player" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" referrerpolicy="strict-origin-when-cross-origin" allowfullscreen></iframe>
+
+
+Physical WAL is key to WalShadow’s architecture, but most managed Postgres services don’t expose it to customers, making it impossible to use WalShadow. ClickHouse Managed Postgres manages both sides of the stack, allowing us to integrate WalShadow directly into the Postgres replication layer and provide a native path from Postgres WAL to ClickHouse.
+
+[Sign up for the private preview of WalShadow on ClickHouse Managed Postgres.](http://clickhouse.com/cloud/postgres/walshadow)
+
+## Architecture: From physical WAL to ClickHouse-native blocks {#architecture_from_physical_wal_to_clickhousenative_blocks}
+
+![WalShadow Schema Decoder Clickhouse.png](uploads/Wal_Shadow_Schema_Decoder_Clickhouse_70652d1a69.png)
+
+> WalShadow takes a new approach to Postgres-to-ClickHouse replication, effectively turning ClickHouse into an analytical physical standby.
+
+WalShadow consumes the same WAL stream Postgres generates for physical replication and recovery. Instead of asking the source database to decode changes into logical events, WalShadow processes the WAL outside the source through four stages:
+
+1. **Track the live schema.** WalShadow filters catalog WAL records and replays them into a schema-only shadow Postgres instance. This maintains an up-to-date catalog of tables, columns, and Postgres types as the source schema evolves.  
+2. **Decode data changes in parallel.** Heap records are distributed across a pool of Rust-based decoders without passing through the shadow Postgres instance.   
+3. **Build ClickHouse-native blocks.** A batcher groups decoded rows by table into complete ClickHouse-native blocks, preserving data fidelity without intermediate format conversions.  
+4. **Insert in parallel.** A separate pool of inserters writes multiple blocks to ClickHouse concurrently, allowing decoding and insertion to scale independently.
+
+This creates a direct path from Postgres to ClickHouse: no logical decoding output plugin, no Kafka, and no JSON serialization or separate normalization step.
+
+Because WalShadow processes blocks in parallel, they may arrive in ClickHouse out of order. WalShadow preserves correctness by attaching the source WAL position (`_lsn`) to every row, allowing ClickHouse to retain the latest version for each key. Operations that require strict ordering, such as schema changes and truncations, introduce barriers that wait for all preceding data to become durable before they are applied.
+
+> **The source only needs to ship physical WAL, resulting in a load profile similar to a physical standby while allowing changes to reach ClickHouse within a second.**
+
+For a detailed overview of architecture, see the [architecture documentation](https://github.com/ClickHouse/walshadow/tree/main/architecture). To understand various available tuning settings affecting performance and functionality, see the [configuration guide](https://github.com/ClickHouse/walshadow/blob/main/docs/configuration.md).
+
+## Performance benchmarks {#performance_benchmarks}
+
+We benchmarked WalShadow against [PeerDB](https://github.com/PeerDB-io/peerdb), our state-of-the-art Postgres-to-ClickHouse CDC tool powered by logical replication which powers ClickPipes.
+
+For me, this comparison is bittersweet. We’re proud that PeerDB, which we created, serves thousands of customers. WalShadow carries that journey forward by reimagining replication directly from physical WAL and moving us closer to a unified Postgres and ClickHouse stack.
+
+The benchmark replicated a continuous stream of changes from a single table, with Postgres, ClickHouse, and each replication tool running in the same region. We used modest `c8i.2xlarge` instances with 8 vCPUs each. Performance will vary by workload, but these results offer a useful indication of what WalShadow can offer.
+
+### Around 200 ms commit-to-visible latency
+
+![](https://clickhouse.com/uploads/walshadow_sep2026_image3_b60715f13f.png)
+
+Commit-to-visible latency measures the time from a transaction committing in Postgres to its rows becoming visible in ClickHouse. A native Postgres physical replica established a practical baseline of around 50 ms. WalShadow achieved approximately 200 ms, compared with around 10 seconds for PeerDB, about 50x lower latency in this benchmark.
+
+### 289,000 rows per second sustained throughput
+
+![](https://clickhouse.com/uploads/walshadow_sep2026_image1_fbe85a67f2.png)
+
+The source Postgres instance sustained approximately 290,000 inserted rows per second, establishing the maximum rate the replication pipeline could process. WalShadow replicated 289,000 rows per second, effectively matching the source without becoming the bottleneck. PeerDB sustained approximately 120,000 rows per second, or around 40% of the source rate.
+
+These results show that low latency does not have to come at the cost of throughput: WalShadow keeps data real-time while operating at nearly the full speed of the source.
+
+## Conclusion and vision {#conclusion_and_vision}
+
+At ClickHouse, we have taken several major steps to bring Postgres and ClickHouse closer together: acquisition of [PeerDB](https://clickhouse.com/blog/clickhouse-welcomes-peerdb-adding-the-fastest-postgres-cdc-to-the-fastest-olap-database), launching [Postgres CDC in ClickPipes](https://clickhouse.com/blog/postgres-cdc-connector-clickpipes-ga), and introducing [ClickHouse Managed Postgres](https://clickhouse.com/blog/postgres-managed-by-clickhouse), an enterprise-grade Postgres service built on local NVMe storage for fast OLTP and natively integrated with ClickHouse for fast OLAP.
+
+These efforts share one goal: to give developers a unified data stack that combines Postgres for transactions and ClickHouse for analytics, without added complexity.
+
+WalShadow represents a major milestone toward that vision. By replicating directly from physical WAL into ClickHouse-native blocks, it delivers sub-second analytics, removes much of the operational overhead of logical replication, and supports advanced schema changes that are difficult to handle through conventional logical-decoding pipelines.
+
+Over the coming months, we will work closely with customers to harden WalShadow across real-world workloads. We are already collaborating with an initial group of design partners and are now ready to expand access.
+
+[**Sign up for the private preview**](http://clickhouse.com/cloud/postgres/walshadow)**, and we’ll get you access within a day or two.**
+
+
+
+WalShadow is one of several initiatives underway to make Postgres and ClickHouse work seamlessly together. Stay tuned for more.
+
+---
+
+## Get started with ClickHouse Managed Postgres today
+
+Interested in seeing how ClickHouse Managed Postgres works on your data? Get started with ClickHouse Cloud in minutes and receive $300 in free credits.
+
+[Sign up](https://console.clickhouse.cloud/signUp?intent=pg&loc=blog-cta-1940-get-started-with-clickhouse-managed-postgres-today-sign-up&utm_blogctaid=1940)
+
+---
+
+---
+
+## ClickHouse is a launch partner for the Data agent in ChatGPT Work
+Published: 2026-09-10T15:13:26+00:00
+URL: https://clickhouse.com/blog/chatgpt-data-plugin
+
+---
+title: "ClickHouse is a launch partner for the Data agent in ChatGPT Work"
+date: "2026-09-10T15:13:26.941Z"
+author: "Aditya Chidurala and Teresa Blanco"
+category: "Product"
+excerpt: "ClickHouse joins the Data agent in ChatGPT Work, connecting ClickHouse Cloud to natural-language queries, reports, and interactive dashboards."
+---
+
+# ClickHouse is a launch partner for the Data agent in ChatGPT Work
+
+## Summary
+
+ClickHouse is a launch partner for the [Data agent in ChatGPT Work](https://openai.com/business/plugins/data/), and the [ClickHouse plugin](https://chatgpt.com/plugins/plugin_asdk_app_6a57330f603c8191928119af462402b2?q=clickhouse) is available in the plugin directory shared by ChatGPT and Codex. Connect it to ClickHouse Cloud with OAuth, then ask questions about your data in plain language and turn the answers into reports and interactive dashboards.
+
+We're building toward [agentic analytics](https://clickhouse.com/blog/agent-facing-analytics) and the [Agentic Data Stack](https://clickhouse.com/ai). The [ClickHouse Remote MCP server](https://clickhouse.com/docs/products/cloud/features/ai-ml/mcp/remote-mcp) connects ClickHouse to the tools where developers, analysts, and business teams already work.
+
+On September 10, 2026, OpenAI [introduced](https://openai.com/index/put-data-to-work/) the new [Data agent](https://openai.com/business/plugins/data/), which brings agentic dashboards, expanded admin controls, and improved data connections in ChatGPT Work. The [ClickHouse plugin](https://chatgpt.com/plugins/plugin_asdk_app_6a57330f603c8191928119af462402b2?q=click) is one of the data connections it launches with. It packages the Remote MCP server and the open-source [ClickHouse Agent Skills](https://github.com/ClickHouse/agent-skills) into a single listing that both ChatGPT Work and Codex surface from their shared plugin directory. Connect it to ClickHouse Cloud with OAuth, and ChatGPT Work can explore your schemas, query your data, and build dashboards from the results.
+
+## Add ClickHouse to ChatGPT {#add_clickhouse_to_chatgpt}
+
+In ChatGPT Work, open Plugins, find [ClickHouse](https://chatgpt.com/plugins/plugin_asdk_app_6a57330f603c8191928119af462402b2?q=click), and select Install plugin. ChatGPT Work initiates the connection flow; select Connect, then sign in with your ClickHouse Cloud credentials. The OAuth flow scopes access to the organizations and services your ClickHouse Cloud user can see, so there's no API key to create and nothing to paste into ChatGPT Work. Workspace admins can also make the plugin available to eligible members or install it for them from Workspace settings under Plugins.
+
+**Prerequisites**: You need a ClickHouse Cloud service with the Remote MCP server enabled and a ChatGPT workspace with plugins enabled. To enable the server in an organization, open your service in the ClickHouse Cloud console, select Connect, then MCP, and toggle it on, as shown in the [setup guide](https://clickhouse.com/docs/products/cloud/features/ai-ml/mcp/remote-mcp). The endpoint is `https://mcp.clickhouse.cloud/mcp`.
+
+![The ClickHouse plugin listing in the ChatGPT plugin directory, with the Install plugin button](https://clickhouse.com/uploads/chatgpt_data_sep2026_image3_5032c09b85.png)
+
+*The ClickHouse plugin in the ChatGPT plugin directory.* 
+
+## What's in the plugin {#whats_in_the_plugin}
+
+The plugin has two parts. The [Remote MCP server](https://clickhouse.com/docs/products/cloud/features/ai-ml/remote-mcp) is fully managed in ClickHouse Cloud and exposes 13 tools for listing databases and tables, inspecting schemas, running `SELECT` queries, and reading service, backup, [ClickPipes](https://clickhouse.com/docs/integrations/clickpipes), and billing information. Every tool is read-only and carries `readOnlyHint: true` in its MCP metadata, so nothing in the plugin can modify data or change a service's configuration.
+
+The second part is [ClickHouse Agent Skills](https://clickhouse.com/blog/introducing-clickhouse-agent-skills), the Apache 2.0-licensed skills we maintain on GitHub. They encode the ClickHouse best practices our engineers and community have learned, covering schema design, query optimization, and data ingestion, so the model follows them when it writes SQL for your questions. In Codex, where the same listing appears, the skills also guide the code Codex writes against your service, from table design to ingestion, while the MCP server itself stays read-only.
+
+## Ask questions in plain language {#ask_questions_in_plain_language}
+
+Once connected, mention the ClickHouse plugin in a chat and ask. "Which databases and tables do I have on my production service?" calls [`list_databases` and `list_tables`](https://clickhouse.com/docs/products/cloud/features/ai-ml/remote-mcp#available-tools). "What was the average session duration by country for the last seven days?" becomes a `SELECT` with a `GROUP BY`, run through `run_select_query`, and the agent works from the result. Follow-ups build on the same context, so "break that down by device type" runs as a second query in the same conversation. Every query runs on your ClickHouse Cloud service, so the answer is as fresh as your ingestion.
+
+The plugin also covers the service itself. "What did my organization spend last week?" calls `get_organization_cost`, and "which ClickPipes are configured on this service?" calls `list_clickpipes`.
+
+![A ChatGPT conversation asking a plain-language question about ClickHouse data, with the answer returned by the ClickHouse plugin](https://clickhouse.com/uploads/chatgpt_data_sep2026_image4_c54b1a04b9.png)
+
+*Asking ChatGPT a question that the ClickHouse plugin answers with a query against ClickHouse Cloud.* 
+
+## From answer to dashboard {#from_answer_to_dashboard}
+
+Ask ChatGPT Work to "turn this into a dashboard for the growth team," and the Data agent builds an interactive dashboard from the query results, styled to match your company's brand. Because the plugin is read-only, a dashboard in ChatGPT never becomes a path to write into ClickHouse, and access stays scoped to the organizations and services the connected ClickHouse Cloud user can see.
+
+![An interactive dashboard in ChatGPT Work built from ClickHouse query results](https://clickhouse.com/uploads/chatgpt_data_sep2026_image2_c63c9c18ff.png)
+
+*A dashboard in ChatGPT Work built from ClickHouse data.*
+
+> "Businesses need to see what's happening and act fast with insights. Connecting ClickHouse to ChatGPT Work puts real-time analytics right in front of all business users making decisions big or small. They can explore their data, ask questions in plain language, and get answers straight from ClickHouse, then bring those answers into the reports and dashboards their teams use."  
+>   
+> Ryadh Dahimene, Director of Product Management - AI/ML, ClickHouse
+
+---
+
+>   
+> “Real-time data is most useful when the people making decisions can explore it themselves. Our work with ClickHouse helps business teams understand what’s changing and build their own dashboards using natural language, without writing SQL or waiting for a new report.”  
+>   
+> Arpan Shah, General Manager, Technology Vertical, OpenAI
+
+## Real-time analytics where the questions get asked {#realtime_analytics_where_the_questions_get_asked}
+
+An agent rarely stops at one query. A request like "what changed in signups last week" becomes a chain of queries that lists the tables, checks the columns, samples a few rows, aggregates, compares with the prior week, and drills into the region that looks off. If each of those queries is slow, the conversation stalls, and the person goes back to filing a ticket. ClickHouse is built for sub-second analytical queries over billions of rows of continuously ingested data, which is what keeps that chain interactive. OpenAI itself runs [ClickHouse for petabyte-scale observability](https://clickhouse.com/blog/why-openai-uses-clickhouse-for-petabyte-scale-observability).
+
+ChatGPT Work handles the conversation and the dashboards; ClickHouse answers the data questions, scoped to what the connected user is allowed to see. The plugin is listed in the ChatGPT Work and Codex plugin directory, and availability depends on your ChatGPT plan and workspace settings.
+
+Learn more at [clickhouse.com/docs/products/cloud/features/ai-ml/mcp/remote-mcp](https://clickhouse.com/docs/products/cloud/features/ai-ml/mcp/remote-mcp), or tell us what you build in the [ClickHouse community Slack](https://clickhouse.com/slack).
+
+
+---
+
+## Get started today
+
+Interested in seeing how ClickHouse works on your data? Get started with ClickHouse Cloud in minutes and receive $300 in free credits.
+
+[Sign up](https://console.clickhouse.cloud/signUp?loc=blog-cta-1936-get-started-today-sign-up&utm_blogctaid=1936)
+
+---
+
+---
+
+## Announcing On-Demand Compute: Instant compute for your most intensive workloads
+Published: 2026-09-10T14:22:58+00:00
+URL: https://clickhouse.com/blog/on-demand-compute
+
+---
+title: "Announcing On-Demand Compute: Instant compute for your most intensive workloads"
+date: "2026-09-10T14:22:58.760Z"
+author: "Melvyn Peignon"
+category: "Product"
+excerpt: "ClickHouse On-Demand Compute lets you scale individual queries with additional workers, run intensive workloads without disrupting production, and use compute when you need it."
+---
+
+# Announcing On-Demand Compute: Instant compute for your most intensive workloads
+
+Today, we're excited to announce the private preview of **ClickHouse On-Demand Compute**, a new infrastructure capability of ClickHouse Cloud that lets your service execute queries on a shared pool of ClickHouse workers, outside your own cluster's compute.
+
+Have you ever wanted to run a compute-intensive ad hoc query without disrupting your production workload, add compute without waiting for autoscaling to kick in, or query your data lake as you would with Athena? With On-Demand Compute, you can now simply tell your query how many ClickHouse workers to use, and ClickHouse Cloud will take care of the rest.
+
+**But that’s not everything. On-Demand Compute is also powered by two major ClickHouse features:**
+
+- A new distributed query execution framework that uses ClickHouse multistage query execution, allowing complex queries to run across multiple nodes.
+- A new cost-based optimizer (CBO) that evaluates different execution plans and chooses a more efficient way to run your queries.
+
+You can sign up for the [private preview waitlist](https://clickhouse.com/cloud/on-demand-compute-waitlist).
+
+
+
+## Why did we build this?
+
+When we built ClickHouse Cloud, one of our main goals was to give users the power of ClickHouse on top of cost-efficient, scalable storage. [SharedMergeTree](https://clickhouse.com/docs/products/cloud/features/infrastructure/shared-merge-tree) gave us native separation of compute and storage, allowing services to scale them independently.
+
+We then added [autoscaling](https://clickhouse.com/docs/products/cloud/features/autoscaling/overview) so compute could grow and shrink with demand. But metric-based autoscaling is reactive: the service first needs to observe demand before it scales. For most workloads, that’s exactly what you want. But what about a compute-intensive query that you already know will need more resources? Why wait for autoscaling when you could request that compute from the start?
+
+That is easier said than done. Additional compute normally needs to be provisioned and brought online before a query can use it. This leaves you with three imperfect options: overprovision for peak demand, wait for autoscaling, or let heavy queries compete with critical workloads.
+
+That’s what motivated us to build ClickHouse On-Demand Compute. Instead of scaling the entire service, you scale the query itself. An eligible query can request additional workers from a ClickHouse-managed pool, reducing resource competition on the primary service without permanently increasing its size.
+
+This makes On-Demand Compute useful for several workload patterns:
+
+- **Ad hoc queries.** Run exploratory or one-off queries on additional workers.
+- **Workload offloading.** Move selected read workloads to additional workers, reducing competition with critical workloads.
+- **Data lake workloads.** Run eligible queries over supported Apache Iceberg and Delta Lake data on additional workers.
+
+## How does it work?
+
+Using On-Demand Compute is as simple as adding a couple of settings to your query:
+
+```sql
+SELECT
+    l_returnflag,
+    l_linestatus,
+    sum(l_quantity) AS sum_qty,
+    avg(l_extendedprice) AS avg_price
+FROM lineitem
+GROUP BY l_returnflag, l_linestatus
+SETTINGS
+    make_distributed_plan = 1,
+    distributed_plan_workers_num = 3,
+    enable_parallel_replicas = 0;
+```
+
+On-Demand Compute works with:
+
+- SharedMergeTree
+- Iceberg
+- Delta
+
+## Workers and leases
+
+When the query above runs, On-Demand Compute requests three workers from the pool. Each worker is leased for a minimum of 60 seconds, and the lease renews automatically if the query runs longer.
+
+![on-demand-compute-workers-leased.png](https://clickhouse.com/uploads/on_demand_compute_workers_leased_a131c69e71.png)
+
+Once the query completes, the workers remain leased but inactive.
+
+![on-demand-compute-workers-inactive.png](https://clickhouse.com/uploads/on_demand_compute_workers_inactive_c6048b4af9.png)
+
+This is where things get interesting: if you send a new query while the lease is still active, those workers are reused **immediately**, **with no cold start and no discovery delay**. When the lease expires, the workers are released back and terminated. This makes ClickHouse even faster, since the next query can start right away instead of waiting for new workers to come online.
+
+![on-demand-compute-workers-reused.png](https://clickhouse.com/uploads/on_demand_compute_workers_reused_d95761d17b.png)
+
+One important behavior to keep in mind is that concurrent queries share workers rather than receiving separate worker sets. For example, if two concurrent queries each request three workers, they will share the same three workers. If a third concurrent query requests five workers, it will use those three workers plus two additional ones. This means the pool grows to match the largest worker request rather than adding each query’s request together.
+
+### What if the worker pool runs low?
+
+During the private preview, you may occasionally request more workers than the pool can provide while we fine-tune its autoscaling. If that happens, your query will still run using the workers currently available. For example, if you request five workers but only three are available, the query will run on those three.
+
+## On-Demand Compute in action
+
+### Setup
+
+Let's see how On-Demand Compute can be used to power your workload.
+
+In this scenario, we will be using SharedMergeTree as storage and the TPC-H SF10 dataset.
+
+We will be using two clusters with the following configurations:
+
+The On-Demand Compute cluster:
+
+- 1 node
+- Static size of 32 GB/8 CPUs
+- Can use up to 15 workers (32 GB/8 CPUs)
+
+The autoscaling cluster:
+
+- 5 nodes
+- Minimum node size of 32 GB/8 CPUs
+- Maximum node size of 64 GB/16 CPUs
+
+The experiment is fairly simple: we will run the benchmark multiple times on each cluster at different concurrency levels. For the On-Demand Compute cluster, we will increase the worker count as query concurrency rises:
+
+| Iteration | Query concurrency (both clusters) | On-Demand Compute workers |
+| :-------- | :-------------------------------- | :------------------------ |
+| 1         | 1                                 | 5                         |
+| 2         | 3                                 | 5                         |
+| 3         | 5                                 | 10                        |
+| 4         | 10                                | 10                        |
+| 5         | 20                                | 10                        |
+| 6         | 25                                | 15                        |
+
+This will test the ability of ClickHouse to use more compute than expected.
+
+
+### Results
+
+### CPU usage
+
+Let’s first look at the CPU usage of the two clusters. The first chart below compares CPU usage between On-Demand Compute and the stateful autoscaling cluster. At concurrency levels of 1 and 3, both use roughly the same amount of CPU.
+
+Near the end of the second iteration, the autoscaling cluster begins to scale up. It uses a “make-before-break” approach, bringing new capacity online before removing the old capacity. This explains the sharp increase before usage settles at around 80 CPU cores.
+
+Compared with the autoscaling cluster, On-Demand Compute (yellow) shows different behavior. The dips occur because ClickHouse workers are allocated for the duration of their lease. When a lease expires during a pause between runs, those workers are released, reducing CPU usage while the workload is idle. This means you use compute (on demand!) when your queries need it, rather than keeping extra capacity running between bursts.
+
+Autoscaling also takes time. Several hours after the benchmark finished, the autoscaler was still recommending 80 CPU cores, even though the burst had ended. The cluster scales up quickly, but it holds on to that additional capacity for longer.
+
+![on-demand-compute-cpu-usage.png](https://clickhouse.com/uploads/on_demand_compute_cpu_usage_bdf5fe843b.png)
+
+
+### Query performance
+
+The second chart compares benchmark performance. On-Demand Compute was faster for this particular workload.
+
+![on-demand-compute-query-performance.png](https://clickhouse.com/uploads/on_demand_compute_query_performance_347c5795bd.png)
+
+The new distributed query plan and cost-based optimizer (CBO) account for much of the difference. Neither is enabled on the stateful cluster yet. Together, they choose a more efficient execution plan and distribute the work across the available workers.
+
+As concurrency increases, the performance advantage of the new distributed query execution framework narrows. At 25 concurrent queries, with 15 workers, it delivers performance similar to the stateful cluster’s single-node execution while using 50% less compute.
+
+It’s also important to note that these results vary from benchmark to benchmark. Typically, complex JOINs, GROUP BY, and ORDER BY queries will perform better with the new distributed plan, but short-running queries that mainly perform simple reads and analytics will likely perform better on the stateful cluster.
+
+
+## What’s next?
+
+This is the first release of On-Demand Compute. We know that the first iteration of the feature is limited in scope, but we wanted to put it in your hands as soon as possible so you can experiment, start building with it, and give us feedback on what we should improve or prioritize!
+
+Register now for the private preview, and we will start rolling out the feature after our webinar on September 24, 2026: register [here](https://clickhouse.com/company/events/202609-AMER-Webinar-On-Demand-Compute?utm_medium=event&utm_source=qr-code&utm_campaign=202606-AMER-Open-House-Road-Show-NYC). If you want to learn more about the feature, check out the documentation: [On-Demand Compute documentation](https://clickhouse.com/docs/products/cloud/features/infrastructure/on-demand-compute).
+
+
+
+
 
 ---
 
