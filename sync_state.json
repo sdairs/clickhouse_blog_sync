@@ -1,5 +1,5 @@
 {
-  "last_sync": "2026-09-11T10:44:39.873312Z",
+  "last_sync": "2026-09-12T10:13:18.442815Z",
   "processed_blogs": {
     "https://clickhouse.com/blog/clickhouse-raises-400-million-series-d-acquires-langfuse-launches-postgres": {
       "title": "ClickHouse raises $400M Series D led by Dragoneer to accelerate expansion across analytics and AI infrastructure",
@@ -5826,9 +5826,27 @@
       "pub_date": "2026-09-10T14:22:58+00:00",
       "file_path": "blogs/2026-09-10-announcing-on-demand-compute-instant-compute-for.md",
       "processed_at": "2026-09-11T10:44:39.767847Z"
+    },
+    "https://clickhouse.com/blog/ai-functions-in-clickhouse": {
+      "title": "AI Functions in ClickHouse: Upgrade your SQL to the AI age",
+      "pub_date": "2026-09-11T12:49:32+00:00",
+      "file_path": "blogs/2026-09-11-ai-functions-in-clickhouse-upgrade-your-sql-to.md",
+      "processed_at": "2026-09-12T10:13:17.826526Z"
+    },
+    "https://clickhouse.com/blog/parquet-to-mysql-with-clickhouse": {
+      "title": "Loading Parquet data into MySQL with ClickHouse",
+      "pub_date": "2026-09-10T00:00:00+00:00",
+      "file_path": "blogs/2026-09-10-loading-parquet-data-into-mysql-with-clickhouse.md",
+      "processed_at": "2026-09-12T10:13:18.056482Z"
+    },
+    "https://clickhouse.com/blog/clickhouse-release-26-08": {
+      "title": "ClickHouse release 26.8",
+      "pub_date": "2026-09-10T00:00:00+00:00",
+      "file_path": "blogs/2026-09-10-clickhouse-release-26-8.md",
+      "processed_at": "2026-09-12T10:13:18.333871Z"
     }
   },
-  "total_blogs": 971,
+  "total_blogs": 974,
   "failed_blogs": [
     {
       "url": "https://clickhouse.com/jp/blog/clickhouse-gcp-japan-availability",

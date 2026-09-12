@@ -1,6 +1,444 @@
 # ClickHouse Blogs
-Last updated: 2026-09-11 10:44:39 UTC
-Total blogs: 971
+Last updated: 2026-09-12 10:13:18 UTC
+Total blogs: 974
+
+---
+
+## AI Functions in ClickHouse: Upgrade your SQL to the AI age
+Published: 2026-09-11T12:49:32+00:00
+URL: https://clickhouse.com/blog/ai-functions-in-clickhouse
+
+---
+title: "AI Functions in ClickHouse: Upgrade your SQL to the AI age"
+date: "2026-09-11T12:49:32.253Z"
+author: "Andriy Yakovlev and George Larionov"
+category: "Product"
+excerpt: "Explore ClickHouse AI Functions for classification, generation, translation, embeddings, semantic search, and cost controls—all directly from SQL."
+---
+
+# AI Functions in ClickHouse: Upgrade your SQL to the AI age
+
+ClickHouse now has a family of built-in [AI Functions](https://clickhouse.com/docs/reference/functions/regular-functions/ai-functions) that call an LLM or an embedding provider directly from the SQL engine. The model becomes something you call from SQL, like lower() or sum(), and it runs where your data already lives.
+
+The functions are currently in Beta and functionality is constantly being added and improved. They arrived over the course of three releases: *aiGenerate()*, *aiClassify()*, *aiExtract()*, and *aiTranslate()* in 26.4, *aiEmbed()* in 26.6, then *aiFilter()*, *aiRedact()*, and *aiSimilarity()* in 26.8.
+
+---
+
+## Try AI Functions in ClickHouse Cloud
+
+In ClickHouse Cloud, no extra configuration mentioned below is required—the functions are plug-and-play. Currently, AI Functions are in private preview in ClickHouse Cloud.
+
+[Join the private preview](https://clickhouse.com/cloud/ai-functions-and-inference-services-waitlist?loc=blog-cta-1960-try-ai-functions-in-clickhouse-cloud-join-the-private-preview&utm_blogctaid=1960)
+
+---
+
+## Why we developed this {#why_we_developed_this}
+
+All your data already lives in ClickHouse: logs, product reviews, descriptions and support tickets. Traditional LLM workflows (like RAG) pull data out of database into a separate stack to run classification or embedding tasks, then push the results back in. This approach is slow, error prone, and adds operational complexity.
+
+The core idea behind AI Functions is to move the model to the data instead of the data to the model. Because ClickHouse already stores and can [search vectors](https://clickhouse.com/docs/guides/use-cases/ai-ml/vector-search), the full RAG cycle can run in one system rather than being stitched together across a vector database, an orchestration framework, and a separate LLM API. 
+
+As a simple example:
+
+```sql
+SELECT aiClassify('I love this product!', ['positive', 'negative', 'neutral']);
+```
+
+Response:
+
+```shell
+positive
+```
+
+---
+
+## AI Functions in one query
+
+In short, AI Functions turn intricate workflows into a straightforward `SELECT` query.
+
+[Explore AI Functions](https://clickhouse.com/docs/reference/functions/regular-functions/ai-functions?loc=blog-cta-1961-ai-functions-in-one-query-explore-ai-functions&utm_blogctaid=1961)
+
+---
+
+## What is in the beta {#what_is_in_the_beta}
+
+The following [AI Functions](https://clickhouse.com/docs/reference/functions/regular-functions/ai-functions) are available for you in 26.8. **Text** functions:
+
+* **aiClassify** - Classifies the given text into one of the provided categories using an LLM provider.  
+* **aiExtract** - Extracts structured information from unstructured text using an LLM provider.  
+* **aiGenerate** - Generates free-form text content from a prompt using an LLM provider.  
+* **aiTranslate** - Translates the given text into the specified target language using an LLM provider.  
+* **aiFilter** - Evaluates a natural-language condition against the given text using an LLM provider and returns a boolean (`UInt8`) suitable for **`WHERE`**, **`PREWHERE`**, and **`JOIN ... ON`**.  
+* **aiRedact** - Detects and redacts personally identifiable information (PII) in the given text using an LLM provider.
+
+**Embedding** functions:
+
+* **aiEmbed** - Generates an embedding vector for the given text using the configured AI provider.  
+* **aiSimilarity** - Computes the semantic similarity of two texts using the configured embedding provider.
+
+AI Functions work by making a remote HTTP call to the configured provider's API for each input, or a batch of inputs for the embedding functions, and returning the parsed response as a native ClickHouse value. 
+
+## Preparing the setup (OSS only) {#preparing_the_setup_oss_only}
+
+To begin using AI Functions, you must configure two [named collections](https://clickhouse.com/docs/concepts/features/configuration/server-config/named-collections) (for text and embedding, respectively) to store your provider credentials and configuration.
+
+We recommend configuring settings `ai_function_text_default_credentials` and `ai_function_embedding_default_credentials` with the names of the named collections. Then, all AI Functions will pick up the right endpoint automatically. It is also possible to override the settings during execution.
+
+Example statement to create a named collection with OpenAI provider credentials: you'll need an API key from OpenAI, one with a **chat** endpoint and another with an **embedding** endpoint:
+
+```sql
+CREATE NAMED COLLECTION ai_text_credentials AS
+    provider = 'openai',
+    endpoint = 'https://api.openai.com/v1/chat/completions',
+    model = 'gpt-5.6-terra',
+    api_key = 'sk-...';
+
+-- The embedding functions (`aiEmbed`, `aiSimilarity`) do not read `model` from the named collection.
+CREATE NAMED COLLECTION ai_embedding_credentials AS
+    provider = 'openai',
+    endpoint = 'https://api.openai.com/v1/embeddings',
+    api_key = 'sk-...';
+```
+
+> **Note:** Any OpenAI-compatible API (e.g. Ollama, LiteLLM) can be used by setting `provider = 'openai'` and pointing the endpoint to your service. Therefore, this works with a local model too.
+
+Next, configure the default-credentials setting:
+
+```sql
+SET ai_function_text_default_credentials = 'ai_text_credentials';
+SET ai_function_embedding_default_credentials = 'ai_embedding_credentials';
+```
+
+Now you are ready to run the functions. Let’s review some examples.
+
+## Understanding your data: classify, filter {#understanding_your_data_classify_filter}
+
+The examples below use the [Hacker News dataset](https://clickhouse.com/docs/get-started/sample-datasets/hacker-news), 28 million rows of stories and comments, loaded with the Parquet schema from that guide. The columns we care about are `title`, `comment`, `author`, `score`, `type`, and `timestamp`. Make sure you follow the setup steps above.
+
+`aiClassify` takes a string and a constant list of labels, and returns exactly one of those labels. The model is asked to pick a bucket, so it has limited creativity here.
+
+Front page titles are a good starting point because they are short, which keeps token usage low:
+
+```sql
+SELECT 
+    title,
+    aiClassify(title, ['space', 'security', 'databases', 'startups', 'programming', 'other']) AS topic
+FROM hackernews
+WHERE (type = 'story') AND (score < 3000) AND (title != '')
+ORDER BY score DESC
+LIMIT 3 FORMAT Vertical;
+```
+
+Response:
+
+```sql
+Row 1:
+──────
+title: SpaceX’s Falcon Heavy successfully launches
+topic: space
+
+Row 2:
+──────
+title: Twitter Will Allow Employees to Work at Home Forever
+topic: other
+
+Row 3:
+──────
+title: No Cookie for You
+topic: security
+```
+
+Since the output is a `String`, it integrates seamlessly with standard SQL. You can use `aiClassify` in a subquery, then aggregate over the result. For anything you plan to query more than once, classify into a column instead of recomputing.
+
+---
+
+## Analyze with SQL, not Python
+
+That is a topic breakdown of high-scoring Hacker News stories, computed without a single line of Python. In the old workflow, this would be an export, a classification job, and a load back into ClickHouse.
+
+[Explore the dataset](https://clickhouse.com/docs/get-started/sample-datasets/hacker-news?loc=blog-cta-1962-analyze-with-sql-not-python-explore-the-dataset&utm_blogctaid=1962)
+
+---
+
+`aiFilter` returns `UInt8`, which means it can go straight into `WHERE` and behave like any other boolean condition. This is the function that most clearly does something SQL could not do before. Token search finds rows containing the word "database". `aiFilter` finds rows where someone is complaining about one:
+
+```sql
+SELECT author, substring(comment, 1, 100) AS snippet 
+FROM (
+  SELECT author, comment 
+  FROM hackernews
+  WHERE type = 'comment' AND ilike(comment, '%database%') 
+  LIMIT 500 
+)
+WHERE aiFilter(comment, 'the author is describing a production incident or outage they experienced') LIMIT 3 FORMAT Vertical;
+```
+
+Response:
+
+```sql
+Row 1:
+──────
+author:  0x0
+snippet: Wow, the database connection ip and dbname were taken from http cookies!
+
+Row 2:
+──────
+author:  AccountCreated
+snippet: &gt; The primary MCP database is comprised of 9 MongoDB shards
+enough said.
+
+Row 3:
+──────
+author:  tomazzi
+snippet: The link goes to "Database Error - Error establishing a database connection" which is kind of intere
+```
+
+> **Note:** Since AI Function calls can be slow to process, it’s best to apply cheap predicates first in a subquery, then call the LLM predicate in the outer query.
+
+## Reshaping your data: generate, translate {#reshaping_your_data_generate_translate}
+
+Previous classification examples put text into buckets; the next two functions produce new text. We use the same dataset and same setup as above.
+
+`aiGenerate` takes a prompt and returns whatever the model writes back. In a SQL context the prompt is usually built with `concat` from a column.
+
+Hacker News comments are a good target because many of them are long, and this is a great candidate for summarization. In this example we also use `params` map with a `system_prompt` and `temperature` parameters that keep the output shaped consistently across rows:
+
+```sql
+
+SELECT
+    author,
+    length(comment) AS original_chars,
+    aiGenerate(
+        concat('Summarize this Hacker News comment in one sentence: ', comment),
+        map('system_prompt', 'You are terse. Reply with one sentence and no preamble.',
+            'temperature', '0.3',
+            'max_tokens', '2000'
+)
+    ) AS summary
+FROM hackernews
+WHERE type = 'comment' AND length(comment) > 1000
+LIMIT 3 FORMAT Vertical;
+```
+
+Response:
+
+```sql
+Row 1:
+──────
+author:         0-_-0
+original_chars: 1076
+summary:        Some VPN providers have been court-verified to keep no logs, and given their financial incentive to protect their reputation plus mandatory data retention laws in many countries, using a reputable VPN is likely more private than relying on your local ISP.
+
+Row 2:
+──────
+author:         0-_-0
+original_chars: 1428
+summary:        The comment shares Our World in Data links comparing COVID-19 confirmed cases, deaths, and case fatality rates across several countries using 7-day rolling averages.
+
+Row 3:
+──────
+author:         0-_-0
+original_chars: 1337
+summary:        The commenter is drawing a parallel to Wim Hof, a man famous for extreme cold endurance feats and the ability to consciously control his immune system through a method combining cold exposure, breathing, and meditation.
+```
+
+You can also do interesting patterns with generating once per group rather than once per row, something like this:
+
+```sql
+SELECT aiGenerate(
+    concat(
+        'Write a three-bullet digest of what Hacker News was discussing. Titles:\n',
+        arrayStringConcat(groupArray(title), '\n')
+    )
+) AS digest;
+```
+
+`aiTranslate` takes the text and a target language, either a name or a BCP-47 code. The parameter worth knowing about is `instructions`, which passes style or dialect guidance to the model:
+
+```sql
+SELECT title, aiTranslate(title, 'Spanish', map('instructions', 'Use polite form. Keep technical terms and product names in English.')) AS title_es 
+FROM hackernews
+WHERE type = 'story' AND score < 3000 AND title != ''
+ORDER BY score DESC LIMIT 3 FORMAT Vertical;
+```
+
+Response:
+
+```sql
+Row 1:
+──────
+title:    SpaceX’s Falcon Heavy successfully launches
+title_es: El Falcon Heavy de SpaceX se lanza con éxito
+
+Row 2:
+──────
+title:    Twitter Will Allow Employees to Work at Home Forever
+title_es: Twitter Permitirá a sus Empleados Trabajar desde Casa para Siempre
+
+Row 3:
+──────
+title:    No Cookie for You
+title_es: Sin Cookie para Ti
+```
+
+Because both functions return `String`, they can be nested. For example, summarize a long comment, then translate the summary:
+
+```sql
+aiTranslate(
+ aiGenerate( concat('Summarize in one sentence: ', comment),
+            map('system_prompt', 'Reply with one sentence, no preamble.') ),
+ 'es-MX' ) AS resumen;
+```
+
+## The full RAG cycle, in the database {#the_full_rag_cycle_in_the_database}
+
+Retrieval augmented generation powered by aiEmbed and vector search  
+
+![ClickHouse AI Functions MDSN-142.jpg](https://clickhouse.com/uploads/Click_House_AI_Functions_MDSN_142_59966a8ce7.jpg)
+
+Every stage can now be performed in SQL:
+
+1. Embed at write time with `aiEmbed()` in a materialized view, so vectors are populated as data lands.  
+2. Store data and Embeddings next to each other  
+3. Index with a vector similarity index  
+4. Retrieve with `cosineDistance` against the embedded data.  
+5. Generate the answer with `aiGenerate` over the retrieved context
+
+Note that `aiSimilarity()` is the convenience path for ad hoc work: it embeds both sides and returns cosine similarity in one call, which is ideal for semantic dedup or ranking a few thousand rows.
+
+## Putting a ceiling on spend {#putting_a_ceiling_on_spend}
+
+Unlike most ClickHouse functions, AI functions have a per-call cost in tokens and dollars, as opposed to just CPU cycles and memory usage. When deploying such functions, limiting per-query token cost and usage is likely to be front of mind. To help avoid runaway queries and hair-raising AI usage bills, we have implemented a set of quota settings which can be used to limit per-query AI function usage. 
+
+The following session settings are used to control these quotas:
+
+* [ai_function_max_input_tokens_per_query (default 1000000\)](https://clickhouse.com/docs/reference/settings/session-settings/ai-function#ai_function_max_input_tokens_per_query)  
+* [ai_function_max_output_tokens_per_query (default 500000\)](https://clickhouse.com/docs/reference/settings/session-settings/ai-function#ai_function_max_output_tokens_per_query)  
+* [ai_function_max_api_calls_per_query (default 1000\)](https://clickhouse.com/docs/reference/settings/session-settings/ai-function#ai_function_max_api_calls_per_query)
+
+As well as a setting that controls error behavior upon reaching the quota limit: [ai_function_throw_on_quota_exceeded](https://clickhouse.com/docs/reference/settings/session-settings/ai-function#ai_function_throw_on_quota_exceeded) (default 1 - throw).
+
+The settings above can be used like so:
+
+```sql
+SELECT
+    title,
+    aiClassify(title, ['space', 'security', 'databases', 'startups', 'programming', 'other']) AS topic
+FROM hackernews
+WHERE type = 'story' AND score > 100 AND title != ''
+LIMIT 5000
+SETTINGS ai_function_max_api_calls_per_query = 100;
+```
+
+The text functions issue one request per row, so a call budget is effectively a row budget. This query wants 5000 rows but is only allowed 100 requests, so it stops:
+
+```sql
+Code: 290. DB::Exception: AI API call limit reached: 100 calls made, maximum: 100.
+This is controlled by the 'ai_function_max_api_calls_per_query' setting. (LIMIT_EXCEEDED)
+```
+
+The count is exact, since the quota is checked before every request is dispatched, so a query never overshoots its call budget. Setting it to `0` disables the limit.
+
+Token quotas work the same way, but track what the provider actually reports, which is much closer to what you get billed for. Summarizing long Hacker News comments is the expensive case, since the whole comment goes into the prompt:
+
+```sql
+SELECT
+    author,
+    aiGenerate(
+        concat('Summarize this Hacker News comment in one sentence: ', comment),
+        map('system_prompt', 'You are terse. Reply with one sentence and no preamble.',
+            'temperature', '0.3')
+    ) AS summary
+FROM hackernews
+WHERE type = 'comment' AND length(comment) > 1000
+LIMIT 2000
+SETTINGS
+    ai_function_max_input_tokens_per_query = 500000,
+    ai_function_max_output_tokens_per_query = 50000;
+
+Code: 290. DB::Exception: AI input token limit reached or exceeded: 500642 tokens consumed,
+maximum: 500000. This is controlled by the 'ai_function_max_input_tokens_per_query' setting.
+```
+
+Note "reached or exceeded". A call's token cost is not known until its response comes back, so the total can overshoot by up to one in-flight request's worth per thread. Leave headroom rather than setting the limit to the exact number you can afford.
+
+Aborting is the right default, but not always what you want. Stopping a long classification run at 99% and returning nothing is worse than returning most of it. `ai_function_throw_on_quota_exceeded = 0` turns the quota into a soft stop:
+
+```sql
+SELECT
+    topic,
+    count() AS stories
+FROM (
+    SELECT aiClassify(title, ['space', 'security', 'databases', 'startups', 'programming', 'other']) AS topic
+    FROM hackernews
+    WHERE type = 'story' AND score > 100 AND title != ''
+    LIMIT 5000
+)
+WHERE topic != ''
+GROUP BY topic
+ORDER BY stories DESC
+SETTINGS
+    ai_function_max_api_calls_per_query = 1000,
+    ai_function_throw_on_quota_exceeded = 0;
+```
+
+Rows past the quota receive the column's default, an empty string for `String`, and the query succeeds. The `WHERE topic != ''` filters them back out, so you get a partial but honest aggregate instead of an exception.
+
+To see what a query actually spent, read the profile events from `system.query_log`:
+
+```sql
+SELECT
+    ProfileEvents['AIAPICalls']      AS api_calls,
+    ProfileEvents['AIInputTokens']   AS input_tokens,
+    ProfileEvents['AIOutputTokens']  AS output_tokens,
+    ProfileEvents['AIRowsProcessed'] AS rows_processed,
+    ProfileEvents['AIRowsSkipped']   AS rows_skipped
+FROM system.query_log
+WHERE query_id = 'hn_classify' AND type = 'QueryFinish'
+ORDER BY event_time DESC
+LIMIT 1 FORMAT Vertical;
+
+Row 1:
+──────
+api_calls:      1000
+input_tokens:   24310
+output_tokens:  3122
+rows_processed: 1000
+rows_skipped:   4000
+```
+
+`AIRowsSkipped` is the one to watch whenever `ai_function_throw_on_quota_exceeded = 0`, since it counts rows that quietly got a default value, from either a quota cut or an error. The cheapest way to size a quota is to run this over a `LIMIT 100` sample first and multiply.
+
+Some things to keep in mind while configuring the quotas:
+
+* **Set them in the top-level query.** A `SETTINGS` clause on a sub-query is ignored for the quota settings.  
+* **They are per server, per query fragment.** Within one execution context the cap is exact and shared across every AI function, block and thread. A distributed query can dispatch up to the limit *on each shard*, so divide by your shard count.  
+* **Token quotas need a provider that reports usage.** OpenAI, Anthropic and vLLM do. Providers that omit the `usage` object leave the token counters at `0`, so those limits never fire, and you should bound them with `ai_function_max_api_calls_per_query` instead.   
+* **Embedding functions never produce completion tokens**, so the output-token limit does not apply to `aiEmbed` or `aiSimilarity`.  
+* **Retries count against the call quota**. `ai_function_max_retries` defaults to `1`, so a budget of 1000 covers 1000 *attempts*, not 1000 rows, if the provider returns transient errors.
+
+## Things to know before you ship {#things_to_know_before_you_ship}
+
+Please keep in mind those concerns and limitations while shipping this to production:
+
+* **Prompt injection**: input text steers the model, so treat output as untrusted and never feed it into generated SQL or shell commands.  
+* **Non-determinism**: same rows fed into the LLM will give different answers, so use temperature = 0 and consider materializing results rather than recomputing them.   
+* **Cost:** Cost and latency scale with row count, so always test with LIMIT first, and make use of the quota settings described above   
+* **Security**: restrict `remote_url_allow_hosts` to your providers, keep endpoints on HTTPS, and remember the provider sees your data in cleartext after TLS termination.
+
+## Conclusion {#conclusion}
+
+AI Functions put classification, translation, embedding, and generation on SQL map in ClickHouse World. The full RAG loop now runs where the data already is. Looking forward to hearing from you on how you can build your apps based on this functionality.
+
+---
+
+## Try AI Functions in ClickHouse Cloud
+
+AI Functions are in private preview in ClickHouse Cloud.
+
+[Join the private preview](https://clickhouse.com/cloud/ai-functions-and-inference-services-waitlist?loc=blog-cta-1963-try-ai-functions-in-clickhouse-cloud-join-the-private-preview&utm_blogctaid=1963)
+
+---
 
 ---
 
@@ -1227,6 +1665,1446 @@ The same architecture also kept the fresh-data path economical. Together, lower 
 > **ClickHouse Cloud is purpose-built end to end for fast answers on continuously fresh data. Its advantage comes from how the complete system works together - from preparing each incoming row to serving current answers.**
 
 Next in the CostBench series: ClickHouse Cloud vs. BigQuery.
+
+---
+
+## Loading Parquet data into MySQL with ClickHouse
+Published: 2026-09-10T00:00:00+00:00
+URL: https://clickhouse.com/blog/parquet-to-mysql-with-clickhouse
+
+---
+title: "Loading Parquet data into MySQL with ClickHouse"
+date: "2026-09-11T13:17:45.862Z"
+author: "Mark Needham"
+category: "Engineering"
+excerpt: "Use ClickHouse to load Parquet files into MySQL, explore remote data, and run MySQL queries with table functions and named collections."
+---
+
+# Loading Parquet data into MySQL with ClickHouse
+
+A couple of weeks ago, I was working on a video for the [MySQL CDC connector for ClickPipes](https://clickhouse.com/blog/mysql-cdc-connector-for-clickpipes-is-now-generally-available) and I needed to get some data from Parquet files into MySQL. There isn't a native way to do this, so I decided to use [clickhouse-local](https://clickhouse.com/docs/concepts/features/tools-and-utilities/clickhouse-local), my favorite tool for doing this type of adhoc data work.
+
+<iframe width="768" height="432" src="https://www.youtube.com/embed/PNkIYSVz-AU" frameborder="0" allowfullscreen></iframe>
+
+## Setting up MySQL
+
+I used AWS RDS for MySQL in the video, but to make it easier to reproduce, we'll use MySQL running on my machine for this blog post. We can launch MySQL by running the following:
+
+```bash
+docker run --name parquet-mysql \
+    -p 127.0.0.1:3306:3306 \
+    -e MYSQL_ROOT_PASSWORD=local-root-password \
+    -e MYSQL_DATABASE=stackoverflow \
+    -e MYSQL_USER=admin \
+    -e MYSQL_PASSWORD=local-demo-password \
+    -v parquet-mysql-data:/var/lib/mysql \
+    mysql:8.4
+```
+
+## Setting up ClickHouse
+
+We'll run ClickHouse via its binary, which we can download like this:
+
+```bash
+curl https://clickhouse.com | sh
+```
+
+We'll then launch it:
+
+```bash
+./clickhouse -mn \
+--config-file ch-config.yaml \
+--param_mysql_password "local-demo-password" \
+--param_mysql_host "127.0.0.1:3306" \
+--output-format Pretty
+```
+
+> **Tip**
+>
+> We're passing in the MySQL host and password in plain text because it's running on our machine. For a production system, we'd have those values stored in environment variables.
+
+The contents of `ch-config.yaml` are shown below:
+
+```yaml
+echo: 0
+users_config: ch-users.yaml
+named_collections:
+  mysql_demo:
+    host: '127.0.0.01'
+    port: 3306
+    user: 'admin'
+    password: 'local-demo-password'
+    database: 'stackoverflow'
+```
+
+`ch-users.yaml` contains config for the default user. The named collection `mysql_demo` contains our MySQL credentials that we'll use later in the post.
+
+## Exploring StackOverflow dataset
+
+Now that we've got MySQL and ClickHouse running, let's explore our dataset. We're going to work with StackOverflow votes data, which lives in the following S3 bucket:
+
+```sql
+SET url_base = 'https://datasets-documentation.s3.eu-west-3.amazonaws.com/stackoverflow/parquet/votes/';
+```
+
+When using the `url` table function, the `url_base` parameter is prepended to relative paths so that we don't have to repeat the same base URL multiple times. We can describe the `2024.parquet` file in that bucket like this:
+
+```sql
+DESCRIBE url('2024.parquet');
+```
+
+```shell
+┌──────────────┬──────────────────────┐
+│ name         │ type                 │
+├──────────────┼──────────────────────┤
+│ Id           │ Int64                │
+│ PostId       │ Int64                │
+│ VoteTypeId   │ Int64                │
+│ CreationDate │ DateTime64(3, 'UTC') │
+│ UserId       │ Int64                │
+│ BountyAmount │ UInt64               │
+└──────────────┴──────────────────────┘
+
+6 rows in set. Elapsed: 0.445 sec.
+```
+
+## Creating table in MySQL
+
+Let's now connect to MySQL:
+
+```bash
+docker exec -it parquet-mysql mysql -u admin -p stackoverflow
+```
+
+And then run the following query to create a table to store this data:
+
+
+```sql
+CREATE TABLE votes_from_parquet
+(
+    Id           BIGINT NOT NULL PRIMARY KEY,
+    PostId       BIGINT,
+    VoteTypeId   BIGINT NOT NULL,
+    CreationDate DATETIME(3) NOT NULL,
+    UserId       BIGINT,
+    BountyAmount BIGINT UNSIGNED DEFAULT 0
+)
+ENGINE = InnoDB;
+```
+
+```shell
+Query OK, 0 rows affected (0.039 sec)
+```
+
+
+## Inserting data in MySQL
+
+Back to ClickHouse we go to ingest the data.
+We're going to use the [`mysql`](https://clickhouse.com/docs/reference/functions/table-functions/mysql) table function, as shown in the following query:
+
+```sql
+INSERT INTO FUNCTION mysql(
+    {mysql_host:String},     -- MySQL host
+    'stackoverflow',         -- MySQL database
+    'votes_from_parquet',    -- MySQL table
+    'admin',                 -- MySQL user
+    {mysql_password:String}  -- MySQL password
+)
+(Id, PostId, VoteTypeId, CreationDate, UserId, BountyAmount)
+SELECT Id, PostId, VoteTypeId, CreationDate, UserId, BountyAmount
+FROM url('2024.parquet');
+```
+
+```shell
+2296977 rows in set. Elapsed: 16.609 sec. Processed 2.30 million rows, 21.63 MB (138.29 thousand rows/s., 1.30 MB/s.)
+Peak memory usage: 227.31 MiB.
+```
+
+## Querying MySQL from ClickHouse
+
+We can also query MySQL by using the `mysql` table function in the `FROM` clause:
+
+```sql
+SELECT *
+FROM mysql(
+    {mysql_host:String},
+    'stackoverflow',
+    (
+        SELECT count(*) AS `votes`
+        FROM votes_from_parquet
+        WHERE tuple(VoteTypeId, PostId) IN ((2, 37996101), (2, 802038))
+    ),
+    'admin',
+    {mysql_password:String}
+);
+```
+
+When we pass in the inner query like this, it uses ClickHouse syntax. ClickHouse parses it into a syntax tree, converts supported ClickHouse constructs into MySQL-valid SQL, and then sends the resulting query to MySQL for execution.
+
+```shell
+┏━━━━━━━┓
+┃ votes ┃
+┡━━━━━━━┩
+│     5 │
+└───────┘
+
+1 row in set. Elapsed: 1.708 sec.
+```
+
+Alternatively, we can pass in the query as a string to the `query` function, but this time the query must be MySQL-SQL. ClickHouse treats it as an opaque string and sends it directly to MySQL without parsing or rewriting the SQL inside it. If we pass it as is, we'll get an exception:
+
+
+```sql
+SELECT *
+FROM mysql(
+    {mysql_host:String},
+    'stackoverflow',
+    query($sql$
+        SELECT count(*) AS `votes`
+        FROM votes_from_parquet
+        WHERE tuple(VoteTypeId, PostId) IN ((2, 37996101), (2, 802038))
+    $sql$),
+    'admin',
+    {mysql_password:String}
+);
+```
+
+```shell
+Received exception:
+Code: 1000. DB::Exception: mysqlxx::BadQuery: FUNCTION stackoverflow.tuple does not exist while executing query: 'SELECT * FROM (
+        SELECT count(*) AS `votes`
+        FROM votes_from_parquet
+        WHERE tuple(VoteTypeId, PostId) IN ((2, 37996101), (2, 802038))
+    ) AS __subquery LIMIT 0' (127.0.0.1:3306). (POCO_EXCEPTION)
+```
+
+`tuple` doesn't exist in MySQL, so its unable to parse the query. But if we remove `tuple` and send this query, it'll work fine:
+
+```sql
+SELECT *
+FROM mysql(
+    {mysql_host:String},
+    'stackoverflow',
+    query($sql$
+        SELECT count(*) AS `votes`
+        FROM votes_from_parquet
+        WHERE (VoteTypeId, PostId) IN ((2, 37996101), (2, 802038))
+    $sql$),
+    'admin',
+    {mysql_password:String}
+);
+```
+
+## Querying MySQL from ClickHouse with named collection
+
+We can also query MySQL using the credentials that we defined in a named collection in our config file. We can query the server's named collections with this query:
+
+```sql
+SELECT *
+FROM system.named_collections
+FORMAT Vertical;
+```
+
+```shell
+Row 1:
+──────
+name:         mysql_demo
+collection:   {'database':'[HIDDEN]','host':'[HIDDEN]','password':'[HIDDEN]','port':'[HIDDEN]','user':'[HIDDEN]'}
+source:       CONFIG
+create_query:
+
+1 row in set. Elapsed: 0.001 sec.
+```
+
+We can then pass in `mysql_demo` as the first argument, with the query being provided as a string:
+
+```sql
+SELECT *
+FROM mysql(
+    mysql_demo,
+    query=$sql$
+    SELECT count(*)
+    FROM votes_from_parquet
+    WHERE (VoteTypeId = 2 AND CreationDate = '2024-01-01')
+    $sql$
+);
+```
+
+```text
+┌──────────┐
+│ count(*) │
+├──────────┤
+│ 10067    │
+└──────────┘
+
+1 row in set. Elapsed: 1.100 sec.
+```
+
+Let's finish with one more query that finds the posts with both upvotes and downvotes:
+
+```sql
+SELECT * FROM mysql(mysql_demo, query = '
+  SELECT PostId, upvotes, downvotes,
+         upvotes + downvotes AS total_votes,
+         ROUND(
+           100.0 * LEAST(upvotes, downvotes) / (upvotes + downvotes),
+           1
+         ) AS balance_pct
+        FROM
+        (
+          SELECT PostId, SUM(VoteTypeId = 2) AS upvotes, 
+                 SUM(VoteTypeId = 3) AS downvotes
+          FROM votes_from_parquet
+          WHERE VoteTypeId IN (2, 3)
+          GROUP BY PostId
+        ) AS vote_totals
+  WHERE upvotes > 0 AND downvotes > 0
+  ORDER BY LEAST(upvotes, downvotes) DESC, total_votes DESC
+  LIMIT 10'
+);
+```
+
+```shell
+┌──────────┬─────────┬───────────┬─────────────┬─────────────┐
+│ PostId   │ upvotes │ downvotes │ total_votes │ balance_pct │
+├──────────┼─────────┼───────────┼─────────────┼─────────────┤
+│ 69699772 │ 205     │ 23        │ 228         │ 10.1        │
+│ 69713899 │ 53      │ 9         │ 62          │ 14.5        │
+│ 62099904 │ 37      │ 8         │ 45          │ 17.8        │
+│ 10032024 │ 7       │ 16        │ 23          │ 30.4        │
+│ 78114790 │ 7       │ 12        │ 19          │ 36.8        │
+│ 62477194 │ 7       │ 9         │ 16          │ 43.8        │
+│ 72231704 │ 8       │ 7         │ 15          │ 46.7        │
+│ 77766725 │ 7       │ 8         │ 15          │ 46.7        │
+│ 78129981 │ 24      │ 6         │ 30          │ 20          │
+│ 77767692 │ 6       │ 8         │ 14          │ 42.9        │
+└──────────┴─────────┴───────────┴─────────────┴─────────────┘
+
+10 rows in set. Elapsed: 8.883 sec.
+```
+
+## Conclusion
+
+In this blog post, we've used ClickHouse to read a Parquet file, loads its contents into MySQL and query the results.
+
+Being able to do all of that without leaving ClickHouse is why I like table functions so much. And MySQL is just one option. There are also table functions for [Postgres](https://clickhouse.com/docs/reference/functions/table-functions/postgresql), [SQLite](https://clickhouse.com/docs/reference/functions/table-functions/sqlite), and [MongoDB](https://clickhouse.com/docs/reference/functions/table-functions/mongodb), to name just a few.
+
+---
+
+## Get started today
+
+Interested in seeing how ClickHouse works on your data? Get started with ClickHouse Cloud in minutes and receive $300 in free credits.
+
+[Sign up](https://console.clickhouse.cloud/signUp?loc=blog-cta-1967-get-started-today-sign-up&utm_blogctaid=1967)
+
+---
+
+---
+
+## ClickHouse release 26.8
+Published: 2026-09-10T00:00:00+00:00
+URL: https://clickhouse.com/blog/clickhouse-release-26-08
+
+---
+title: "ClickHouse release 26.8"
+date: "2026-09-11T13:12:38.318Z"
+author: "ClickHouse"
+category: "Engineering"
+excerpt: "ClickHouse 26.8 LTS introduces background queries, pipelined SQL, new text tokenizers, expanded data lake integrations, and faster Parquet, aggregation, and join queries."
+---
+
+# ClickHouse release 26.8
+
+Another month goes by, which means it’s time for another release! 
+
+<p>The ClickHouse 26.8 release contains 98 new features &#127815; 128 performance optimizations &#127776; 556 bug fixes &#128029; and is a long-term support release.</p>
+
+This release brings background queries, pipelined SQL, new text tokenizers, expanded data lake integrations, and performance improvements for Parquet, GROUP BY, and joins.
+
+## New contributors {#new-contributors}
+
+A special welcome to all the new contributors in 26.8! The growth of ClickHouse's community is humbling, and we are always grateful for the contributions that have made ClickHouse so popular.
+
+Below are the names of the new contributors:
+
+*Aashish Kohli, AbdullahKaya, Alex Budkar, Alex Kalmakov, Alexey Elkin, Amog Iska, Amogh-Bharadwaj, Andrey Tsarevskiy, Andy Bradshaw, Avinash Kamath, Bartok, Bartok9, Chris Lu, Christian Bianchi, ClickGap, Daniel Q. Kim, David Dallakyan, Dean Chen, Dergousov Maksim, Diego Gomes Tomé, Dmitrii Tunikov, Eduardo Gómez, Emil Sadek, George MacRorie, Hamid, Hank Cui, Haowen Feng (from Dev Box), Ilia Demianenko, Ivan Shelestov, James Sanders, Jose Muñoz, KD2YCU, Kirill Shcherbatov, Kirill Shokhin, Konstantin Plis, Kseniia, Nikolai Ovchinnikov, Nishant, Nishant Agarwal, Nuno Adrego, Perfloop Agent, Rahul Malik, RamiDarwiche, Raymond Lee, Ria Khatoniar, Ria-K912, Rohith Pariki, RohithPariki, Schum, Sean Reid, Sergey Chernov, Shawn Chen, Stanislav, Steve Lerner, Tod Trevillian, UberDever, Utkal Singh, Valery Petrov, VighneshPath, Vladimir Chemeris, William Hatcher, Yecine Megdiche, Yiyang Shao, ZachEddy, Zeynel Koca, a.akhondi, addshore, amirreza1307, avinash, deusgaudio, francisconeves-clickhouse, gelsonbagetti, gudauu, kalyanamdewri, locadex-agent\[bot\], pavol kutaj, quantrail-admin, vahid, vahid sohrabloo, yisamlee, yiyang-shao, zainulabidin302, Éco*
+
+Hint: if you’re curious how we generate this list… [here](https://gist.github.com/gingerwizard/5a9a87a39ba93b422d8640d811e269e9).
+
+<iframe width="768" height="432" src="https://www.youtube.com/embed/5A9gRYE0v2M?si=4pD3DBREk8UJKUQW" title="YouTube video player" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" referrerpolicy="strict-origin-when-cross-origin" allowfullscreen></iframe>
+
+You can also [view the slides from the presentation](https://presentations.clickhouse.com/2026-release-26.8).
+
+## Run a query in the background {#run_a_query_in_the_background}
+
+### Contributed by Miсhael Stetsyuk
+
+It’s now possible to run a query in the background. The query will return immediately and then run until completion, regardless of what happens to your connection.
+
+This feature is useful for long-running queries that ingest data into ClickHouse or export data from it, allowing them to continue even if the client disconnects.
+
+We have a ClickHouse server running with the [UK property prices dataset](https://clickhouse.com/docs/get-started/sample-datasets/uk-price-paid) imported and then copied a few times using the following query:
+
+<pre><code type='click-ui' language='sql'>
+ALTER TABLE uk_price_paid
+ATTACH PARTITION ID 'all'
+FROM uk_price_paid;
+</code></pre>
+
+This gets us up to a little over 240 million rows:
+
+<pre><code type='click-ui' language='sql'>
+SELECT count() FROM uk_price_paid;
+</code></pre>
+
+```shell
+┌───count()─┐
+│ 243619704 │
+└───────────┘
+```
+
+Next, we can run the following query to write the data in the `uk_price_paid` table to a file on a local HTTP server. 
+
+<pre><code type='click-ui' language='sql'>
+INSERT INTO FUNCTION url('http://localhost:8080/uploads/london-sales.parquet', 'Parquet')
+SELECT * FROM uk_price_paid
+SETTINGS run_query_in_background = 1;
+</code></pre>
+
+```shell
+Query id: 59eabb9f-33f4-412b-b2f3-b090fe7b4bbf
+
+Ok.
+
+0 rows in set. Elapsed: 0.001 sec.
+```
+
+We can query `system.processes` to check on the progress of background queries: 
+
+<pre><code type='click-ui' language='sql'>
+SELECT query_id, query,
+      round(elapsed, 2) AS elapsed_seconds,
+      read_rows, written_rows
+FROM system.processes
+WHERE query NOT ILIKE '%system.processes%'
+ORDER BY elapsed DESC;
+</code></pre>
+
+```shell
+Row 1:
+──────
+query_id:        59eabb9f-33f4-412b-b2f3-b090fe7b4bbf
+query:           INSERT INTO FUNCTION url('http://localhost:8080/uploads/uk.parquet', 'Parquet')
+SELECT * FROM uk_price_paid
+SETTINGS run_query_in_background = 1;
+elapsed_seconds: 8.52
+read_rows:       179243204 -- 179.24 million
+written_rows:    179243204 -- 179.24 million
+```
+
+Once the query’s finished, we can query `system.query_log` to see how long it took:
+
+<pre><code type='click-ui' language='sql'>
+SELECT event_time, type, query_duration_ms,
+      read_rows, result_rows
+FROM system.query_log
+WHERE query_id = '59eabb9f-33f4-412b-b2f3-b090fe7b4bbf'
+ORDER BY event_time;
+</code></pre>
+
+```shell
+┌──────────event_time─┬─type────────┬─query_duration_ms─┬─read_rows─┬─result_rows─┐
+│ 2026-09-03 12:32:05 │ QueryStart  │                 0 │         0 │           0 │
+│ 2026-09-03 12:32:17 │ QueryFinish │             11798 │ 243619704 │   243619704 │
+└─────────────────────┴─────────────┴───────────────────┴───────────┴─────────────┘
+```
+
+## PostgreSQL-style regular-expression operators {#postgresql-style_regular-expression_operators}
+
+### Contributed by Alexey Milovidov
+
+ClickHouse now supports the following PostgreSQL-style regex operators:
+
+*  `~` returns 1 when the string matches the regular expression, using case-sensitive matching.  
+*  `~*` returns 1 when the string matches the regular expression, using case-insensitive matching.  
+*  `!~` returns 1 when the string does not match the regular expression, using case-sensitive matching.  
+* `!~*` returns 1 when the string does not match the regular expression, using case-insensitive matching.
+
+The following query shows how to use all the operators to match parts of the term `Baker Street`:
+
+<pre><code type='click-ui' language='sql'>
+SELECT
+      'Baker Street' ~ 'street$' AS matchesCaseSensitively,
+      'Baker Street' ~* 'street$' AS matchesCaseInsensitively,
+      'Baker Street' !~ 'street$' AS doesNotMatchCaseSensitively,
+      'Baker Street' !~* 'street$' AS doesNotMatchCaseInsensitively
+FORMAT Vertical;
+</code></pre>
+
+```shell
+Row 1:
+──────
+matchesCaseSensitively:        0
+matchesCaseInsensitively:      1
+doesNotMatchCaseSensitively:   1
+doesNotMatchCaseInsensitively: 0
+```
+
+> **A small disclaimer:** These operators come with a disclaimer from Alexey, who implemented them: he isn’t a fan and thinks they make SQL look a little too much like Bash or Perl. PostgreSQL compatibility won this round.
+> The same change means that `psql` commands such as `\d`, `\dt`, and `\dv` now work when connected to ClickHouse over the PostgreSQL wire protocol. However, `\d <table>` still uses some PostgreSQL syntax that ClickHouse doesn’t yet support.
+
+## Array as an array subscript {#array_as_an_array_subscript}
+
+### Contributed by folly
+
+The subscript operator now accepts an array of indices and returns the elements at all given positions. This makes it possible to gather, reorder, or sample array elements in a single expression, which is convenient when used with arraySort and topK-style functions.
+
+Let’s have a look at a simple example:
+
+<pre><code type='click-ui' language='sql'>
+WITH arrayMap(x -&gt; rand(x), range(1, 10)) AS random_values
+SELECT random_values[[1, 3, 5]];
+</code></pre>
+
+```shell
+┌─arrayElement(ran⋯ues, [1, 3, 5])─┐
+│ [344408953,1157293782,407846805] │
+└──────────────────────────────────┘
+```
+
+A more realistic use is selecting quarterly checkpoints from a monthly time series. The following query builds an ordered array of each district’s monthly median prices, then selects January, April, July, and October in one expression:
+
+<pre><code type='click-ui' language='sql'>
+WITH monthlyPrices AS
+(
+    SELECT district, toStartOfMonth(date) AS month,
+           round(median(price)) AS medianPrice
+    FROM uk_price_paid
+    WHERE town = 'LONDON'
+      AND district IN ('CAMDEN', 'CITY OF WESTMINSTER', 'KENSINGTON AND CHELSEA')
+      AND date &gt;= '2024-01-01' AND date &lt; '2025-01-01'
+    GROUP BY district, month
+)
+SELECT district,
+       arraySort(groupArray((month, medianPrice)))[[1, 4, 7, 10]] AS quarterlyPrices
+FROM monthlyPrices
+GROUP BY district
+HAVING count() = 12
+ORDER BY district;
+</code></pre>
+
+```shell
+Row 1:
+──────
+district:        CAMDEN
+quarterlyPrices: [('2024-01-01',760000),('2024-04-01',731000),('2024-07-01',762500),('2024-10-01',805000)]
+
+Row 2:
+──────
+district:        CITY OF WESTMINSTER
+quarterlyPrices: [('2024-01-01',1215000),('2024-04-01',1037500),('2024-07-01',935000),('2024-10-01',875000)]
+
+Row 3:
+──────
+district:        KENSINGTON AND CHELSEA
+quarterlyPrices: [('2024-01-01',1205000),('2024-04-01',1187500),('2024-07-01',1100000),('2024-10-01',1200000)]
+```
+
+## Query to JSON to query {#query_to_json_to_query}
+
+### Contributed by Alexey Milovidov, Nikita Fomichev
+
+It’s now possible to convert a query to its Abstract Syntax Tree in JSON and to query ClickHouse using an Abstract Syntax Tree in JSON.
+
+The `parseQueryToJSON` function returns an Abstract Syntax Tree in JSON format. We’ll use a simple `count()` to demonstrate this function, as the output is extremely verbose:
+
+<pre><code type='click-ui' language='sql'>
+SELECT parseQueryToJSON($sql$
+SELECT count() FROM uk_price_paid
+$sql$)::JSON
+FORMAT Vertical;
+</code></pre>
+
+```json
+{
+  "type": "SelectWithUnionQuery",
+  "union_mode": "UNION_DEFAULT",
+  "list_of_selects": {
+    "type": "ExpressionList",
+    "children": [
+      {
+        "type": "SelectQuery",
+        "select": {
+          "type": "ExpressionList",
+          "children": [
+            {"type": "Function", "name": "count",
+             "arguments": {"type": "ExpressionList"}}
+          ]
+        },
+        "tables": {
+          "type": "TablesInSelectQuery",
+          "children": [
+            {"type": "TablesInSelectQueryElement",
+             "table_expression": {
+               "type": "TableExpression",
+               "database_and_table_name": {
+                 "type": "TableIdentifier", "name": "uk_price_paid"}}}
+          ]
+        }
+      }
+    ]
+  }
+}
+```
+
+The JSON describes the query as a tree of typed nodes:  identifiers, literals, functions, and clauses. 
+
+Because it's ordinary JSON, any language with a JSON library can analyze, validate, rewrite, or generate queries without embedding a SQL parser. 
+
+The conversion runs both ways: `formatQueryFromJSON` turns the tree back into SQL, so you can always read back what you built:
+
+<pre><code type='click-ui' language='sql'>
+SELECT formatQueryFromJSON(parseQueryToJSON($sql$
+SELECT count() FROM uk_price_paid
+$sql$));
+</code></pre>
+
+```shell
+┌─formatQueryFromJ⋯_price_paid\n'))─┐
+│ SELECT count() FROM uk_price_paid │
+└───────────────────────────────────┘
+```
+
+ClickHouse 26.8 also adds an experimental dialect, `clickhouse_json`, that lets you send a JSON AST instead of SQL. It's gated behind the `enable_json_ast_dialect` setting, then selected like any other dialect:
+
+<pre><code type='click-ui' language='sql'>
+SET enable_json_ast_dialect = 1, dialect = 'clickhouse_json';
+</code></pre>
+
+If we paste the AST for `SELECT count() FROM uk_price_paid` that we created earlier, we get:
+
+```shell
+┌───count()─┐
+│ 243619704 │
+└───────────┘
+```
+
+We're not expecting you to start writing your queries as JSON syntax trees! This feature is more for machines than people. 
+
+Anything that generates queries can generate a JSON syntax tree instead of SQL, which means there’s no need for string concatenation, no more horrible escaping bugs, and maybe most importantly, no SQL injection surface.
+
+## CREATE USER ... VALID FOR {#create_user__valid_for}
+
+### Contributed by Alexey Milovidov
+
+Before ClickHouse 26.8, it was already possible to create time-limited users using the `VALID UNTIL` syntax:
+
+<pre><code type='click-ui' language='sql'>
+CREATE USER mark
+IDENTIFIED WITH no_password
+VALID UNTIL '2026-10-04';
+</code></pre>
+
+ClickHouse 26.8 adds `VALID FOR INTERVAL` syntax, which computes the deadline starting from the current time. So, to have a user valid for two weeks from now, we’d run the following query:
+
+<pre><code type='click-ui' language='sql'>
+CREATE USER mark
+IDENTIFIED WITH no_password
+VALID FOR INTERVAL 2 WEEKS;
+</code></pre>
+
+We can then check when this user is valid until:
+
+<pre><code type='click-ui' language='sql'>
+SHOW CREATE USER mark
+FORMAT LineAsString;
+</code></pre>
+
+The output of this query will all be on one line, so we’ve manually formatted it for ease of reading:
+
+```shell
+CREATE USER mark 
+IDENTIFIED WITH no_password 
+VALID UNTIL '2026-09-18 10:06:29'
+```
+
+We can also use this syntax when altering the user. To have the user instead be valid for one week from now, we’d run the following query:
+
+<pre><code type='click-ui' language='sql'>
+ALTER USER mark VALID FOR INTERVAL 1 WEEK;
+</code></pre>
+
+```shell
+CREATE USER mark 
+IDENTIFIED WITH no_password 
+VALID UNTIL '2026-09-11 10:08:34'
+```
+
+## Pipelined SQL {#pipelined_sql}
+
+### Contributed by Alexey Milovidov
+
+ClickHouse 26.8 introduces pipelined SQL, which lets you write queries top-down, with each step following the previous.
+
+You can learn more in the [Pipelined SQL in ClickHouse 26.8](https://clickhouse.com/blog/pipelined-sql-26.8) blog post.
+
+## ClickHouse as a streaming HTTP API {#clickhouse_as_a_streaming_http_api}
+
+### Contributed by Alexey Milovidov
+
+ClickHouse 26.8 also introduces several features that make it reasonably easy to add a lightweight HTTP API around your tables and common queries.  
+
+You can learn more in the [ClickHouse as a streaming HTTP API](https://clickhouse.com/blog/clickhouse-streaming-http-api) blog post.
+
+## system.user_query_log {#systemuser_query_log}
+
+### Contributed by Yue Ni, Alexey Milovidov
+
+ClickHouse 26.8 also introduces a new system table, `system.user_query_log`, which only includes the queries for the current user.
+
+This means that every user can see their own query history without needing access to the `system.query_log` table.
+
+Queries to `system.query_log` will still return a permission denied exception if your user doesn’t have access to that table.
+
+## Atomic POPULATE {#atomic_populate}
+
+### Contributed by Alexey Milovidov
+
+An [incremental materialized view](https://clickhouse.com/docs/concepts/features/materialized-views/incremental-materialized-view) is equivalent to a trigger that runs a query on blocks of data as they’re inserted into a table. 
+
+When creating an incremental materialized view and populating it on creation, a race condition caused it to skip records inserted during the population. In ClickHouse 26.8, this has been fixed.
+
+When you call `CREATE MATERIALIZED VIEW ... POPULATE`, the view is subscribed to new inserts on the source table, and a snapshot of the existing data is captured together, under a brief exclusive lock on the source table, so that every row inserted concurrently with the population is delivered exactly once.
+
+This functionality is enabled by default, but we can disable it by setting `materialized_views_populate_atomically` to `0`, which lets us demonstrate the previous behavior.
+
+First, let’s create a source table containing 100,000 rows:
+
+<pre><code type='click-ui' language='sql'>
+CREATE TABLE src (id UInt64) 
+ORDER BY id;
+INSERT INTO src 
+SELECT number FROM numbers(100000);
+</code></pre>
+
+And a destination one:
+
+<pre><code type='click-ui' language='sql'>
+CREATE TABLE dst (id UInt64) 
+ORDER BY id;
+</code></pre>
+
+Next, we’ll have one query inserting 50 rows and another query creating a materialized view that populates the `dst` table.
+
+For a row to fall through the gap, its `INSERT` has to still be in flight when `POPULATE` takes its snapshot of the source table. Most inserts finish too quickly for that, so we use `sleepEachRow` to spread 50 rows over about two and a half seconds, and start the `CREATE` while that insert is still running.
+
+We're also using `POPULATE` together with `TO`, which was a syntax error before 26.8. The view backfills the existing `dst` table from the data already in `src`.
+
+<pre><code type='click-ui' language='bash'>
+./clickhouse client -q "
+  INSERT INTO src SELECT number + 100000 FROM numbers(50)
+  WHERE sleepEachRow(0.05) = 0;" &amp;
+
+sleep 0.5
+
+./clickhouse client -m -q "
+  SET materialized_views_populate_atomically = 0;
+  CREATE MATERIALIZED VIEW mv TO dst
+  POPULATE AS SELECT id FROM src;"
+
+wait
+</code></pre>
+
+Once this has finished running, we can compare the source table against the destination one:
+
+<pre><code type='click-ui' language='sql'>
+SELECT (SELECT count() FROM src) AS sourceRows,
+       (SELECT count() FROM dst) AS dstRows,
+       (SELECT uniqExact(id) FROM dst) AS dstDistinct,
+       sourceRows - dstRows AS lost,
+       dstRows - dstDistinct AS duplicated
+FORMAT PrettyCompact;
+</code></pre>
+
+```shell
+┌─sourceRows─┬─dstRows─┬─dstDistinct─┬─lost─┬─duplicated─┐
+│     100050 │  100000 │      100000 │   50 │          0 │
+└────────────┴─────────┴─────────────┴──────┴────────────┘
+```
+
+All 50 records are in the source table, but none are in the destination table. The insert started before `mv` existed, so it didn’t push to it, and it committed after the population snapshot was taken, so the backfill didn't see it either.
+
+It's exactly 50 because an insert decides which views will receive its data once, when the query starts, rather than per row or per block. So the whole insert either arrives or it doesn't.
+
+If we drop `mv`, `src`, and `dst`, and then recreate `src` and `dst`, we can create the materialized view, but this time with `materialized_views_populate_atomically` set to `1`:
+
+<pre><code type='click-ui' language='bash'>
+./clickhouse client -q "
+  INSERT INTO src SELECT number + 100000 FROM numbers(50)
+  WHERE sleepEachRow(0.05) = 0;" &amp;
+
+sleep 0.5
+
+./clickhouse client -m -q "
+  SET materialized_views_populate_atomically = 1;
+  CREATE MATERIALIZED VIEW mv TO dst
+  POPULATE AS SELECT id FROM src;"
+
+wait
+</code></pre>
+
+And this time, we’ll get the following output when we count the records in each table:
+
+```shell
+┌─sourceRows─┬─dstRows─┬─dstDistinct─┬─lost─┬─duplicated─┐
+│     100050 │  100050 │      100050 │    0 │          0 │
+└────────────┴─────────┴─────────────┴──────┴────────────┘
+```
+
+## Japanese and Chinese tokenizer support {#japanese_and_chinese_tokenizer_support}
+
+### Contributed by Robert Schulze, Amos Bird, Jimmy Aguilar Mena
+
+The default tokenizer in ClickHouse (used by the `tokens`, `hasAllTokens`, and `hasAnyTokens` functions) is `splitByNonAlpha` which splits a string by whitespace and punctuation characters into an array of substrings. Unlike English and other Indo-European languages, Chinese and Japanese text have no spaces between words, so unique tokenizers are required.
+
+26.8 addresses this with two purpose-built tokenizers:
+
+* **japanese** - The Japanese tokenizer relies on the MeCab morphological analyzer and requires an external MeCab dictionary specified in the server configuration  
+* **chinese** - a jieba-style tokenizer combining a dictionary with an HMM (hidden Markov model) for segmenting unknown sequences, e.g. splitting ClickHouse是一个快速的开源数据库 into ClickHouse, 是, 一个, 快速, 的, 开源, 数据库 rather than one blob or single characters.
+
+#### Japanese
+
+To use the Japanese tokenizer, you’ll first need to configure a dictionary. In this example, we’ll use [UniDic](https://clrd.ninjal.ac.jp/unidic/). Once you’ve downloaded the .zip archive from the website, you’ll need to get the SHA256 of the archive, which ClickHouse uses to verify the dictionary before loading it:
+
+<pre><code type='click-ui' language='bash'>
+sha256sum /var/lib/clickhouse/unidic-cwj-202512.zip
+</code></pre>
+
+```shell
+d94216b589d15d05c408ed59abc5259086703ebbac14e225b5314e4cd106c4db
+```
+
+Add a new tokenizer in `/etc/clickhouse-server/config.d/tokenizers.xml` to define a custom configuration that gets merged into your primary `config.xml` file when the server starts.
+
+```xml
+<clickhouse>
+  <tokenizer>
+    <japanese>
+      <dictionary_location>file:///var/lib/clickhouse/unidic-cwj-202512.zip</dictionary_location>
+      <dictionary_sha>d94216b589d15d05c408ed59abc5259086703ebbac14e225b5314e4cd106c4db</dictionary_sha>
+    </japanese>
+  </tokenizer>
+</clickhouse>
+```
+
+ > **Note**
+>
+> You can also specify a dictionary via HTTP/HTTPS URL or in S3-compatible storage
+
+If your server is already running, make sure to restart it so the configuration takes effect. You can now create a text index and query it like this:
+
+<pre><code type='click-ui' language='sql'>
+CREATE TABLE reviews
+(
+    id UInt64,
+    text String,
+    INDEX text_idx text TYPE text(tokenizer = 'japanese')
+)
+ENGINE = MergeTree
+ORDER BY id;
+
+INSERT INTO reviews VALUES
+(1, '渋谷の新しい寿司屋で美味しいうにを食べた'),      -- "ate" (食べた)
+(2, '大阪のラーメンは最高だった、また食べたい'),      -- "want to eat" (食べたい)
+(3, '京都で抹茶アイスを食べながら散歩した'),          -- "while eating" (食べながら)
+(4, '新幹線に乗って富士山を見に行った');              -- no mention of eating
+
+SELECT id, text
+FROM reviews
+WHERE hasAnyTokens(text, ['食べ'], 'japanese')
+ORDER BY id;
+</code></pre>
+
+| id | text |
+| :--- | :--- |
+| 1 | 渋谷の新しい寿司屋で美味しいうにを食べた |
+| 2 | 大阪のラーメンは最高だった、また食べたい |
+| 3 | 京都で抹茶アイスを食べながら散歩した |
+
+3 rows in set. Elapsed: 0.007 sec.
+
+In the example above, `食べた`, `食べたい`, and `食べながら` are all different forms of the verb `食べる` ("to eat"), but the tokenizer segments each of them down to the stem `食べ` plus a separate conjugation particle. So a single-token search for `食べ` correctly pulls rows 1–3, and skips row 4.
+
+For more details, read [the Japanese tokenizer docs](https://clickhouse.com/docs/reference/engines/table-engines/mergetree-family/textindexes#japanese-tokenizer-dictionary)
+
+#### Chinese
+
+Unlike the Japanese tokenizer, which requires downloading an external dictionary archive and configuring it in your server XML configuration, the Chinese tokenizer requires no server configuration setup. Its embedded dictionary and hidden Markov model data (derived from cppjieba) are built directly into ClickHouse.
+
+The `chinese` tokenizer allows you to specify a granularity parameter. By default, it is set to `coarse_grained` but if you pass `fine_grained` you can index overlapping sub-words to improve search recall at the cost of a larger index.
+
+The query below creates two tables. The first has an index using the `chinese` tokenizer with the default `coarse_grained` granularity parameter, and the second has an index using the `fine_grained` parameter.
+
+Four strings are inserted into both tables, either containing the word `大学` ("university") standalone (row 1), embedded inside a longer compound word (rows 2 and 3), or not at all (row 4).
+
+<pre><code type='click-ui' language='sql'>
+CREATE TABLE table_coarse
+(
+    key UInt64,
+    str String,
+    INDEX text_idx str TYPE text(tokenizer = chinese) -- default: coarse_grained
+)
+ENGINE = MergeTree ORDER BY key;
+
+CREATE TABLE table_fine
+(
+    key UInt64,
+    str String,
+    INDEX text_idx str TYPE text(tokenizer = chinese('fine_grained'))
+)
+ENGINE = MergeTree ORDER BY key;
+
+INSERT INTO table_coarse VALUES
+    (1, '他考上了大学，很开心'), -- standalone 大学
+    (2, '北京邮电大学的通信工程专业很强'), -- compound 北京邮电大学
+    (3, '我毕业于北京大学计算机系'), -- compound 北京大学
+    (4, '今天天气不错，适合散步'); -- no mention
+
+INSERT INTO table_fine SELECT * FROM table_coarse;
+</code></pre>
+
+The queries below use the `hasAllTokens` function to search for `大学` ("university"), first on the table using the default `coarse_grained` parameter in its `chinese` index, then for the second table using the `fine_grained` parameter.
+
+For the first table, only `他考上了大学，很开心` ("He got into university and was very happy."), the sentence with a standalone mention of `大学`, is returned. For the second table, both the sentence with the standalone mention of `大学` and the sentences with the compound mentions are returned:
+
+<pre><code type='click-ui' language='sql'>
+SELECT
+    key,
+    str
+FROM table_coarse
+WHERE hasAllTokens(str, '大学')
+ORDER BY key ASC;
+</code></pre>
+
+Query ID: `7e348059-9cd1-4f72-8026-8d76266050e4`
+
+| key | str |
+| :--- | :--- |
+| 1 | 他考上了大学，很开心 |
+
+1 row in set. Elapsed: 0.002 sec.
+
+<pre><code type='click-ui' language='sql'>
+SELECT
+    key,
+    str
+FROM table_fine
+WHERE hasAllTokens(str, '大学')
+ORDER BY key ASC;
+</code></pre>
+
+Query ID: `4da23c89-8a10-4099-9637-bd2a14f6aa1b`
+
+| key | str |
+| :--- | :--- |
+| 1 | 他考上了大学，很开心 |
+| 2 | 北京邮电大学的通信工程专业很强 |
+| 3 | 我毕业于北京大学计算机系 |
+
+3 rows in set. Elapsed: 0.002 sec.
+
+This is because the `chinese` tokenizer treats `北京大学` ("Peking University") and `北京邮电大学` ("Beijing University of Posts and Telecommunications") as single dictionary tokens in coarse mode so searching for the sub-token 大学 alone never matches those rows under coarse tokenization, even though a human reading the sentence would know that both sentences are relevant matches for "university". `fine_grained` mode is specifically the setting that additionally breaks these compounds apart into their overlapping sub-words like `北京` ("Beijing"), `邮电` ("Post and Telecommunications") or `大学` ("University") which is why it's the one that picks up rows 2 and 3.
+
+## New tokenizers: `icu` and `splitByRegexp` {#new_tokenizers_icu_and_splitbyregexp}
+
+### Contributed by Jimmy Aguilar Mena
+
+Whilst Jieba is designed for simplified and traditional Chinese, and MeCab is primarily intended for Japanese - [ICU](https://icu.unicode.org/) (International Components for Unicode), is a generalized, rule-based multilingual library that uses standard boundary analysis algorithms, we might reasonably ask about how to tokenize text for other languages that don't place whitespace between words - such as Thai, Lao, Khmer or Burmese?
+
+Version 26.8 adds a new `icu(locale)` tokenizer to ClickHouse which splits strings into word tokens using the library's Unicode word segmentation. For scripts that do not put whitespace between words, ICU applies dictionary-based segmentation which ensures that text is split into meaningful multi-character words instead of single characters.
+
+Before 26.8, if you had tried to tokenize text for Thai, Lao, Khmer or Burmese, using a non-ASCII tokenizer like `asciiCJK`, you would have run into a single-character fragmentation problem because `asciiCJK` treats every non-ASCII character as its own token. Take for example, the Thai word `บ้าน` ("house"):
+
+<pre><code type='click-ui' language='sql'>
+SELECT tokens('บ้าน', 'asciiCJK');
+</code></pre>
+
+```shell
+┌─tokens('บ้าน', 'asciiCJK')─┐
+│ ['บ','้','า','น']          │
+└───────────────────────────┘
+```
+
+`บ` and `น` are consonants, `้` is a tone mark, `า` is a vowel sign, so the tokenization has fragmented the word into four meaningless pieces. `hasAllTokens` only checks that every needle fragment exists *somewhere* in the row, so two completely unrelated real Thai words can each contribute a piece and produce a false positive on a search for "house" against a completely unrelated sentence like "The horse is on the mountain":
+
+<pre><code type='click-ui' language='sql'>
+-- "ม้าอยู่บนภูเขา" = "The horse is on the mountain" (no usage of "house")
+SELECT tokens('ม้าอยู่บนภูเขา', 'asciiCJK');
+</code></pre>
+
+```shell
+┌─tokens('ม้าอยู่บนภูเขา', 'asciiCJK')──────────────────────┐
+│ ['ม','้','า','อ','ย','ู','่','บ','น','ภ','ู','เ','ข','า'] │
+└───────────────────────────────────────────────────────┘
+```
+
+<pre><code type='click-ui' language='sql'>
+SELECT hasAllTokens('ม้าอยู่บนภูเขา', 'บ้าน', 'asciiCJK');
+</code></pre>
+
+```shell
+┌─hasAllTokens⋯'asciiCJK')─┐
+│                        1 │
+└──────────────────────────┘
+-- false positive
+```
+
+Compare this with what happens when the `icu` tokenizer is used with `locale` set to `th`:
+
+<pre><code type='click-ui' language='sql'>
+SELECT tokens('ม้าอยู่บนภูเขา', 'icu', 'th');
+</code></pre>
+
+```shell
+┌─tokens('ม้าอยู่⋯icu', 'th')─┐
+│ ['ม้า','อยู่','บน','ภูเขา']  │
+└──────────────────────────┘
+-- "horse", "is/located", "on", "mountain"
+```
+
+<pre><code type='click-ui' language='sql'>
+SELECT hasAllTokens('ม้าอยู่บนภูเขา', 'บ้าน', 'icu(''th'')');
+</code></pre>
+
+```shell
+┌─hasAllTokens⋯u(\'th\')')─┐
+│                        0 │
+└──────────────────────────┘
+```
+
+ > **Tip**
+>
+> You can query the `system.collations` table for a list of all the supported ICU locales:
+
+For situations requiring more control, 26.8 introduces the `splitByRegexp` tokenizer which allows you to split text into tokens using a regular expression as the separator.
+
+ClickHouse's default tokenizer `splitByNonAlpha` splits on every non-alphanumeric ASCII character, which means that text like `C++`, `C#`, and `F#` all collapse to the same bare letter:
+
+<pre><code type='click-ui' language='sql'>
+SELECT
+    tokens('C++', 'splitByNonAlpha'),
+    tokens('C#', 'splitByNonAlpha'),
+    tokens('F#', 'splitByNonAlpha')
+FORMAT Vertical;
+</code></pre>
+
+```shell
+tokens('C++'⋯yNonAlpha'): ['C']
+tokens('C#',⋯yNonAlpha'): ['C']
+tokens('F#',⋯yNonAlpha'): ['F']
+```
+
+In practice this means that a search for "C#" can return a false-positive like "I am an expert in C++":
+
+<pre><code type='click-ui' language='sql'>
+SELECT hasAllTokens('I am an expert in C++', 'C#', 'splitByNonAlpha');
+</code></pre>
+
+```shell
+┌─hasAllTokens⋯yNonAlpha')─┐
+│                        1 │
+└──────────────────────────┘
+```
+
+Additionally, `hasToken` rejects needles which contain separator characters, so there is no way to search for the literal term `C++` or `C#` at all with `splitByNonAlpha`.
+
+With `splitByRegexp`, you can define the separator pattern explicitly so characters `#` and `+` are treated as part of the word:
+
+<pre><code type='click-ui' language='sql'>
+CREATE TABLE hold_my_beer
+(
+id UInt64,
+description String,
+INDEX idx description TYPE text(tokenizer = splitByRegexp('[^\p{L}\p{N}#+]+'))
+)
+ENGINE = MergeTree ORDER BY id;
+
+INSERT INTO hold_my_beer VALUES
+    (1, 'I am an expert in C++'),
+    (2, 'I am an expert in C#'),
+    (3, 'I use Arch');
+    
+SELECT id, description FROM hold_my_beer WHERE hasAllTokens(description, 'C++') OR hasAllTokens(description, 'C#');
+</code></pre>
+
+```shell
+┌─id─┬─description───────────┐
+│  1 │ I am an expert in C++ │
+│  2 │ I am an expert in C#  │
+└────┴───────────────────────┘
+```
+
+## `URL` database engine {#the_url_database_engine}
+
+### Contributed by Alexey Milovidov
+
+In last month's [26.7 release blog post](https://clickhouse.com/blog/clickhouse-release-26-07#unification-of-url) we wrote about how the `url` table function and `URL` table engines can now dispatch to the right backend based on the specified URL schema with support for file paths, S3, GCS, Azure, and HDFS in addition to HTTP.
+
+26.8 introduces a new `URL` **database engine** which allows you to specify a URL prefix and query any path on the remote server as a table.
+
+In last month's post our example showed you how you can directly query an s3 bucket with the `url` table engine:
+
+<pre><code type='click-ui' language='sql'>
+SELECT count(), avg(star_rating) FROM url('s3://datasets-documentation/amazon_reviews/amazon_reviews_2015.snappy.parquet');
+</code></pre>
+
+You can now specify `s3://datasets-documentation/amazon_reviews` as the prefix and query each of the files in the bucket as a separate table:
+
+<pre><code type='click-ui' language='sql'>
+CREATE DATABASE datasets
+ENGINE = URL('https://datasets-documentation.s3.eu-west-3.amazonaws.com/amazon_reviews/');
+USE datasets;
+
+SELECT count() FROM 'amazon_reviews_2015.snappy.parquet';
+</code></pre>
+
+```shell
+┌──count()─┐
+│ 41905631 │ -- 41.91 million
+└──────────┘
+```
+
+<pre><code type='click-ui' language='sql'>
+SELECT count() 
+FROM 'amazon_reviews_2014.snappy.parquet';
+</code></pre>
+
+```shell
+┌──count()─┐
+│ 44127569 │ -- 44.13 million
+└──────────┘
+```
+
+In `clickhouse-local` the default database is now also an overlay on top of `URL`, allowing you to conveniently query local files, URLs, S3 data, or regular tables in the default database:
+
+<pre><code type='click-ui' language='sql'>
+SELECT * FROM 'hits.tsv';
+SELECT * FROM 'https://example.com/hits.tsv';
+SELECT * FROM 's3://mybucket/hits.tsv';
+SELECT * FROM table;
+</code></pre>
+
+## `bigquery` table function and `BigQuery` table engine {#bigquery_table_function_and_bigquery_table_engine}
+
+### Contributed by Alexey Milovidov
+
+For those who have not yet migrated their workloads from BigQuery to ClickHouse, `26.8` makes it easier than ever to do so with the introduction of the `bigquery` table function and `BigQuery` table engine.
+
+Let's see how it works using an existing Stack Overflow posts BigQuery project ([setup steps](https://pastila.nl/?003f30a0/ab5c593a768497695e7e0c9957cf118d#2FvhCYiX4UryqoULfQ/vfA==GCM)).
+
+We'll use the `bigquery` table function to take a look at the data shape first. For this we'll need to pass a service key to the `bigquery` table function.
+
+Create a named collection and replace `your_service_key` below with the contents of the `.json` service key obtained from Google console:
+
+```xml
+<clickhouse>
+    <named_collections>
+        <bigquery_credentials>
+            <project>bigquery-clickhouse</project>
+            <dataset>stackoverflow</dataset>
+            <table>badges</table>
+            <service_account_key><![CDATA[your_service_key]]></service_account_key>
+        </bigquery_credentials>
+    </named_collections>
+</clickhouse>
+```
+
+Confirm your named collection is present:
+
+<pre><code type='click-ui' language='sql'>
+SELECT *
+FROM system.named_collections;
+</code></pre>
+
+```shell
+┌─name────────┬─collection───────────────────────────────────────────────────────────────────┬─source─┬─create_query─┐
+│ my_bigquery │ {'dataset':'[HIDDEN]','project':'[HIDDEN]','service_account_key':'[HIDDEN]'} │ CONFIG │              │
+└─────────────┴──────────────────────────────────────────────────────────────────────────────┴────────┴──────────────┘
+```
+
+Now use the named collection as the argument to the `bigquery` table function to see the data shape:
+
+<pre><code type='click-ui' language='sql'>
+DESCRIBE TABLE bigquery(bigquery_credentials);
+</code></pre>
+
+```shell
+Query id: dd1e8285-b286-4892-8770-eeed49ef6919
+
+┌─name─────┬─type───────────────────────────┬─default_type─┬─default_expression─┬─comment─┬─codec_expression─┬─ttl_expression─┐
+│ Id       │ Nullable(Int64)                │              │                    │         │                  │                │
+│ UserId   │ Nullable(Int64)                │              │                    │         │                  │                │
+│ Name     │ Nullable(String)               │              │                    │         │                  │                │
+│ Date     │ Nullable(DateTime64(6, 'UTC')) │              │                    │         │                  │                │
+│ Class    │ Nullable(Int64)                │              │                    │         │                  │                │
+│ TagBased │ Nullable(Int64)                │              │                    │         │                  │                │
+└──────────┴────────────────────────────────┴──────────────┴────────────────────┴─────────┴──────────────────┴────────────────┘
+
+6 rows in set. Elapsed: 0.602 sec.
+```
+
+You can now easily create the same table locally and insert the data:
+
+<pre><code type='click-ui' language='sql'>
+CREATE TABLE bq_badges
+(
+    Id       Int64,
+    UserId   Int64,
+    Name     LowCardinality(String),
+    Date     DateTime64(6, 'UTC'),
+    Class    Int64,
+    TagBased Int64
+)
+ENGINE = MergeTree
+ORDER BY (Id);
+
+INSERT INTO bq_badges SELECT * FROM bigquery(bigquery_credentials) LIMIT 5; -- I don't want to max out my credit card
+
+SELECT * FROM bq_badges;
+</code></pre>
+
+```shell
+┌───────Id─┬───UserId─┬─Name────────┬───────────────────────Date─┬─Class─┬─TagBased─┐
+│  3336768 │  1033808 │ Copy Editor │ 2012-05-03 22:19:43.187000 │     1 │        0 │
+│  6687355 │    19299 │ .net        │ 2013-06-15 03:03:52.690000 │     1 │        1 │
+│ 12885730 │  3892259 │ Copy Editor │ 2015-01-31 14:43:59.373000 │     1 │        0 │
+│ 39830489 │ 10659482 │ Copy Editor │ 2020-12-09 11:16:11.410000 │     1 │        0 │
+│ 40413130 │  1386551 │ Copy Editor │ 2021-01-29 18:00:54.783000 │     1 │        0 │
+└──────────┴──────────┴─────────────┴────────────────────────────┴───────┴──────────┘
+
+5 rows in set. Elapsed: 0.005 sec.
+```
+
+
+## S3 Tables {#s3_tables}
+
+### Contributed by Konstantin Vedernikov
+
+ClickHouse 26.8 adds write support for Amazon S3 Tables, AWS’s managed service for Iceberg tables. Alongside querying existing tables, you can now insert data and create new tables.
+
+First, let’s enable the Iceberg catalog integration and writes:
+
+<pre><code type='click-ui' language='sql'>
+SET allow_database_iceberg = 1;
+SET allow_insert_into_iceberg = 1;
+</code></pre>
+
+With AWS credentials configured to access your table bucket, we can connect using the `DataLakeCatalog` database engine. Replace the region and warehouse ARN below with your own:
+
+<pre><code type='click-ui' language='sql'>
+CREATE DATABASE tables
+ENGINE = DataLakeCatalog(
+    'https://s3tables.us-east-1.amazonaws.com/iceberg'
+)
+SETTINGS
+    catalog_type = 's3tables',
+    region = 'us-east-1',
+    warehouse = 'arn:aws:s3tables:us-east-1:123456789012:bucket/analytics';
+</code></pre>
+
+We can then list the available tables and query one. For example, if your bucket contains an `events` table in the `ns` namespace:
+
+<pre><code type='click-ui' language='sql'>
+SHOW TABLES FROM tables;
+
+SELECT *
+FROM tables.`ns.events`
+LIMIT 10;
+</code></pre>
+
+We can now also write to the table, supplying values that match its schema:
+
+<pre><code type='click-ui' language='sql'>
+-- Replace … with values matching your table's columns.
+INSERT INTO tables.`ns.events` VALUES (…);
+</code></pre>
+
+
+## Snowflake Horizon {#snowflake_horizon}
+
+### Contributed by Melvyn Peignon
+
+ClickHouse 26.8 adds support for reading and writing Iceberg tables through the Snowflake Horizon catalog. ClickHouse reads the underlying data files directly from object storage.
+
+Let’s enable the Iceberg catalog integration and writes, then connect to the catalog. Replace the account endpoint, database name, personal access token, and Snowflake role below with your own. The role needs access to the Iceberg tables you want to use.
+
+<pre><code type='click-ui' language='sql'>
+SET allow_database_iceberg = 1;
+SET allow_insert_into_iceberg = 1;
+
+CREATE DATABASE horizon
+ENGINE = DataLakeCatalog(
+    'https://&lt;org&gt;-&lt;account&gt;.snowflakecomputing.com/polaris/api/catalog'
+)
+SETTINGS
+    catalog_type = 'horizon',
+    warehouse = 'ICEBERG_DB',
+    catalog_credential = '&lt;PAT&gt;',
+    auth_scope = 'session:role:&lt;ROLE&gt;',
+    vended_credentials = 1;
+</code></pre>
+
+We can then list the available tables and query one. For example, if your catalog contains a `trades` table in the `schema` namespace:
+
+<pre><code type='click-ui' language='sql'>
+SHOW TABLES FROM horizon;
+
+SELECT *
+FROM horizon.`schema.trades`
+LIMIT 10;
+</code></pre>
+
+To insert data, supply values that match the table’s schema:
+
+<pre><code type='click-ui' language='sql'>
+-- Replace … with values matching your table's columns.
+INSERT INTO horizon.`schema.trades` VALUES (…);
+</code></pre>
+
+ClickHouse commits the changes through the Horizon catalog.
+
+## Puffin file format {#puffin_file_format}
+
+### Contributed by Konstantin Vedernikov
+
+ClickHouse 26.8 adds support for the Puffin file format, which Apache Iceberg uses to store statistics and deletion vectors.
+
+Let’s see how this works using a small sample file from the ClickHouse test suite:
+
+<pre><code type='click-ui' language='sql'>
+SELECT referenced_data_file, deleted_rows
+FROM url(
+    'https://raw.githubusercontent.com/ClickHouse/ClickHouse/693dee22dda0d7ff23343c326754ccfc24f3237f/tests/queries/0_stateless/data_puffin/file_properties_ok.puffin',
+    'Puffin'
+);
+</code></pre>
+
+```shell
+┌─referenced_data_file───────────┬─deleted_rows─┐
+│ /data/table/part-00000.parquet │ [2,5]        │
+└───────────────────────────────┴──────────────┘
+```
+
+This tells us that row positions 2 and 5 in the referenced Parquet file are marked as deleted. We don’t need access to that Parquet file—the deletion information is stored in the Puffin file itself. This can help explain why rows present in a data file don’t appear when querying the Iceberg table.
+
+We can also use the `PuffinMetadata` format to inspect the blob’s type and properties:
+
+<pre><code type='click-ui' language='sql'>
+SELECT blob_type, properties
+FROM url(
+    'https://raw.githubusercontent.com/ClickHouse/ClickHouse/693dee22dda0d7ff23343c326754ccfc24f3237f/tests/queries/0_stateless/data_puffin/file_properties_ok.puffin',
+    'PuffinMetadata'
+);
+</code></pre>
+
+For this file, the blob type is `deletion-vector-v1`, and its properties include a `cardinality` of `2`, matching the two deleted row positions above.
+
+
+## Prefetching manifest files in Iceberg {#prefetching_manifest_files_in_iceberg}
+
+### Contributed by Asya Shneerson and Konstantin Vedernikov
+
+Before reading data from an Iceberg table, ClickHouse reads manifest files that describe its data and delete files. Fetching and processing this metadata can add noticeable startup time, especially when it requires many requests to object storage.
+
+In 26.8, ClickHouse prefetches the next manifest file while parsing the current one, overlapping storage reads with CPU work.
+
+Delete manifests are also read and decoded concurrently. Since these must be processed before reading data files, this helps queries on tables with many delete files start faster. The `iceberg_delete_manifest_decode_concurrency` setting controls how many delete manifests are decoded at once and defaults to `4`.
+
+This release also fixes the S3 bucket-region cache for data lake catalogs, avoiding repeated requests to determine a bucket’s region.
+
+
+## Native Parquet improvements {#native_parquet_improvements}
+
+### Contributed by Alexey Milovidov and Vasily Chekalkin
+
+ClickHouse 26.8 brings several improvements to Parquet reading, helping queries skip unnecessary data.
+
+For queries with `ORDER BY` and `LIMIT`, ClickHouse can read the columns needed for sorting and filtering first, then fetch the remaining columns only for rows that survive the limit. This optimization is enabled by default.
+
+Let’s find the ten latest events in a public Parquet dataset, using `WatchID` to break ties:
+
+<pre><code type='click-ui' language='sql'>
+SELECT URL, Title
+FROM s3(
+    'https://clickhouse-public-datasets.s3.amazonaws.com/hits_compatible/hits.parquet',
+    NOSIGN
+)
+ORDER BY EventTime DESC, WatchID DESC
+LIMIT 10
+SETTINGS query_plan_optimize_lazy_materialization_for_object_storage = 1;
+</code></pre>
+
+We can compare this with lazy reading disabled by setting `query_plan_optimize_lazy_materialization_for_object_storage` to `0`. In repeated checks on ClickHouse 26.8.2.7, the query read approximately 6.6–6.7 GB from S3 with the optimization disabled and 1.5 GB with it enabled, returning the same ten rows.
+
+Dictionary-based filtering also helps ClickHouse skip data for equality and `IN` conditions. Let’s find rows matching a particular phone model:
+
+<pre><code type='click-ui' language='sql'>
+SELECT count()
+FROM s3(
+    'https://clickhouse-public-datasets.s3.amazonaws.com/hits_compatible/hits.parquet',
+    NOSIGN
+)
+WHERE MobilePhoneModel = 'GT-C3262';
+</code></pre>
+
+```shell
+┌─count()─┐
+│     200 │
+└─────────┘
+```
+
+When a column chunk is fully dictionary-encoded, ClickHouse can skip its row group if the requested value is absent from the dictionary. This helps even when min/max statistics cannot rule out a match and Bloom filters are unavailable.
+
+With dictionary filtering enabled, this query processed 12 data pages, compared with 226 when disabled. Both queries returned `200`. The `input_format_parquet_dictionary_filter_push_down` setting defaults to `1048576` (a 1 MiB dictionary-page limit); setting it to `0` disables the optimization.
+
+GeoParquet queries also benefit from spatial pruning. ClickHouse uses bounding-box information to skip irrelevant row groups and pages, and applies spatial predicates during row reading.
+
+## GROUP BY performance improvements {#group_by_performance_improvements}
+
+### Contributed by Nihal Z. Miaji, Dmitriy Terenichev, Konstantin Bogdanov, Harikrishnan Prabakaran
+
+The 26.8 release also sees a series of performance improvements for GROUP BYs, including:
+
+* A new algorithm for parallel `GROUP BY` that adaptively combines the approaches used by the merging and splitting aggregators.  
+* The 26.7 release fused `GROUP BY` with `ORDER BY LIMIT` for tables sorted by key. 26.8 does it for any read order, pruning groups that cannot appear in the result.  
+* `GROUP BY` with a single-string key now uses much smaller hash table cells.  
+* The final merge step in parallel `GROUP BY` queries now uses multiple threads, preventing it from becoming a single-threaded bottleneck.
+
+We will go into more detail about these optimizations in a separate post.
+
+## Joins {#joins}
+
+### Contributed by Han Fei, Anton Popov, Robert Schulze, Alexey Milovidov, Vladimir Cherkasov, Alexander Gololobov
+
+And as with every release, we have more improvements around joins, including:
+
+* Column statistics are now built on `INSERT` by default for small tables, resulting in a 29% improvement across all TPC-H benchmarks.  
+* JOINS whose condition was two inequalities used to be executed as a filtered `CROSS JOIN`. They will now use the sort-based `IEJoin` algorithm instead.  
+* A new merge join algorithm, `parallel_full_sorting_merge`, that runs on all cores. The input is sharded by the keys' hash into independent per-shard merge joins.  
+* A cost-based optimizer for distributed query plans. The new cost-based optimizer uses cardinality estimates to choose how distributed joins, aggregations, sorting, and data movement should be executed.
+
+We’ll also write in more detail about these features in a separate post.
+
+
+---
+
+## Get started today
+
+Interested in seeing how ClickHouse works on your data? Get started with ClickHouse Cloud in minutes and receive $300 in free credits.
+
+[Sign up](https://console.clickhouse.cloud/signUp?loc=blog-cta-1966-get-started-today-sign-up&utm_blogctaid=1966)
+
+---
 
 ---
 
