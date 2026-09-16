@@ -1,6 +1,455 @@
 # ClickHouse Blogs
-Last updated: 2026-09-15 11:15:34 UTC
-Total blogs: 974
+Last updated: 2026-09-16 10:57:44 UTC
+Total blogs: 976
+
+---
+
+## Introducing ClickHouse's new TimeSeries Engine: Your drop-In Prometheus replacement
+Published: 2026-09-15T14:00:00+00:00
+URL: https://clickhouse.com/blog/introducing-promql
+
+---
+title: "Introducing ClickHouse's new TimeSeries Engine: Your drop-In Prometheus replacement"
+date: "2026-09-16T10:28:15.374Z"
+author: "James Cunningham"
+category: "Product"
+excerpt: "ClickHouse PromQL support lets you store Prometheus metrics in ClickHouse Cloud, query them using familiar PromQL, and bring metrics together with your logs and traces without rewriting queries in SQL."
+---
+
+# Introducing ClickHouse's new TimeSeries Engine: Your drop-In Prometheus replacement
+
+> **TL;DR:** Store and query Prometheus metrics in ClickHouse Cloud without rewriting the PromQL queries your team already relies on. The private preview lets you send metrics via Prometheus remote write, then query them with PromQL in ClickStack, Grafana, or ClickHouse.
+
+Today, we are announcing the private preview of PromQL and the `TimeSeries` table engine on ClickHouse Cloud, alongside PromQL support in ClickStack.
+
+ClickHouse is already where a lot of teams keep their logs and traces. Now, teams using Prometheus can store and query metrics in the same place without rewriting their existing PromQL queries in SQL.
+
+Send metrics through Prometheus remote write, and they land in a `TimeSeries` table built on a ClickHouse storage engine designed specifically for time-series data. Query them with PromQL through ClickStack, Grafana, or ClickHouse. The language stays the same. The storage can change.
+
+But supporting PromQL is about more than accepting new query syntax. The language reflects decisions made throughout the Prometheus metric lifecycle, from how metrics are exposed and scraped to how they are encoded and interpreted. To understand what ClickHouse needs to preserve, we first need to understand why Prometheus metrics benefit from their own query language.
+
+You can sign up for the [PromQL private preview waitlist](https://clickhouse.com/cloud/promql-support-waitlist).
+
+
+<iframe width="768" height="432" src="https://www.youtube.com/embed/pNE_Ul5ly5s?si=Cl86O02NUJkXONSZ" title="YouTube video player" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" referrerpolicy="strict-origin-when-cross-origin" allowfullscreen></iframe>
+
+## Why do Prometheus metrics benefit from their own query language?
+
+PromQL isn't shorthand for SQL. The reason for PromQL’s existence sits in the shape of the data and the decisions made in the design of Prometheus itself; and as a metrics spec. Each decision is built on top of a decade-tenured design to be able to handle the scale and coordination required in observing distributed systems.
+
+Prometheus began at [SoundCloud in 2012](https://promlabs.com/blog/2022/11/24/prometheus-turns-10/), built by engineers who had just left Google and wanted the same properties they had used internally: a dimensional data model, a pull-based collection path, and a query language that understood both. Julius Volz wrote the first form of PromQL that same year, as part of a prototype that could already scrape, store, and graph. The [public announcement](https://developers.soundcloud.com/blog/prometheus-monitoring-at-soundcloud/) came in January 2015. The language and the types have been a pair ever since, which is why a reader who meets PromQL today is meeting a data model that is more than a decade old.
+
+The model spread for a reason. In May 2016, the Cloud Native Computing Foundation [accepted Prometheus as its second hosted project](https://prometheus.io/blog/2016/05/09/prometheus-to-join-the-cloud-native-computing-foundation/), immediately after Kubernetes. Prometheus had been built for an environment where instances are short-lived, and identity is a set of labels rather than a hostname. That is the environment Kubernetes went on to create everywhere. A generation of platform teams inherited both at once. That is why so many organizations run PromQL dashboards and alerts that they never deliberately chose.
+
+To understand why Prometheus metrics benefit from their own query language, we must understand their lifecycle. Let’s walk through the lifecycle of a Prometheus metric:
+
+![Prometheus metric lifecycle](https://clickhouse.com/uploads/blogimage1_a714783ac5.png)
+
+### Presented for Pulling
+
+In the Prometheus design, an application does not send its metrics explicitly to a receiver. It exposes its current state on an HTTP endpoint and waits. There are no timestamps in that payload, no history, and no promise that anyone will ever read it.
+
+This single decision shapes almost everything about how Prometheus data is collected, stored, and queried. An instrumented service needs no delivery buffer, no backend address, and no way to handle a slow or unavailable monitoring system. It simply exposes its current state. This makes applications easy to instrument by moving the harder work, such as collection, timing, storage, and failure handling, downstream.
+
+The tradeoff is that the application knows nothing about time, so every question about time is answered by something else, somewhere else. What begins as a simple collection choice becomes the foundation for the whole system.
+
+### Scraped for Collection
+
+A collector pulls each endpoint on an interval, and the timeline is created at that moment. The application contributes a value. Values are either monotonically incremented as a counter, arbitrarily incremented and decremented as a gauge, bucketed measurements as a histogram, or aggregated measurements as a summary. You can find more about the four core Prometheus metric types in their official documentation [here](https://prometheus.io/docs/concepts/metric_types/). Yet, they are all void of timestamps. It is the collector that contributes the timestamp; specifically at scrape time.
+
+Pulling gives you target discovery, a health signal in the scrape itself, and a design that naturally protects applications in the event of a metrics system degradation. The tradeoff is that it does not give you a regular timeline. Intervals drift under load, scrapes fail and leave gaps, and targets appear and disappear with every deployment. Two series describing the same request path can hold a different number of samples over the same window.
+
+### Encoded for Storage
+
+Because a scrape carries only the current state, the type has to carry the rest of the meaning. This is why Prometheus types look unusual next to ordinary numeric columns.
+
+A gauge is the straightforward case, meaningful exactly as it is read. A counter is not. It only ever increases, it means nothing except as a difference between two reads, and it returns to zero when the process restarts. A histogram is even more complex: One scrape cannot carry a distribution, so a histogram is published as a family of cumulative bucket series sharing an `le` label (a shortening of the phrase “less than or equal to”), and the distribution exists only once those siblings are recombined.
+
+The type is a contract. It states how the number is allowed to be interpreted, and it carries information that a column definition cannot.
+
+### Queried for Observation
+
+By the time a query runs, the previous three decisions have already set its terms.
+
+Take `irate(http_requests_total[5m])`. The reset has to be read as a restart rather than a drop of several million. The samples rarely sit on the window boundary, so the result has to reach the edges of the range by extrapolation. The spacing varies, so the window cannot assume a fixed number of samples. Each of those follows directly from presentation, scraping, and encoding.
+
+`histogram_quantile(0.95, ...)` inherits the same debt from the other direction. It regroups the sibling bucket series by `le`, combines their counts in order, and interpolates inside the bucket holding the target rank.
+
+**This is why Prometheus metrics benefit from their own language; and why PromQL exists as a language of its own.** It holds the accumulated knowledge of a data model built for unpredictable delivery, and it applies that knowledge to every query without asking the person at the keyboard to remember any of it.
+
+Before this preview, there was no standard way to query Prometheus metrics in ClickHouse with PromQL. Teams either rewrote their queries in SQL or built and maintained their own PromQL-to-SQL translation layer.
+
+All of this is expressible in SQL, but translating it correctly is difficult. Every PromQL function comes with boundary conditions, and even a subtle difference in reset handling can produce a query that looks plausible but returns different results. During a migration, those inconsistencies undermine confidence at exactly the wrong moment.
+
+Evaluating PromQL inside ClickHouse puts that responsibility in the server. It lets us preserve the language’s exact semantics and produce the same results users already expect from Prometheus. That consistency gives teams confidence that they can migrate without quietly changing the meaning of their dashboards, alerts, or queries. How ClickHouse achieves this efficiently is a subject in its own right, so we will cover it in a separate post.
+
+We’re obsessed with performance, and that extends past the boundaries of SQL. It’s not just our responsibility to transpile PromQL to SQL, but to transpile PromQL into *performant* SQL, and we gladly accept that responsibility.
+
+## What is in the private preview?
+
+<!-- VIDEO 1: Insert the YouTube video from Mark here -->
+
+A Prometheus deployment does four jobs. Something scrapes targets, something stores the samples, something answers queries, and something evaluates rules.
+
+**This preview takes over storage and querying.**
+
+Collection is unchanged. Keep the Prometheus servers, agents, or OpenTelemetry collectors you already run, and keep the scrape configuration you tuned. ClickHouse accepts what they produce over the Prometheus remote-write v1 protocol.
+
+The samples land in a `TimeSeries` table, which stores metric metadata, a set of labels, and timestamped values. Retrieval is where PromQL arrives. Any tool that already targets the Prometheus HTTP API can point at the service and query it. A Prometheus server can read the table as a remote-read backend. `clickhouse-client` evaluates PromQL directly through its `promql` dialect. SQL reaches it through the `prometheusQuery` and `prometheusQueryRange` table functions. All four run the same PromQL implementation inside the server, so a query means the same thing wherever you send it.
+
+And finally, if you are looking for an alert evaluation tool to bring your Alerting Rules and Recording Rules into ClickHouse, stay tuned for a later announcement.
+
+![Private preview architecture for Prometheus metrics in ClickHouse](https://clickhouse.com/uploads/blogimage2_3e3b048848.png)
+
+## How do I get metrics in?
+
+Once your ClickHouse Cloud service has been upgraded by our support team, create a `TimeSeries` table. The column list is optional, and the default is a reasonable place to start.
+
+```sql
+CREATE DATABASE prometheus;
+CREATE TABLE prometheus.metrics ENGINE = TimeSeries;
+```
+
+If you run Prometheus, add the endpoint as a remote-write target:
+
+```yaml
+remote_write:
+  - url: https://your-service.clickhouse.cloud:8443/prometheus/api/v1/write?database=prometheus&table=metrics
+    basic_auth:
+      username: default
+      password: <password>
+```
+
+If you collect metrics with the OpenTelemetry Collector, use the Prometheus remote-write exporter:
+
+```yaml
+extensions:
+  basicauth/demo:
+    client_auth: { username: default, password: "<password>" }
+...
+exporters:
+  prometheusremotewrite:
+    endpoint: https://your-service.clickhouse.cloud:8443/prometheus/api/v1/write?database=prometheus&table=metrics
+    auth:
+      auth: { authenticator: basicauth/demo }
+```
+
+## How do I query it?
+
+There are many ways to query a Prometheus server, all of which have their pros and cons. Here are all the ways you can do that:
+
+### Via Grafana
+
+Point a Grafana Prometheus data source at the service. The URL stops before `/api/v1`, and the table selection travels as a query parameter:
+
+```yaml
+apiVersion: 1
+datasources:
+  - name: ClickHouse Prometheus
+    type: prometheus
+    access: proxy
+    url: https://your-service.clickhouse.cloud:8443/prometheus
+    basicAuth: true
+    basicAuthUser: default
+    jsonData:
+      httpMethod: GET
+      customQueryParameters: database=prometheus&table=metrics
+```
+
+### Via Curl
+
+```bash
+curl --user default:<password> --get \
+  "https://your-service.clickhouse.cloud:8443/prometheus/api/v1/query" \
+  --data-urlencode "query=rate(http_requests_total[5m])" \
+  --data-urlencode "database=prometheus" \
+  --data-urlencode "table=metrics"
+```
+
+### Via the clickhouse-client CLI
+
+```bash
+clickhouse-client \
+  --dialect promql \
+  --promql_database prometheus \
+  --promql_table metrics \
+  --query 'rate(http_requests_total[5m])'
+```
+
+### Via SQL in a ClickHouse session
+
+```sql
+SELECT
+    tags['service'] AS service,
+    time_series
+FROM prometheusQueryRange(
+    prometheus.metrics,
+    'sum by (service) (rate(http_requests_total[5m]))',
+    now() - INTERVAL 1 HOUR,
+    now(),
+    INTERVAL 1 MINUTE
+);
+```
+
+## and now announcing, via ClickStack
+
+ClickStack exposes a `TimeSeries` table as a PromQL data source as part of the same private preview. Once the source is configured, you write PromQL in the chart editor, and ClickStack sends it through the Prometheus-compatible interface backed by ClickHouse.
+
+The preview covers charting, dashboards, series queries, and scalar queries. ClickStack can also proxy PromQL to an external Prometheus-compatible endpoint, so metrics stored outside ClickHouse can be read through the same interface.
+
+The private preview focuses on exploring metrics through charts and dashboards. You write PromQL directly in the chart editor; a visual PromQL query builder and alerting on PromQL queries are not yet supported.
+
+ClickStack also supports variables inside PromQL queries, allowing you to pass filter values into your expressions and coordinate filtering across metrics, logs, and traces. We’re actively expanding this integration.
+
+
+<video autoplay="0" muted="0" loop="0" controls="1">
+  <source src="https://clickhouse.com/uploads/export_1789394191651_web_louder_5c28d31f3b.mp4" type="video/mp4" />
+</video>
+
+
+<!-- IMAGE 3: Insert the ClickStack PromQL image here -->
+
+For ingestion, metrics destined for a `TimeSeries` table need the Prometheus remote-write pipeline shown above. ClickStack’s standard OTLP pipeline does not populate these tables. If you already use an OpenTelemetry Collector, configure its Prometheus remote-write exporter to send metrics to the table.
+
+> **Note:** ClickStack also supports OpenTelemetry metrics through a dedicated source type, which remains unchanged. In the future, we’ll explore supporting OpenTelemetry metrics via the `TimeSeries` engine - thus unifying Prometheus and OpenTelemetry metrics under a single source type and enabling querying of OTel metrics with PromQL.
+
+## What do you plan to support in the future?
+
+**Dialect Coverage** coverage is over 85%, and we are marching to 100% in the order that unblocks the most dashboards at a time. If your favorite function or operator does not yet fall into support yet, reaching out to us with your unsupported queries is the best way for that support to land. You can find our entire list of what is and is not supported in our documentation [here](https://clickhouse.com/docs/reference/functions/table-functions/prometheusQueryRange).
+
+**Downsampling** is a topic that comes up, and is something that exists at a higher level of complexity beside slapping a TTL on a table and calling it feature-complete. We want to release a downsampling feature that does not store copies of your data at coarser granularity, but instead produces configurable compaction when the time comes.
+
+**Native Histograms** are a newly introduced data structure in the Prometheus ecosystem, and this new data structure demands appropriate attention from us to get it right on the first try.
+
+**RecordingRules and AlertingRules** are a core component of Prometheus ecosystems, and we have plans to announce our solution for migrating those rules in a later blog post.
+
+**OpenMetrics** and **remote-write v2 protocols** are starting to emerge in similar technologies, and we plan to expand our list of supported protocols, along with supporting a direct insert method via our official [OTEL ClickHouse Exporter](https://github.com/open-telemetry/opentelemetry-collector-contrib/blob/main/exporter/clickhouseexporter/README.md).
+
+## Where can I read more?
+
+You can find our resources for the PromQL interfaces in our official docs, [here](https://clickhouse.com/docs/concepts/features/interfaces/prometheus), and our list of supported PromQL functions and operators [here](https://clickhouse.com/docs/reference/functions/table-functions/prometheusQueryRange#supported-promql-features).
+
+We will be covering the technical internals of the `TimeSeries` table engine in a later blog post, but if you would like a preview, you can read our official docs on the table engine [here](https://clickhouse.com/docs/engines/table-engines/special/time_series).
+
+Any questions you may have, curiosities you seek, or feedback you'd like to provide can be given in the #promql channel in our community Slack.
+
+## How do I join the private preview?
+
+This preview brings Prometheus metrics into ClickHouse for storage and querying while preserving the PromQL semantics users already expect.
+
+The private preview is open today, and places are limited. [Register here](https://clickhouse.com/cloud/promql-support-waitlist) and tell us about:
+
+- The size and cardinality of your metrics estate.
+- The PromQL your dashboards and alerts actually contain.
+- What would have to be true for you to move off the metrics system you run today.
+
+If you already work with a ClickHouse account team, mention the preview to them as well. To learn more about the feature, read the [PromQL documentation](https://clickhouse.com/docs/concepts/features/interfaces/prometheus).
+
+Your feedback will help shape what comes next.
+
+Happy monitoring!
+
+
+
+
+
+
+---
+
+## Replica-aware routing public beta
+Published: 2026-09-15T13:15:00+00:00
+URL: https://clickhouse.com/blog/replica-aware-routing-public-beta
+
+---
+title: "Replica-aware routing public beta"
+date: "2026-09-15T16:52:38.892Z"
+author: "Amy Chen and Jan Mensch"
+category: "Product"
+excerpt: "Temporary tables and named sessions live on a single ClickHouse replica, so a follow-up query routed elsewhere can't see them. Replica-aware routing pins your requests to the same replica over HTTP or the native protocol — and here's how we built it."
+---
+
+# Replica-aware routing public beta
+
+## Introduction {#introduction}
+
+Imagine you create a temporary table, then run a query to read from it one second after, and it fails saying the table does not exist.
+
+This isn't a bug in the usual sense. For services with more than one replica, your ClickHouse temporary tables and named sessions only exist on the replica they were created on. It's possible that subsequent queries get load balanced to a different replica and then it's like it was never created.
+
+This is why we built replica-aware routing: so you always have access. Replica-aware routing does one simple thing: it sends your requests to the same replica. Alongside temporary session and table access, it opens up the door for experiences like read-after-write consistency.
+
+Today we want to show you how to use it, how we built it, and of course, when to reach for it. Replica-aware routing is now available in Public Beta to Enterprise customers, coming to an org near you.
+
+## How it works {#how_it_works}
+
+Let's put it in the use case of read-after-write consistency. If you're using HTTP, all you have to do is send your queries with a header of your choice. For native, all you need to do is overwrite the SNI value.
+
+<pre><code type='click-ui' language='bash'>
+### Replica-aware routing over HTTP
+
+# Write, tagged with a routing key
+echo "INSERT INTO events VALUES (now(), 'signup')" | curl \
+  -H 'X-ClickHouse-User: default' \
+  -H 'X-ClickHouse-Key: &lt;password&gt;' \
+  -H 'X-ClickHouse-Replica-Tag: amy_test' \
+  'https://&lt;host&gt;:8443/' -d @-
+
+# Read it back on the same replica, using the same tag
+echo 'SELECT count() FROM events' | curl \
+  -H 'X-ClickHouse-User: default' \
+  -H 'X-ClickHouse-Key: &lt;password&gt;' \
+  -H 'X-ClickHouse-Replica-Tag: amy_test' \
+  'https://&lt;host&gt;:8443/' -d @-
+
+### Replica-aware routing over native
+
+# Write with routing key
+clickhouse client --user default \
+	--password &lt;password&gt; \
+	--host &lt;host&gt; \
+	--query "INSERT INTO events VALUES (now(), 'signup')" \
+	--secure \
+	--tls-sni-override jan_key.sticky.&lt;host&gt;
+
+# Read with routing key
+clickhouse client --user default \
+	--password &lt;password&gt; \
+	--host &lt;host&gt; \
+	--query 'SELECT count() FROM events' \
+	--secure \
+	--tls-sni-override jan_key.sticky.&lt;host&gt;
+</code></pre>
+
+That's it 🙂 The requests carry the same `X-ClickHouse-Replica-Tag` or SNI override, so they land on the same replica, and the read sees the write, even if the other replicas are still catching up on replication. Use a different value and it hashes independently, and may land somewhere else.
+
+## When should you reach for it? {#when_should_you_reach_for_it}
+
+Like any tool, replica-aware routing is worth pulling out for specific jobs. There are three that come up again and again.
+
+**You are using temporary tables or named sessions.** Session-scoped objects only exist on the replica that made them. Reuse one routing key for the whole session and your queries execute on the same replica.
+
+**You want your replica caches to stay warm.** When the same replica keeps serving the same workload, its local caches stay warm: filesystem cache, decompressed blocks, lazily loaded primary keys and indexes, the query cache. (Honest take: our distributed cache is the better long term answer for this, but there is still valuable cache in the replica's memory.)
+
+**Consistency with read after write.** On a multi-replica service, a write on one replica may not be visible on the others until replication catches up. With replica-aware routing, you can read your own write even while the other replicas are still catching up. This is quite handy for interactive apps and for ETL jobs that validate an insert before moving on. Related to this, if you have changed your schema and it hasn't synced across the replicas, using replica-aware routing will ensure you insert to the new schema to avoid an error.
+
+## How we built this {#how_we_built_this}
+
+### Looking for a key to hash
+
+Our proxy layer is built on Istio and Envoy. Istio (more precisely Istio Pilot) manages the configuration, and Envoy is the data plane, which is the proxy that actually moves the bytes.
+
+Our initial approach to sticky routing was with URL-based subdomains. However this method did not scale because of certificate limitations from our cert provider. After brainstorming, we came across the idea that if we ran an L7 proxy instead of an L4 one, Envoy can read into the request itself, like a query parameter, and route based on that. L4 proxies don't work because Envoy only sees TCP packets.
+
+The first approach was via `session_id` but moved off of it because [ClickHouse only allows a single query at a time within one session](https://clickhouse.com/docs/concepts/features/interfaces/http#using-clickhouse-sessions-in-the-http-protocol). That is definitely not ideal!
+
+As an alternative to the `session_id`, we went with a header that ClickHouse simply ignores. We use the [`X-ClickHouse` namespace](https://clickhouse.com/docs/reference/functions/regular-functions/other-functions#getClientHTTPHeader) for ClickHouse-specific settings. Customers pass a value via the header → Envoy uses it for consistent hashing → the request routes to one of the replicas.
+
+You can test this out yourself. The command below calls your instance repeatedly and prints the hostname of the replica that served it. With HTTP-based sticky routing enabled, you will always see the same replica. Make sure you have at least two replicas in your cluster first. If you only have one, the demo is a lot less impressive 😉
+
+<pre><code type='click-ui' language='bash'>
+while true; do
+  echo 'select hostname()' | curl \
+    'https://abcdefghij.eu-west-1.aws.clickhouse.cloud:8443' \
+    -H 'X-ClickHouse-Replica-Tag: some-string' \
+    -H 'X-ClickHouse-User: YOUR-USER' \
+    -H 'X-ClickHouse-Key: YOUR-PASSWORD' \
+    -d @-
+done
+</code></pre>
+
+### Native support
+
+But we couldn't stop with just HTTP. Our customers also connect via the native connection.
+
+Recall the original limitation: provisioning a new cert for every instance that uses sticky routing does not scale. But what if we could just reuse the cert we already have?
+
+The ClickHouse client provides a way to override the Server Name Indication (SNI).
+
+<pre><code type='click-ui' language='bash'>
+clickhouse client --help | grep tls-sni-override
+#  --tls-sni-override arg   Override the SNI host name used for TLS connections
+</code></pre>
+
+What if during your TLS connection, you could validate the global cert, but use the SNI for routing? This is exactly the idea behind our native support.
+
+<pre><code type='click-ui' language='bash'>
+while true; do
+  clickhouse client \
+    --host abcdefghij.eu-north-1.aws.clickhouse.cloud \
+    --secure \
+    --tls-sni-override some_string.sticky.abcdefghij.eu-north-1.aws.clickhouse.cloud \
+    --query 'select hostname()'
+done
+</code></pre>
+
+`--host` is the host we will validate in the cert. `--secure` indicates that this connection should use TLS. `--tls-sni-override` is what we use for routing. The client will validate the regional certificate. In this case, we also send the SNI value which Envoy then hashes and uses for routing. This is the same ring-hash-on-hostname mechanism as the original approach with a new trick: `--tls-sni-override` decouples the hostname we route on (the SNI) from the hostname we validate the cert against (`--host`).
+
+This is what this looks like in Golang:
+
+<pre><code type='click-ui' language='go'>
+tlsConfig.ServerName = sniOverride
+// disable the default check. If we don't disable then our 
+// client will try to match some_string.sticky.abcdefghij.eu-north-1.aws.clickhouse.cloud
+// which the cert does not cover
+tlsConfig.InsecureSkipVerify = true 
+
+tlsConfig.VerifyPeerCertificate = func(rawCerts [][]byte, _ [][]*x509.Certificate) error {
+	// get all the certs
+	certs := make([]*x509.Certificate, 0, len(rawCerts))
+	for _, raw := range rawCerts {
+		cert, err := x509.ParseCertificate(raw)
+		if err != nil {
+			return err
+		}
+		certs = append(certs, cert)
+	}
+
+	// error if no certs
+	if len(certs) == 0 {
+		return fmt.Errorf("no certificate presented by %s", dialHost)
+	}
+
+	// check the --host instead of the SNI value
+	// pool is for intermediate certs
+	opts := x509.VerifyOptions{DNSName: dialHost, Intermediates: x509.NewCertPool()}
+
+	for _, cert := range certs[1:] {
+		opts.Intermediates.AddCert(cert)
+	}
+	
+	// validate the leaf cert, which 
+	// abcdefghij.eu-north-1.aws.clickhouse.cloud
+	_, err := certs[0].Verify(opts)
+	return err
+}
+</code></pre>
+
+Now you have two ways to use replica-aware routing. One over HTTP with a header, the other natively with the SNI override.
+
+## A few things to keep in mind {#a_few_things_to_keep_in_mind}
+
+A couple of honest caveats so there are no surprises in production.
+
+- **Stickiness is best-effort, not a guarantee.** Anything that reshapes the service could break the routing and have the queries land on a different replica. This includes upgrades, restarts, and scaling in or out. When that happens, a key can move to a different replica, and any temporary tables or session settings you were relying on will need to be recreated. A quick `SELECT hostName()` always tells you where you are.
+- **It is not workload isolation.** Replica routing controls which replica handles a request, but that replica still serves other traffic.
+- **Enterprise only.** This feature is rolling out to Enterprise tier plans, available via your service settings page. If it hasn't hit your account yet, feel free to open up a support ticket to get it turned on earlier.
+
+![](https://clickhouse.com/uploads/replica_aware_routing_sep2026_image1_bce123ed79.png)
+
+## TLDR {#tldr}
+
+Now, if you just want the gist of it, here you go :) Replica-aware routing routes your queries to the same replicas. You can access it via HTTP or native connection if you're on an Enterprise tier account, both on standard ClickHouse Cloud accounts and BYOC. Just remember stickiness is best-effort. See the [documentation](https://clickhouse.com/docs/products/cloud/features/infrastructure/replica-aware-routing) for more info. Happy querying!
+
+
+---
+
+## Get started today
+
+Interested in seeing how ClickHouse works on your data? Get started with ClickHouse Cloud in minutes and receive $300 in free credits.
+
+[Sign up](https://console.clickhouse.cloud/signUp?loc=blog-cta-1992-get-started-today-sign-up&utm_blogctaid=1992)
+
+---
 
 ---
 

@@ -1,5 +1,5 @@
 {
-  "last_sync": "2026-09-15T11:15:34.564711Z",
+  "last_sync": "2026-09-16T10:57:45.055379Z",
   "processed_blogs": {
     "https://clickhouse.com/blog/clickhouse-raises-400-million-series-d-acquires-langfuse-launches-postgres": {
       "title": "ClickHouse raises $400M Series D led by Dragoneer to accelerate expansion across analytics and AI infrastructure",
@@ -5844,9 +5844,21 @@
       "pub_date": "2026-09-10T00:00:00+00:00",
       "file_path": "blogs/2026-09-10-clickhouse-release-26-8.md",
       "processed_at": "2026-09-12T10:13:18.333871Z"
+    },
+    "https://clickhouse.com/blog/introducing-promql": {
+      "title": "Introducing ClickHouse's new TimeSeries Engine: Your drop-In Prometheus replacement",
+      "pub_date": "2026-09-15T14:00:00+00:00",
+      "file_path": "blogs/2026-09-15-introducing-clickhouse-s-new-timeseries-engine.md",
+      "processed_at": "2026-09-16T10:57:44.805597Z"
+    },
+    "https://clickhouse.com/blog/replica-aware-routing-public-beta": {
+      "title": "Replica-aware routing public beta",
+      "pub_date": "2026-09-15T13:15:00+00:00",
+      "file_path": "blogs/2026-09-15-replica-aware-routing-public-beta.md",
+      "processed_at": "2026-09-16T10:57:44.949461Z"
     }
   },
-  "total_blogs": 974,
+  "total_blogs": 976,
   "failed_blogs": [
     {
       "url": "https://clickhouse.com/jp/blog/clickhouse-gcp-japan-availability",
