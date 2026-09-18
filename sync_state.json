@@ -1,5 +1,5 @@
 {
-  "last_sync": "2026-09-17T11:08:04.998180Z",
+  "last_sync": "2026-09-18T10:42:11.354218Z",
   "processed_blogs": {
     "https://clickhouse.com/blog/clickhouse-raises-400-million-series-d-acquires-langfuse-launches-postgres": {
       "title": "ClickHouse raises $400M Series D led by Dragoneer to accelerate expansion across analytics and AI infrastructure",
@@ -5862,9 +5862,33 @@
       "pub_date": "2026-09-16T19:38:40+00:00",
       "file_path": "blogs/2026-09-16-clickhouse-is-now-available-on-the-dbt-platform.md",
       "processed_at": "2026-09-17T11:08:04.889836Z"
+    },
+    "https://clickhouse.com/blog/postgres-week-in-the-netherlands-pgday-lowlands-percona-live-2026": {
+      "title": "Postgres week in the Netherlands: PGDay Lowlands & Percona Live 2026",
+      "pub_date": "2026-09-18T09:44:41+00:00",
+      "file_path": "blogs/2026-09-18-postgres-week-in-the-netherlands-pgday-lowlands.md",
+      "processed_at": "2026-09-18T10:42:10.640270Z"
+    },
+    "https://clickhouse.com/blog/clickhouse-airflow-provider": {
+      "title": "The official ClickHouse provider for Apache Airflow is now available",
+      "pub_date": "2026-09-17T18:06:01+00:00",
+      "file_path": "blogs/2026-09-17-the-official-clickhouse-provider-for-apache.md",
+      "processed_at": "2026-09-18T10:42:10.892751Z"
+    },
+    "https://clickhouse.com/blog/202609-newsletter": {
+      "title": "September 2026 newsletter",
+      "pub_date": "2026-09-17T14:34:32+00:00",
+      "file_path": "blogs/2026-09-17-september-2026-newsletter.md",
+      "processed_at": "2026-09-18T10:42:11.084566Z"
+    },
+    "https://clickhouse.com/blog/whats-new-in-clickstack-august-2026": {
+      "title": "What's new in ClickStack - Aug ’26",
+      "pub_date": "2026-09-16T00:00:00+00:00",
+      "file_path": "blogs/2026-09-16-what-s-new-in-clickstack-aug-26.md",
+      "processed_at": "2026-09-18T10:42:11.246705Z"
     }
   },
-  "total_blogs": 977,
+  "total_blogs": 981,
   "failed_blogs": [
     {
       "url": "https://clickhouse.com/jp/blog/clickhouse-gcp-japan-availability",

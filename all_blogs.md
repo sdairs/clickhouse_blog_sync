@@ -1,6 +1,513 @@
 # ClickHouse Blogs
-Last updated: 2026-09-17 11:08:04 UTC
-Total blogs: 977
+Last updated: 2026-09-18 10:42:11 UTC
+Total blogs: 981
+
+---
+
+## Postgres week in the Netherlands: PGDay Lowlands & Percona Live 2026
+Published: 2026-09-18T09:44:41+00:00
+URL: https://clickhouse.com/blog/postgres-week-in-the-netherlands-pgday-lowlands-percona-live-2026
+
+---
+title: "Postgres week in the Netherlands: PGDay Lowlands & Percona Live 2026"
+date: "2026-09-18T09:44:41.366Z"
+author: "Gülçin Yıldırım Jelínek"
+category: "Community"
+excerpt: "Notes from three days in the Netherlands, featuring a lightning talk on pg_clickhouse and pg_stat_ch at PGDay Lowlands and a session on PostgreSQL 19 monitoring at Percona Live Amsterdam."
+---
+
+# Postgres week in the Netherlands: PGDay Lowlands & Percona Live 2026
+
+Last week, I spent three days in the Netherlands and gave two talks at two conferences: a lightning talk at [PGDay Lowlands](https://2026.pgday.nl/) in Utrecht on Thursday, September 10, and a session at [Percona Live](https://perconalive.com/2026-amsterdam/) in Amsterdam on Friday, September 11\. In this blog post, I’m going to share my notes from both.
+
+As often happens with conferences (or any big events, really), there was a minor hurdle to overcome before we could get there. On Wednesday, September 9, just one day before PGDay Lowlands, a nationwide 24-hour public transport strike stopped trains, buses, trams and metros across the whole country. Not the ideal warm-up for a conference that draws people from all over the world, but by Thursday morning everything was moving again and the day went ahead as planned. Yay!
+
+## PGDay Lowlands, Utrecht {#pgday_lowlands_utrecht}
+
+PGDay Lowlands is a one-day Dutch PostgreSQL conference (although all the talks are in English), organized by [PostgreSQL Europe](https://2026.pgday.nl/organisation/). This was its third edition, and the event moves around: last year, it was held at Blijdorp Zoo in Rotterdam; this year, it took place at TivoliVredenburg, a music venue in the center of Utrecht, with the main track in a hall called Cloud Nine.
+
+Last year I gave a full 45-minute talk, my now famous [Anatomy of Table-Level Locks in PostgreSQL](https://www.postgresql.eu/events/pgdaynl2025/schedule/session/6730-anatomy-of-table-level-locks-in-postgresql/) (the recording is on [YouTube](https://youtu.be/2Zsjn47a7b8)). This year, I went for the other end of the spectrum: a five-minute lightning talk. It’s the format I struggle with the most, but I tried anyway.
+
+## Analytics without leaving Postgres {#analytics_without_leaving_postgres}
+
+Five minutes is not a lot of time, so I kept it to two open-source extensions ([pg_clickhouse](https://clickhouse.com/blog/introducing-pg_clickhouse) and [pg_stat_ch](https://clickhouse.com/blog/pg_stat_ch-postgres-extension-stats-to-clickhouse)) we maintain at ClickHouse, both Apache 2.0 licensed. The idea behind both is that you keep Postgres as your front door and your system of record, and let ClickHouse do the analytical heavy lifting behind it.
+
+![](https://clickhouse.com/uploads/postgres_conferences_sep2026_image2_213d5d5fd7.jpg)  
+*On a personal note, this was my first talk as a new ClickHouse employee 😀 [Photo credit: Tom](https://www.honkingelephant.com/)* 
+
+[pg_clickhouse](https://github.com/ClickHouse/pg_clickhouse) is a foreign data wrapper. You `CREATE SERVER` pointing at ClickHouse, add a `USER MAPPING` with the credentials, and `IMPORT FOREIGN SCHEMA`: the ClickHouse tables show up as foreign tables in a Postgres schema of your choice, with the same column names and ClickHouse types mapped to Postgres types. Change `search_path` to that schema and existing read queries, ORMs and dashboards run unmodified. Where the query is pushable, the Postgres planner sends the whole thing to ClickHouse as ClickHouse SQL and gets back the aggregated result; otherwise it pushes down what it can and finishes the rest locally.
+
+The point of `pg_clickhouse` is simple: moving data to ClickHouse is easy, but rewriting years’ worth of dashboard and ORM-generated SQL is hard. The extension lets existing PostgreSQL queries run against ClickHouse, so improving query pushdown is the top roadmap priority. Today, 15 of the 22 TPC-H queries at scale factor 1 are fully pushed down.
+
+![](https://clickhouse.com/uploads/postgres_conferences_sep2026_image3_f67eafeb23.png)  
+*The main slide from the lightning talk: Analytics Without Leaving Postgres*
+
+[pg_stat_ch](https://github.com/ClickHouse/pg_stat_ch) goes in the opposite direction. Postgres hooks capture every query execution as a raw event (`timing, buffers, WAL, CPU, errors, application, client`), write it into a shared-memory ring buffer, and a background worker drains batches to ClickHouse over the native protocol, where the aggregation happens. It uses the same `query_id` as `pg_stat_statements`, so the two correlate, but you get per-query history you can slice by time and application, with real percentiles and error tracking. `pg_stat_statements` cannot give you that because it only keeps cumulative counters. There is no back-pressure by design: if ClickHouse is slow or unreachable, events are dropped and counted, and Postgres never waits.
+
+### The rest of the lightning block
+
+Lightning talks are so much fun to watch, so I stayed for the whole block.
+
+![](https://clickhouse.com/uploads/postgres_conferences_sep2026_image5_0f6cdfdd15.jpg)  
+*In the audience during the lightning talks. Look how happy I am 😀 [Photo credit: Tom](https://www.honkingelephant.com/)* 
+
+[Cornelia Biacsics](https://www.postgresql.eu/events/pgdaynl2026/schedule/session/7779-my-lightning-talk-disaster/) opened with *My Lightning Talk Disaster*, looking back on her first speaking experience exactly one year later. It was also a reminder that the five-minute format is sold as the easy way in for new speakers, but is not risk-free, especially for introverts. Speaking as an extrovert, I can confirm that it is THE hardest format for me too, as I mentioned above. [Ellert van Koperen](https://www.postgresql.eu/events/pgdaynl2026/schedule/session/7881-when-partitioning-has-a-side-effect/) showed a real-life case where partitioning, the default answer to "the table keeps growing", had a knock-on effect with serious consequences, and the simple fix that resolved it. [Jan Wieremjewicz](https://www.postgresql.eu/events/pgdaynl2026/schedule/session/7795-tde-status-update/) gave a status update on [pg_tde](https://github.com/percona/pg_tde), what works today, what is still open, and how to get involved. And [Dave Pitts](https://www.postgresql.eu/events/pgdaynl2026/schedule/session/8512-behind-the-soundtrack-of-the-pgday-lowlands-trilogy/) closed the block with something completely different: the story behind the PGDay Lowlands conference songs, produced with digital instruments and an actual piano keyboard rather than generated by AI. Yes, this conference has its own soundtrack! 
+
+The whole day was [live streamed](https://www.youtube.com/watch?v=mXndwAOrH7g) and recorded, and the individual talks will be available to watch later.
+
+### Optimizer hints in PostgreSQL, by Michael Banck
+
+Before lunch I attended [Michael Banck](https://www.postgresql.eu/events/pgdaynl2026/schedule/speaker/301-michael-banck/)'s talk, [Optimizer Hints in PostgreSQL](https://www.postgresql.eu/events/pgdaynl2026/schedule/session/7815-optimizer-hints-in-postgresql/), and I liked it a lot. Postgres has famously refused to add optimizer hints for decades, on the grounds that planner problems are bugs to fix. Michael walked through what you can do today: the `enable_*` parameters (reworked in PostgreSQL 18 so disabled node types are counted rather than penalized with a huge cost) and [pg_hint_plan](https://github.com/ossc-db/pg_hint_plan) with its `/*+ ... */` comments and hints table keyed by query ID.
+
+The part I found most interesting was the two new PostgreSQL 19 contrib modules by Robert Haas, [pg_plan_advice](https://www.postgresql.org/docs/19/pgplanadvice.html) and [pg_stash_advice](https://www.postgresql.org/docs/19/pgstashadvice.html). They are aimed at plan stabilization rather than hints in the classic sense. 
+
+`EXPLAIN (PLAN_ADVICE)` prints a compact "advice string" describing the plan you got (join order, join methods, scan methods, parallelism). You can feed that string back via `pg_plan_advice.advice` to pin the plan, and `pg_stash_advice` stores advice per query ID in shared memory, so it is applied automatically and survives reconnects and restarts. 
+
+The implementation works by constraining the planner rather than replacing it, so you can only ever get a plan that the planner would have considered anyway. Michael's argument was that plan flips are the real problem, and stable plans are often worth a little lost performance. His [slides](https://www.postgresql.eu/events/pgdaynl2026/sessions/session/7815/slides/895/postgresql-optimizer-hints.pdf) are worth a read.
+
+## Speaker dinner in Amsterdam {#speaker_dinner_in_amsterdam}
+
+From Utrecht, I went straight to Amsterdam for the Percona Live speaker dinner on Thursday evening. It was a nice way to arrive at a conference (I was attending for the first time): meet the other speakers over dinner first, then show up the next morning already knowing a few faces.
+
+![](https://clickhouse.com/uploads/cropped_dinner_4486c6c572.png)  
+*Percona Live speaker dinner at De Bekeerde Suster—spot me listening carefully to Alastair Turner 🙂*
+
+## Percona Live, Amsterdam {#percona_live_amsterdam}
+
+[Percona Live 2026](https://perconalive.com/2026-amsterdam/) ran from September 9 to 11 at the Mövenpick Hotel Amsterdam City Centre. It is a multi-database conference, with MySQL, PostgreSQL, MongoDB, and Valkey tracks side by side, which makes for a broader audience than at a PGDay. I was only there for the final day.
+
+The final morning opened with a fireside chat called [*The Columnstore Revolution*](https://perconalive.com/2026-amsterdam/talks/fireside-chat-the-columnstore-revolution/), moderated by Percona founder Peter Zaitsev, with Alexey Milovidov, CTO of ClickHouse, and Hannes Mühleisen, co-founder of DuckDB, discussing the resurgence of column-oriented databases and what it means for modern data workloads.
+
+![](https://clickhouse.com/uploads/postgres_conferences_sep2026_image4_71742f0946.jpg)  
+*I didn’t know that Alexey Milovidov, our CTO, would be there until Peter Zaitsev told me at the speaker dinner, so that was a nice surprise too.*
+
+## What's new with monitoring in PostgreSQL 19 {#whats_new_with_monitoring_in_postgresql_19}
+
+My [session](https://perconalive.com/2026-amsterdam/talks/whats-new-with-monitoring-in-postgresql-19/) was a 30-minute version of the [talk I'll give at PGConf.EU](https://www.postgresql.eu/events/pgconfeu2026/schedule/session/8182-whats-new-with-monitoring-in-postgresql-19/) in October.
+
+I grouped the changes into five parts:
+
+* **Logging:** `log_lock_waits` is now on by default, `log_min_messages` accepts different log levels for each process type, autoanalyze logging is split from autovacuum with `log_autoanalyze_min_duration`, and messages from remote servers, through replication, `postgres_fdw`, or `dblink` are now formatted like local ones.  
+* **WAL and I/O:** the new `wal_fpi_bytes` counter appears in `pg_stat_wal`, per-backend statistics, `VACUUM` and `ANALYZE` log lines, and `EXPLAIN (ANALYZE, WAL)`. `COPY TO` / `FROM` files, pipes and programs now has its own wait events.  
+* **`WAIT FOR`:** a new command for read-your-writes semantics on asynchronous standbys, with wait events for the written, flushed, and replayed stages of WAL.  
+* **New system views:** `pg_stat_lock`, `pg_stat_recovery`, and `pg_stat_autovacuum_scores`.  
+* **Multixacts and wraparound:** the new `pg_get_multixact_stats()`, and the XID wraparound warning threshold moving from 40 million to 100 million transactions.
+
+I closed with what is already committed for PostgreSQL 20 (`pg_stat_get_backend_lock()`, which gives you `pg_stat_lock` per backend). I also covered wait-event statistics, where the discussion on the hackers list keeps moving towards sampling rather than counters.
+
+If you want the long version, I have already written most of it in three posts: [What's New with Monitoring in PostgreSQL 19](https://clickhouse.com/blog/postgres-19-monitoring-whats-new), [Read your writes: WAIT FOR in PostgreSQL 19](https://clickhouse.com/blog/postgresql-19-wait-for-read-your-writes) and [New system views in PostgreSQL 19](https://clickhouse.com/blog/postgres-19-new-system-views).
+
+## What's next {#whats_next}
+
+Both events will be back in 2027 with dates and locations to follow.
+
+Thanks to the people who made PGDay Lowlands happen: Floor Drees, Derk van Veen, Teresa Lopes, Boriss Mejías, Sarah Conway, Stacy Raspopina, Jos van Schouten, Chelsea Dole, Stefan Fercot and Ellert van Koperen. Thanks also to Peter Zaitsev, Alastair Turner, Jan Wieremjewicz and Kai Wagner from the Percona team for having me, and to everyone who came to my talks. See you in Valencia!
+
+
+---
+
+## Get started today
+
+Interested in seeing how ClickHouse works on your data? Get started with ClickHouse Cloud in minutes and receive $300 in free credits.
+
+[Sign up](https://console.clickhouse.cloud/signUp?loc=blog-cta-2214-get-started-today-sign-up&utm_blogctaid=2214)
+
+---
+
+---
+
+## The official ClickHouse provider for Apache Airflow is now available
+Published: 2026-09-17T18:06:01+00:00
+URL: https://clickhouse.com/blog/clickhouse-airflow-provider
+
+---
+title: "The official ClickHouse provider for Apache Airflow is now available"
+date: "2026-09-17T18:06:01.746Z"
+author: "Aditya Chidurala, Bentsi Leviav and Alex Francoeur"
+category: "Product"
+excerpt: "The official ClickHouse provider for Apache Airflow simplifies data workflows with standard SQL operators, bulk inserts, and shared setup across self-managed Airflow and Astronomer."
+---
+
+# The official ClickHouse provider for Apache Airflow is now available
+
+## Summary
+
+ClickHouse now has an official integration with Apache Airflow, making it easier for teams to orchestrate and manage ClickHouse data workflows wherever they run Airflow. Many ClickHouse customers are already using the new Apache Airflow provider in production today.
+
+## Introduction {#introduction}
+
+Many ClickHouse users rely on [Apache Airflow](https://airflow.apache.org/), the open source standard for orchestrating data pipelines to schedule ingestion, transformations, and recurring analytical jobs. Until now, connecting the two usually meant installing a community plugin or writing custom integration code.
+
+Airflow now has an upstream ClickHouse provider: [`apache-airflow-providers-clickhousedb`](https://airflow.apache.org/registry/providers/clickhousedb/1.0.0/). It uses ClickHouse Connect over HTTP(S), works with Airflow’s common SQL operators, and includes a ClickHouse hook for bulk and client-specific operations. This post shows how to install it, configure a connection, and run the same workflow on a self-managed Airflow setup or a managed platform like [Astronomer](https://www.astronomer.io/).
+
+## Community origins {#community_origins}
+
+Before this release, the ClickHouse community solved this problem on its own. Anton Bryzgalov ([bryzgaloff](https://github.com/bryzgaloff)) created the [airflow-clickhouse-plugin](https://github.com/bryzgaloff/airflow-clickhouse-plugin) back when Airflow had no native way to talk to ClickHouse. He maintained it for years, evolving it into the de facto standard for the Airflow and ClickHouse community, [and one of the top 1% downloaded packages](https://clickpy.clickhouse.com/dashboard/airflow-clickhouse-plugin) on PyPI. Its conventions even shaped the internal tooling our own data warehouse team built. Contributions like these are why the ClickHouse ecosystem is what it is today. Thank you, Anton.
+
+For teams that want an officially maintained integration, the provider is a natural upgrade path. It's where our investment and new features will land, and moving over is mostly mechanical. Install the provider, point your connection at the HTTP(S) port, and use the standard `SQLExecuteQueryOperator` in your DAGs. 
+
+## Why an official provider {#why_an_official_provider}
+
+We ship new ClickHouse features constantly, and an official provider living upstream lets the integration keep pace with the database instead of always playing catch-up.
+
+A few decisions shaped the implementation:
+
+- **Built on ClickHouse Connect.** The provider connects over the [HTTP interface](https://clickhouse.com/docs/interfaces/http) using [`clickhouse-connect`](https://clickhouse.com/docs/integrations/python), the Python client we maintain in-house. When the client gets faster or gains features, the provider inherits them.  
+- **Airflow's common SQL framework.** The provider exposes ClickHouse through `apache-airflow-providers-common-sql`, so the standard `SQLExecuteQueryOperator` handles DDL, DML, and analytical queries. No ClickHouse-specific operator to learn.  
+- **A hook for everything else.** For bulk inserts, streaming, or ClickHouse-specific client calls, `ClickHouseHook` gives you direct access, including a `bulk_insert_rows` method that uses the native columnar insert path.
+
+## How customers use Airflow with ClickHouse {#how_customers_use_airflow_with_clickhouse}
+
+Many of our customers run Airflow with ClickHouse today. The pairing shows up across nearly every industry we serve, and in our own stack.
+
+The relationship with Astronomer runs both directions, too. Astro Observe, their data observability product, is [built on ClickHouse Cloud](https://clickhouse.com/blog/why-astronomer-chose-clickhouse-to-power-its-new-data-observability-platform-astro-observe), handling billions of Airflow workflow events to power real-time pipeline insights for Airflow users. The team behind the platform that runs Airflow for thousands of companies chose ClickHouse for its own analytics.
+
+[Chartmetric](https://clickhouse.com/blog/chartmetric-scaling-music-analytics), which tracks more than 12 million artists across streaming and social platforms, pairs Airflow-orchestrated pipelines with ClickHouse Cloud, including a playlist cache pipeline that ingests over 15 million rows every five minutes.
+
+We run the same pattern ourselves. Our [internal data warehouse](https://clickhouse.com/blog/building-a-data-warehouse-with-clickhouse) is built on ClickHouse Cloud with Airflow scheduling the insert jobs across 76 DAGs across 40+ data sources, moving around 6 billion rows a day. The entire company relies on it, from leadership reviewing weekly metrics to product, sales, and support teams answering day-to-day questions, and increasingly the agentic workflows we're building on top of our own data. Airflow is the component that keeps it all fed.
+
+## Getting started with Apache Airflow {#getting_started_with_apache_airflow}
+
+If you're running open source Airflow, the provider installs like any other:
+
+<pre><code type='click-ui' language='bash'>
+pip install apache-airflow-providers-clickhousedb
+</code></pre>
+
+It pulls in `apache-airflow-providers-common-sql` and `clickhouse-connect` automatically. Next, create a connection. The provider registers a `clickhouse` connection type, so you can configure it in the Airflow UI under **Admin > Connections**, or define it as an environment variable:
+
+<pre><code type='click-ui' language='bash'>
+export AIRFLOW_CONN_CLICKHOUSE_DEFAULT='{
+    "conn_type": "clickhouse",
+    "host": "abc123.clickhouse.cloud",
+    "port": 8443,
+    "login": "default",
+    "password": "secret",
+    "schema": "my_database",
+    "extra": {"secure": true}
+}'
+</code></pre>
+
+For [ClickHouse Cloud](https://clickhouse.com/cloud) or any TLS-enabled cluster, set `secure` to `true` and use port `8443`.
+
+![](https://clickhouse.com/uploads/airflow_sep2026_connection_6e4f1f764f.png)
+
+From there, a DAG is just standard Airflow:
+
+<pre><code type='click-ui' language='python'>
+from datetime import datetime
+
+from airflow import DAG
+from airflow.providers.common.sql.operators.sql import SQLExecuteQueryOperator
+
+with DAG(
+    dag_id="clickhouse_example",
+    start_date=datetime(2026, 1, 1),
+    default_args={"conn_id": "clickhouse_default"},
+    schedule="@daily",
+    catchup=False,
+) as dag:
+    create_table = SQLExecuteQueryOperator(
+        task_id="create_table",
+        sql="""
+            CREATE TABLE IF NOT EXISTS events_daily (
+                day  Date,
+                user_id String,
+                events UInt64
+            ) ENGINE = MergeTree()
+            ORDER BY (day, user_id);
+        """,
+    )
+
+    aggregate = SQLExecuteQueryOperator(
+        task_id="aggregate_events",
+        sql="""
+            INSERT INTO events_daily
+            SELECT toDate(ts), user_id, count()
+            FROM events
+            WHERE toDate(ts) = yesterday()
+            GROUP BY toDate(ts), user_id;
+        """,
+    )
+
+    create_table &gt;&gt; aggregate
+</code></pre>
+
+![](https://clickhouse.com/uploads/airflow_sep2026_dag_5081933f5c.png)
+
+For workloads that don't fit a SQL operator, `ClickHouseHook` gets you to the underlying client:
+
+<pre><code type='click-ui' language='python'>
+from airflow.providers.clickhousedb.hooks.clickhouse import ClickHouseHook
+
+hook = ClickHouseHook(clickhouse_conn_id="clickhouse_default")
+hook.bulk_insert_rows(
+    table="events",
+    rows=[("user1", "click"), ("user2", "view")],
+    column_names=["user_id", "action"],
+    batch_size=1000,
+)
+</code></pre>
+
+The full walkthrough, including session settings, per-task database overrides, and connection options, is in [our docs](https://clickhouse.com/docs/integrations/airflow). If you'd rather see it live, Bentsi Leviav [demoed the provider](https://youtu.be/f4jNltAxgIA?t=894) as part of the ecosystem talk at [Open House 2026](https://clickhouse.com/blog/open-house-2026-day-2#apache-airflow-native-provider), our user conference back in May.
+
+## Getting started with Astronomer {#getting_started_with_astronomer}
+
+[Astronomer](https://www.astronomer.io/) is the managed Airflow platform many of our customers run in production, and the [Astro CLI](https://www.astronomer.io/docs/astro/cli/overview) is the fastest way to get a local Airflow environment running. The provider works out of the box.
+
+First, install the CLI and scaffold a project:
+
+<pre><code type='click-ui' language='bash'>
+brew install astro
+astro dev init
+</code></pre>
+
+Add the provider to the `requirements.txt` in your new project:
+
+```shell
+apache-airflow-providers-clickhousedb
+```
+
+Then start Airflow locally:
+
+<pre><code type='click-ui' language='bash'>
+astro dev start
+</code></pre>
+
+This spins up the Airflow components in containers on your machine. Once it's up, open the Airflow UI at `localhost:8080`, head to **Admin > Connections**, and create a connection with the **ClickHouse** type, pointing at your ClickHouse Cloud service or self-hosted cluster (remember `secure: true` and port `8443` for TLS).
+
+Drop the DAG from the section above into the `dags/` folder and it'll appear in the UI, ready to trigger.
+
+If you're running on Astro, there's an even more turnkey path for the connection. The [Environment Manager](https://www.astronomer.io/docs/astro/create-and-link-connections) in the Astro UI lets you create the ClickHouse connection once, store the credentials in Astro's managed secrets backend, and share it across every deployment in your workspace, with per-deployment overrides where you need them. The Astro CLI can [pull those same connections into your local environment](https://www.astronomer.io/docs/astro/cli/local-connections), so you configure ClickHouse once and use it everywhere, local or hosted.
+
+![](https://clickhouse.com/uploads/airflow_sep2026_astronomer_e98964a5d8.png)
+
+When you're ready for production, `astro deploy` ships the same project, provider and all, to your Astro deployment. Nothing about the ClickHouse setup changes between local and production.
+
+## What's next {#whats_next}
+
+The provider is available today and is already being used in production at scale by early adopters. We'll be prioritizing new capabilities based on what the community asks for, so if there's something you need, [open an issue or a PR](https://github.com/apache/airflow) and let us know.
+
+If you're orchestrating ClickHouse with Airflow today, we'd love to hear how it's going. Come say hi in the [ClickHouse Community Slack](https://clickhouse.com/slack), and if you're new to ClickHouse, you can [get started with ClickHouse Cloud](https://console.clickhouse.cloud/signUp) in minutes with $300 in free credits. We can't wait to see what you build with it.
+
+
+---
+
+## Get started today
+
+Interested in seeing how ClickHouse works on your data? Get started with ClickHouse Cloud in minutes and receive $300 in free credits.
+
+[Sign up](https://console.clickhouse.cloud/signUp?loc=blog-cta-2112-get-started-today-sign-up&utm_blogctaid=2112)
+
+---
+
+---
+
+## September 2026 newsletter
+Published: 2026-09-17T14:34:32+00:00
+URL: https://clickhouse.com/blog/202609-newsletter
+
+---
+title: "September 2026 newsletter"
+date: "2026-09-17T14:34:32.331Z"
+author: "Mark Needham"
+category: "Community"
+excerpt: "Welcome to the September 2026 ClickHouse newsletter, featuring ClickHouse 26.8, PromQL, On-Demand Compute, CostBench results, and the latest community news and events."
+---
+
+# September 2026 newsletter
+
+Hello and welcome to another ClickHouse newsletter!
+
+We’ve got another feature-packed ClickHouse release, with custom HTTP handlers, pipelined SQL, and Japanese/Chinese tokenizers for the text-index.
+
+Elsewhere, Mohamed Hussain S dives into the replication queue, Tom Schreiber and Lionel Palacin share the first end-to-end results from CostBench, and Himanshu Pandey walks us through reading ClickHouse query plans.
+
+We also have preview releases of PromQL, On-Demand Compute, AI functions, and sub-second Postgres replication to ClickHouse
+
+## Featured community member: Rory Shanks {#featured-community-member}
+
+This month's featured community member is Rory Shanks, ClickHouse Engineer at PostHog.
+
+![](https://clickhouse.com/uploads/sep2026_nl_image1_6de95ac8bc.png)
+
+Rory’s background is in site reliability and cloud platform engineering, and he previously worked as a Staff DevOps Engineer at ENWAY and a Senior Site Reliability Engineer at Inkitt and powercloud.
+
+Rory contributed several improvements to ClickHouse 26.8, released at the end of August.
+
+First, he added an <a href="https://github.com/ClickHouse/ClickHouse/pull/113020" target="_blank">option for replicas to fetch already mutated data parts</a> from another replica, avoiding the need to repeat mutation work locally. Additionally, he added <a href="https://github.com/ClickHouse/ClickHouse/pull/112742" target="_blank">caching for tokens absent from the text index</a> and <a href="https://github.com/ClickHouse/ClickHouse/pull/113008" target="_blank">improved JSON subcolumn reads</a> by reusing column metadata during conversions.
+
+➡️ <a href="https://www.linkedin.com/in/rorylshanks/" target="_blank">Connect with Rory on LinkedIn</a>
+
+## Open House Roadshow {#open_house_roadshow}
+
+We’re halfway through the <a href="https://clickhouse.com/company/events?category=Open+House&utm_source=clickhouse&utm_medium=email&utm_campaign=202609-newsletter&ref=newsletter" target="_blank">Open House Roadshow</a>, but there are still visits to come in <a href="https://clickhouse.com/company/events/202609-APJ-India-Bangalore-Open-House-Roadshow?utm_source=clickhouse&utm_medium=email&utm_campaign=202609-newsletter&ref=newsletter" target="_blank">Bangalore</a> (Sep 22), <a href="https://clickhouse.com/openhouse/london-2026?utm_source=clickhouse&utm_medium=email&utm_campaign=202609-newsletter&ref=newsletter" target="_blank">London</a> (Sep 30), and <a href="https://clickhouse.com/company/events/202610-munich-open-house?utm_source=clickhouse&utm_medium=email&utm_campaign=202609-newsletter&ref=newsletter" target="_blank">Munich</a> (Oct 6), so don’t forget to sign up!
+
+➡️ <a href="https://clickhouse.com/company/events?category=Open+House&utm_source=clickhouse&utm_medium=email&utm_campaign=202609-newsletter&ref=newsletter" target="_blank">See all Open House locations</a>
+
+## 26.8 release {#release}
+
+![](https://clickhouse.com/uploads/sep2026_nl_image2_791480bdd7.png)
+
+After last month’s mega 26.7 release blog post, we’ve decided to try something different this month: multiple smaller posts!
+
+The 26.8 release includes a series of features, such as custom HTTP handlers and dynamic query filtering, that enable you to use <a href="https://clickhouse.com/blog/clickhouse-streaming-http-api?utm_source=clickhouse&utm_medium=email&utm_campaign=202609-newsletter&ref=newsletter" target="_blank">ClickHouse as a streaming HTTP API</a>. This release also adds a new `|>` operator that lets us write <a href="https://clickhouse.com/blog/pipelined-sql-26.8?utm_source=clickhouse&utm_medium=email&utm_campaign=202609-newsletter&ref=newsletter" target="_blank">queries as a sequence of transformations</a>.
+
+The release also adds a `system.user_query_log` table that shows only the current user’s queries, a URL database engine, and Japanese and Chinese tokenizer support for the text index.
+
+➡️ <a href="https://clickhouse.com/blog/clickhouse-release-26-08?utm_source=clickhouse&utm_medium=email&utm_campaign=202609-newsletter&ref=newsletter" target="_blank">Read the release post</a>
+
+## Understanding the replication queue in ClickHouse {#replication_queue}
+
+![](https://clickhouse.com/uploads/sep2026_nl_image3_3287f1a43b.png)
+
+Mohamed Hussain S explores ClickHouse’s replication queue by stopping a replica and investigating the backlog.
+
+He shows how to use the `system.replicas` and `system.replication_queue` system tables to diagnose issues, and explains why a non-empty queue doesn’t necessarily mean something is wrong.
+
+➡️ <a href="https://dev.to/mohhddhassan/understanding-the-replication-queue-in-clickhouse-gl6" target="_blank">Read the blog post</a>
+
+## Measuring real-time performance per dollar under continuous load: CostBench’s first end-to-end results {#costbench_results}
+
+![](https://clickhouse.com/uploads/sep2026_nl_image4_91a192e230.jpg)
+
+Tom Schreiber and Lionel Palacin share the first end-to-end results from <a href="https://clickhouse.com/blog/costbench-data-warehouse-cost-performance?utm_source=clickhouse&utm_medium=email&utm_campaign=202609-newsletter&ref=newsletter" target="_blank">CostBench</a>, an open benchmark for cloud data warehouse cost-performance: performance-per-dollar, rather than just speed.
+
+They test ClickHouse Cloud, Snowflake, BigQuery, and Redshift Serverless under continuous ingestion, measuring the cost of keeping fresh data ready for queries alongside query performance.
+
+In a follow-up post, they <a href="https://clickhouse.com/blog/clickhouse-vs-snowflake-real-time-performance-per-dollar?utm_source=clickhouse&utm_medium=email&utm_campaign=202609-newsletter&ref=newsletter" target="_blank">take a closer look at the ClickHouse Cloud and Snowflake results</a>, explaining how their architectures and billing models contribute to the performance-per-dollar gap.
+
+➡️ <a href="https://clickhouse.com/blog/costbench-real-time-performance-per-dollar?utm_source=clickhouse&utm_medium=email&utm_campaign=202609-newsletter&ref=newsletter" target="_blank">Read the blog post</a>
+
+## Announcing On-Demand Compute: Instant compute for your most intensive workloads {#on_demand_compute}
+
+![](https://clickhouse.com/uploads/sep2026_nl_image5_6883c67807.jpg)
+
+This is one of the biggest features we have been working on: On-Demand Compute is now in <a href="https://clickhouse.com/cloud/on-demand-compute-waitlist?utm_source=clickhouse&utm_medium=email&utm_campaign=202609-newsletter&ref=newsletter" target="_blank">private preview</a>.
+
+You are now a step away from offloading intensive workloads to dedicated ClickHouse workers. And it doesn’t land alone! It comes with two friends:
+
+• A new cost-based optimizer (CBO)  
+• A new distributed query execution framework
+
+The dream for anybody wanting to offload ad-hoc or data lake queries to dedicated workers!
+
+Curious to learn more? Melvyn Peignon will present a <a href="https://clickhouse.com/company/events/202609-AMER-Webinar-On-Demand-Compute?utm_source=clickhouse&utm_medium=email&utm_campaign=202609-newsletter&ref=newsletter" target="_blank">live webinar on September 24th</a>, where he’ll explain how it works, give a live demo, and talk through the six-month roadmap.
+
+➡️ <a href="https://clickhouse.com/blog/on-demand-compute?utm_source=clickhouse&utm_medium=email&utm_campaign=202609-newsletter&ref=newsletter" target="_blank">Read the announcement</a>
+
+## ClickHouse 26.8 LTS: 57 Breaking Changes Since 26.3 {#clickhouse_26_8_lts}
+
+![](https://clickhouse.com/uploads/sep2026_nl_image6_cc65b466a3.png)
+
+Mohamed Hussain S has written an alternative blog post for the 26.8 release, exploring changes since the previous LTS release, 26.3.
+
+He highlights breaking changes and new defaults across all five releases, with a checklist of what to audit before upgrading and monitor afterward.
+
+➡️ <a href="https://dev.to/mohhddhassan/clickhouse-268-lts-57-breaking-changes-since-263-3ba9" target="_blank">Read the blog post</a>
+
+## Postgres Round-up {#postgres_round_up}
+
+![](https://clickhouse.com/uploads/sep2026_nl_image7_fc6aee448d.jpg)
+
+We’ve been publishing more and more <a href="https://clickhouse.com/blog?search=postgres&utm_source=clickhouse&utm_medium=email&utm_campaign=202609-newsletter&ref=newsletter" target="_blank">Postgres content</a> as the weeks go by, so I thought it deserved its own section in the newsletter.
+
+* Sai Srirampur announced <a href="https://clickhouse.com/blog/introducing-walshadow?utm_source=clickhouse&utm_medium=email&utm_campaign=202609-newsletter&ref=newsletter" target="_blank">WalShadow</a>, an open-source engine that replicates Postgres data to ClickHouse directly from the physical WAL. It’s available as an open-source project or in <a href="https://clickhouse.com/cloud/postgres/walshadow?utm_source=clickhouse&utm_medium=email&utm_campaign=202609-newsletter&ref=newsletter" target="_blank">private preview on ClickHouse Managed Postgres</a>.
+* Kunal Gupta announced the availability of <a href="https://clickhouse.com/blog/postgres-managed-by-clickhouse-gcp-private-preview?utm_source=clickhouse&utm_medium=email&utm_campaign=202609-newsletter&ref=newsletter" target="_blank">ClickHouse Managed Postgres on Google Cloud</a>, also in <a href="https://clickhouse.com/cloud/postgres?utm_source=clickhouse&utm_medium=email&utm_campaign=202609-newsletter&ref=newsletter#gcp-waitlist" target="_blank">private preview</a> for the time being.
+* David Wheeler announced the open-source <a href="https://clickhouse.com/blog/introducing-chdb-postgres?utm_source=clickhouse&utm_medium=email&utm_campaign=202609-newsletter&ref=newsletter" target="_blank">chdb Postgres extension</a>, which expands Postgres import and export features via the <a href="https://clickhouse.com/docs/chdb?utm_source=clickhouse&utm_medium=email&utm_campaign=202609-newsletter&ref=newsletter" target="_blank">chDB</a> library.
+* Gülçin Yıldırım Jelínek has started writing a series of blog posts on Postgres 19\. So far, she’s covered <a href="https://clickhouse.com/blog/postgres-19-monitoring-whats-new?utm_source=clickhouse&utm_medium=email&utm_campaign=202609-newsletter&ref=newsletter" target="_blank">monitoring</a>, <a href="https://clickhouse.com/blog/postgres-19-new-system-views?utm_source=clickhouse&utm_medium=email&utm_campaign=202609-newsletter&ref=newsletter" target="_blank">new system views</a>, and <a href="https://clickhouse.com/blog/postgresql-19-wait-for-read-your-writes?utm_source=clickhouse&utm_medium=email&utm_campaign=202609-newsletter&ref=newsletter" target="_blank">read-your-writes</a>.
+* Kaushik Iska explains how ClickHouse Managed Postgres <a href="https://clickhouse.com/blog/protect-postgres-from-supporting-processes?utm_source=clickhouse&utm_medium=email&utm_campaign=202609-newsletter&ref=newsletter" target="_blank">protects Postgres from resource-hungry supporting processes</a>.
+* Sai Srirampur explores <a href="https://clickhouse.com/blog/posette-talk-recap-postgres-isnt-slow-your-storage-is?utm_source=clickhouse&utm_medium=email&utm_campaign=202609-newsletter&ref=newsletter" target="_blank">how storage choices affect Postgres performance</a>.
+* Cristina Albu and Yashpreet Bathla walk through <a href="https://clickhouse.com/blog/clickhouse-managed-postgres-onboarding?utm_source=clickhouse&utm_medium=email&utm_campaign=202609-newsletter&ref=newsletter" target="_blank">a new onboarding flow for ClickHouse Managed Postgres</a>.
+
+## Introducing ClickHouse's new TimeSeries Engine: Your drop-In Prometheus replacement {#promql_timeseries_engine}
+
+![](https://clickhouse.com/uploads/sep2026_nl_image8_6086cc19f9.png)  
+James Cunningham introduces PromQL and the TimeSeries table engine in ClickHouse Cloud, now in <a href="https://clickhouse.com/cloud/promql-support-waitlist?utm_source=clickhouse&utm_medium=email&utm_campaign=202609-newsletter&ref=newsletter" target="_blank">private preview</a>.
+
+You can send metrics to ClickHouse through Prometheus remote write and query them with PromQL in Grafana, ClickHouse, or ClickStack, all while keeping your existing collection setup.
+
+➡️ <a href="https://clickhouse.com/blog/introducing-promql?utm_source=clickhouse&utm_medium=email&utm_campaign=202609-newsletter&ref=newsletter" target="_blank">Read the blog post</a>
+
+## Quick reads {#quick-reads}
+
+* Saarth Soni <a href="https://medium.com/@saarthsoni/wikipulse-what-streaming-and-batch-actually-disagree-about-afbd88e1c267" target="_blank">compares streaming and batch counts of Wikipedia edits</a> using Quix Streams and ClickHouse, exploring why the same data can yield different results.
+* Oleksandr Andrushchenko <a href="https://medium.com/@oleksandr.andrushchenko1988/clickhouse-vs-postgresql-what-happens-at-billion-row-scale-8506a11f2836" target="_blank">compares ClickHouse and PostgreSQL for SMS analytics</a>, reporting that ClickHouse processes 10 times more rows and exploring how query shape affects performance.
+* Himanshu Pandey <a href="https://medium.com/@hp12/reading-a-clickhouse-explain-plan-ffb4e8353098" target="_blank">explains how to read ClickHouse query plans</a> to understand query execution and investigate performance.
+* Andriy Yakovlev and George Larionov <a href="https://clickhouse.com/blog/ai-functions-in-clickhouse?utm_source=clickhouse&utm_medium=email&utm_campaign=202609-newsletter&ref=newsletter" target="_blank">introduce AI Functions in ClickHouse</a>, bringing AI models into SQL for tasks such as text generation, classification, and embeddings.
+* Pete Hampton <a href="https://clickhouse.com/blog/mcp-toolbox-clickhouse-vectors?utm_source=clickhouse&utm_medium=email&utm_campaign=202609-newsletter&ref=newsletter" target="_blank">shows how to build semantic search with Google’s MCP Toolbox and ClickHouse</a>, automatically turning text into embeddings for storage and search.
+* Lareb Zafar <a href="https://clickhouse.com/blog/clickgap-autonomous-qa-for-clickhouse?utm_source=clickhouse&utm_medium=email&utm_campaign=202609-newsletter&ref=newsletter" target="_blank">introduces ClickGap</a>, an autonomous QA agent that tests merged ClickHouse changes and traces regressions to the commits that introduced them.
+
+## Upcoming events {#upcoming-events}
+
+### Global virtual events
+
+* Webinar: <a href="https://clickhouse.com/company/events/202609-AMER-Webinar-On-Demand-Compute?utm_source=clickhouse&utm_medium=email&utm_campaign=202609-newsletter&ref=newsletter" target="_blank">What if your most intensive queries could run on more compute? Introducing On-Demand Compute</a> - Sep 24, 2026 (AMER)
+* Webinar: <a href="https://clickhouse.com/company/events/202610-EMEA-Webinar-On-Demand-Compute?utm_source=clickhouse&utm_medium=email&utm_campaign=202609-newsletter&ref=newsletter" target="_blank">What if your most intensive queries could run on more compute? Introducing On-Demand Compute</a> - Oct 7, 2026 (EMEA)
+
+### Virtual training
+
+* <a href="https://clickhouse.com/company/events/202609-APJ-query-optimization-workshop?utm_source=clickhouse&utm_medium=email&utm_campaign=202609-newsletter&ref=newsletter" target="_blank">Query Optimization with ClickHouse Workshop</a> - Sep 29, 2026
+* <a href="https://clickhouse.com/company/events/202609-AMER-PostgreSQL-ClickHouse-Better-Together?utm_source=clickhouse&utm_medium=email&utm_campaign=202609-newsletter&ref=newsletter" target="_blank">PostgreSQL and ClickHouse, Better Together</a> -  - Oct 8, 2026
+* <a href="https://clickhouse.com/company/events/202610-APJ-Real-time-Analytics-ClickHouse-Level1?utm_source=clickhouse&utm_medium=email&utm_campaign=202609-newsletter&ref=newsletter" target="_blank">Real-time Analytics with ClickHouse: Level 1</a> - Oct 20, 2026
+* <a href="https://clickhouse.com/company/events/202610-APJ-Real-time-Analytics-ClickHouse-Level2?utm_source=clickhouse&utm_medium=email&utm_campaign=202609-newsletter&ref=newsletter" target="_blank">Real-time Analytics with ClickHouse: Level 2</a> - Oct 21, 2026
+* <a href="https://clickhouse.com/company/events/202610-APJ-Real-time-Analytics-ClickHouse-Level3?utm_source=clickhouse&utm_medium=email&utm_campaign=202609-newsletter&ref=newsletter" target="_blank">Real-time Analytics with ClickHouse: Level 3</a> - Oct 22, 2026
+
+### Events in AMER
+
+* <a href="https://luma.com/clickh-wavw" target="_blank">Rows and Columns summit San Francisco</a> - Sep 22nd
+* <a href="https://cloudonair.withgoogle.com/events/google-cloud-summit-brasil-2026-1" target="_blank">Google Cloud Summit Brasil</a> - Sep 23-24, 2026
+* <a href="https://runway.runreveal.com/" target="_blank">Runway by RunReveal</a> - San Francisco - Sep 29, 2026
+* <a href="https://coreweave.com/fully-connected-2026" target="_blank">CoreWeave Fully Connected</a> - San Francisco - Sep 29 - Oct 2, 2026
+* <a href="https://clickhouse.com/company/events/202610-LATAM-SaoPaulo-Observability-with-ClickStack/?utm_source=clickhouse&utm_medium=email&utm_campaign=202609-newsletter&ref=newsletter" target="_blank">Sao Paulo In-person training</a> - Observabilidade com ClickStack - Sao Paulo - Oct 8, 2026
+* Sao Paulo Meetup - Observabilidade de Agentes em Escala: o Case do iFood com Langfuse - Sao Paulo - Oct 8, 2026
+
+### Events in EMEA
+
+* <a href="https://ai.engineer/paris/2026" target="_blank">AI Engineer Paris (Langfuse) - Sept 22-24, 2026</a>
+* <a href="https://clickhouse.com/company/events/202609-EMEA-Stockholm-Real-time-Analytics-w-ClickHouse?utm_source=clickhouse&utm_medium=email&utm_campaign=202609-newsletter&ref=newsletter" target="_blank">Stockholm In-Person Training: Real-time Analytics with ClickHouse</a> - Sep 23, 2026
+* <a href="https://luma.com/p7td11mb" target="_blank">AI Builders and Databases Barcelona</a> - Sep 23, 2026
+* <a href="https://www.bigdataldn.com/" target="_blank">BigDataLondon - Sept 23-24, 2026</a>
+* <a href="https://clickhouse.com/company/events/202609-EMEA-Copenhagen-Real-time-Analytics-w-ClickHouse?utm_source=clickhouse&utm_medium=email&utm_campaign=202609-newsletter&ref=newsletter" target="_blank">Copenhagen In-person training - Sept 24, 2026</a>
+* <a href="https://espc.tech/conference/fabcon-europe-2026/" target="_blank">FabCON - Sept 28 - Oct 1</a>
+* <a href="https://go2.striim.com/2026-fabcon-ai-roundtable?tracker=clickhouse" target="_blank">FabCon Lunch and Learn - Sept 30, 2026</a>
+* <a href="https://clickhouse.com/company/events/ai-builders-and-databases-sep-paris-2026?utm_source=clickhouse&utm_medium=email&utm_campaign=202609-newsletter&ref=newsletter" target="_blank">AI Builders and Databases Paris</a> - Sep 29, 2026
+* <a href="https://www.agenticaiforum.net/" target="_blank">Agentic AI Forum Dubai</a> - Sept 30, 2026
+* <a href="https://clickhouse.com/company/events/202609-EMEA-London-AI-Agents-w-Langfuse?utm_source=clickhouse&utm_medium=email&utm_campaign=202609-newsletter&ref=newsletter" target="_blank">London In-person training - From 0 to Production: Observing and Improving AI Agents with Langfuse</a> - Sep 30, 2026
+* <a href="https://clickhouse.com/company/events/202609-EMEA-London-One-Database-Every-Workload?utm_source=clickhouse&utm_medium=email&utm_campaign=202609-newsletter&ref=newsletter" target="_blank">London In-person training - One Database, Every Workload: A ClickHouse Workshop</a> - Sep 30, 2026
+* <a href="https://clickhouse.com/openhouse/london-2026?utm_source=clickhouse&utm_medium=email&utm_campaign=202609-newsletter&ref=newsletter" target="_blank">Open House Roadshow London</a> - Sep 30, 2026
+* <a href="https://clickhouse.com/company/events/202610-EMEA-Munich-AI-Agents-w-Langfuse?utm_source=clickhouse&utm_medium=email&utm_campaign=202609-newsletter&ref=newsletter" target="_blank">Munich In-person training - From 0 to Production: Observing and Improving AI Agents with Langfuse</a> - Oct 6, 2026
+* <a href="https://clickhouse.com/company/events/202610-EMEA-Munich-One-Database-Every-Workload?utm_source=clickhouse&utm_medium=email&utm_campaign=202609-newsletter&ref=newsletter" target="_blank">Munich In-person training - One Database, Every Workload: A ClickHouse Workshop</a> - Oct 6, 2026
+* <a href="https://clickhouse.com/company/events/202610-munich-open-house?utm_source=clickhouse&utm_medium=email&utm_campaign=202609-newsletter&ref=newsletter" target="_blank">Open House Roadshow Munich</a> - Oct 6, 2026
+* <a href="https://worldsummit.ai/" target="_blank">World Summit AI Amsterdam</a> - Oct 7-8, 2026
+* <a href="https://clickhouse.com/company/events/ai-builders-and-databases-oct-stockholm-2026?utm_source=clickhouse&utm_medium=email&utm_campaign=202609-newsletter&ref=newsletter" target="_blank">AI Builders and Databases Stockholm</a> - Oct 8, 2026
+* <a href="https://clickhouse.com/company/events/ai-builders-and-databases-oct-tel-aviv-2026?utm_source=clickhouse&utm_medium=email&utm_campaign=202609-newsletter&ref=newsletter" target="_blank">AI Builders and Databases Tel Aviv</a> - Oct 12, 2026
+* <a href="https://luma.com/clickh-6n6u" target="_blank">SRECon Dublin Happy Hour by the Quay</a> - Oct 13, 2026
+* <a href="https://www.usenix.org/conference/srecon25emea" target="_blank">SRECon Dublin</a> - Oct 13-15, 2026
+* <a href="https://datainnovationsummit.com/region/mea/" target="_blank">Data Innovation Summit Dubai</a> Oct 14-15
+* <a href="https://clickhouse.com/company/events/202610-EMEA-Oslo-Real-time-Analytics-w-ClickHouse?utm_source=clickhouse&utm_medium=email&utm_campaign=202609-newsletter&ref=newsletter" target="_blank">Oslo In-Person Training: Real-time Analytics with ClickHouse</a> - Oct 14, 2026
+* <a href="https://www.postgresql.org/about/event/pgconfeu-2026-2587/" target="_blank">PostgreSQL Conference Europe - Oct 20-23, 2026</a>
+* <a href="https://aws.amazon.com/events/cloud-days/riyadh/" target="_blank">AWS Cloud Days Riyadh</a> - Oct 21, 2026
+* <a href="https://clickhouse.com/company/events/202610-EMEA-London-Real-time-Analytics-w-ClickHouse?utm_source=clickhouse&utm_medium=email&utm_campaign=202609-newsletter&ref=newsletter" target="_blank">London In-Person Training: Real-time Analytics with ClickHouse</a> - Oct 21, 2026
+* <a href="https://clickhouse.com/company/events/ai-builders-and-analytics-oct-london-2026?utm_source=clickhouse&utm_medium=email&utm_campaign=202609-newsletter&ref=newsletter" target="_blank">AI Builders and Analytics London</a> - Oct 21, 2026
+* <a href="https://luma.com/clickh-vtzf" target="_blank">AI Builders and Databases Dubai</a> - Oct 22, 2026
+* <a href="https://battleofthequants.com/london-2026/" target="_blank">Battle of the Quants London - Oct 22, 2026</a>
+* <a href="https://clickhouse.com/company/events/202610-EMEA-Dublin-Real-time-Analytics-w-ClickHouse?utm_source=clickhouse&utm_medium=email&utm_campaign=202609-newsletter&ref=newsletter" target="_blank">Dublin In-Person Training: Real-time Analytics with ClickHouse</a> - Oct 23, 2026
+* <a href="https://luma.com/clickh-1qqg" target="_blank">AI Builders and Databases Madrid</a> - Nov 3, 2026
+* <a href="https://clickhouse.com/company/events/ai-builders-and-databases-nov-cyprus-2026?utm_source=clickhouse&utm_medium=email&utm_campaign=202609-newsletter&ref=newsletter" target="_blank">AI Builders and Databases Cyprus</a> - Limassol - Nov 26, 2026
+
+### Events in APAC
+
+* <a href="https://clickhouse.com/company/events/202609-APJ-India-Bangalore-Open-House-Roadshow?utm_source=clickhouse&utm_medium=email&utm_campaign=202609-newsletter&ref=newsletter" target="_blank">Open House Roadshow Bangalore</a> - Sep 22, 2026
+* Singapore - <a href="https://clickhouse.com/company/events/202609-APJ-Singapore-AI-Agents-w-Langfuse?utm_source=clickhouse&utm_medium=email&utm_campaign=202609-newsletter&ref=newsletter" target="_blank">From 0 to Production: Observing and Improving AI Agents with Langfuse</a> - Sep 24, 2026
+* Singapore: <a href="https://clickhouse.com/company/events/202609-APJ-Singapore-One-Database-Every-Workload?utm_source=clickhouse&utm_medium=email&utm_campaign=202609-newsletter&ref=newsletter" target="_blank">One Database, Every Workload: A ClickHouse Workshop</a> - Sep 24, 2026
+* Singapore: <a href="https://clickhouse.com/company/events/build-better-llm-apps-with-langfuse-singapore?utm_source=clickhouse&utm_medium=email&utm_campaign=202609-newsletter&ref=newsletter" target="_blank">Build Better LLM Apps</a> - Sep 29, 2026
+* Auckland: <a href="https://clickhouse.com/company/events/one-database-every-workload-new-zealand?utm_source=clickhouse&utm_medium=email&utm_campaign=202609-newsletter&ref=newsletter" target="_blank">One Database, Every Workload: A ClickHouse Workshop</a> - Oct 6, 2026
+* Auckland: <a href="https://clickhouse.com/company/events/nz-unified-data-stack-postgres-clickhouse?utm_source=clickhouse&utm_medium=email&utm_campaign=202609-newsletter&ref=newsletter" target="_blank">Build a unified data stack with Postgres and ClickHouse</a> - Oct 6, 2026
+* Singapore: <a href="https://events.confluent.io/confluent-fsi-singapore-2026" target="_blank">Confluent Financial Services Leaders Summit</a> - Oct 9, 2026
+* Sydney: <a href="https://clickhouse-workshop-syd.innovatusmediaevents.com/" target="_blank">Build a unified data stack for real-time AI with Postgres and ClickHouse</a> - Oct 13, 2026
+* Melbourne: <a href="https://clickhouse.com/company/events/build-better-llm-apps-with-langfuse-melbourne?utm_source=clickhouse&utm_medium=email&utm_campaign=202609-newsletter&ref=newsletter" target="_blank">Build Better LLM Apps</a> - Oct 15, 2026
+
 
 ---
 
@@ -153,6 +660,350 @@ Try the ClickHouse dbt v2 adapter public beta, or request access to the ClickHou
 Interested in seeing how ClickHouse works on your data? Get started with ClickHouse Cloud in minutes and receive $300 in free credits.
 
 [Sign up](https://console.clickhouse.cloud/signUp?loc=blog-cta-2054-get-started-today-sign-up&utm_blogctaid=2054)
+
+---
+
+---
+
+## What's new in ClickStack - Aug ’26
+Published: 2026-09-16T00:00:00+00:00
+URL: https://clickhouse.com/blog/whats-new-in-clickstack-august-2026
+
+---
+title: "What's new in ClickStack - Aug ’26"
+date: "2026-09-17T16:53:18.042Z"
+author: "The ClickStack Team"
+category: "Product"
+excerpt: "The August ClickStack update brings dashboard variables, chart formulas, PromQL support, a metrics browser, LLM observability, and improvements to alerting and tracing."
+---
+
+# What's new in ClickStack - Aug ’26
+
+> For those of you who can’t wait for these monthly ClickStack updates, we have weekly [Demo Day videos](https://clickhouse.com/docs/clickstack/demo-days/2026/2026-09-10). The dev team records demos of the features they’re working on, so you can see what’s taking shape before it reaches this newsletter. We share them in [Slack](https://clickhouse.com/slack) too in the #o11y-clickstack channel. 
+
+Welcome to the August edition of What's New in ClickStack. Five releases shipped between v2.34 and v2.38, and dashboards took most of the attention.
+
+Dashboard variables are now generally available. A filter's selection can be referenced anywhere in a tile, from raw SQL and builder fields to Lucene and PromQL, and one dropdown can narrow another. Charts also gained formulas, so two series on a chart can be combined into a rate or a ratio.
+
+Two other additions make dashboards quicker to build and easier to read. A metrics explorer in the chart editor lets you browse what a deployment actually emits before you pick a metric. 
+
+Release markers overlay the moment each version of a service first appeared, so a latency spike can be lined up against the deploy that caused it.
+
+We also shipped a beta LLM observability dashboard with Alerting receiving a long list of improvements, several of which came directly from user requests: up to ten notification targets per alert, alert names and tags, an evaluation history you can read over the API, and richer webhook payloads.
+
+We’ll cover all of this below, alongside new dashboard filter types, OIDC authentication for the collector, and another round of MCP server improvements.
+
+## New contributors {#new_contributors}
+
+Thank you to our open source contributors and to the users whose feedback shaped many of these features.
+
+[arj22](https://github.com/arj22), [Vansh98789](https://github.com/Vansh98789), [truehazker](https://github.com/truehazker), [RIP21](https://github.com/RIP21), [espenloov](https://github.com/espenloov), [MFA-G](https://github.com/MFA-G), [milansanjeev](https://github.com/milansanjeev), [Tyagiquamar](https://github.com/Tyagiquamar), [bsosnader](https://github.com/bsosnader), [motsc](https://github.com/motsc)
+
+Contributing also doesn't have to mean writing code. Documentation fixes, ideas, feature requests, bug reports, and general feedback are all welcome through the repository. Small contributions count too, and each one improves ClickStack for the wider community.
+
+---
+
+## Join the ClickStack Cloud waitlist
+
+Get the performance and cost efficiency of ClickHouse in a fully managed observability service. With ClickStack Cloud, we handle the schemas, ingestion, and scaling.
+
+[Join the waitlist](https://clickhouse.com/cloud/clickstack-cloud-waitlist-turnkey?loc=blog-cta-2109-join-the-clickstack-cloud-waitlist-join-the-waitlist&utm_blogctaid=2109)
+
+---
+
+## Time series engine for out-of-the-box Prometheus support {#time_series_engine_for_out_of_the_box_prometheus_support}
+
+Many teams already store their logs and traces in ClickHouse, but bringing their Prometheus workloads across meant rewriting PromQL queries in SQL or maintaining a translation layer. For teams with existing Prometheus dashboards and tooling, we needed a way to support the query language they already used.
+
+The TimeSeries engine and PromQL support are now in private preview in Managed ClickStack, and open source as experimental, allowing ClickHouse to replace Prometheus for storage and querying. You keep your existing collectors and scrape configuration, send metrics through Prometheus remote write, and query them using PromQL through ClickStack, Grafana, or directly in ClickHouse.
+
+[Watch on YouTube](https://youtube.com/watch?v=pNE_Ul5ly5s)
+
+In ClickStack, you can configure a TimeSeries table as a PromQL data source and write PromQL directly in the chart editor. This lets you build dashboards with Prometheus metrics alongside your logs and traces. Dashboard variables, covered below, connect filters to those queries so you can explore services and environments without editing each expression. You can also connect ClickStack to an external Prometheus-compatible endpoint.
+
+The preview focuses on storage, querying, and dashboards. PromQL coverage is still expanding, and a visual PromQL query builder and alerting on PromQL queries aren't supported yet.
+
+Read the [full announcement](https://clickhouse.com/blog/introducing-promql) for the architecture and setup details, and to join the private preview to try it with your own metrics.
+
+## Dashboard variables {#dashboard_variables}
+
+Historically, for dashboard filters, you would pick a value, and ClickStack would add a `WHERE` condition to every tile the filter applies to. This covers most cases, but not all of them.
+
+Sometimes the selected value belongs in a `SELECT` expression, a `HAVING` clause, or a filter on a different column than the one the dropdown queries. With support for Prometheus data sources, dashboard selections also need to carry through to PromQL queries, where filtering uses label matchers rather than a SQL `WHERE` clause. A service dropdown might need to filter logs queried with SQL and metrics queried with PromQL on the same dashboard.
+
+![](https://clickhouse.com/uploads/clickstack_aug2026_image2_full_8bcdad708c.png)
+
+Dashboard variables make this possible by letting each tile reference the selected value wherever its query needs it.
+
+Any filter, existing or new, can be marked “Available as variable” in the filters dialog. Its current selection is then exposed to tile queries as `$variableName`, and each tile decides where and how the value is used. Broadcast and variable mode can be enabled independently, so a filter can keep its existing behavior while also being available as a variable.
+
+![](https://clickhouse.com/uploads/clickstack_aug2026_image3_full_a8571bb739.png)
+
+> *Here, the log severity dropdown filters trace volume by service over time by mapping the selected severity to a trace status, with all statuses included when nothing is selected.*
+
+Raw SQL tiles can reference a variable anywhere in the query. The reference form controls the rendering: `$name` expands to the selected values as SQL strings, while `${name:csv}`, `${name:regex}` and `${name:lucene}` render them as a comma-separated list, a regex alternation, or an OR of quoted terms.
+
+> An empty selection is the awkward case. A bare `$name` renders as NULL before anything is selected, which would silently empty a chart. Two macros exist for exactly this. `$__filter($var)` expands to an IN condition when values are selected and to 1=1 otherwise. `$__conditionalAll(condition, $var)` includes an arbitrary condition only when the variable has a selection - as used in the example above.
+
+<pre><code type='click-ui' language='sql'>
+SELECT
+    $__timeInterval(TimestampTime) AS ts,
+    ServiceName,
+    count() AS count
+FROM otel_traces
+WHERE $__timeFilter(TimestampTime)
+    AND $__filter(ServiceName, $service)
+    AND $__conditionalAll(
+        StatusCode = transform(
+            $Log_Severity,
+            ['error', 'info', 'information', 'trace', 'warn'],
+            ['Error', 'Ok', 'Ok', 'unset', 'unset'],
+            'unset'
+        ),
+        $Log_Severity
+    )
+GROUP BY ServiceName, ts
+ORDER BY ts ASC;
+</code></pre>
+
+As shown in the example above, the conditional macro makes cross-source mappings possible. A dashboard can map trace status codes to error or info, allowing a severity filter defined against a logs table to filter a traces table. Select error at the dashboard level and the trace query filters for an error status.
+
+Builder tiles use the same substitution in every SQL expression input: `SELECT`, `WHERE`, `GROUP BY`, `HAVING`, and `ORDER BY` all support variables as do Lucene queries.
+
+Autocomplete suggests every available variable and macro. It also shows the actual expansion inline using the current selection, so you can see what the query will run before it runs. 
+
+Filters can also depend on each other, allowing users to create chained filters. For example, a filter's `WHERE` clause can reference other variables, so a severity dropdown that references the service filter offers only the severities found for the selected service.
+
+<video autoplay="1" muted="1" loop="1" controls="1">
+  <source src="https://clickhouse.com/uploads/dependent_filters_b6cc300be1.mp4" type="video/mp4" />
+</video>
+
+Variable support is essential for filters to work in Prometheus dashboards and make PromQL visualizations interactive and responsive to filters. As part of the Prometheus support introduced above, dashboard variables connect filters to these queries, letting you explore different services and environments without editing the PromQL by hand.
+
+![](https://clickhouse.com/uploads/clickstack_aug2026_image5_full_c3fddc5d14.png)
+
+PromQL charts substitute variables before the query runs, with autocomplete for variable references and a generated PromQL preview alongside the existing generated SQL panel.
+
+The external dashboards API, the MCP server, and, through the API, the ClickHouse Terraform provider all carry variable configuration. An agent can build a dashboard with variable filters, dependent dropdowns, and tiles that reference them, then check its own substitutions with the query tile tools before handing the dashboard over.
+
+## Formulas on charts {#formulas_on_charts}
+
+Plotting errors and successful requests on the same chart gives you two counts. To see the failure rate, you need to combine them. Chart formulas let you do that directly in the chart editor.
+
+Time series, table, and number charts now have an “Add Formula” row. Each series gets a letter reference, such as A or B, which you can use in an arithmetic expression. If A counts errors and `B` counts successful requests, `A / (A + B) * 100` gives the percentage of requests that failed. Formulas work with metric, log, and trace sources, and you can add several to the same chart.
+
+![](https://clickhouse.com/uploads/clickstack_aug2026_image6_full_44b4f7e7f0.png)
+
+Each formula has its own alias and number format. The **Show input series** toggle lets you display the underlying series alongside the result or show only the calculated value. 
+
+ClickHouse computes the formulas as part of the chart query. Alerts on a formula chart evaluate the calculated result, so you can alert on a failure rate directly. Formulas are also supported through the dashboards API and the MCP server.
+
+> Formulas support arithmetic over series references. ClickHouse functions and references to other formulas aren't supported yet.
+
+## Browse metrics in the chart editor {#browse_metrics_in_the_chart_editor}
+
+The ClickStack metrics selector was optimized for when you knew a metric’s name. If you didn’t, the flat dropdown gave you little visibility into what your services were actually emitting. With more users moving their metrics workloads to ClickHouse following the release of the TimeSeries engine, we needed a better way to explore those metrics.
+
+<video autoplay="1" muted="1" loop="1" controls="1">
+  <source src="https://clickhouse.com/uploads/metrics_browser_8d8bdc1c54.mp4" type="video/mp4" />
+</video>
+
+To address this, we've added a **Browse metrics** control beside the metric selector that opens a metrics explorer. Names are grouped into a tree, so `system.cpu.utilization` appears under `system`, then `cpu`. You can search across names and descriptions or switch to a flat list.
+
+Selecting a metric shows its type, unit, description, reporting services, and available tags. You can explore tag values, choose filters and group-bys, and apply them together with the metric to your chart. The explorer also sets an aggregation suited to the metric type: average for gauges, sum for counters, and p95 for histograms.
+
+## Release markers on dashboard charts {#release_markers_on_dashboard_charts}
+
+ClickStack dashboards showed changes in latency and error rates, but gave you no indication of when a service had been updated. To see whether a release might explain a spike, you had to check your deployment tools and compare timestamps yourself.
+
+We've added release markers to bring that context into the dashboard. Enable **Show release markers** from the dashboard menu, and charts display a dashed vertical line when a new service version first appears in your telemetry. Hover over a marker to see the service, version, and time.
+
+![](https://clickhouse.com/uploads/clickstack_aug2026_image8_full_3305c0822d.png)
+
+Release markers use version information from your existing logs and traces. By default, they read the OpenTelemetry `service.version` resource attribute. If you record versions elsewhere, you can configure a Service Version Expression on the source. For example, teams using container image tags can point it at `ResourceAttributes['container.image.tag']`.
+
+Markers follow the services shown in each chart. A chart filtered to one service shows its releases, while a chart grouped by service shows markers colored to match each service's line. Charts that combine multiple services into a single line don't show markers.
+
+## LLM observability dashboard (beta) {#llm_observability_dashboard_beta}
+
+ClickStack users are already sending logs and traces from LLM applications and coding agents. Until now, though, there was no dedicated view for understanding which models they were using, how many tokens they consumed, or what happened during a conversation.
+
+We've added a beta LLM observability dashboard alongside the existing ClickHouse, Kubernetes, and services presets. It covers token usage, model calls, tool calls, cache hits, error rates, and response times, with a breakdown by user when that information is available.  
+![](https://clickhouse.com/uploads/clickstack_aug2026_image9_full_72a70bece2.png)
+
+The dashboard reads your existing traces and logs, so it also works on telemetry collected before this release. It supports the OpenTelemetry GenAI semantic conventions, OpenLLMetry, OpenInference, and Vercel AI SDK telemetry, with no dedicated tables or ingestion changes required.
+
+The **Sessions** tab groups calls by conversation. Open a session to see its timeline, then expand a call to read the messages, inspect tool calls, and see token usage.
+
+The **Latency** tab helps you investigate slow model and tool calls. Select a region of the duration heatmap to see which attributes distinguish those calls, such as the model or token count. The Errors tab brings failing LLM spans together with related error logs.
+
+> This dashboard isn't a full LLM observability or AI engineering solution. If you need broader capabilities, such as evaluations and prompt management, we recommend Langfuse.
+
+## Alerting improvements {#alerting_improvements}
+
+We've made several alerting improvements this month, many of them based on requests from users. These cover sending notifications to more destinations, organizing alerts, and understanding what happened when an alert was evaluated.
+
+### Multiple notification targets
+
+ClickStack alerts were limited to a single notification target. If you wanted to page an on-call engineer and post to a team channel, you had to create two alerts and keep their conditions in sync.
+
+An alert can now notify up to ten targets. You can add and remove them directly in the alert editor for saved searches and dashboard tiles, and the alerts page shows all configured destinations.  
+![](https://clickhouse.com/uploads/clickstack_aug2026_image10_full_62e2b8a4ec.png)
+
+The evaluation history also shows notification duration and failures for each target, helping you identify which integration is slow or failing. Multiple targets are supported through the external API and MCP server.
+
+### Alert names and tags
+
+Alerts previously took their names from the saved search or dashboard tile they monitored. As teams added more alerts, this made them harder to distinguish and organize.
+
+You can now give each alert its own name and tags, then search and filter by them on the alerts page. New alerts start with the name and tags of the dashboard or saved search they belong to, which you can change in the alert editor.
+
+### Evaluation history
+
+When an alert failed, ClickStack showed its latest error, but that didn't tell you whether earlier evaluations had succeeded or whether the alert was keeping up with its schedule.
+
+Each evaluation is now recorded separately, including query errors, timeouts, and notification failures. The history also records query duration and backfilled time windows, so you can see when an alert is falling behind.  
+![](https://clickhouse.com/uploads/clickstack_aug2026_image11_full_f5d653777f.png)
+
+You can inspect errored evaluations from the history on the alerts page. The same history is available through the API at `GET /alerts/:id/evaluations`, with filtering by time range and a breakdown by group for grouped alerts.
+
+### Richer webhook payloads
+
+Routing or deduplicating an alert in another system previously meant extracting information from its rendered title and message.
+
+Generic and incident.io webhook templates now expose fields for the alert's ID, status, condition, observed value, and evaluation time range. The stable `alertId` identifies the same alert across repeated notifications, giving downstream systems a key for deduplication.
+
+The webhook editor lists the available variables with descriptions, and Test Webhook includes sample values so you can check your integration before an alert fires.
+
+## New dashboard filter types {#new_dashboard_filter_types}
+
+ClickStack dashboard filters populated their dropdowns by querying a column in ClickHouse. That works when the options come from your data, but sometimes you already know the values you want to offer. With Prometheus data sources, we also needed a way to populate dropdowns from metric labels.
+
+We've added two filter types to the filters and variables dialog.
+
+**Static values** let you define the options yourself. For example, an environment filter can offer “dev”, “staging”, and “prod” without running a query to discover them. Static filters work through the variables we highlighted above, with each tile referencing the selected value in its query.
+
+![](https://clickhouse.com/uploads/clickstack_aug2026_image12_full_4a70164229.png)
+
+You can also use them to control how a chart displays data. For example, a dropdown containing ServiceName and SeverityText lets users choose how the chart groups its results.
+
+<video autoplay="1" muted="1" loop="1" controls="1">
+  <source src="https://clickhouse.com/uploads/static_filters_0439b01132.mp4" type="video/mp4" />
+</video>
+
+The **PromQL label values** filter type lets you build a dropdown from the metric labels in a PromQL source. When configuring the filter, you choose a label using autocomplete and can optionally add a series matcher to narrow the values offered in the dropdown.
+
+<video autoplay="0" muted="0" loop="0" controls="1">
+  <source src="https://clickhouse.com/uploads/aaron_promql_with_labels_5cab80b52c.mp4" type="video/mp4" />
+</video>
+
+The matcher can reference other dashboard variables, allowing filters to depend on each other. An instance dropdown can use the selected environment to show only instances in that environment, with PromQL charts using those selections to filter their results.
+
+## OIDC authentication for the OTLP receiver {#oidc_authentication_for_the_otlp_receiver}
+
+The standalone ClickStack collector authenticated incoming telemetry using a single shared token. This was straightforward to set up, but every application sending data needed the same long-lived credential. For teams running larger fleets, rotating that token meant coordinating updates across all of those applications.
+
+The collector now supports OpenID Connect (OIDC) authentication, so applications can send telemetry using short-lived tokens from your existing identity provider or workload identity system.
+
+To configure it, set `OIDC_ISSUER_URL` and `OIDC_AUDIENCE` on the collector. Applications then send a JWT in the `Authorization: Bearer <token>` header with their OTLP requests. The collector retrieves the provider's signing keys and validates the token's signature, issuer, audience, and expiry.
+
+This lets teams manage credentials through their identity provider and issue tokens to individual applications, without distributing one shared secret across the fleet.
+
+> OIDC authentication is available in standalone collector mode. Shared-token authentication remains supported, but the two options are mutually exclusive. Setting `OIDC_ISSUER_URL` enables OIDC.
+
+## MCP server improvements {#mcp_server_improvements}
+
+We continue to expand the ClickStack MCP server, using our evaluation framework to test how agents investigate problems and build dashboards. This month, we've added tools for finding changes in log patterns and checking dashboards, along with improvements based on how agents are using the server.
+
+### Finding new and disappearing log patterns
+
+The existing pattern tools helped agents find common log messages and compare attribute values, but they couldn't identify a log pattern that had just started appearing. This matters during an investigation, when a new error message might explain what changed.
+
+The new `clickstack_emerging_signals` tool compares log patterns across two time windows. It reports patterns that are new or becoming more frequent, as well as those that have disappeared.
+
+In our `service-health-check` evaluation, agents found a planted new log pattern in eight of ten runs with the tool, compared with none without it.
+
+### Checking a whole dashboard
+
+Agents previously had to query each tile separately to check whether a dashboard they'd built actually worked. On larger dashboards, this added a lot of calls just to validate the result.
+
+The new `clickstack_query_tiles` tool checks multiple tiles in one call and returns a summary of results, errors, and query warnings for each. In our dashboard-building evaluation, an agent used it to validate a 17-tile dashboard in a single call.
+
+### Helping agents choose the right tools
+
+Production usage showed agents increasingly choosing raw SQL as the number of available tools grew. It accounted for around 73% of querying calls and had roughly twice the error rate of the builder tools.
+
+We've updated the tool descriptions and server instructions to guide agents toward the builder tools first, which, on average, are [almost 20% more accurate and use 27% fewer tool calls](https://clickhouse.com/blog/benchmarking-the-clickstack-mcp-server-with-hdx-evals). These produce charts and tables that users can drill into, while raw SQL remains available for queries that the builder can't express.
+
+Tools also now declare whether they read data or can modify it, helping clients decide which actions need approval.
+
+## Span links in both directions {#span_links_in_both_directions}
+
+When an application offloads work through Kafka, the producer sending a message and the consumer processing it may appear in separate traces. OpenTelemetry [span links](https://opentelemetry.io/docs/specs/semconv/messaging/messaging-spans/) connect those operations, letting you follow the work across services.
+
+ClickStack already let you follow these links from a consumer back to its producer. If you started at the producer, though, there was no way to find the consumers that linked to it. That made it harder to investigate what happened after a message was published.
+
+We've added a **Linked from** section to the span detail panel, so you can find the spans that reference the one you're viewing. You can now follow a consumer's link to its producer and see the consumer listed there.
+
+<video autoplay="0" muted="0" loop="0" controls="1">
+  <source src="https://clickhouse.com/uploads/clickstack_aug2026_span_links_df1d42357e.mp4" type="video/mp4" />
+</video>
+
+The existing **Span Links** section also shows more detail. Each linked span includes its name, service, duration, and timestamp, helping you choose which one to investigate before opening it. If the target span can't be found, the **Open trace** action is still available.
+
+Navigating back to a span you've already visited also returns to its existing breadcrumb, keeping the navigation history manageable as you move between linked spans.
+
+## Little but useful things {#little_but_useful_things}
+
+### What's new, in the app
+
+You can now see what's changed in your version of ClickStack from the **Help** menu. It shows release highlights, badges for new features and breaking changes, and a **View all releases** option for browsing earlier updates.
+
+<video autoplay="1" muted="1" loop="1" controls="1">
+  <source src="https://clickhouse.com/uploads/help_168515dd08.mp4" type="video/mp4" />
+</video>
+
+### Replay a tile's query in Search
+
+Log and trace dashboard tiles now have a **Replay search** action. It opens Search in a new tab with the tile's source, query, dashboard filters, and time range preserved, so you can investigate the events behind a chart without rebuilding the query.
+
+<video autoplay="1" muted="1" loop="1" controls="1">
+  <source src="https://clickhouse.com/uploads/replay_search_08df5bcf5e.mp4" type="video/mp4" />
+</video>
+
+### PromQL legend templates
+
+PromQL charts previously labeled each series using the metric name and its distinguishing labels, which could make legends difficult to read. You can now define a handlebars template in display settings that uses only the labels you want to show.
+
+![](https://clickhouse.com/uploads/clickstack_aug2026_image16_full_4d9f9e4f44.png)
+
+### Heatmap percentile tooltip
+
+Hovering over a heatmap cell now shows where that bucket sits in the distribution. You can see its percentile directly, helping you understand whether a duration is typical or among the slowest observations.
+
+![](https://clickhouse.com/uploads/clickstack_aug2026_image17_full_4917cecd41.png)
+
+### A faster alerts page
+
+The alerts page could overwhelm the browser when a team had thousands of alerts. The list now renders only the rows currently in view, making those larger alert collections easier to browse.
+
+### Link to sources by name
+
+Links into ClickStack can now identify a source by its name as well as its ID. This is useful for runbooks and alerting integrations, where source IDs may differ between environments or change when a source is recreated.
+
+## Conclusion {#conclusion}
+
+That's it for August. Much of this month's work focused on making dashboards easier to build and more useful during investigations, alongside improvements to alerting, the MCP server, and support for Prometheus and LLM workloads.
+
+Many of these changes came directly from users running ClickStack and telling us where the experience fell short. Keep that feedback coming, try the features covered above, and let us know what you'd like to see next.
+
+---
+
+## Get started today
+
+Interested in seeing how ClickHouse works on your data? Get started with ClickHouse Cloud in minutes and receive $300 in free credits.
+
+[Sign up](https://console.clickhouse.cloud/signUp?loc=blog-cta-2110-get-started-today-sign-up&utm_blogctaid=2110)
 
 ---
 
