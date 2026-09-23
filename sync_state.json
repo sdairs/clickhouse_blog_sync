@@ -1,5 +1,5 @@
 {
-  "last_sync": "2026-09-22T11:05:38.257451Z",
+  "last_sync": "2026-09-23T10:55:34.853277Z",
   "processed_blogs": {
     "https://clickhouse.com/blog/clickhouse-raises-400-million-series-d-acquires-langfuse-launches-postgres": {
       "title": "ClickHouse raises $400M Series D led by Dragoneer to accelerate expansion across analytics and AI infrastructure",
@@ -5892,9 +5892,21 @@
       "pub_date": "2026-09-21T15:47:52+00:00",
       "file_path": "blogs/2026-09-21-postgres-on-nvme-performance-and-the-convergence.md",
       "processed_at": "2026-09-22T11:05:38.088080Z"
+    },
+    "https://clickhouse.com/blog/clickhouse-appoints-mike-scarpelli-to-board-of-directors": {
+      "title": "ClickHouse appoints Mike Scarpelli, former Snowflake and ServiceNow CFO, to Board of Directors",
+      "pub_date": "2026-09-22T20:32:35+00:00",
+      "file_path": "blogs/2026-09-22-clickhouse-appoints-mike-scarpelli-former.md",
+      "processed_at": "2026-09-23T10:55:34.562762Z"
+    },
+    "https://clickhouse.com/blog/fountain-agentic-ai-for-high-volume-hiring": {
+      "title": "How Fountain rebuilt its data plane on ClickHouse Cloud to power Cue, the Frontline Superintelligence",
+      "pub_date": "2026-09-22T14:52:36+00:00",
+      "file_path": "blogs/2026-09-22-how-fountain-rebuilt-its-data-plane-on-clickhouse.md",
+      "processed_at": "2026-09-23T10:55:34.748162Z"
     }
   },
-  "total_blogs": 982,
+  "total_blogs": 984,
   "failed_blogs": [
     {
       "url": "https://clickhouse.com/jp/blog/clickhouse-gcp-japan-availability",
