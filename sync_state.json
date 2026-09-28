@@ -1,5 +1,5 @@
 {
-  "last_sync": "2026-09-27T11:33:08.697688Z",
+  "last_sync": "2026-09-28T13:07:01.720735Z",
   "processed_blogs": {
     "https://clickhouse.com/blog/clickhouse-raises-400-million-series-d-acquires-langfuse-launches-postgres": {
       "title": "ClickHouse raises $400M Series D led by Dragoneer to accelerate expansion across analytics and AI infrastructure",
@@ -5910,9 +5910,15 @@
       "pub_date": "2026-09-23T00:00:00+00:00",
       "file_path": "blogs/2026-09-23-clickhouse-release-26-9.md",
       "processed_at": "2026-09-24T11:15:23.891789Z"
+    },
+    "https://clickhouse.com/blog/chdb-durable-layer-for-agent-memory": {
+      "title": "chDB Durable Layer for agent memory",
+      "pub_date": "2026-09-28T09:42:20+00:00",
+      "file_path": "blogs/2026-09-28-chdb-durable-layer-for-agent-memory.md",
+      "processed_at": "2026-09-28T13:07:01.614556Z"
     }
   },
-  "total_blogs": 985,
+  "total_blogs": 986,
   "failed_blogs": [
     {
       "url": "https://clickhouse.com/jp/blog/clickhouse-gcp-japan-availability",
