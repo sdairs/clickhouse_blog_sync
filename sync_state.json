@@ -1,5 +1,5 @@
 {
-  "last_sync": "2026-09-28T13:07:01.720735Z",
+  "last_sync": "2026-09-29T12:16:42.618513Z",
   "processed_blogs": {
     "https://clickhouse.com/blog/clickhouse-raises-400-million-series-d-acquires-langfuse-launches-postgres": {
       "title": "ClickHouse raises $400M Series D led by Dragoneer to accelerate expansion across analytics and AI infrastructure",
@@ -5916,9 +5916,33 @@
       "pub_date": "2026-09-28T09:42:20+00:00",
       "file_path": "blogs/2026-09-28-chdb-durable-layer-for-agent-memory.md",
       "processed_at": "2026-09-28T13:07:01.614556Z"
+    },
+    "https://clickhouse.com/blog/clickhouse-expands-collaboration-with-microsoft": {
+      "title": "ClickHouse expands collaboration with Microsoft, bringing Fabric integration, deeper OneLake interoperability, and enterprise deployment flexibility",
+      "pub_date": "2026-09-29T07:24:08+00:00",
+      "file_path": "blogs/2026-09-29-clickhouse-expands-collaboration-with-microsoft.md",
+      "processed_at": "2026-09-29T12:16:41.846117Z"
+    },
+    "https://clickhouse.com/blog/clickhouse-for-microsoft-fabric": {
+      "title": "ClickHouse Workload for Microsoft Fabric: sub-second analytics on OneLake, now in public preview",
+      "pub_date": "2026-09-29T07:18:14+00:00",
+      "file_path": "blogs/2026-09-29-clickhouse-workload-for-microsoft-fabric-sub.md",
+      "processed_at": "2026-09-29T12:16:42.013037Z"
+    },
+    "https://clickhouse.com/blog/clickhouse-now-writes-to-microsoft-onelake": {
+      "title": "ClickHouse now writes Apache Iceberg tables to Microsoft OneLake",
+      "pub_date": "2026-09-29T07:17:01+00:00",
+      "file_path": "blogs/2026-09-29-clickhouse-now-writes-apache-iceberg-tables-to.md",
+      "processed_at": "2026-09-29T12:16:42.225239Z"
+    },
+    "https://clickhouse.com/blog/can-your-postgres-survive-a-bad-query": {
+      "title": "Can your Postgres survive a bad query?",
+      "pub_date": "2026-09-28T15:37:06+00:00",
+      "file_path": "blogs/2026-09-28-can-your-postgres-survive-a-bad-query.md",
+      "processed_at": "2026-09-29T12:16:42.509208Z"
     }
   },
-  "total_blogs": 986,
+  "total_blogs": 990,
   "failed_blogs": [
     {
       "url": "https://clickhouse.com/jp/blog/clickhouse-gcp-japan-availability",

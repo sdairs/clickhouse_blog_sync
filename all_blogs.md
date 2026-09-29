@@ -1,6 +1,508 @@
 # ClickHouse Blogs
-Last updated: 2026-09-28 13:07:01 UTC
-Total blogs: 986
+Last updated: 2026-09-29 12:16:42 UTC
+Total blogs: 990
+
+---
+
+## ClickHouse expands collaboration with Microsoft, bringing Fabric integration, deeper OneLake interoperability, and enterprise deployment flexibility
+Published: 2026-09-29T07:24:08+00:00
+URL: https://clickhouse.com/blog/clickhouse-expands-collaboration-with-microsoft
+
+---
+title: "ClickHouse expands collaboration with Microsoft, bringing Fabric integration, deeper OneLake interoperability, and enterprise deployment flexibility"
+date: "2026-09-29T07:24:08.283Z"
+author: "Alex Francoeur and Aditya Chidurala"
+category: "Company and culture"
+excerpt: "ClickHouse expands its Microsoft collaboration with a native Fabric workload, OneLake read and write capabilities, and ClickHouse BYOC availability in the Microsoft Marketplace."
+---
+
+# ClickHouse expands collaboration with Microsoft, bringing Fabric integration, deeper OneLake interoperability, and enterprise deployment flexibility
+
+**Barcelona, September 29, 2026 —** ClickHouse, the company behind the open-source, real-time analytical database that has become the data layer for the AI era, today at The European Microsoft Fabric + SQL Community Conference announced a significant expansion of its strategic collaboration with Microsoft. The announcement encompasses four major milestones: the launch of the native ClickHouse workload for Microsoft Fabric, the general availability of OneLake read, the public preview of OneLake write, and the availability of ClickHouse Bring Your Own Cloud (BYOC) in the Microsoft Marketplace.
+
+This expansion builds on ClickHouse's growing presence within the Microsoft ecosystem, where data-intensive organizations rely on [ClickHouse Cloud on Azure](https://marketplace.microsoft.com/en-us/product/saas/clickhouse.clickhouse_cloud?tab=overview) to power real-time observability, business intelligence, AI/ML pipelines, and analytical applications at scale. The deepened collaboration reflects a shared commitment between ClickHouse and Microsoft to give data teams fast, flexible, and open infrastructure for the next generation of analytics and AI.
+
+"Expanding our collaboration with Microsoft brings ClickHouse performance and deployment flexibility to where our customers' data increasingly lives," said Yury Izrailevsky, President, Product & Engineering at ClickHouse. "Our engineering teams have worked closely together so that these capabilities are seamlessly integrated into the Microsoft data platform rather than layered on top of it, and joint customers no longer have to trade off between the platforms they've standardized on."
+
+## Sub-second analytics with the ClickHouse workload for Microsoft Fabric {#clickhouse_workload_for_microsoft_fabric}
+
+The ClickHouse workload for Microsoft Fabric is now available in public preview through the Fabric workload hub. It brings the ClickHouse query engine directly into the Fabric experience, so data teams can accelerate OneLake queries to sub-second response times without leaving Fabric.
+
+For joint customers, the value is straightforward. Fabric provides the unified data estate, the governance, and the business user surface area. ClickHouse provides the speed. Highly concurrent agentic workloads, real-time interactive dashboards, and observability that were previously impractical to serve directly from a lakehouse now run at the latency users expect, with no separate cluster to provision, and no ETL pipeline to maintain.
+
+"We’ve long believed that unifying data in OneLake using open, standards-based formats will enable customers to innovate faster," said Dipti Borkar, Vice President, Microsoft IQ and OneLake, Microsoft. "With the ClickHouse workload available in Fabric, running on OneLake, joint customers have more best-in-class analytical engines to choose from to deliver analytics and AI, without moving or copying data between platforms. This collaboration is a strong example of our partner ecosystem extending what teams can do on a single, unified data estate."
+
+[Learn more](https://clickhouse.com/blog/clickhouse-for-microsoft-fabric?utm_medium=referral&utm_source=press&utm_campaign=microsoft-fabcon-press)
+
+## Reading Apache Iceberg tables from OneLake (GA) {#reading_apache_iceberg_tables_from_onelake}
+
+ClickHouse support for reading Iceberg tables from OneLake using OneLake Table APIs is now generally available. Customers can query Iceberg tables managed in OneLake directly from ClickHouse, with no data duplication and no ingestion step.
+
+This removes the friction that has historically forced data teams to choose between a governed lakehouse and a fast analytical engine. Organizations can keep OneLake as the single source of truth for their data estate while applying ClickHouse's query engine to the full breadth of it.
+
+[Learn more](https://clickhouse.com/blog/clickhouse-integrates-with-microsoft-onelake?utm_medium=referral&utm_source=press&utm_campaign=microsoft-fabcon-press)
+
+## Writing Apache Iceberg tables to OneLake (public preview) {#writing_apache_iceberg_tables_to_onelake}
+
+ClickHouse support for writing Iceberg tables to OneLake using OneLake Table APIs with credential vending is now in public preview. This allows ClickHouse users to write results back into OneLake as governed, open-format tables that any Fabric engine can read.
+
+This brings the data lifecycle full circle. Data can be read from OneLake, transformed and aggregated at ClickHouse speed, and written back into the lakehouse where Power BI, notebooks, and the rest of the Fabric ecosystem consume it.
+
+[Learn more](https://clickhouse.com/blog/clickhouse-now-writes-to-microsoft-onelake?utm_medium=referral&utm_source=press&utm_campaign=microsoft-fabcon-press)
+
+## ClickHouse BYOC is now available in the Microsoft Marketplace {#clickhouse_byoc_in_microsoft_marketplace}
+
+ClickHouse Bring Your Own Cloud (BYOC) is now available to Azure customers through the Microsoft Marketplace. BYOC lets organizations run ClickHouse Cloud inside their own Azure tenant, giving them the operational simplicity of a fully managed service without relinquishing control of their data environment. Data never leaves the customer's environment; IAM policies, network controls, and encryption configuration remain under the customer's direct ownership, while ClickHouse manages provisioning, upgrades, monitoring, and scaling. For enterprises operating under strict data residency, compliance, or sovereignty requirements, BYOC provides a path to adopt ClickHouse Cloud without compromise.
+
+Availability in Microsoft Marketplace means both products can be procured through existing Microsoft agreements and count toward Microsoft Azure Consumption Commitments (MACC), removing procurement friction for enterprise buyers.
+
+[Learn more](https://marketplace.microsoft.com/en-gb/product/clickhouse.byoc_clickhouse_cloud)
+
+## About ClickHouse {#about_clickhouse}
+
+ClickHouse, Inc. is the company behind ClickHouse, the open-source, real-time analytical database that has become the data layer for the AI era. Built for the speed, scale, and efficiency that modern applications and AI agents demand, ClickHouse lets companies run real-time analytics, data warehousing, observability, AI, and agent observability, and transactional workloads. More than 4,000 customers, including DoorDash, Ramp, Meta, Tesla, Cisco, and Visa, build on ClickHouse. Headquartered in the San Francisco Bay Area with offices in Amsterdam, London, New York, Singapore, Sydney, and Tokyo, ClickHouse is backed by investors including Dragoneer Investment Group, Khosla Ventures, Coatue, Altimeter Capital, Index Ventures, Benchmark, J.P. Morgan Private Capital, BDT & MSD Partners, Craft Ventures, and 20VC. Learn more at [clickhouse.com](http://clickhouse.com?utm_medium=referral&utm_source=press&utm_campaign=microsoft-fabcon-press).
+
+
+---
+
+## Get started today
+
+Interested in seeing how ClickHouse works on your data? Get started with ClickHouse Cloud in minutes and receive $300 in free credits.
+
+[Sign up](https://console.clickhouse.cloud/signUp?loc=blog-cta-2428-get-started-today-sign-up&utm_blogctaid=2428)
+
+---
+
+---
+
+## ClickHouse Workload for Microsoft Fabric: sub-second analytics on OneLake, now in public preview
+Published: 2026-09-29T07:18:14+00:00
+URL: https://clickhouse.com/blog/clickhouse-for-microsoft-fabric
+
+---
+title: "ClickHouse Workload for Microsoft Fabric: sub-second analytics on OneLake, now in public preview"
+date: "2026-09-29T07:18:14.838Z"
+author: "Alex Francoeur and Aditya Chidurala"
+category: "Product"
+excerpt: "ClickHouse Workload for Microsoft Fabric brings sub-second analytics to OneLake data through a native Fabric workload, with dedicated ClickHouse Cloud compute for agents, dashboards, and applications."
+---
+
+# ClickHouse Workload for Microsoft Fabric: sub-second analytics on OneLake, now in public preview
+
+<iframe width="768" height="432" src="https://www.youtube.com/embed/xFJkRs0og1c" frameborder="0" allowfullscreen></iframe>
+
+For most data teams on Microsoft Fabric, the question of where data lives is settled. It's in OneLake, governed and unified. The harder question is what to do when an AI agent starts querying that data and expects answers in milliseconds, at a concurrency no team of analysts could ever generate. Real-time interactive dashboards and customer-facing applications create the same pressure; agents just get there faster.
+
+Ask teams running Fabric today how they handle these workloads, and you'll hear about workarounds: pre-aggregation pipelines in their existing engines, custom caching layers, or an external database running alongside Fabric with hand-rolled ETL to keep it fed. Each of these works, and each one is extra infrastructure to build, secure, and maintain outside the platform.
+
+The ClickHouse workload for Microsoft Fabric aims to address this problem, and it's now in public preview, available from the [Fabric workload hub](https://app.fabric.microsoft.com/workloadhub). It brings ClickHouse, the fastest open-source analytical database, directly into your Fabric workspace as a native workload: an acceleration layer for OneLake.
+
+![](https://clickhouse.com/uploads/fabric_sep2026_image1_722fd73fb0.png)
+
+## The ClickHouse workload at a glance {#the_clickhouse_workload_at_a_glance}
+
+Sync your OneLake tables into a dedicated ClickHouse Cloud service in a few clicks, query billions of rows with sub-second response times from inside Fabric, and OneLake stays the source of truth throughout.
+
+Creating a ClickHouse item in your workspace provisions a dedicated ClickHouse Cloud service on Microsoft Azure using your Microsoft Entra account, with a trial included.
+
+With the workload you can:
+
+- **Serve AI agents, dashboards, and applications** at high concurrency on dedicated, cost-efficient ClickHouse Cloud compute, without consuming your Fabric capacity  
+- **Sync OneLake tables** into ClickHouse as accelerated copies, with no pipelines to build or maintain  
+- **Query and explore** with an embedded SQL console right inside Fabric, saving your own queries to return to  
+- **Connect everything:** governed, read-only access for agents in Microsoft Copilot Studio and GitHub Copilot. Beyond agents, you can consume with Power BI through the certified ClickHouse connector, analyze in Fabric notebooks, or build with the official ClickHouse clients
+
+## A quick tour {#a_quick_tour}
+
+<iframe width="768" height="432" src="https://www.youtube.com/embed/kq9i0z0g7EU" frameborder="0" allowfullscreen></iframe>
+
+**Create a ClickHouse item.** In your workspace, select `+ New item` and pick ClickHouse Cloud. Your workspace is mapped to a ClickHouse organization, and your item is mapped to a dedicated service. Every member in your workspace is added as a ClickHouse user the first time they open the item.
+
+**Sync from OneLake.** Pick a Lakehouse, select the tables you want to accelerate, and start the sync. You can accept a destination table with inferred types, or define your own table first. In public preview, syncs are point-in-time snapshots with no ingestion charges.
+
+![](https://clickhouse.com/uploads/fabric_sep2026_image2_733352a4f0.png)
+
+**Query it.** The embedded SQL console is standard SQL with ClickHouse's full analytical toolkit behind it, so existing queries and skills carry straight over. Full-table aggregations over billions of rows come back in milliseconds, consistently, even with many clients querying at once. Save the queries worth keeping and come back to them anytime. In public preview, saved queries are personal to each user.
+
+![](https://clickhouse.com/uploads/fabric_sep2026_image3_2beb93c8f9.png)
+
+**Connect your tools.** The Connect screen has copy-paste quickstarts for everything that can reach the service. Turn on agent access and the service becomes a governed, read-only endpoint for Copilot Studio, Microsoft Foundry, GitHub Copilot, and any MCP-compatible tool. Quickstarts also cover Power BI Desktop and service, Fabric notebooks, HTTPS, JDBC/ODBC, MySQL protocol, and the official clients for Python, Node.js, Java, Go, C#, Rust and more.
+
+![](https://clickhouse.com/uploads/fabric_sep2026_image4_msft_approved_efb28ac229.png)
+
+**Open in ClickHouse Cloud.** One click takes you to the Cloud console, signed in with Microsoft SSO, for scaling, idling, monitoring, backups, and everything else administrators need. Day to day, you can stay in Fabric and the Cloud console is just a click away when you need it.
+
+## Under the hood {#under_the_hood}
+
+Going a bit deeper, here's how a third-party database becomes a native Fabric experience.
+
+**Provisioning.** The workload is built on the [Fabric Extensibility Toolkit](https://learn.microsoft.com/en-us/fabric/extensibility-toolkit/). When you create a ClickHouse item, Fabric calls our backend through the item lifecycle API, and we provision the organization, service, and trial automatically. Users are created just-in-time through a token exchange. The Fabric Workload Client SDK hands us your Entra token, we validate it and establish the matching ClickHouse Cloud identity, deterministically derived from your tenant and object IDs. Your ClickHouse organization role is mapped from your Fabric workspace role, so admins arrive as admins and viewers arrive read-only.
+
+**Syncing.** Every sync from OneLake runs through [ClickPipes](https://clickhouse.com/docs/integrations/clickpipes), the same managed ingestion machinery that powers our object storage pipes for S3 and Azure Blob Storage. The ClickPipe reads the table directly from OneLake using your authorized credentials, maps the types, and streams the data into your service. Data flows directly between OneLake and your dedicated service, and because everything runs within Azure, there are no egress costs.
+
+**The engine.** The service behind the item is ClickHouse Cloud on Azure, provisioned in the region nearest your Fabric capacity. These are our [supported regions](https://clickhouse.com/docs/products/cloud/reference/supported-regions#azure-regions), which include EU regions for data residency requirements. This is dedicated compute that scales vertically and horizontally, with idling enabled by default. And because it's billed through the [Microsoft Marketplace](https://marketplace.microsoft.com/en-us/product/clickhouse.clickhouse_cloud) as dedicated infrastructure, agent and application load never competes with your Power BI capacity.
+
+For security, privacy, and compliance details, view our [vendor attestation](https://clickhouse.com/legal/clickhouse-microsoft-fabric-workload-attestation).
+
+## What's next {#whats_next}
+
+The most common asks from teams we've spoken with are write-back to OneLake, permission sync, and deeper Microsoft Power BI integration, and that's where we're headed. Here's what we're looking to build next:
+
+- **Write-back to OneLake**: bringing OneLake write into the workload, so accelerated results, like materialized view output, land back in your Lakehouse for Power BI, semantic models, and the rest of Fabric to consume  
+- **Richer replication**: continuous sync from OneLake, beyond today's point-in-time snapshots  
+- **Permission sync**: more granular access control, carrying OneLake's permissions into ClickHouse  
+- **A deeper workload experience**: more access control and shared saved queries for collaboration, private networking with Private Link, and more of the service's management and administrative capabilities surfaced directly in Fabric  
+- **Purpose-built experiences on ClickHouse strengths**: full-text search, vector search, and materialized views, surfaced as first-class experiences inside the Fabric workload
+
+## Get started {#get_started}
+
+The workload is live in the [Fabric workload hub](https://app.fabric.microsoft.com/workloadhub) today, with a trial included on the ClickHouse Scale tier. The [documentation](https://clickhouse.com/docs/integrations/microsoft-fabric) includes a getting started tutorial built on Fabric's public holidays sample data. With it you can try the whole flow, sync, query, Power BI, even asking an agent, without bringing your own dataset.
+
+Try it with your own OneLake tables and let us know what you think. This is a public preview, and the feedback we get now shapes what ships next.
+
+
+---
+
+## Get started today
+
+Interested in seeing how ClickHouse works on your data? Get started with ClickHouse Cloud in minutes and receive $300 in free credits.
+
+[Sign up](https://console.clickhouse.cloud/signUp?loc=blog-cta-2426-get-started-today-sign-up&utm_blogctaid=2426)
+
+---
+
+---
+
+## ClickHouse now writes Apache Iceberg tables to Microsoft OneLake
+Published: 2026-09-29T07:17:01+00:00
+URL: https://clickhouse.com/blog/clickhouse-now-writes-to-microsoft-onelake
+
+---
+title: "ClickHouse now writes Apache Iceberg tables to Microsoft OneLake"
+date: "2026-09-29T07:17:01.504Z"
+author: "Melvyn Peignon"
+category: "Product"
+excerpt: "ClickHouse today announced the ability to write directly to Microsoft OneLake, the unified data lake service within Microsoft Fabric."
+---
+
+# ClickHouse now writes Apache Iceberg tables to Microsoft OneLake
+
+Following our announcement that [ClickHouse is data lake ready](https://clickhouse.com/blog/clickhouse-is-data-lake-ready), we've continued to expand support for open data lake ecosystems and catalog integrations. At the end of June 2026, ClickHouse supported writing Iceberg tables to object storage, where you provide the S3 or Microsoft Azure ADLSgen2 path directly. This works, but it has a limitation: unless those tables are also registered in a catalog, other tools in your organization can't discover or query them.
+
+At [OpenHouse 2026](https://clickhouse.com/openhouse/san-francisco), we announced that ClickHouse now writes Iceberg tables directly to Microsoft OneLake. Your results are registered in the OneLake catalog using [Iceberg REST-based Table APIs](https://learn.microsoft.com/en-us/fabric/onelake/table-apis/iceberg-table-apis-overview), secured by [OneLake Security](https://learn.microsoft.com/en-us/fabric/onelake/security/data-access-control-model), and queryable by compatible tools and engines.
+
+You can read data from OneLake, accelerate it in ClickHouse, and push results back to OneLake for the rest of your organization to consume, all through the same catalog connection.
+
+## **Use case: AI agents that write results back to OneLake**
+
+As AI agents become more embedded in analytical workflows, they need two things from their database: fast reads to answer questions in real time, and a way to publish their results where the rest of the organization can use them.
+
+Say you have an AI agent that monitors order data in ClickHouse, detects anomalies (unusual spikes in returns, shipping delays by region, revenue drops by product line), and produces a daily summary table with anomaly scores and recommended actions. Before catalog writes, those results stayed in ClickHouse.
+
+With OneLake write support, the agent runs its queries in ClickHouse and writes the results directly to an Iceberg table in OneLake. That table shows up automatically for every tool connected to the OneLake catalog. Your operations team sees it in Microsoft Power BI, data science picks it up in Fabric Spark, and the agent's output is secured by the same [OneLake Security access controls](https://learn.microsoft.com/en-us/fabric/onelake/security/data-access-control-model) as the rest of your data. The agent produces the insight, ClickHouse provides the analytical query speed, and OneLake handles the distribution.
+
+This is what Melvyn Peignon demoed at OpenHouse: ClickHouse querying OneLake Iceberg tables to power an analytics AI assistant. Write support closes the loop, letting the assistant publish its results back to the same catalog it reads from.
+
+## **Use case: Applications writing directly to OneLake via ClickHouse**
+
+Beyond writing aggregated query results, you can also use ClickHouse as the write path for applications that need to land data directly into OneLake. Rather than routing through a separate ingestion layer, applications write to ClickHouse and the results flow into OneLake as a managed Iceberg table, governed and discoverable from the moment they land.
+
+## **How it works**
+
+If you've already connected ClickHouse to OneLake for reads, writes use the same connection. No additional setup is required.
+
+The connection uses the `DataLakeCatalog` engine, which connects ClickHouse to OneLake's Iceberg-compatible Table APIs. You authenticate via Microsoft Entra ID (formerly Azure Active Directory) using a service principal, and ClickHouse uses that identity both to discover tables in the catalog and to read and write data in OneLake storage.
+
+Setting up the connection looks like this:
+
+```sql
+SET allow_database_iceberg = 1;
+
+CREATE DATABASE onelake_catalog
+ENGINE = DataLakeCatalog('https://onelake.table.fabric.microsoft.com/iceberg')
+SETTINGS
+    catalog_type = 'onelake',
+    warehouse = '<workspace_id>/<lakehouse_id>',
+    onelake_tenant_id = '<tenant_id>',
+    oauth_server_uri = '<https://login.microsoftonline.com/><tenant_uuid>/oauth2/v2.0/token',
+    auth_scope = '<https://storage.azure.com/.default>',
+    onelake_client_id = '<client_id>',
+    onelake_client_secret = '<client_secret>';
+```
+
+The `warehouse` parameter combines your Fabric workspace ID and lakehouse ID. You can find these in the Microsoft Fabric portal. The `onelake_client_id` and `onelake_client_secret` come from a service principal registered in Entra ID. See [Microsoft's documentation](https://learn.microsoft.com/en-us/fabric/onelake/table-apis/table-apis-overview#prerequisites) for a step-by-step guide on gathering these credentials.
+
+Once the connection is in place, the entire OneLake catalog appears as a ClickHouse database. You can list tables, inspect schemas, and query data just like any other database in ClickHouse:
+
+```sql
+SHOW TABLES FROM onelake_catalog;
+
+SELECT count(*)
+FROM onelake_catalog.`<namespace>.<table_name>`
+WHERE region = 'EMEA';
+```
+
+Note the backtick syntax around the namespace and table name. ClickHouse doesn't support multiple namespace levels natively, so the full `namespace.table` path is wrapped in backticks.
+
+And now, the new part. Writing results back uses the same `INSERT INTO` syntax you'd use with any ClickHouse table:
+
+```sql
+INSERT INTO onelake_catalog.`<namespace>.<output_table>`
+SELECT
+    region,
+    count() AS order_count,
+    sum(revenue) AS total_revenue
+FROM onelake_catalog.`<namespace>.<source_table>`
+GROUP BY region;
+```
+
+The resulting table is managed by the OneLake catalog and secured by [OneLake Security access controls](https://learn.microsoft.com/en-us/fabric/onelake/security/data-access-control-model). Any Iceberg-compatible engine connected to the same catalog can read it. You can also write from a local MergeTree table into OneLake, which is the typical pattern when you've accelerated data locally and want to publish the results back.
+
+For full setup instructions, see the [OneLake catalog documentation](https://clickhouse.com/docs/use-cases/data-lake/onelake-catalog).
+
+## **Why OneLake**
+
+OneLake is the unification layer for Microsoft Fabric. Every tenant gets exactly one OneLake instance, provisioned automatically, and all data inside it inherits a single governance model with lineage tracking, data protection, certification, and catalog integration. Workspace-level permissions mean different teams can own their data independently while still contributing to the same lake. Writing to OneLake means your results become part of that governance model from the moment they land.
+
+The interoperability story is where it gets interesting. [Shortcuts](https://learn.microsoft.com/en-us/fabric/onelake/onelake-shortcuts) are symbolic links that point to data in S3, Google Cloud Storage, Azure ADLS, or other OneLake locations without moving or duplicating data. [Mirroring](https://learn.microsoft.com/en-us/fabric/mirroring/overview) continuously replicates databases (SQL Server, Snowflake, Oracle, and others) using zero-ETL technology into OneLake as Delta Lake tables, which are automatically converted to Apache Iceberg. Between the two, OneLake can surface data from across clouds and on-premises systems in one place, without ETL pipelines or manual data movement.
+
+OneLake also keeps Delta Lake and Iceberg in sync automatically. A table written in one format is readable in the other. So when ClickHouse writes an Iceberg table to OneLake, that data is accessible to every tool in the Microsoft Fabric stack, including those that speak Delta Lake.
+
+At the OpenHouse session, Kevin Liu (Engineer at Microsoft and Apache Iceberg PMC member) demonstrated DuckDB, Spark, PyIceberg, Databricks, Snowflake, and Salesforce all reading from the same OneLake table.
+
+On the security side, Microsoft announced at Build 2026 that OneLake Security is now GA, with table, row, and column-level security enforced across the platform. They also announced that the security APIs are opening up to third-party engines. This is something we're actively looking at for deeper ClickHouse integration.
+
+## **What's next**
+
+OneLake is the first catalog to support writes from ClickHouse, with more catalogs planned over the coming months. We're also working on deeper integration with OneLake's [fine-grained security APIs](https://learn.microsoft.com/en-us/fabric/onelake/security/onelake-security-integrations-external-engines), which are now open to third-party engines.
+
+For the full breakdown of what ClickHouse supports across formats, catalogs, and cloud storage, check the [data lake support matrix](https://clickhouse.com/docs/use-cases/data-lake/support-matrix).
+
+## **Get started**
+
+If you're already connected to OneLake for reads, the [OneLake catalog guide](https://clickhouse.com/docs/use-cases/data-lake/onelake-catalog) covers everything you need for writes. Starting from scratch, begin with the [data lake getting started guide](https://clickhouse.com/docs/use-cases/data-lake/getting-started) and [try ClickHouse Cloud](https://clickhouse.com/cloud).
+
+
+---
+
+## Can your Postgres survive a bad query?
+Published: 2026-09-28T15:37:06+00:00
+URL: https://clickhouse.com/blog/can-your-postgres-survive-a-bad-query
+
+---
+title: "Can your Postgres survive a bad query?"
+date: "2026-09-28T15:37:06.430Z"
+author: "Kevin Biju Kizhake Kanichery"
+category: "Engineering"
+excerpt: "How do Postgres providers handle a query that exhausts memory? A recursive query benchmark compares query failures and cluster survival across ClickHouse Managed Postgres, Cloud SQL, PlanetScale, and Amazon RDS."
+---
+
+# Can your Postgres survive a bad query?
+
+With no shortage of Postgres providers in 2026, one may be confused where to deploy the database powering their next app. One could of course look at dimensions like performance (we do [*pretty well*](https://clickhouse.com/blog/postgresbench) there), pricing, and extension support. A dimension not as prevalent in the zeitgeist is *reliability*.
+
+Database reliability has many facets. Postgres itself is stubbornly reliable. Hardware reliability is an interesting concern, but hyperscalers either offer or host every Postgres option we’re examining today. So on that front, every option here performs about as reliably as hardware can.
+
+To me, a product is reliable when it holds up under workloads it shouldn't have to. While we stress test to shake out bugs in our Postgres offering, customers sometimes punish their database by accident because Postgres memory tuning isn't a solved problem, and the growing share of Postgres databases now provisioned and driven entirely by agents means the "by accident" route will only get busier.
+
+## The quicksand of memory management and query tuning {#the_quicksand_of_memory_management_and_query_tuning}
+
+Postgres unfortunately does not have a setting that says "a query can only use X MB of RAM at most please". What it has is `work_mem` (default `4MB`), a ceiling that applies per “operation”, not per query. Every query node in a plan that needs memory gets its own `work_mem` budget, and a plan can have several such nodes at once. Hash-based nodes get an additional budget multiplier on top from `hash_mem_multiplier`. The Postgres docs clearly state that actual memory use "could be many times the value of `work_mem`."
+
+To demonstrate how tricky query tuning can be, let's consider a simple schema on a database with all default Postgres settings. Just two tables, powering a hypothetical LLM inference service:
+
+<pre><code type='click-ui' language='sql'>
+CREATE TABLE wm_api_keys (
+  api_key_id uuid         PRIMARY KEY,
+  tier       smallint     NOT NULL,
+  scopes     text[]       NOT NULL,
+  expires_at timestamptz,
+  created_at timestamptz  NOT NULL
+);
+
+CREATE TABLE wm_api_calls (
+  call_id     bigint         PRIMARY KEY,
+  api_key_id  uuid           NOT NULL,
+  called_at   timestamptz    NOT NULL,
+  model_id    smallint       NOT NULL,
+  tokens      integer        NOT NULL,
+  cost_usd    numeric(10,6)  NOT NULL,
+  latency_ms  integer        NOT NULL
+);
+</code></pre>
+
+Alongside the OLTP traffic from your API gateway, your customers frequently hit a console per-key drilldown view backed by a SELECT statement:
+
+<pre><code type='click-ui' language='sql'>
+SELECT c.api_key_id,
+       sum(c.cost_usd)         AS total_cost_usd,
+       sum(c.tokens)           AS total_tokens,
+       count(*)                AS n_calls,
+       max(c.called_at)        AS last_active_at,
+       avg(c.latency_ms)::int  AS avg_latency_ms
+FROM wm_api_calls c JOIN wm_api_keys k USING (api_key_id)
+WHERE k.tier IN (0, 1, 2)
+GROUP BY c.api_key_id
+ORDER BY total_cost_usd DESC;
+</code></pre>
+
+A bit after you launch you have 2000 API keys (congrats!) and they've made a total of 30,000 calls so far. The plan from `EXPLAIN (ANALYZE, BUFFERS, VERBOSE)` is unremarkable; the relevant lines:
+
+<pre><code type='click-ui' language='bash'>
+ Sort
+   Sort Method: quicksort  Memory: 87kB
+   ->  HashAggregate
+         Batches: 1  Memory Usage: 689kB
+         ->  Hash Join
+               ->  Seq Scan on wm_api_calls c
+               ->  Hash
+                     Buckets: 2048  Batches: 1  Memory Usage: 68kB
+</code></pre>
+
+Three nodes consume memory: the `Hash` (build side, 68 kB), the `HashAggregate` (689 kB), and the `Sort` (87 kB). These sum up to around 0.8 MB, comfortably below the default `work_mem` threshold.
+
+*A note on memory accounting: when we say "total memory" in this section we mean the sum of each memory-using node's peak. Postgres usually holds a node's memory until the end of the query, so we judge this a close-enough approximation.*
+
+A few months later, your product has officially gone viral. You now have 55,000 API keys and 9 million API calls. The console page that runs this query has started to feel heavier, so you check the plan:
+
+<pre><code type='click-ui' language='bash'>
+ Sort
+   Sort Method: quicksort  Memory: 2926kB
+   ->  Finalize GroupAggregate
+         ->  Gather Merge
+               Workers Planned: 2
+               Workers Launched: 2
+               ->  Sort  (loops=3)
+                     Sort Method: external merge  Disk: 4256kB
+                       Worker 0: external merge  Disk: 4256kB
+                       Worker 1: external merge  Disk: 4248kB
+                     ->  Partial HashAggregate  (loops=3)
+                           Batches: 5  Memory Usage: 8241kB  Disk Usage: 3408kB
+                             Worker 0: Batches: 5  Memory Usage: 8241kB  Disk Usage: 3400kB
+                             Worker 1: Batches: 5  Memory Usage: 8241kB  Disk Usage: 3392kB
+                           ->  Hash Join
+                                 ->  Parallel Seq Scan on wm_api_calls c
+                                 ->  Hash
+                                       Buckets: 32768  Batches: 1  Memory Usage: 1671kB
+</code></pre>
+
+Two things changed just from having more data to process. `wm_api_calls` is over a gigabyte on disk now, way past the `min_parallel_table_scan_size` (8 MB default), and the planner pulled in two background workers to speed up query execution. Three processes now run the partial subtree below the `Gather Merge`: the two workers plus the leader, which by default also acts as a worker. Each process builds its own copy of every node below the `Gather Merge`, including the join's `Hash` (1671 kB × 3 processes = 5 MB total). The takeaway here is that each worker has its own memory-using nodes and they have their own memory budget. So adding parallel workers has added an opaque ~3x multiple to our memory usage.
+
+Second, spilling. The `Partial HashAggregate` shows `Memory Usage: 8241kB  Disk Usage: 3408kB` in each worker. The per-worker `Sort` says `external merge  Disk: 4256kB`. Two memory-using nodes per process, both writing to temporary files because they've hit the node cap enforced by `work_mem`. The default `work_mem` in Postgres is 4 MB. But hash-flavored nodes get `work_mem * hash_mem_multiplier` (default 2.0) before they spill, so the `Partial HashAggregate`'s cap is 8 MB. The `HashAggregate` would naturally use ~14 MB per worker if uncapped, which doesn't fit in 8 MB, so partitions to disk in 5 batches, instead. The Sort wants ~5 MB, which doesn't fit in 4 MB, so goes to external merge.
+
+Adding it up across the three processes:
+
+- **RAM**: `3 × (8.2 MB Partial HashAgg + 1.7 MB Hash) + 2.9 MB outer Sort ≈ 33 MB`  
+- **Disk**: `3 × (3.4 MB HashAgg partitions + 4.3 MB Sort) ≈ 23 MB`
+
+We're using more than **8x** `work_mem` for this relatively simple query and also incurring 23 MB of disk I/O on every console page load. The first-order fix for the `Disk Usage` and `external merge` markers in `EXPLAIN` is to raise `work_mem` past each node's working set. 
+
+An increase to 8 MB eliminates the spilling at the cost of using **8.5× that amount** (~68MB) across the parallel processes running the query, due to the combination of tunable factors. The Planner picked `workers + 1` from the `wm_api_calls` table size and the number of memory-using nodes from the query and the data, but `hash_mem_multiplier` is a per-node modifier, not a query-wide cap. There's only `work_mem`, applied per node, per process, with a multiplier on hash-flavoured nodes.
+
+If every memory-hungry query respected this model, the article could end here. It doesn't.
+
+## Not everything spills {#not_everything_spills}
+
+Some executor memory allocations sit outside this tidy `work_mem` model. It is not just a question of setting the knob too high or forgetting that parallel workers multiply it, but that some structures have no useful disk-backed fallback at all, so they can keep growing until the query finishes or the backend runs out of memory.
+
+Spilling arbitrary executor state is complex, messy, and absolutely obliterates performance if done badly. Postgres has invested a lot of work into spilling where the tradeoff makes sense, but it deliberately keeps some structures in memory. What this means in practice is that it is possible to run queries that don't respect memory tuning parameters under pathological conditions. The query that forms our test workload exhibits this pattern, and it's worth digging into further.
+
+Consider representing directed graphs in Postgres. The simplest pattern would be an edges table like so:
+
+<pre><code type='click-ui' language='sql'>
+CREATE TABLE edges (
+   src bigint NOT NULL,
+   dst bigint NOT NULL,
+   PRIMARY KEY (src, dst)
+);
+</code></pre>
+
+To find all nodes reachable from node 0, you'd write a recursive CTE. Because the graph may have cycles, the recursion needs `UNION` (not `UNION ALL`) to terminate, otherwise it would revisit nodes forever. The use of `UNION` triggers the creation of a hashtable in the executor for deduplicating rows. The hashtable holds an entry for every reachable node, for the entire query's lifetime, in a memory context that doesn't honour `work_mem` to spill to disk.
+
+<pre><code type='click-ui' language='sql'>
+WITH RECURSIVE walk(n) AS (
+   SELECT 0::bigint
+   UNION
+   SELECT e.dst
+   FROM walk
+   JOIN edges e ON e.src = walk.n
+ )
+SELECT n
+FROM walk;
+</code></pre>
+
+The hashtable is built by a function `BuildTupleHashTable` that itself has no logic to spill to disk. The same function backs the `HashAggregate` we used in the `GROUP BY` example earlier in this post. So why does that hash table spill cleanly and this one doesn't? It boils down to the hashtable’s *purpose*.
+
+In `HashAggregate`, the hashtable is a **one-shot accumulator**: it ends when input ends. That defined end lets Postgres monitor the table's size and, once it crosses `work_mem * hash_mem_multiplier`, start routing new-group tuples to disk instead of letting the in-memory table grow further. When input drains, Postgres reads back each on-disk partition and aggregates it in isolation.
+
+In `WITH RECURSIVE … UNION`, the hashtable **needs a deduplication set for the entire query.** Every candidate row from every iteration has to be checked against every key seen so far. Sending part of the table to disk would mean reading it back on every membership check, which is catastrophic for throughput. So the table stays in memory for the query's lifetime, until the reachable set is fully materialised.
+
+## Benchmarking {#benchmarking}
+
+We tested 4 Postgres providers under a workload that heavily stresses memory usage. The criterion is that a database should be able to handle as much load as possible and shed the rest cleanly without crashing.
+
+We ran the cyclic-graph recursive UNION query from above over a graph of ~12.6 million nodes, consuming ~1 GiB of RAM from the deduplication hashtable. It generates the edges on the fly using a `CROSS JOIN`, eliminating variance due to storage and cache performance. From each node, the query creates two outgoing edges: one to the next node, and one 251 positions ahead. The "next node" edge ensures every node is reachable from zero. The second edge gives most nodes multiple incoming paths, so the UNION must reject duplicates on every iteration, and it shortens the recursion from millions of steps to tens of thousands.
+
+<pre><code type='click-ui' language='sql'>
+WITH RECURSIVE walk(n) AS (
+  SELECT 0
+  UNION
+  SELECT (walk.n + step.s) % 12600000
+  FROM walk
+  CROSS JOIN (VALUES (1), (251)) AS step(s)
+)
+SELECT n FROM walk;
+</code></pre>
+
+*A note on memory accounting: Postgres also materialized the CTE output into a tuplestore that honours `work_mem` and spills the excess to temp files (around ~200 MB for this graph), which creates some I/O pressure across multiple backends but at a rate less than the memory pressure exerted at the same time.*
+
+The providers under test are:
+
+1. ClickHouse Managed Postgres \[r8gd.large, AWS us-west-2, 118GB local SSD, Postgres 18.6\]  
+2. Google Cloud SQL \[db-c4a-highmem-2, us-west1, 118GB Hyperdisk Balanced, Postgres 18.6\]  
+3. PlanetScale Postgres \[r8gd.large, AWS us-west-2, 118GB local SSD, Postgres 18.6\]  
+4. Amazon RDS \[db.r8g.large, us-west-2, 118GB gp3, Postgres 18.6\]
+
+ClickHouse Managed Postgres and PlanetScale both use locally attached SSDs and were therefore set up with synchronous HA (2 standbys) to match the durability guarantees of the others. 
+
+For each provider, we opened n concurrent connections running the same query, with n ranging from 7 to 23\. We repeated this 10 times at each value of `n`, with a 60-second cooldown between runs, and sampled per-connection memory usage throughout. Each connection sets a 120-second statement_timeout: a single query normally finishes in under 5 seconds, so anything past two minutes counts as a failure. We also recorded a failure for any connection that returned an error or was terminated. A run in which every connected client lost its session at once was classified as a full outage. The test driver was a single Amazon EC2 instance in the same region as all clusters.
+
+## Results {#results}
+
+There are three failure modes here: query failure, session failure, and cluster failure. The good thing that Postgres can do is when the allocator sees the failure and the caller checks: a log entry  with SQLSTATE `53200` (`out_of_memory`), the failing transaction rolls back, the connection stays open, the pool keeps that slot, and the next query on that connection works. The other backends and any other clients on the cluster don't even notice. ClickHouse Managed Postgres is the only provider tested that does this. We disable memory overcommit in the kernel and cap committed memory. When a backend asks for more than the overall limit, the allocation fails. Postgres catches this and responds with a SQL ERROR rather than crashing. 
+
+![](https://clickhouse.com/uploads/postgres_bad_query_sep2026_query_completion_11a712665e.png)
+
+When nothing catches the memory pressure in time, the Linux OOM killer fires and picks a backend to `SIGKILL`. Postgres treats this abnormal exit as potential shared memory corruption and restarts the whole cluster into crash recovery, which results in several minutes of unavailability on a busy system. RDS exhibits this pattern and starts entering crash recovery at 19 connections, when the workload needs way more memory than the cluster has, though a handful of connections occasionally finish their workload before the crash. Before that point, RDS doesn't stop any queries itself, but some queries exceed the 120-second `statement_timeout` at 15 and 17 connections and error out. This is a sign of thrashing under heavy memory pressure, but we couldn't confirm this theory.
+
+Cloud SQL and PlanetScale take a different approach and run supervisors that watch memory pressure and kill queries before the OOM killer kicks in. The client sees `FATAL: terminating connection due to administrator command`, which is less polite than an ERROR because the connection itself dies without explanation, but the postmaster remains up and the cluster still serves requests. This isn’t a perfect solution. At 11+ connections, most PlanetScale runs end in a crash. Cloud SQL copes better under heavy load but is more unstable at moderate load. Cloud SQL also occasionally took minutes to recover, causing some future runs to not start and error out prematurely.
+
+![](https://clickhouse.com/uploads/postgres_bad_query_sep2026_platform_survival_6a3fe01a9b.png)
+
+These two heatmaps tell different stories about each corresponding table cell. The first shows the fraction of individual queries that finished their query; the second the fraction of runs in which the cluster itself stayed up. **At 23 connections, ClickHouse Managed Postgres had 32% query completion but 100% cluster survival**: the memory cap stopped ~70% of queries with an ERROR, but the cluster remained healthy throughout. RDS at 23 connections had 7% query completion and 0% cluster survival: the postmaster crashed in every run, and a handful of lucky connections finished their query right before the host gave up.
+
+In this benchmark, ClickHouse Managed Postgres kept the cluster running at every tested connection count by stopping runaway queries before the host was exhausted. Its configuration comes with a tradeoff: Postgres backends do not get to consume as much of host RAM as they do on providers that allow the workload to run closer to the edge. The next heatmap shows that tradeoff directly. Memory allocation on ClickHouse Managed Postgres plateaus at 57% of host RAM, or about 9 GiB on these 16 GiB instances. Cloud SQL and PlanetScale enforce similar memory caps while RDS allows backend memory to climb much higher before failure.   
+![](https://clickhouse.com/uploads/postgres_bad_query_sep2026_memory_6913120aa2.png)  
+This may seem like a waste of memory, but it is well understood that Postgres performance *heavily* hinges on caching, both via Postgres `shared_buffers` and the OS page cache. ClickHouse Managed Postgres carves out dedicated memory for both caches, with 4GB (25%) fully allocated to Postgres `shared_buffers` by default and a smaller reserve for the Linux kernel overhead, which includes the page cache.
+
+ClickHouse Managed Postgres does limit memory-heavy workloads more than RDS, which takes a more laissez-faire approach. This is why RDS completes more queries than ClickHouse Managed Postgres at moderate load: our cap starts rejecting queries at 9 connections, where the workload reaches it, while RDS keeps accepting them until the host gives out. But RDS's approach costs more than crashes: with no protection against runaway memory consumption, backends may compete with caches and slow everything down.  
+
+## Conclusion {#conclusion}
+
+Our lower memory ceiling is a deliberate tradeoff in favor of uptime, and which approach is better depends on what you want the service to optimize for. Letting backends consume nearly all available RAM can be useful when you fully control the workload and accept that a bad plan or pathological query may take the instance down. Enforcing a lower ceiling leaves some memory unused in the best case, but lets the system fail individual queries instead of the whole database. **We would rather return a clean query failure under runaway executor memory than let the postmaster disappear and force every client through crash recovery.**
+
+We’re investing in ways to further stabilize the memory profiles of Postgres and our ancillary components running on each VM, with the hopes of giving more memory to user queries in the future.
+
+
+---
+
+## Get started with ClickHouse Managed Postgres today
+
+Interested in seeing how ClickHouse Managed Postgres works on your data? Get started with ClickHouse Cloud in minutes and receive $300 in free credits.
+
+[Sign up](https://console.clickhouse.cloud/signUp?intent=pg&loc=blog-cta-2398-get-started-with-clickhouse-managed-postgres-today-sign-up&utm_blogctaid=2398)
+
+---
 
 ---
 
