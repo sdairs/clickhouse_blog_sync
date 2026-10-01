@@ -1,6 +1,696 @@
 # ClickHouse Blogs
-Last updated: 2026-09-30 12:02:20 UTC
-Total blogs: 990
+Last updated: 2026-10-01 12:35:28 UTC
+Total blogs: 994
+
+---
+
+## How LinkedIn extended ClickHouse from distributed tracing to metric discovery and analytics
+Published: 2026-10-01T11:47:10+00:00
+URL: https://clickhouse.com/blog/linkedin-observability-at-scale
+
+---
+title: "How LinkedIn extended ClickHouse from distributed tracing to metric discovery and analytics"
+date: "2026-10-01T11:47:10.629Z"
+author: "ClickHouse"
+category: "User stories"
+excerpt: "LinkedIn expanded its ClickHouse observability stack from distributed tracing to metric discovery and analytics, consolidating 13B+ metrics into one index serving 150k+ queries per minute."
+---
+
+# How LinkedIn extended ClickHouse from distributed tracing to metric discovery and analytics
+
+## Summary
+
+- LinkedIn’s observability team runs distributed tracing and metric metadata discovery, and analytics on ClickHouse, after proving the database on tracing first.
+- Even at 1% head sampling, that system generates around 0.8 trillion spans and 200 TB of uncompressed data per day.
+- The metric metadata index consolidates three systems behind a single ClickHouse cluster, serving 150k+ queries/minute at 68ms average latency across 13B+ metrics.
+- Migrating off a legacy stack cut memory use to roughly one-fifth and compute to about two-thirds, with headroom to double metric volume.
+
+With over a billion members worldwide and thousands of interacting services, a single LinkedIn feed load or job search touches dozens of backend systems. When one of them slows down, finding the culprit means being able to see inside all of them.
+
+That visibility falls to the company’s observability team, who own the full stack that keeps the platform measurable, from hosts, containers, services, and storage up through online, nearline, and offline workflows and real user monitoring, along with the ingestion, alerting, triaging, on-call, and visualization layers built on top. That stack covers every kind of observability signal, including metrics, logs, traces, events, profiles, and exceptions.
+
+LinkedIn’s ClickHouse journey began two years ago with distributed tracing. As Arun Gupta detailed at an [April 2026 ClickHouse meetup in San Francisco](https://clickhouse.com/videos/meetupsjapril20262), the team put it into production across three data centers, building a system that handles roughly 800 billion spans a day and gives engineers a near-real-time troubleshooting surface. “This is just the beginning for ClickHouse at LinkedIn,” Arun said at the time.
+
+<iframe width="768" height="432" src="https://www.youtube.com/embed/eSPy8uDQq0s" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe>
+
+At [Open House SF 2026](https://clickhouse.com/openhouse/san-francisco), staff software engineer Jacob Zelek picked up the thread, sharing the next step in LinkedIn’s observability journey: how the team consolidated a legacy metric metadata system onto a single ClickHouse index, resulting in a system that costs less to run and answers questions the old stack couldn’t, with plenty of room to grow.
+
+## LinkedIn’s initial chapter with ClickHouse {#linkedins_initial_chapter_with_clickhouse}
+
+In 2024, Arun and the team were ramping up an OpenTelemetry-based distributed tracing system that follows a request end-to-end, from a member’s app down through every backend service it touches. Even at 1% head sampling, that system generates around 0.8 trillion spans and 200 TB of uncompressed data per day. They needed storage that could keep up with that volume on the write side and stay fast on the read side, since, as Arun puts it, “When someone sees a problem, or an engineer is debugging a feature they’re adding, they should be able to use our apps and see what the traces are showing very quickly.”
+
+Among their targets for the system, end-to-end ingestion had to complete in under 10 seconds, listing traces over a two-hour window had to return within 2.5 seconds at P99, and fetching a full trace by ID had to come back in 750 milliseconds or less. They also wanted a [7-day retention policy](https://clickhouse.com/docs/guides/developer/ttl), [tiered storage](https://clickhouse.com/docs/observability/managing-data), [customizable indexes](https://clickhouse.com/docs/optimize/skipping-indexes), and [query workload isolation](https://clickhouse.com/docs/operations/workload-scheduling). Finally, whatever solution they picked had to support [KQL](https://clickhouse.com/docs/guides/developer/alternative-query-languages#kusto-query-language-kql), one of LinkedIn’s preferred query languages.
+
+Today, the deployment spans three data centers. Each has its own ClickHouse cluster of 22 shards fed by PubSub and a tier of ingesters. The team runs a red-black setup, writing to two clusters and reading from one, with the second ready to take over if the first has trouble, and a third handling validation. The schema is flattened, with span attributes carried alongside, and runs 3x local replication over a distributed table. Compression is around 5x. Each node takes in 350,000 spans a second at steady state, bursting past 1.2 million at max load.
+
+![](https://clickhouse.com/uploads/01_pubsub_cross_data_center_ingestion_1_f66f781550.jpg)
+
+*PubSub in each data center feeds ingesters in all three, with one cluster set aside for validation.*
+
+The team reordered the table to put low-cardinality columns first, [repartitioned](https://clickhouse.com/docs/optimize/partitioning-key) on the field they actually query, and tightened [Bloom filter](https://clickhouse.com/docs/optimize/skipping-indexes#bloom-filter-types) false-positive rates on the columns where it was cheap to do so, bringing queries to run in under two seconds. “This was pretty significant for us,” says Arun.
+
+Just as important, the project put ClickHouse into production at scale and got several teams comfortable running it. That momentum proved key when LinkedIn’s observability team extended it from distributed tracing to metric discovery and analytics.
+
+## The next challenge: legacy metric metadata {#the_next_challenge_legacy_metric_metadata}
+
+Years ago, LinkedIn relied on a legacy time-series data logging and graphing system called [RRDtool](https://en.wikipedia.org/wiki/RRDtool). However, the naming convention it introduced never left, and at LinkedIn’s scale and size, it had stayed.
+
+Today, this metric is still referenced by an RRD, a single string that concatenates two to six standardized dimensions (e.g. “my-server/responses.status.200.rrd”). Originally, users could target a single metric, but at some point the team introduced the ability to apply a regex across many of them to generate multiple series in one graph, or a separate graph per match. “You can see why this starts to become a problem,” Jacob says.
+
+That problem is compounded by the scale at which LinkedIn operates. The company has more than 13 billion metrics that are still referenced using RRD semantics, with roughly 30% daily turnover. Millions of graphs and alerts are defined this way, with dozens of tools and services still querying RRD metrics. Meanwhile, the metrics count keeps climbing, and new tools, services, and use cases keep getting onboarded. 
+
+The challenge for LinkedIn’s observability team was letting people discover and analyze across all of it. For example, engineers might want to ask which hosts emit a given metric, which RRDs a service emits, which metrics match a pattern across every service, and how unique metric counts are trending for growth tracking. “The big problem,” Jacob says, “is that we need people to be able to query these things until we can finally migrate everybody off of it.”
+
+The older stack had grown into three separate services behind a single gateway. When Jacob joined, there was a custom in-memory search index and a custom in-memory KV store. He later introduced Elasticsearch hoping it could serve all the queries and let them remove the other services. “Unfortunately, it became yet another service to serve these queries,” he says, noting that Elasticsearch didn’t handle larger spanning aggregations very well, and returning large result sets meant serializing them in memory.
+
+![](https://clickhouse.com/uploads/02_query_gateway_before_clickhouse_1_3b9887c42e.jpg)
+
+*Before ClickHouse, queries arrived through a single gateway that fanned out to three separate systems: a custom in-memory search index, Elasticsearch, and a custom in-memory KV store.*
+
+By 2025, all three existing services had reached their scaling limits, managing three separate systems had become an operational burden, and even together they couldn’t serve some of the queries engineers were asking for. They needed a better solution.
+
+## Developing a ClickHouse ecosystem at LinkedIn {#developing_a_clickhouse_ecosystem_at_linkedin}
+
+The team considered a number of options. Building yet another custom solution was unappealing, since, as Jacob puts it, “it would never be as flexible as a generic solution,” and the expertise would be limited to a handful of developers. “We’ve done this already and we weren’t trying to go down that route anymore,” he adds.
+
+Sharded MySQL was a known quantity, but for the wrong reasons, as the team had previously used Vitess as a source of truth and found it couldn’t scale reads. Elasticsearch was already in hand and had already been tried, but the earlier attempt to migrate traffic onto it had failed, leading the team to keep it around for exploration purposes only.
+
+ClickHouse, meanwhile, supported all existing queries. Benchmarked against the custom in-memory databases, most ran faster on ClickHouse, with the slower ones still well within acceptable bounds. Its quotas and query logs let the team see which team or service was driving each query, and, as Jacob says, “not only stop abusive queries, but also work with those teams to rewrite them to make them more efficient.” As a generic OLAP store holding every dimension, it allowed the team to support analytical queries they’d never thought of, some of which could be more efficient replacements for existing queries.
+
+> “The expertise we gained from using ClickHouse for tracing made onboarding a new project very easy. We’re starting to develop a ClickHouse ecosystem at LinkedIn.” — Jacob Zelek, Staff Software Engineer
+
+“To us, expanding ClickHouse feels more comfortable than introducing another system like Elasticsearch, which people are moving away from, or trying to build something custom that only our team would understand,” says Jacob.
+
+## The new ClickHouse-based architecture for legacy metric metadata {#the_new_clickhousebased_architecture_for_legacy_metric_metadata}
+
+The current architecture is “pretty simple,” Jacob says. The team’s time-series database feeds ClickHouse through a continual change-capture system, while the gateway that fronted every metadata query now rewrites those queries into SQL and runs them against ClickHouse.
+
+![](https://clickhouse.com/uploads/03_query_gateway_after_clickhouse_1_36a7379bb9.jpg)
+
+*After the migration, the same gateway routes queries to a single ClickHouse index, kept current by a continual sync from the time-series database.*
+
+That gateway, Jacob says, made the migration “transparent.” Every tool and service in the company already routed through it, so when the gateway stopped fanning out to three separate services and started writing SQL to ClickHouse instead, nothing downstream had to change. “Anyone using RRD is already using ClickHouse,” he says.
+
+Underneath, the table is a replicated [ReplacingMergeTree](https://clickhouse.com/docs/engines/table-engines/mergetree-family/replacingmergetree), ordered to keep the discovery dimensions efficient, with deduplication keyed on a unique ID. The change-capture stream delivers at-least-once, so duplicates are inevitable; letting ClickHouse drop them during its merges meant the team could tolerate the stream’s semantics without extra plumbing. The pipeline builds a fresh daily table from the offline time-series database, catches it up with change-capture data, then uses an alias to swap the table pointer and cut traffic over before deleting the old table.
+
+[Projections](https://clickhouse.com/docs/sql-reference/statements/alter/projection) handle the heavier aggregations the old systems couldn’t, including service-to-metric counts, service-to-unique-RRD counts, and datacenter-to-host listings. The schema also exposes the individual dimensions directly, so engineers who once ran regex over the full RRD string now filter on a column instead. “This is a lot more efficient,” Jacob says.
+
+## The results, and the road ahead {#the_results_and_the_road_ahead}
+
+Today, the consolidated index serves more than 150,000 queries per minute across the fleet, with an average latency of 68 milliseconds. As Jacob notes, that average runs across every query type, including the slow, deep analytical queries the old systems couldn’t serve at all. “If you were to distribute this out, you’d see some single-digit-millisecond queries,” he says. It does this over the full 13 billion-plus metrics, with LinkedIn’s 30% daily turnover, on a single shard.
+
+In terms of resources, Jacob estimates that the migration cut memory use to roughly one-fifth of what the previous three-system stack required, and reduced compute to about two-thirds. Because the metadata index is a single shard the team doesn’t have to think about resharding, it also has enough headroom to double the metric volume, a big departure from the old architecture that had reached its scaling limits.
+
+Now that every dimension is queryable, major customers are rewriting their old regex-heavy queries into more efficient native ones. This means the cluster may actually scale down over time, even as metric volume grows. With ClickHouse, the same index is becoming the tool that helps engineers find and reason about their metrics as LinkedIn moves graphs and alerts off RRD semantics onto native ones, enabling the larger migration Jacob, Arun, and the observability team have been working toward for years.
+
+---
+
+## Get started today
+
+Interested in seeing how ClickHouse works on your data? Get started with ClickHouse Cloud in minutes and receive $300 in free credits.
+
+[Sign up](https://console.clickhouse.cloud/signUp?loc=blog-cta-2478-get-started-today-sign-up&utm_blogctaid=2478)
+
+---
+
+---
+
+## Introducing SCIM Provisioning in ClickHouse Cloud
+Published: 2026-09-30T17:23:47+00:00
+URL: https://clickhouse.com/blog/introducing-scim-provisioning-in-clickhouse-cloud
+
+---
+title: "Introducing SCIM Provisioning in ClickHouse Cloud"
+date: "2026-09-30T17:23:47.599Z"
+author: "Raymond Lee"
+category: "Product"
+excerpt: "ClickHouse Cloud now supports SCIM 2.0, so your identity provider can create, update, and deprovision organization members and sync group membership to ClickHouse roles automatically."
+---
+
+# Introducing SCIM Provisioning in ClickHouse Cloud
+
+> ClickHouse Cloud now speaks SCIM 2.0. Your identity provider becomes the source of truth for who is in your organization and what they can do, no manual invites, and no orphaned accounts after someone leaves.
+
+SAML SSO solved authentication: Members in your organization are able to sign in to ClickHouse Cloud with their corporate identity. But it left membership as a separate, manual job. Someone joins the team, and an admin has to remember to invite them. Someone changes teams, and their ClickHouse role has to be updated by hand. Someone leaves, and their access lingers until an admin notices, which is the part that keeps security teams awake.
+
+[SCIM provisioning](https://clickhouse.com/docs/cloud/security/scim-setup) closes that gap. ClickHouse Cloud exposes a standard SCIM 2.0 endpoint (RFC 7644), so your IdP pushes membership changes to us as they happen. Assign someone to the ClickHouse app in the IdP eg: Okta and they appear in your organization. Unassign them and they're removed. Move them between groups and their ClickHouse roles follow.
+
+## Setting it up
+
+SCIM builds on SAML, so start with a configured SAML connection. From your organization settings page, open **SAML & SCIM settings** and switch to the **SCIM configuration** tab.
+
+![The SAML and SCIM settings page in ClickHouse Cloud](https://clickhouse.com/uploads/scim_settings_e8f0d3f96c.png)
+
+Turn on **Enable SCIM**. Two things appear: your **SCIM Endpoint URL**, and an **API keys** panel.
+
+![The SCIM endpoint URL and API keys panel](https://clickhouse.com/uploads/scim_endpoint_api_keys_b7ff52f923.png)
+
+Click **+ Generate new key** and choose an expiration, anything from a week to never. The key is scoped to the SCIM endpoint alone; it cannot read your data, manage services, or touch billing.
+
+![Generating a new SCIM API key](https://clickhouse.com/uploads/generate_scim_key_5ab402b23d.png)
+
+You get a **Key ID** and a **Key Secret**. Copy both now, or download the credentials file. The secret is shown once and never again. Paste them into your IdP: most providers, including Okta and Microsoft Entra ID, accept them as HTTP Basic credentials (key as username, secret as password). For providers that only offer a single bearer-token field, use `Bearer <keyId>:<keySecret>`.
+
+You can hold up to two keys at a time, which is enough to rotate without a gap in provisioning.
+
+## Mapping groups to roles
+
+SCIM also keeps permissions aligned as users move between groups, without requiring administrators to update roles manually.Provisioning users is half the value. The other half is getting their permissions right without a human in the loop.
+
+ClickHouse Cloud represents your IdP groups as SCIM Groups backed by [custom roles](https://clickhouse.com/docs/cloud/security/cloud-access-management) if your IdP supports group push. Okta's Push Groups, Entra ID's group provisioning — pushing a group creates or links a matching custom role, and its members get that role.
+
+To connect an IdP group to a role you already have, go to **Users and roles → Roles**. Once SCIM is active, each custom role gains a **SCIM group** column. Set the group name there to match what your IdP sends.
+
+![Mapping an IdP group to a custom ClickHouse role](https://clickhouse.com/uploads/scim_role_mapping_2e6e26bf9f.png)
+
+Once your IdP has written to a mapping, ClickHouse tracks it by the group's stable external ID rather than its name, so renaming a group in Okta doesn't break the link. Linked mappings show a link icon and become read-only in the console, the IdP owns them from that point on.
+
+Users provisioned always provisioned with **default assigned roles** configured on your SAML settings.
+
+## What SCIM does and doesn't manage
+
+SCIM is deliberately scoped. There are a few things to know before setting up SCIM:A few boundaries are worth knowing before you wire it up:
+
+- **SAML is required.** SCIM cannot be enabled without an active SAML connection, and removing that connection revokes every SCIM key and turns provisioning off immediately.
+- **Only verified domains.** Users can only be provisioned onto email domains verified for your SAML connection. An IdP cannot provision someone onto a domain you don't control.
+- **Custom roles only.** System roles such as Admin are invisible to SCIM and cannot be assigned through it. A misconfigured or compromised IdP group cannot make someone an organization admin.
+- **Only SSO users.** SCIM sees the SSO directory. Members you invited manually outside SAML are not managed or listed by it.
+- **No password sync.** Authentication stays with your IdP; ClickHouse never receives or stores credentials for SSO users.
+
+Deprovisioning users works by sending a `PATCH` or `PUT` setting `active: false` or `DELETE`. Every provisioning/deprovisioning action is written to your organization's audit log.
+
+## Availability
+
+| Plan | SAML SSO | SCIM provisioning |
+| --- | --- | --- |
+| Basic | — | — |
+| Scale | — | — |
+| Enterprise | Included | Included |
+
+[SCIM provisioning](https://clickhouse.com/docs/cloud/security/scim-setup) is generally available now for Enterprise and BYOC organizations, with no opt-in beyond enabling it. Because it's standard SCIM 2.0, it works with any compliant identity provider; we test the full lifecycle end to end against Okta and Microsoft Entra ID.
+
+Directory management is the kind of work that should be invisible. With SCIM, your identity provider stays the single place you manage access, and ClickHouse Cloud keeps up on its own.
+
+<!-- EDITORIAL: Seven unresolved Notion discussions remain. Before publication, review the proposed market-context intro, acronym expansion, replacement Availability/CTA copy, and technical notes on custom-role mapping, SCIM disablement, and rate limiting. -->
+
+
+---
+
+## pg_clickhouse & chdb updates: Encoding, nesting, and types
+Published: 2026-09-30T16:29:40+00:00
+URL: https://clickhouse.com/blog/pg_clickhouse-chdb
+
+---
+title: "pg_clickhouse & chdb updates: Encoding, nesting, and types"
+date: "2026-09-30T16:29:40.227Z"
+author: "David Wheeler"
+category: "Product"
+excerpt: "The latest pg_clickhouse and chdb extension releases improve character encoding, interval handling, nested data, JSON, and type mappings between ClickHouse and Postgres."
+---
+
+# pg_clickhouse & chdb updates: Encoding, nesting, and types
+
+Out now on GitHub and PGXN, [pg_clickhouse](https://clickhouse.com/docs/products/managed-postgres/extensions/pg_clickhouse/) v0.11.0 and the [chdb extension](https://clickhouse.com/docs/products/managed-postgres/extensions/chdb/)
+v0.1.2 continue our dogged focus on cross-database compatibility. A slew of
+these enhancements derive from our header-only C libraries, [clickhouse-c](https://github.com/serprex/clickhouse-c) and
+[pg-clickhouse-c](https://github.com/ClickHouse/pg-clickhouse-c/). Let's take a look at just three of the changes in these
+releases.
+
+## What a character {#what_a_character}
+
+First up, character encoding. In the process of developing the benchmark for
+the [chdb extension post](https://clickhouse.com/blog/introducing-chdb-postgres), I discovered that [pg-clickhouse-c](https://github.com/ClickHouse/pg-clickhouse-c/) wasn't
+validating character encodings on text columns. My colleague [Philip](https://clickhouse.com/authors/philip-dube) quickly
+patched the library to raise an exception when any text- or json-based[^json]
+type contains bytes that violate the database encoding.
+
+This fix shipped in [chdb v0.1.1](https://pgxn.org/dist/chdb/0.1.1/), but we delayed pg_clickhouse a bit to avoid
+errors for anyone with existing foreign tables that read invalidly-encoded
+data. [pg_clickhouse](https://clickhouse.com/docs/products/managed-postgres/extensions/pg_clickhouse/) v0.11.0 adds a new [foreign server](https://clickhouse.com/docs/products/managed-postgres/extensions/pg_clickhouse/reference#create-server) option,
+`check_encoding`, that provides encoding error handlers. The options are:
+
+*   `fail` (default): raise an error
+*   `remove`: remove invalid bytes
+*   `replace`: under the UTF-8 encoding, replace invalid bytes with the
+    Unicode replacement character (`�`); same as `remove` for other
+    encodings
+*   `truncate`: truncate the text at the first invalid byte
+
+[chdb_hook](https://clickhouse.com/docs/products/managed-postgres/extensions/chdb/chdb_hook) v0.1.2 provides the same option for its [COPY](https://clickhouse.com/docs/products/managed-postgres/extensions/chdb/chdb_hook#copy-overloading) and [CREATE TABLE](https://clickhouse.com/docs/products/managed-postgres/extensions/chdb/chdb_hook#create-table-overloading)
+commands. Both allow you to address errors resembling:
+
+```shell
+ERROR:  invalid byte sequence for encoding "UTF8": 0x81
+```
+
+Change the pg_clickhouse server configuration `check_encoding` to eliminate
+the errors. The most legible will be `replace`:
+
+<pre><code type='click-ui' language='sql'>
+ALTER SERVER ch_server_name OPTIONS (ADD check_encoding 'replace');
+</code></pre>
+
+For chdb_hook, pass it as a [COPY](https://clickhouse.com/docs/products/managed-postgres/extensions/chdb/chdb_hook#copy-overloading) or [CREATE TABLE](https://clickhouse.com/docs/products/managed-postgres/extensions/chdb/chdb_hook#create-table-overloading) option:
+
+<pre><code type='click-ui' language='sql'>
+CREATE TABLE logs () WITH (
+    copy_from      = 's3://chdb-lakedata-public/logs/logs-2026-08-26.csv',
+    format         = 'CSVWithNames',
+    check_encoding = 'replace'
+);
+</code></pre>
+
+For UTF-8 encoded databases, invalid bytes will be replaced with `�`,
+
+```shell
+try=# SELECT * FROM ch_table ORDER BY id;
+ id |   name
+----+---------
+  1 | Barrack
+  2 | Ale�y
+  3 | Leopold
+  4 | An�n�e
+```
+
+For other database encodings, the offending characters will simply be removed:
+
+```shell
+try=# SELECT * FROM ch_table ORDER BY id;
+ id |   name
+----+---------
+  1 | Barrack
+  2 | Aley
+  3 | Leopold
+  4 | Ann
+```
+
+If, on the other hand, you need to retain byte compatibility, you'll need
+to map the offending column to `bytea`, instead:
+
+<pre><code type='click-ui' language='sql'>
+ALTER FOREIGN TABLE ch_table ALTER name TYPE bytea;
+</code></pre>
+
+This will preserve the byte-for-byte binary data:
+
+```shell
+try=# SELECT * FROM ch_table ORDER BY id;
+id |      name
+----+------------------
+  1 | \x4261727261636b
+  2 | \x416c650079
+  3 | \x4c656f706f6c64
+  4 | \x416e006e8165
+(4 rows)
+```
+
+But be aware that conversions to text will fail.
+
+## Intervalid {#intervalid}
+
+ClickHouse supports a panoply of [interval types](https://clickhouse.com/docs/reference/data-types/special-data-types/interval): `IntervalNanosecond`,
+`IntervalHour`, `IntervalDay`, `IntervalYear`, and everything in between. In
+previous releases, pg_clickhouse did not support these types; an attempt to
+[import](https://clickhouse.com/docs/products/managed-postgres/extensions/pg_clickhouse/reference#import-foreign-schema) a ClickHouse table using one returned an error.
+
+No more. [pg_clickhouse](https://clickhouse.com/docs/products/managed-postgres/extensions/pg_clickhouse/) v0.11.0 and [chdb_hook](https://clickhouse.com/docs/products/managed-postgres/extensions/chdb/chdb_hook) 0.1.2 import these types as
+Postgres `interval` columns. So, given a ClickHouse table using, say,
+`IntervalMillisecond`, as in the `duration` column here:
+
+<pre><code type='click-ui' language='sql'>
+CREATE TABLE logs (
+    req_id    Int64                NOT NULL,
+    start_at  DateTime64(6, 'UTC') NOT NULL,
+    duration  IntervalMillisecond  NOT NULL,
+    resource  Text                 NOT NULL,
+    method    Enum8('GET' = 1, 'HEAD', 'POST', 'PUT', 'DELETE', 'PATCH') NOT NULL,
+    node_id   Int64                NOT NULL,
+    response  Int32                NOT NULL
+) ENGINE = MergeTree
+  ORDER BY start_at;
+</code></pre>
+
+On import, pg_clickhouse creates a table with a `duration interval` column:
+
+| Column  |            Type             | Nullable |
+| --- | --- | --- |
+| req_id   | bigint                      | not null |
+| start_at | timestamp(6) with time zone | not null |
+| duration | interval                    | not null |
+| resource | text                        | not null |
+| method   | text                        | not null |
+| node_id  | bigint                      | not null |
+| response | integer                     | not null |
+
+Of course pushdown also works. Say you want to count all the transactions that
+*completed* before the end of the day yesterday. Just add the duration to the
+start time:
+
+```shell
+try=# EXPLAIN (VERBOSE, COSTS OFF)
+ SELECT COUNT(*)
+   FROM logs
+  WHERE start_at + duration < date_trunc('day', now());
+                                                QUERY PLAN
+-----------------------------------------------------------------------------------------------------------
+ Foreign Scan
+   Output: (count(*))
+   Relations: Aggregate on (logs)
+   Remote SQL: SELECT count(*) FROM "default".logs WHERE (((start_at + duration) < toStartOfDay(now64())))
+(4 rows)
+```
+
+The `EXPLAIN (VERBOSE)` output shows the remote query that executes on
+ClickHouse, which plainly pushes down `start_at + duration` for execution in
+ClickHouse (along with the `COUNT()` aggregate[^ival_agg], of course).
+
+The same pattern applies [chdb_hook](https://clickhouse.com/docs/products/managed-postgres/extensions/chdb/chdb_hook) v0.1.2: it imports chDB [interval types](https://clickhouse.com/docs/reference/data-types/special-data-types/interval)
+as Postgres `interval` values. Both extensions also allow the interval types
+to be imported as `bigint`s, instead. Simply create the foreign or copy target
+table with `duration bigint` and the extension will do the rest.
+
+## Nesting instinct {#nesting_instinct}
+
+The pg_clickhouse http driver has supported the [JSON type](https://clickhouse.com/docs/reference/data-types/newjson) since v0.1, and
+the binary driver since v0.3. However, although it would push down a
+JSON property accessor, e.g.,
+
+<pre><code type='click-ui' language='sql'>
+SELECT * FROM things ORDER BY data -&gt;&gt; 'name';
+</code></pre>
+
+ClickHouse would return an error:
+
+```shell
+DB::Exception: Data types Variant/Dynamic are not allowed in ORDER BY keys, because it can lead to unexpected results.
+Consider using a subcolumn with a specific data type instead
+```
+
+This error derives from the implementation of ClickHouse JSON objects:
+ClickHouse wants to know a JSON property exists to sort. ClickHouse 25.3+
+parameterized sub-columns assure property presence. An example:
+
+<pre><code type='click-ui' language='sql'>
+CREATE TABLE things (
+    id    Int32 NOT NULL,
+    data  JSON(
+      id      UInt32,
+      name    String,
+      size    Enum('small', 'medium', 'large'),
+      stocked Bool
+    ) NOT NULL
+) ENGINE = MergeTree PARTITION BY id ORDER BY (id);
+</code></pre>
+
+Previously, [pg_clickhouse](https://clickhouse.com/docs/products/managed-postgres/extensions/pg_clickhouse/) was unable to import parameterized JSON columns,
+but v0.11.0 (and [chdb_hook](https://clickhouse.com/docs/products/managed-postgres/extensions/chdb/chdb_hook) v0.1.2), simply maps it to jsonb (or json), and
+now `ORDER BY` on a property properly pushes down:
+
+```shell
+try=# SELECT * FROM things ORDER BY data ->> 'name';
+ id |                              data
+----+-----------------------------------------------------------------
+  4 | {"id": 4, "name": "doodad", "size": "large", "stocked": false}
+  3 | {"id": 3, "name": "gizmo", "size": "medium", "stocked": true}
+  2 | {"id": 2, "name": "sprocket", "size": "small", "stocked": true}
+  1 | {"id": 1, "name": "widget", "size": "large", "stocked": true}
+(4 rows)
+```
+
+Similarly [pg_clickhouse](https://clickhouse.com/docs/products/managed-postgres/extensions/pg_clickhouse/) v0.11.0 and [chdb_hook](https://clickhouse.com/docs/products/managed-postgres/extensions/chdb/chdb_hook) v0.1.2 improved support for
+unflattened [Nested type](https://clickhouse.com/docs/reference/data-types/nested-data-structures)s, as in this example:
+
+<pre><code type='click-ui' language='sql'>
+CREATE TABLE visits(
+    visit_id  UInt64,
+    user_id   UInt64,
+    goals     Nested(
+        serial    UInt32,
+        order_id  String
+    )
+) ENGINE = MergeTree ORDER BY visit_id SETTINGS flatten_nested = 0;
+</code></pre>
+
+The [`flatten_nested=0`](https://clickhouse.com/docs/reference/settings/session-settings/other#flatten_nested) instructs ClickHouse to create a single `goals`
+column formatted as an array of `Tuple(serial UInt32, order_id String)`
+(rather than separate array columns for each field). Previously, neither
+extension supported this structure. Now they offer two mappings.
+
+By default [IMPORT FOREIGN SCHEMA](https://clickhouse.com/docs/products/managed-postgres/extensions/pg_clickhouse/reference#import-foreign-schema) and [chdb_hook](https://clickhouse.com/docs/products/managed-postgres/extensions/chdb/chdb_hook)'s [COPY](https://clickhouse.com/docs/products/managed-postgres/extensions/chdb/chdb_hook#copy-overloading) and
+[CREATE TABLE](https://clickhouse.com/docs/products/managed-postgres/extensions/chdb/chdb_hook#create-table-overloading) commands map an unflattened Nested column to a two-dimensional
+text array:
+
+|  Column  |     Type      |
+| -------- | ------------- |
+| visit_id | numeric(20,0) |
+| user_id  | numeric(20,0) |
+| goals    | text[][]      |
+
+This maps each item in a Nested value to an array of the textual
+representation of each type:
+
+```shell
+try=# SELECT * FROM nest_bin.visits WHERE visit_id < 3 ORDER BY visit_id;
+ visit_id | user_id |      goals      
+----------+---------+-----------------
+        1 |       1 | {{1,xx},{2,yy}}
+(1 row)
+```
+
+The `goals` array contains two arrays with two text values each, the first for
+`serial`, the second for `order_id`. This structure preserves the data at the
+expense of its data type, although an INSERT on a pg_clickhouse table properly
+converts types before inserting into ClickHouse:
+
+<pre><code type='click-ui' language='sql'>
+INSERT INTO visits
+VALUES (2, 2, ARRAY[ ['3', 'aa'], ['4', 'bb'] ]);
+</code></pre>
+
+But we can do better. [pg_clickhouse](https://clickhouse.com/docs/products/managed-postgres/extensions/pg_clickhouse/) v0.11.0 also allows Nested values to map
+to custom [composite types](https://www.postgresql.org/docs/current/rowtypes.html), as long as the order, type, and naming align
+perfectly. Given the Nested type defined for `goals`:
+
+```shell
+Tuple(serial UInt32, order_id String)
+```
+
+We can create a type with the corresponding names and types and slot it into
+the foreign table:
+
+<pre><code type='click-ui' language='sql'>
+CREATE TYPE goal_type AS (serial bigint, order_id text);
+ALTER FOREIGN TABLE visits ALTER goals TYPE goal_type[];
+</code></pre>
+
+And now the Nested tuples translate to the composite type:
+
+```shell
+try=# SELECT * FROM nest_bin.visits WHERE visit_id < 3 ORDER BY visit_id;
+ visit_id | user_id |        goals        
+----------+---------+---------------------
+        1 |       1 | {"(1,xx)","(2,yy)"}
+        2 |       2 | {"(3,aa)","(4,bb)"}
+```
+
+Naturally we can also INSERT data in this format:
+
+<pre><code type='click-ui' language='sql'>
+INSERT INTO visits
+VALUES (3, 3, ARRAY[row(5, 'jj'), row(6, 'zz')]::goal_type[]);
+</code></pre>
+
+The same pattern applies to [chdb_hook](https://clickhouse.com/docs/products/managed-postgres/extensions/chdb/chdb_hook) v0.1.2: When working with nested data
+exported from ClickHouse or chDB, the Postgres target table can use a
+multidimensional array of values or an array of an appropriately structured
+composite type:
+
+<pre><code type='click-ui' language='sql'>
+CREATE TYPE event_status AS ENUM ('new', 'done');
+CREATE TYPE event_point AS (x integer, y integer);
+CREATE TYPE event_label AS (key text, value bigint);
+CREATE TYPE event_item AS (id integer, name text);
+
+CREATE TABLE events (
+    status event_status,
+    point  event_point,
+    labels event_label[],
+    items  event_item[]
+);
+</code></pre>
+
+Then use the appropriate definitions for the data types in the `COPY` query
+(or rely on one of the `*WithNamesAndTypes` formats) to import the data.
+
+<pre><code type='click-ui' language='sql'>
+COPY events FROM 's3://chdb-lakedata-public/examples/events.parquet' (
+    structure $$
+        status Enum8('new' = 1, 'done' = 2),
+        point  Tuple(Int32, Int32),
+        labels Map(String, Int64),
+        items  Array(Tuple(id Int32, name String))
+    $$
+);
+</code></pre>
+
+Here we've used an `Array()` for the nested type; if the data was exported
+from ClickHouse with unflattened ([`flatten_nested=0`](https://clickhouse.com/docs/reference/settings/session-settings/other#flatten_nested)) structure, you can use
+`Nested`, instead:
+
+<pre><code type='click-ui' language='sql'>
+COPY events FROM 's3://chdb-lakedata-public/examples/events.parquet' (
+    structure $$
+        status Enum8('new' = 1, 'done' = 2),
+        point  Tuple(Int32, Int32),
+        labels Map(String, Int64),
+        items  Nested(id Int32, name String)
+    $$
+);
+</code></pre>
+
+## Odds and ends {#odds_and_ends}
+
+[pg_clickhouse](https://clickhouse.com/docs/products/managed-postgres/extensions/pg_clickhouse/) v0.11.0 ships a number of other improvements worth mentioning:
+
+*   As sharp-eyed readers no doubt noticed, in addition to [interval
+    mappings](#intervalid), the large integer types now map to appropriate
+    Postgres numerics, and a number of other ClickHouse data types now map to
+    appropriate Postgres counterparts:
+
+    |   ClickHouse    |  PostgreSQL   |
+    |---------------- | ------------- |
+    | Int128          | numeric(39,0) |
+    | Int256          | numeric(77,0) |
+    | UInt64          | numeric(20,0) |
+    | UInt128         | numeric(39,0) |
+    | UInt256         | numeric(78,0) |
+    | BFloat16        | float4        |
+    | Time            | time          |
+    | Time64(P)       | time          |
+    | Tuple(...)      | text[]        |
+    | Map(K,V)        | text[][]      |
+    | LineString      | path          |
+    | MultiLineString | path[]        |
+    | MultiPolygon    | polygon[][]   |
+    | Point           | point         |
+    | Ring            | polygon       |
+    | Polygon         | polygon[]     |
+
+    The same mappings apply to [chdb extension](https://clickhouse.com/docs/products/managed-postgres/extensions/chdb/) v0.1.2.
+
+*   The original `clickhouse_raw_query()` function, deprecated in v0.10.0, has
+    been dropped. Update your code to use `clickhouse_query(server, sql)` to
+    read rows and `CALL clickhouse_perform(server, sql)` to run statements
+    that return none.
+
+*   This release drops support for PostgreSQL 13, which has been unsupported
+    by the Postgres community since September, 2025.
+
+*   A [community contribution](https://github.com/ClickHouse/pg_clickhouse/pull/360), added pushdown for the PostgreSQL `sha224()`,
+    `sha256()`, `sha384()`, and `sha512()` functions, along with supported
+    constant-algorithm calls to the [pgcrypto](https://www.postgresql.org/docs/current/pgcrypto.html) extension's `digest()`
+    function.
+
+Have a look at the complete [pg_clickhouse changes](https://github.com/ClickHouse/pg_clickhouse/releases/tag/v0.11.0) and [chdb changes](https://github.com/ClickHouse/pg_chdb/releases/tag/v0.1.2) for
+more details, including bug fixes. Then get them from the usual places. For
+pg_clickhouse:
+
+*   [PGXN](https://pgxn.org/dist/pg_clickhouse/)
+*   [GitHub](https://github.com/ClickHouse/pg_clickhouse/releases/tag/v0.11.0)
+*   [Docker](https://github.com/ClickHouse/pg_clickhouse/pkgs/container/pg_clickhouse)
+
+And for the chdb extension:
+
+*   [PGXN](https://pgxn.org/dist/chdb/)
+*   [GitHub](https://github.com/ClickHouse/pg_chdb/releases/tag/v0.1.2)
+
+[^json]: Yes of course JSON [prefers UTF-8](https://www.rfc-editor.org/info/rfc7159/#section-8.1) by definition, except when it's not.
+    [JSON data in Postgres](https://www.postgresql.org/docs/current/datatype-json.html) must always use the database encoding.
+[^ival_agg]: Unfortunately, ClickHouse interval types do not yet support
+    aggregates themselves, so `avg(duration)`, for example, will fail. But do
+    watch for [`avg`](https://github.com/ClickHouse/ClickHouse/pull/121458) and [`sum`](https://github.com/ClickHouse/ClickHouse/pull/121600) support in 26.10.
+
+
+---
+
+## Get started with ClickHouse Managed Postgres today
+
+Interested in seeing how ClickHouse Managed Postgres works on your data? Get started with ClickHouse Cloud in minutes and receive $300 in free credits.
+
+[Sign up](https://console.clickhouse.cloud/signUp?intent=pg&loc=blog-cta-2467-get-started-with-clickhouse-managed-postgres-today-sign-up&utm_blogctaid=2467)
+
+---
+
+---
+
+## Memory safety for Postgres extensions in C/C++
+Published: 2026-09-30T13:56:27+00:00
+URL: https://clickhouse.com/blog/memory-safety-postgres-extensions-c-cpp
+
+---
+title: "Memory safety for Postgres extensions in C/C++"
+date: "2026-09-30T13:56:27.997Z"
+author: "Philip Dubé"
+category: "Engineering"
+excerpt: "How ClickHouse’s Postgres extensions handle the memory safety challenges of combining C and C++, from clean language boundaries to isolated helper processes."
+---
+
+# Memory safety for Postgres extensions in C/C++
+
+We’ve developed a few postgres extensions at ClickHouse:
+
+* [pg_clickhouse](https://clickhouse.com/blog/introducing-pg_clickhouse) (clickhouse fdw)  
+* [pg_re2](https://clickhouse.com/blog/introducing-pg_re2-regex-in-postgres) (integrates re2, the same regex engine used by ClickHouse, into postgres)  
+* [pg_chdb](https://clickhouse.com/blog/introducing-chdb-postgres) (ClickHouse object storage capabilities for COPY in postgres)  
+* [pg_stat_ch](https://clickhouse.com/blog/pg_stat_ch-postgres-extension-stats-to-clickhouse) (ships metrics & logs)
+
+All of these involved bringing C++ into a Postgres extension. Postgres is C. Surely C & C++ play nice together, right?
+
+No. Postgres has its own memory allocation pattern built around [MemoryContext](https://www.cybertec-postgresql.com/en/memory-context-for-postgresql-memory-management/). Instead of using malloc/free, one should use palloc/pfree. These functions associate allocations with a MemoryContext, which can work as an [arena allocator](https://en.wikipedia.org/wiki/Region-based_memory_management) freeing everything at the end of a transaction or aggregate or what have you. MemoryContexts can also have callbacks to act as destructors. Postgres handles failed memory allocations by raising an error, for which it has a whole PG_TRY/PG_CATCH/PG_FINALLY macro package built on [setjmp/longjmp](https://en.cppreference.com/c/program/setjmp). PG_FINALLY is another method of building [RAII](https://en.wikipedia.org/wiki/Resource_acquisition_is_initialization)-like destructor logic.
+
+C++ code on the other hand tends to use new/delete, which invokes constructors/destructors, & raises [std::bad_alloc](https://en.cppreference.com/cpp/memory/new/bad_alloc) on failed allocation. These two systems do not interact well: setjmp/longjmp skips C++ cleanup; jumping past nontrivial destructors for automatic objects is [undefined behavior](https://eel.is/c++draft/csetjmp.syn), not merely a leak. PG_FINALLY and MemoryContext callbacks do not make such a jump safe. Exceptions bypass PG_CATCH/PG_FINALLY. Worse, an uncaught exception causes the process to abort, which even in a background worker will lead to the Postgres postmaster process having to restart everything in fear that shared memory has been corrupted.
+
+Each of these extensions took a different strategy around memory safety.
+
+## pg_clickhouse {#pg_clickhouse}
+
+For pg_clickhouse we have completely eradicated the use of C++. This involved replacing [clickhouse-cpp](https://github.com/clickhouse/clickhouse-cpp) with an entirely new C library, [clickhouse-c](https://github.com/ClickHouse/clickhouse-c), which we recently wrapped in another library, [pg-clickhouse-c](https://github.com/ClickHouse/pg-clickhouse-c), in order to consolidate postgres logic while keeping clickhouse-c a general-purpose library. clickhouse-c was designed to be transport-agnostic, supporting [Native](https://clickhouse.com/docs/reference/formats/Native) format outside Native protocol, so now the HTTP driver shares much of its decoding/encoding logic with the binary driver by using Native format over HTTP. For HTTP we use libcurl, which offers a low level enough interface to play nice with Postgres's environment.
+
+For example, previously in `binary.cpp`, `make_datum` converted a ClickHouse String with:
+
+```cpp
+auto s = std::string(col->AsStrict<ColumnString>()->At(row));
+ret = PointerGetDatum(cstring_to_text_with_len(s.data(), s.size()));
+```
+
+`cstring_to_text_with_len` allocates a Postgres text value with `palloc`. If that allocation fails, Postgres raises ERROR and jumps to its error handler, bypassing `s`'s destructor. Surrounding C++ try/catch cannot catch this jump.
+
+## pg_re2 {#pg_re2}
+
+For pg_re2 C++ is scoped to [re2_wrapper.cpp](https://github.com/ClickHouse/pg_re2/blob/main/src/re2_wrapper.cpp). All C++ allocations happen within C++ try/catch, & it doesn't call into postgres C code. Separation of concerns is sufficient for this encapsulation to draw a clean line between the two systems.
+
+## pg_chdb {#pg_chdb}
+
+pg_chdb reuses pg-clickhouse-c for decoding/encoding native blocks. Originally it loaded [libchdb](https://clickhouse.com/docs/chdb/) into the background worker, but eventually moved libchdb into a separate helper executable. Isolating libchdb is the point: its C++ runtime, threads, allocations, and failures live outside a Postgres backend or managed background worker. The backend forks and execs this helper, so it remains a descendant of postmaster, but postmaster does not manage it as a background worker. This helper only needs enough information to run a ClickHouse query & exchange Native blocks, so it has no need for postgres headers. A libchdb crash can then fail the calling operation without itself triggering Postgres cluster crash recovery.
+
+## pg_stat_ch {#pg_stat_ch}
+
+pg_stat_ch relies on OpenTelemetry libraries & [Arrow's C++ bindings](https://arrow.apache.org/docs/cpp/), as [nanoarrow](https://arrow.apache.org/nanoarrow/latest/) lacks many IPC features. C++ code is isolated to a Postgres background worker which we then instrument with C++ exception handling & PG exception handling. A terminate handler routes uncaught exceptions / std::terminate through `ereport(FATAL)` instead of default `abort()` / SIGABRT. FATAL normally runs Postgres process-exit cleanup and exits with status 1. Postmaster accepts this as a non-crash exit if shared-memory detachment also completes cleanly; worker restart then follows `bgw_restart_time`. By contrast, abnormal worker termination can trigger cluster-wide crash recovery and disconnect other sessions.
+
+This is a mitigation, not a general crash-isolation guarantee. FATAL cannot repair inconsistent shared memory, and failed cleanup can still make postmaster treat exit as a crash. A process-wide terminate handler also needs scrutiny if invoked by a library thread: it does not make Postgres error handling and exit callbacks safe to call from arbitrary threads.
+
+Writing this blog exposed a concrete ownership problem, addressed in [PR #126](https://github.com/ClickHouse/pg_stat_ch/pull/126): an interrupted dequeue could leave a slot pointing to already-freed error text or already-released query text. Recovery retries the slot before tail advances, potentially freeing or releasing the same reference twice. Long term moving C++ dependencies into a helper executable, as done in pg_chdb, will further harden pg_stat_ch. [PR #129](https://github.com/ClickHouse/pg_stat_ch/pull/129) is the first step: isolate C++ in `src/exporter` with no Postgres dependency and let `bgworker.c` handle the C/C++ boundary.
+
+
+---
+
+## Get started today
+
+Interested in seeing how ClickHouse works on your data? Get started with ClickHouse Cloud in minutes and receive $300 in free credits.
+
+[Sign up](https://console.clickhouse.cloud/signUp?loc=blog-cta-2463-get-started-today-sign-up&utm_blogctaid=2463)
+
+---
 
 ---
 

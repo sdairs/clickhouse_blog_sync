@@ -1,5 +1,5 @@
 {
-  "last_sync": "2026-09-30T12:02:20.278456Z",
+  "last_sync": "2026-10-01T12:35:28.237557Z",
   "processed_blogs": {
     "https://clickhouse.com/blog/clickhouse-raises-400-million-series-d-acquires-langfuse-launches-postgres": {
       "title": "ClickHouse raises $400M Series D led by Dragoneer to accelerate expansion across analytics and AI infrastructure",
@@ -5940,9 +5940,33 @@
       "pub_date": "2026-09-28T15:37:06+00:00",
       "file_path": "blogs/2026-09-28-can-your-postgres-survive-a-bad-query.md",
       "processed_at": "2026-09-29T12:16:42.509208Z"
+    },
+    "https://clickhouse.com/blog/linkedin-observability-at-scale": {
+      "title": "How LinkedIn extended ClickHouse from distributed tracing to metric discovery and analytics",
+      "pub_date": "2026-10-01T11:47:10+00:00",
+      "file_path": "blogs/2026-10-01-how-linkedin-extended-clickhouse-from-distributed.md",
+      "processed_at": "2026-10-01T12:35:27.523379Z"
+    },
+    "https://clickhouse.com/blog/introducing-scim-provisioning-in-clickhouse-cloud": {
+      "title": "Introducing SCIM Provisioning in ClickHouse Cloud",
+      "pub_date": "2026-09-30T17:23:47+00:00",
+      "file_path": "blogs/2026-09-30-introducing-scim-provisioning-in-clickhouse-cloud.md",
+      "processed_at": "2026-10-01T12:35:27.749867Z"
+    },
+    "https://clickhouse.com/blog/pg_clickhouse-chdb": {
+      "title": "pg_clickhouse & chdb updates: Encoding, nesting, and types",
+      "pub_date": "2026-09-30T16:29:40+00:00",
+      "file_path": "blogs/2026-09-30-pg-clickhouse-chdb-updates-encoding-nesting-and.md",
+      "processed_at": "2026-10-01T12:35:27.938606Z"
+    },
+    "https://clickhouse.com/blog/memory-safety-postgres-extensions-c-cpp": {
+      "title": "Memory safety for Postgres extensions in C/C++",
+      "pub_date": "2026-09-30T13:56:27+00:00",
+      "file_path": "blogs/2026-09-30-memory-safety-for-postgres-extensions-in-c-c.md",
+      "processed_at": "2026-10-01T12:35:28.129840Z"
     }
   },
-  "total_blogs": 990,
+  "total_blogs": 994,
   "failed_blogs": [
     {
       "url": "https://clickhouse.com/jp/blog/clickhouse-gcp-japan-availability",
