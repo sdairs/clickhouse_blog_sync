@@ -1,5 +1,5 @@
 {
-  "last_sync": "2026-10-01T12:35:28.237557Z",
+  "last_sync": "2026-10-02T12:00:06.131148Z",
   "processed_blogs": {
     "https://clickhouse.com/blog/clickhouse-raises-400-million-series-d-acquires-langfuse-launches-postgres": {
       "title": "ClickHouse raises $400M Series D led by Dragoneer to accelerate expansion across analytics and AI infrastructure",
@@ -5964,9 +5964,15 @@
       "pub_date": "2026-09-30T13:56:27+00:00",
       "file_path": "blogs/2026-09-30-memory-safety-for-postgres-extensions-in-c-c.md",
       "processed_at": "2026-10-01T12:35:28.129840Z"
+    },
+    "https://clickhouse.com/blog/direct-io-managed-postgres-backups": {
+      "title": "What is direct I/O, and why does ClickHouse Managed Postgres use it for backups?",
+      "pub_date": "2026-10-02T11:57:44+00:00",
+      "file_path": "blogs/2026-10-02-what-is-direct-i-o-and-why-does-clickhouse.md",
+      "processed_at": "2026-10-02T12:00:06.063370Z"
     }
   },
-  "total_blogs": 994,
+  "total_blogs": 995,
   "failed_blogs": [
     {
       "url": "https://clickhouse.com/jp/blog/clickhouse-gcp-japan-availability",
