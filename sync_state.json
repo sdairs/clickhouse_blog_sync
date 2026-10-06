@@ -1,5 +1,5 @@
 {
-  "last_sync": "2026-10-05T13:49:45.372957Z",
+  "last_sync": "2026-10-06T12:53:38.861631Z",
   "processed_blogs": {
     "https://clickhouse.com/blog/clickhouse-raises-400-million-series-d-acquires-langfuse-launches-postgres": {
       "title": "ClickHouse raises $400M Series D led by Dragoneer to accelerate expansion across analytics and AI infrastructure",
@@ -5970,9 +5970,21 @@
       "pub_date": "2026-10-02T11:57:44+00:00",
       "file_path": "blogs/2026-10-02-what-is-direct-i-o-and-why-does-clickhouse.md",
       "processed_at": "2026-10-02T12:00:06.063370Z"
+    },
+    "https://clickhouse.com/blog/clickhouse-vs-databricks-real-time-performance-per-dollar": {
+      "title": "Why Databricks can’t match ClickHouse Cloud for real-time analytics",
+      "pub_date": "2026-10-06T12:26:14+00:00",
+      "file_path": "blogs/2026-10-06-why-databricks-can-t-match-clickhouse-cloud-for.md",
+      "processed_at": "2026-10-06T12:53:38.574833Z"
+    },
+    "https://clickhouse.com/blog/executable-udfs-generally-available-on-clickhouse-cloud": {
+      "title": "Executable UDFs are now generally available on ClickHouse Cloud",
+      "pub_date": "2026-10-05T14:46:00+00:00",
+      "file_path": "blogs/2026-10-05-executable-udfs-are-now-generally-available-on.md",
+      "processed_at": "2026-10-06T12:53:38.752648Z"
     }
   },
-  "total_blogs": 995,
+  "total_blogs": 997,
   "failed_blogs": [
     {
       "url": "https://clickhouse.com/jp/blog/clickhouse-gcp-japan-availability",
