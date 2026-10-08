@@ -1,5 +1,5 @@
 {
-  "last_sync": "2026-10-07T12:47:38.865223Z",
+  "last_sync": "2026-10-08T12:56:34.668236Z",
   "processed_blogs": {
     "https://clickhouse.com/blog/clickhouse-raises-400-million-series-d-acquires-langfuse-launches-postgres": {
       "title": "ClickHouse raises $400M Series D led by Dragoneer to accelerate expansion across analytics and AI infrastructure",
@@ -5982,9 +5982,21 @@
       "pub_date": "2026-10-05T14:46:00+00:00",
       "file_path": "blogs/2026-10-05-executable-udfs-are-now-generally-available-on.md",
       "processed_at": "2026-10-06T12:53:38.752648Z"
+    },
+    "https://clickhouse.com/blog/clickhouse-vs-bigquery-real-time-performance-per-dollar": {
+      "title": "Why BigQuery can’t match ClickHouse Cloud for real-time analytics",
+      "pub_date": "2026-10-08T10:49:15+00:00",
+      "file_path": "blogs/2026-10-08-why-bigquery-can-t-match-clickhouse-cloud-for.md",
+      "processed_at": "2026-10-08T12:56:34.390844Z"
+    },
+    "https://clickhouse.com/blog/postgres-summit-us-2026": {
+      "title": "🗽 Postgres Summit US 2026 retrospective",
+      "pub_date": "2026-10-07T17:05:28+00:00",
+      "file_path": "blogs/2026-10-07-postgres-summit-us-2026-retrospective.md",
+      "processed_at": "2026-10-08T12:56:34.554969Z"
     }
   },
-  "total_blogs": 997,
+  "total_blogs": 999,
   "failed_blogs": [
     {
       "url": "https://clickhouse.com/jp/blog/clickhouse-gcp-japan-availability",
