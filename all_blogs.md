@@ -1,6 +1,286 @@
 # ClickHouse Blogs
-Last updated: 2026-10-08 12:56:34 UTC
-Total blogs: 999
+Last updated: 2026-10-09 12:42:35 UTC
+Total blogs: 1001
+
+---
+
+## How we migrated Clera’s 500 GB production database to ClickHouse Managed Postgres overnight
+Published: 2026-10-08T20:51:48+00:00
+URL: https://clickhouse.com/blog/clera-migrates-to-clickhouse-managed-postgres
+
+---
+title: "How we migrated Clera’s 500 GB production database to ClickHouse Managed Postgres overnight"
+date: "2026-10-08T20:51:48.827Z"
+author: "Daniel Wintermeyer"
+category: "User stories"
+excerpt: "Clera migrated its 500 GB production database and 500+ tables to ClickHouse Managed Postgres overnight, cutting CPU usage from 100% to 10–20%."
+---
+
+# How we migrated Clera’s 500 GB production database to ClickHouse Managed Postgres overnight
+
+## Summary
+
+Clera, an AI talent agent representing 200,000+ candidates, runs their operational database on ClickHouse Managed Postgres after outgrowing their previous provider. The team evaluated Supabase, Neon, and PlanetScale, choosing ClickHouse Managed Postgres for its NVMe-backed performance, which won on both their own production workload and sysbench TPC-C, a standardized benchmark. They migrated 500+ tables from the EU to the US overnight, with production traffic still hitting the database; CPU usage dropped from days at 100% to 10 to 20%.
+
+*This is a guest post by Daniel Wintermeyer, CTO and co-founder of [Clera](https://www.getclera.com/), and founding engineer Julian Bouchard. The original post lives on Clera’s blog [here](http://www.getclera.com/blog/how-we-migrated-to-clickhouse-managed-postgres).*
+
+
+Hiring is broken. Candidates apply into the void, founders drown in resumes they don’t want to read, and the people who’d be a great fit almost never end up in the same room. We decided there had to be a better way. You don’t search for a job. You talk to [Clera](https://www.getclera.com/). 
+
+We’re an AI talent agent that works on both sides of the market, representing more than 200,000 candidates and helping them get hired at mostly pre-seed to Series B companies in New York and San Francisco. Right now, the platform has around 2,250 live jobs, and more than 2,000 new candidates are joining every day.
+
+Under the hood, we run a multi-agent system. On the candidate side, you sign up, talk to us through email, iMessage or a chat interface, and agents handle everything from first intake and getting to know your preferences, through to proposing and matching you to the right roles. On the company side, we sit in the founders’ Slack channels and introduce candidates directly, so there’s no application step. We only propose jobs that are a fit, and we curate hard enough that around 50% of the intros we make lead to an interview. Since we work on a success-based fee, what matters to us is people getting placed somewhere they want to work.
+
+The biggest part of the system is data. Every intake conversation, job listing, and signal about who’s a fit for what role feeds the matchmaking engine, and that engine is only as good as the data behind it. It turns out this is a really hard issue to solve.
+
+## Outgrowing our old database vendor
+
+At the time of migration we ran more than 500 GB of data on Postgres (now closer to a terabyte). Before we migrated to ClickHouse Managed Postgres, we ran into many, many issues with our previous database vendor.
+
+One of the clearest examples was a single talent query, a candidate lookup that should have been instant, but instead took around three seconds. We had analytical queries everywhere, and stretches where the database sat at 100% CPU for six straight days. There were also timeouts, and missing and failed writes. If you’ve faced these, you know how painful they are, because you need to retry, and you really don’t want your database letting you down. At its worst we had bursts where we couldn’t even write an update to a table from a primary key.
+
+When Julian looked at our workload, it broke into three types:
+
+* **Hot reads**: the smaller CTEs, job listing queries, and materialized view reads that need to come up quickly when someone browses the site.   
+* **Point lookups**: the tiny primary key reads and writes that should be sub-millisecond when nothing blocks them.   
+* **Background work**: the heavy analytics CTEs that the team runs or dashboards show, plus materialized view refreshes for SEO. 
+
+The biggest pain was point lookups. They were taking multiple seconds because they were getting blocked by the background queries. On top of that, we scrape a lot of data, so we get spiky scrape bursts that pile IOPS, CPU, and wall-clock time on top of everything else.
+
+We decided we needed an operational Postgres where point lookups stay fast while analytics and scrape bursts run alongside, with storage that can take the IOPS, managed by someone else. We’re not really database people. We wanted something that just works.
+
+## Choosing ClickHouse Managed Postgres
+
+We started by evaluating four vendors: Supabase, Neon, PlanetScale, and [ClickHouse Managed Postgres](https://clickhouse.com/cloud/postgres). We didn’t know ClickHouse was an option until our friends at [Langfuse](https://langfuse.com/) were like, “Oh, by the way, ClickHouse is now also in the running for this. They have managed Postgres with NVMe storage. You should talk to them as well.”
+
+We tested the vendors in two ways. First on our own production data, replayed under simulated load on the workload we actually run, and second with a standardized benchmark, to get a generalizable number that other providers publish results on.
+
+## Benchmarking our production workload {#benchmarking_our_production_workload}
+
+For the replay, we loaded around 500 GB of production data onto all four providers and ran the three query classes above, measuring:
+
+* Queries per second (QPS)  
+* P99 latency  
+* Error percentage  
+* Acquire times  
+* Wait events (how often stuff was being blocked that we didn’t want blocked) 
+
+Julian tried running everything through each provider’s pooler, but the poolers all had different settings and equalizing them wasn’t worth it, so the final numbers are on direct connections.
+
+ClickHouse Managed Postgres won nearly everything, especially IOPS. The difference was [local NVMe storage](https://www.ubicloud.com/blog/postgresql-performance-local-vs-network-attached-storage) versus the network-attached storage most providers use, which adds latency on every disk read and write. That alone was enough to immediately eliminate Supabase and Neon, leaving PlanetScale and ClickHouse.
+
+## Validating the benchmark with TPC-C {#validating_the_benchmark_with_tpcc}
+
+We then ran sysbench TPC-C. It’s basically a business-simulating dataset with a mix of read and write queries. (It’s important to note that sysbench isn’t fully TPC-C compliant, but it gives us a comparable baseline.) Both providers ran on the same machine class with 500 GB of generated data. One experiment was 8, 16, 32, 64, and 128 threads, three times back to back, so we could measure variance between runs as well as throughput. We ran multiple experiments, once again tracking QPS, P99, and error rate, and this time measuring transactions per second (TPS) and variation as well. 
+
+ClickHouse Managed Postgres swept again. Stock, without touching anything, its throughput advantage ranged from around 16% at 128 threads to 42% at 16 threads:
+
+![](https://clickhouse.com/uploads/planetscale_clickhouse_postgres_tps_table_preview_caed406a40.png)
+
+It’s important to note, that they don’t run the same PostgreSQL settings out of the box. Tuning is part of each provider's offering but can be manually adjusted to a degree. So we got feedback from PlanetScale on how to equalize these, which we took into account, though we couldn’t test huge pages without going through their engineering team.
+
+Everything is in an [open-source repo on GitHub](http://github.com/getclera/ps-vs-ch-benchmark), including all the results, logs, scripts, and Terraform files, plus a short LaTeX write-up and a dump of context for your LLMs. Please take a look, scrutinize it, reproduce it, and email us if there are mistakes. If you’re evaluating a database of any type, we encourage you to run something like this yourself and make it open source. You can be wrong, and then people can correct you. That’s the beauty of sharing knowledge in a community.
+
+## Migrating the database overnight with ClickPipes
+
+![](https://clickhouse.com/uploads/clera_oct2026_image2_a3a8515192.png)
+
+It was a Thursday when we decided to go with ClickHouse Managed Postgres. On Friday morning, Daniel got a flat white and walked into our 10 a.m. daily prepared to talk about the upcoming migration. Julian said, “Oh, by the way, we’re already on ClickHouse.”
+
+At 11 p.m. the night before, Julian had finished the final prep work. He knew that if we did all the prep and then sat on it, we’d keep pushing it out. So, figuring it would have to be done eventually, he decided we might as well do it now.
+
+For the prep stage, we followed [ClickHouse’s migration guide](https://clickhouse.com/docs/products/managed-postgres/migrations/clickpipes). On the source side, that meant WAL lifetime settings, enabling publications, and pre-checks on keys and extensions. Extensions were the biggest pain. Postgres offers a wide variety of them, and some providers have very specific extensions that don’t port anywhere else. Julian had spent a few days beforehand changing parts of the system to get around that and make sure we could cleanly migrate to any provider.
+
+He set up two [ClickPipes](https://clickhouse.com/cloud/clickpipes) pipelines, one for the core data and one for the non-essential data, so he could focus on the core data and let both run in parallel. Our founding team is German and our database had been in the EU, so we took the opportunity to move it to the US at the same time. That’s 500+ tables crossing the Atlantic while production traffic was hitting it. At one point during testing, Julian ran into an issue due the EU latency + table volume combo. Someone at ClickHouse made a PR for it at 11 p.m. That kind of responsiveness was nice and made the transition a lot easier.
+
+The migration itself was easy enough. The harder part was putting the triggers back, rebuilding the indexes, and resequencing tables. Then there were parity checks and the actual cutover, redeploying the entire system pointing at the new database and making sure nothing was breaking too hard. It all had to be done quickly, because we apply a lot of schema changes and you don’t want people changing the old schema while the new one has already been copied. By 6 or 7 a.m. it was mostly monitoring and cleanup. After the 10 a.m. daily, Julian went to bed.
+
+## Faster queries and ready to scale
+
+With ClickHouse Managed Postgres, everything loads a lot faster for our users and internal admins, who use our tooling every day and are very grateful. No one’s afraid anymore that someone on the team will randomly run a multi-hour analytics query that takes the whole system down. That used to happen on occasion, but not anymore.
+
+Just as important, we have room to breathe. We’re currently sitting around 10 to 20% CPU usage most of the time. We haven’t changed a single setting since the migration. The out-of-the-box performance was already tuned for what we needed, and for us it just worked. Price-wise, it’s about where we were before, if anything slightly cheaper, but with better performance and scalability.
+
+It’s worth noting we didn’t migrate to ClickHouse the analytics database. We migrated to their managed Postgres service, which is essentially vanilla Postgres backed by local NVMe storage instead of network-attached disks. Right now that’s all we need, but if the analytics side of the business ever outgrows it, the path is there. Managed Postgres can sync to ClickHouse when we need it to. In the meantime, we’re confident we can throw a lot more at the system.
+
+**By the numbers**
+
+* 500 GB migrated (now closer to 1 TB)  
+* 500+ tables moved from the EU to the US  
+* 1 night, from final prep to cutover  
+* 100% → 10 to 20% CPU  
+* Up to 42% more TPS than the runner-up on sysbench TPC-C  
+* 0 settings changed since migration
+
+---
+
+## Get started with ClickHouse Managed Postgres today
+
+Interested in seeing how ClickHouse Managed Postgres works on your data? Get started with ClickHouse Cloud in minutes and receive $300 in free credits.
+
+[Sign up](https://console.clickhouse.cloud/signUp?intent=pg&loc=blog-cta-2562-get-started-with-clickhouse-managed-postgres-today-sign-up&utm_blogctaid=2562)
+
+---
+
+---
+
+## Introducing JWT authentication in ClickHouse Cloud
+Published: 2026-10-08T13:55:14+00:00
+URL: https://clickhouse.com/blog/introducing-jwt-authentication-in-clickhouse-cloud
+
+---
+title: "Introducing JWT authentication in ClickHouse Cloud"
+date: "2026-10-08T13:55:14.508Z"
+category: "Product"
+excerpt: "Connect to ClickHouse Cloud with short-lived tokens from your identity provider instead of database passwords."
+---
+
+# Introducing JWT authentication in ClickHouse Cloud
+
+> TL;DR
+> Connect to ClickHouse Cloud with short-lived tokens from your identity provider instead of database passwords.
+
+Long-lived database credentials are difficult to govern. Every person, pipeline, and application needs a password or certificate that must be stored, rotated, and revoked as access changes.
+
+JWT authentication for ClickHouse Cloud Services (26.4 or later) replaces that workflow with short-lived JWT tokens from an existing OpenID Connect provider, including Okta and Microsoft Entra. Identity and roles stay in the provider, while ClickHouse Cloud accepts the token instead of a separate database password. When the token expires, so does the access it provides.
+
+This reduces the number of credentials security and platform teams have to manage and removes the need to provision a persistent database user for every person or workload. It is part of our broader security and governance work in ClickHouse Cloud.
+
+## How it works
+
+When a client presents a JWT token, ClickHouse verifies its signature and required claims against the configured provider. It then creates an ephemeral user and applies the roles and grants in the token within the service’s permission limit.
+
+A token carries the standard JWT claims, along with optional ClickHouse claims for roles and grants:
+
+- `iss`, who issued the token
+- `aud`, which service the token is meant for
+- `sub`, who the user is
+- `iat` and `exp`, when the token was issued and when it expires
+- `clickhouse:roles`, an optional list of existing role names to activate
+
+If your identity provider uses a different claim name for roles (eg. `groups`), you can tell ClickHouse which one to read.
+
+```json
+{
+  "iss": "https://your-tenant.okta.com",
+  "sub": "jane.doe",
+  "aud": "my-clickhouse-service",
+  "exp": 1719504000,
+  "iat": 1719500400,
+  "clickhouse:roles": ["analyst", "reader"]
+}
+```
+
+When a valid token arrives, ClickHouse creates an ephemeral user in memory, gives it the access the token asked for, and runs the query. Usernames follow a fixed pattern, where the hash covers the issuer, subject, audience, and the roles claim:
+
+```text
+JWT::<subject>::<claims_hash>
+```
+
+Two tokens for the same person with different roles produce two different users, so you can tell the sessions apart in `system.users` even though they belong to the same identity. In a multi-replica service, the token travels with forwarded queries and each node verifies it independently.
+
+## No more user provisioning
+
+Ephemeral users change what managing users means on the database side. With password or certificate users, someone runs `CREATE USER` and a set of `GRANT` statements for every new hire, keeps that in sync with the identity provider, and remembers to `DROP USER` when they leave. Most teams end up scripting it, and the scripts drift.
+
+<!-- Editorial note from Notion: Consider linking readers to the security docs and explicitly recommending IdP-issued JWTs over older ephemeral passwords and certificate users. -->
+
+With JWT authentication there is nothing to script. A user appears in memory the first time a valid token is presented, carries the roles from that token, and is removed by a background task after the token's `exp` passes. The user itself is never written to disk. There is no `CREATE USER` step, and `CREATE USER ... IDENTIFIED WITH jwt` raises an exception on purpose, because the token lifecycle is the user lifecycle. `ALTER USER` and `DROP USER` do not apply either, and JWT users are not included in backups, since there is nothing to restore.
+
+What you manage in ClickHouse is the roles. Create `analyst`, `pipeline_writer`, or whatever your team needs once, and let the identity provider decide who gets them by putting role names in the token. Onboarding is a group assignment in your provider. Offboarding is removing it. And `system.users` shows who is active right now rather than everyone who has ever been granted access.
+
+## Bring your own identity provider
+
+If your identity provider speaks OpenID Connect, you already have everything ClickHouse asks for. An OIDC provider publishes its issuer and a `jwks_uri` in its discovery document and signs tokens that already carry `iss`, `aud`, `sub`, `exp`, and `iat`. Those are the values ClickHouse checks. We have verified the setup with Okta and Microsoft Entra, and any provider that follows the standard works the same way. For a custom provider, ClickHouse does not run the login flow itself. Your provider issues the token, your client presents it, and ClickHouse verifies it.
+
+On the Enterprise plan, with a service running 26.4 or later, open your service in the Cloud console and go to Settings → Security → JWT authentication. Each provider needs a name, the issuer and audience values your provider puts in its tokens, and the HTTPS URL where it publishes its JSON Web Key Set (JWKS). If your provider puts group membership in a claim other than `clickhouse:roles`, such as a `groups` claim, set the Roles claim field to that name. The values must match role names that exist on the service. ClickHouse fetches the JWKS URL when you save, so a typo fails at configuration time rather than at someone's first login.
+
+JWKS providers accept RSA keys (`RS256`). From version 26.8, EC keys on the P-256, P-384, and P-521 curves (`ES256`, `ES384`, `ES512`) work as well. The JWKS URL has to be a public HTTPS endpoint.
+
+## Connecting
+
+A client can hold one of two kinds of token, and they are worth keeping apart: a token issued by your own identity provider, or a token issued by ClickHouse Cloud for your Cloud account.
+
+### Tokens from your identity provider
+
+With a custom provider, your identity provider issues the token and the ClickHouse driver presents it. The easiest way to obtain one is with the OAuth client library you already use for your provider. For a service or pipeline that usually means the client credentials flow through your provider's SDK. For a person it means whatever login flow your provider offers. Once you hold the token string, the official clients accept it in place of a username and password.
+
+```typescript
+// clickhouse-js
+import { createClient } from '@clickhouse/client'
+
+const client = createClient({
+  url: 'https://your-instance.clickhouse.cloud:8443',
+  access_token: token,
+})
+```
+
+```python
+# clickhouse-connect
+import clickhouse_connect
+
+client = clickhouse_connect.get_client(
+    host='your-instance.clickhouse.cloud',
+    port=443,
+    secure=True,
+    access_token=token,
+)
+```
+
+Tokens expire, so most clients also let you plug in your refresh logic. `clickhouse-connect` accepts a `token_provider` callable that it calls for the first token and again whenever the server rejects an expired one. The Go client takes a `GetJWT` callback in its options. The Java client has `useBearerTokenAuth` on the builder and `updateBearerToken` to swap the token on a live client. For ad hoc queries, `clickhouse-client` and plain HTTP work too:
+
+```bash
+clickhouse-client --host your-instance.clickhouse.cloud --secure --jwt "$TOKEN"
+
+curl -H "Authorization: Bearer $TOKEN" \
+    'https://your-instance.clickhouse.cloud:8443/?query=SELECT+currentUser()'
+```
+
+In every client the token replaces the username and password rather than adding to them. Passing both is an error.
+
+### Tokens from ClickHouse Cloud
+
+Every Cloud service also has a built-in authenticator whose tokens ClickHouse Cloud issues for your Cloud account. You never handle these tokens yourself. SQL Console uses them automatically, and `clickhouse-client --login` runs an OAuth2 device code flow against your Cloud login, exchanges the result for a ClickHouse token, refreshes it in the background, and reconnects when a new token arrives.
+
+```bash
+clickhouse-client --host your-instance.clickhouse.cloud --login
+```
+
+## Quotas and row policies on users that come and go
+
+If a JWT user only exists while its token is valid, what happens to everything ClickHouse normally attaches to a user? Regular users anchor a lot of configuration. A settings profile caps how much memory an analyst's queries may use. A quota limits how many queries a dashboard can run per hour. A row policy makes sure a regional team sees only its own region's rows. All of these are assigned to a user by name, and if the user vanished every few hours you would expect the assignments to vanish with it.
+
+They do not, because a JWT user has two names. The visible username you saw earlier changes whenever the roles in the token change. Underneath it, ClickHouse gives every identity a UUID computed from the issuer, subject, and audience claims. That UUID is the same every time the same person logs in through the same provider, no matter which roles the token carries or how many times the user has expired and been recreated.
+
+Settings profiles, quotas, row policies, and column masking policies attach to that UUID. You assign them with the same statements you use for regular users, referencing the user's current name from `system.users` while they are active:
+
+```sql
+ALTER SETTINGS PROFILE readonly_profile ADD TO 'JWT::jane.doe::<claims_hash>';
+```
+
+The assignment is recorded on the profile, quota, or policy itself, in the same replicated access storage that holds your roles and other SQL-created objects, backed by Keeper in ClickHouse Cloud. Nothing is written to the ephemeral user, which stays in memory. So the assignment survives the token expiring, the user being removed, and the next login creating a fresh one. In practice most teams will not assign anything per user at all. Profiles, quotas, and row policies can also be attached to a role, and since roles are what the token carries, attaching controls to the `analyst` role covers every analyst automatically.
+
+<!-- Editorial note from Notion: Add explicit best-practice guidance for assigning profiles, quotas, and row policies to roles instead of inferred JWT users. -->
+
+The same question applies to views. A view created with `SQL SECURITY DEFINER` runs with the permissions of whoever created it rather than whoever queries it. If the creator were an ephemeral user, the view would break the moment that user's token expired. So when a JWT user creates a definer view, ClickHouse writes a persistent shadow copy of the user, named after the original with a `:definer` suffix, holding the creator's rights at that moment and with no way to log in. The view runs as the shadow user from then on and keeps working after the original token is gone.
+
+## Availability
+
+|  | Built-in ClickHouse authenticator | Custom identity provider |
+| --- | --- | --- |
+| Used by | SQL Console, `clickhouse-client --login` | Any client with a token from your OIDC provider |
+| Plans | All | Enterprise |
+| Minimum version | Any | 26.4 (26.8 for EC keys) |
+| Setup | None, provisioned with the service | Cloud console, Settings → Security |
+
+## A foundation to build on
+
+JWT authentication comes down to one idea: ClickHouse trusts a signed statement about who you are and which roles you hold, for as long as that statement is valid. Your identity provider decides access. Database users stop being things you create and delete. A token can be as narrow as one role and as short as one job, for a person at a terminal, a pipeline, or an agent that lives for a few minutes.
+
+We think of JWT authentication as a foundation we can keep building on. A signed claim is a general way to hand ClickHouse a verified identity, and we can keep extending what a token carries, where it comes from, and what that identity can do.
+
+The [JWT authentication reference](https://clickhouse.com/docs/concepts/features/security/external-authenticators/jwt) covers claims, ephemeral users, and client usage in detail.
+
 
 ---
 

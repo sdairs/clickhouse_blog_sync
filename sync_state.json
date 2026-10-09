@@ -1,5 +1,5 @@
 {
-  "last_sync": "2026-10-08T12:56:34.668236Z",
+  "last_sync": "2026-10-09T12:42:35.462317Z",
   "processed_blogs": {
     "https://clickhouse.com/blog/clickhouse-raises-400-million-series-d-acquires-langfuse-launches-postgres": {
       "title": "ClickHouse raises $400M Series D led by Dragoneer to accelerate expansion across analytics and AI infrastructure",
@@ -5994,9 +5994,21 @@
       "pub_date": "2026-10-07T17:05:28+00:00",
       "file_path": "blogs/2026-10-07-postgres-summit-us-2026-retrospective.md",
       "processed_at": "2026-10-08T12:56:34.554969Z"
+    },
+    "https://clickhouse.com/blog/clera-migrates-to-clickhouse-managed-postgres": {
+      "title": "How we migrated Clera’s 500 GB production database to ClickHouse Managed Postgres overnight",
+      "pub_date": "2026-10-08T20:51:48+00:00",
+      "file_path": "blogs/2026-10-08-how-we-migrated-clera-s-500-gb-production.md",
+      "processed_at": "2026-10-09T12:42:35.195881Z"
+    },
+    "https://clickhouse.com/blog/introducing-jwt-authentication-in-clickhouse-cloud": {
+      "title": "Introducing JWT authentication in ClickHouse Cloud",
+      "pub_date": "2026-10-08T13:55:14+00:00",
+      "file_path": "blogs/2026-10-08-introducing-jwt-authentication-in-clickhouse-cloud.md",
+      "processed_at": "2026-10-09T12:42:35.354424Z"
     }
   },
-  "total_blogs": 999,
+  "total_blogs": 1001,
   "failed_blogs": [
     {
       "url": "https://clickhouse.com/jp/blog/clickhouse-gcp-japan-availability",
