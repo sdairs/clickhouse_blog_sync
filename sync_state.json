@@ -1,5 +1,5 @@
 {
-  "last_sync": "2026-10-13T13:42:25.639720Z",
+  "last_sync": "2026-10-14T11:20:47.470491Z",
   "processed_blogs": {
     "https://clickhouse.com/blog/clickhouse-raises-400-million-series-d-acquires-langfuse-launches-postgres": {
       "title": "ClickHouse raises $400M Series D led by Dragoneer to accelerate expansion across analytics and AI infrastructure",
@@ -6018,9 +6018,21 @@
       "pub_date": "2026-10-13T08:49:51+00:00",
       "file_path": "blogs/2026-10-13-chasing-that-32-ms-tail-latency-in-clickhouse.md",
       "processed_at": "2026-10-13T13:42:25.373346Z"
+    },
+    "https://clickhouse.com/blog/clickhouse-vs-redshift-serverless-real-time-performance-per-dollar": {
+      "title": "Why Redshift Serverless can’t match ClickHouse Cloud for real-time analytics",
+      "pub_date": "2026-10-14T09:07:30+00:00",
+      "file_path": "blogs/2026-10-14-why-redshift-serverless-can-t-match-clickhouse.md",
+      "processed_at": "2026-10-14T11:20:47.209547Z"
+    },
+    "https://clickhouse.com/blog/postgres-at-open-house-nyc": {
+      "title": "Postgres at Open House NYC",
+      "pub_date": "2026-10-13T15:35:19+00:00",
+      "file_path": "blogs/2026-10-13-postgres-at-open-house-nyc.md",
+      "processed_at": "2026-10-14T11:20:47.361454Z"
     }
   },
-  "total_blogs": 1003,
+  "total_blogs": 1005,
   "failed_blogs": [
     {
       "url": "https://clickhouse.com/jp/blog/clickhouse-gcp-japan-availability",
