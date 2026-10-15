@@ -1,5 +1,5 @@
 {
-  "last_sync": "2026-10-14T11:20:47.470491Z",
+  "last_sync": "2026-10-15T10:58:10.801847Z",
   "processed_blogs": {
     "https://clickhouse.com/blog/clickhouse-raises-400-million-series-d-acquires-langfuse-launches-postgres": {
       "title": "ClickHouse raises $400M Series D led by Dragoneer to accelerate expansion across analytics and AI infrastructure",
@@ -6030,9 +6030,21 @@
       "pub_date": "2026-10-13T15:35:19+00:00",
       "file_path": "blogs/2026-10-13-postgres-at-open-house-nyc.md",
       "processed_at": "2026-10-14T11:20:47.361454Z"
+    },
+    "https://clickhouse.com/blog/202610-newsletter": {
+      "title": "October 2026 newsletter",
+      "pub_date": "2026-10-15T10:07:35+00:00",
+      "file_path": "blogs/2026-10-15-october-2026-newsletter.md",
+      "processed_at": "2026-10-15T10:58:10.515332Z"
+    },
+    "https://clickhouse.com/blog/ridgeline-iceberg-clickhouse-cloud": {
+      "title": "How Ridgeline unified Iceberg and ClickHouse into one analytics layer for investment management",
+      "pub_date": "2026-10-14T17:36:29+00:00",
+      "file_path": "blogs/2026-10-14-how-ridgeline-unified-iceberg-and-clickhouse-into.md",
+      "processed_at": "2026-10-15T10:58:10.738217Z"
     }
   },
-  "total_blogs": 1005,
+  "total_blogs": 1007,
   "failed_blogs": [
     {
       "url": "https://clickhouse.com/jp/blog/clickhouse-gcp-japan-availability",
