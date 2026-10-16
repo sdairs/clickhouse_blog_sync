@@ -1,5 +1,5 @@
 {
-  "last_sync": "2026-10-15T10:58:10.801847Z",
+  "last_sync": "2026-10-16T10:52:08.279193Z",
   "processed_blogs": {
     "https://clickhouse.com/blog/clickhouse-raises-400-million-series-d-acquires-langfuse-launches-postgres": {
       "title": "ClickHouse raises $400M Series D led by Dragoneer to accelerate expansion across analytics and AI infrastructure",
@@ -6042,9 +6042,15 @@
       "pub_date": "2026-10-14T17:36:29+00:00",
       "file_path": "blogs/2026-10-14-how-ridgeline-unified-iceberg-and-clickhouse-into.md",
       "processed_at": "2026-10-15T10:58:10.738217Z"
+    },
+    "https://clickhouse.com/blog/oltp-is-expensive-you-can-clickhouse-it": {
+      "title": "OLTP is expensive, you can ClickHouse it.",
+      "pub_date": "2026-10-15T14:59:39+00:00",
+      "file_path": "blogs/2026-10-15-oltp-is-expensive-you-can-clickhouse-it.md",
+      "processed_at": "2026-10-16T10:52:08.197499Z"
     }
   },
-  "total_blogs": 1007,
+  "total_blogs": 1008,
   "failed_blogs": [
     {
       "url": "https://clickhouse.com/jp/blog/clickhouse-gcp-japan-availability",
