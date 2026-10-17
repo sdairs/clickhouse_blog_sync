@@ -1,5 +1,5 @@
 {
-  "last_sync": "2026-10-16T10:52:08.279193Z",
+  "last_sync": "2026-10-17T10:15:19.913160Z",
   "processed_blogs": {
     "https://clickhouse.com/blog/clickhouse-raises-400-million-series-d-acquires-langfuse-launches-postgres": {
       "title": "ClickHouse raises $400M Series D led by Dragoneer to accelerate expansion across analytics and AI infrastructure",
@@ -6048,9 +6048,21 @@
       "pub_date": "2026-10-15T14:59:39+00:00",
       "file_path": "blogs/2026-10-15-oltp-is-expensive-you-can-clickhouse-it.md",
       "processed_at": "2026-10-16T10:52:08.197499Z"
+    },
+    "https://clickhouse.com/blog/introducing-the-blazing-fast-native-tcp-client-for-net": {
+      "title": "Introducing the (blazing fast!) native TCP client for .NET",
+      "pub_date": "2026-10-16T15:12:43+00:00",
+      "file_path": "blogs/2026-10-16-introducing-the-blazing-fast-native-tcp-client.md",
+      "processed_at": "2026-10-17T10:15:19.602909Z"
+    },
+    "https://clickhouse.com/blog/scaling-clickstack-alerting-anomaly-detection": {
+      "title": "Scaling ClickStack alerting with built-in anomaly detection",
+      "pub_date": "2026-10-15T00:00:00+00:00",
+      "file_path": "blogs/2026-10-15-scaling-clickstack-alerting-with-built-in-anomaly.md",
+      "processed_at": "2026-10-17T10:15:19.802999Z"
     }
   },
-  "total_blogs": 1008,
+  "total_blogs": 1010,
   "failed_blogs": [
     {
       "url": "https://clickhouse.com/jp/blog/clickhouse-gcp-japan-availability",
