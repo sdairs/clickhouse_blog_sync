@@ -1,5 +1,5 @@
 {
-  "last_sync": "2026-10-18T10:31:03.299909Z",
+  "last_sync": "2026-10-19T12:22:10.532314Z",
   "processed_blogs": {
     "https://clickhouse.com/blog/clickhouse-raises-400-million-series-d-acquires-langfuse-launches-postgres": {
       "title": "ClickHouse raises $400M Series D led by Dragoneer to accelerate expansion across analytics and AI infrastructure",
@@ -6060,9 +6060,15 @@
       "pub_date": "2026-10-15T00:00:00+00:00",
       "file_path": "blogs/2026-10-15-scaling-clickstack-alerting-with-built-in-anomaly.md",
       "processed_at": "2026-10-17T10:15:19.802999Z"
+    },
+    "https://clickhouse.com/blog/postgres-wait-events-query-insights": {
+      "title": "Postgres wait events, now in Query Insights",
+      "pub_date": "2026-10-19T11:15:28+00:00",
+      "file_path": "blogs/2026-10-19-postgres-wait-events-now-in-query-insights.md",
+      "processed_at": "2026-10-19T12:22:10.416559Z"
     }
   },
-  "total_blogs": 1010,
+  "total_blogs": 1011,
   "failed_blogs": [
     {
       "url": "https://clickhouse.com/jp/blog/clickhouse-gcp-japan-availability",
