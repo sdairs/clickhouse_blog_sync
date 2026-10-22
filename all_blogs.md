@@ -1,6 +1,514 @@
 # ClickHouse Blogs
-Last updated: 2026-10-21 11:18:08 UTC
-Total blogs: 1012
+Last updated: 2026-10-22 11:17:24 UTC
+Total blogs: 1015
+
+---
+
+## Trace and evaluate Cursor agents with Langfuse, powered by ClickHouse
+Published: 2026-10-22T00:00:00+00:00
+URL: https://clickhouse.com/blog/cursor-agents-with-langfuse
+
+---
+title: "Trace and evaluate Cursor agents with Langfuse, powered by ClickHouse"
+date: "2026-10-21T21:05:09.383Z"
+author: "Hande Kafkas and Aditya Chidurala"
+category: "Product"
+excerpt: "Connect Cursor to Langfuse to trace every agent turn, pinpoint expensive model and tool calls, and use evaluations to confirm a fix actually helps, with ClickHouse powering the analytics underneath."
+---
+
+# Trace and evaluate Cursor agents with Langfuse, powered by ClickHouse
+
+A code diff shows what changed. Improving the agent also means understanding which model calls and tools produced it, where time went, and what the run cost is.
+
+[Langfuse](https://langfuse.com/), our open-source platform for agent observability and evaluation, helps you inspect and improve that work. The [Langfuse Observability plugin](https://cursor.com/marketplace/langfuse/langfuse-observability) captures Cursor’s model calls, tool executions, and token usage as traces. ClickHouse powers the analytics behind those traces, so you can investigate individual runs and compare patterns across your team.
+
+In this guide, we’ll connect Cursor to Langfuse, inspect an expensive turn, and use evaluations to check whether a change improves the result.
+
+## How ClickHouse powers Langfuse analytics {#how_clickhouse_powers_langfuse_analytics}
+
+Agent observability produces analytical data: model calls, tool executions, token usage, latency, and evaluation scores. ClickHouse is the analytical database behind Langfuse, supporting both the investigation of individual runs and analysis across a team.
+
+In [Langfuse v4](https://langfuse.com/changelog/2026-08-17-langfuse-v4), a wide ClickHouse observations table keeps user, session, tags, and environment alongside each observation. Langfuse dashboards and the [Metrics API v2](https://langfuse.com/docs/metrics/features/metrics-api) use these observations to aggregate recorded usage, cost, and latency. Keeping the trace context with each observation avoids joining separate trace and observation tables for these queries.
+
+For a Cursor team, this means you can start with a cost trend, find the turns behind it, and inspect the model and tool activity that needs attention.
+
+## Set up the Langfuse plugin in Cursor {#set_up_the_langfuse_plugin_in_cursor}
+
+1. Create a project in [Langfuse Cloud](https://cloud.langfuse.com/) or your [self-hosted](https://langfuse.com/self-hosting) instance and copy its API keys.
+2. Install [**Langfuse Observability** from the Cursor Marketplace](https://cursor.com/marketplace/langfuse/langfuse-observability): open **Customize**, go to **Plugins**, choose **Browse Marketplace**, and search for it.
+3. Put your keys in `~/.cursor/langfuse.json`:
+
+<pre><code type='click-ui' language='json'>
+{
+  "publicKey": "pk-lf-...",
+  "secretKey": "sk-lf-...",
+  "baseUrl": "https://cloud.langfuse.com"
+}
+</code></pre>
+
+This example uses the EU region. For other regions or a self-hosted instance, use the corresponding base URL from the [integration docs](https://langfuse.com/integrations/developer-tools/cursor).
+
+
+4. Restart Cursor and send a prompt to the agent.
+
+The plugin is open source under the MIT license. It sends prompts, assistant messages, tool inputs and outputs, token usage, and other trace metadata to your Langfuse project. Capture of file-read contents is off by default; enabling it requires both `captureFileContent` and `captureToolOutput`. The plugin masks your Langfuse keys and, by default, logs upload failures while keeping Cursor running. Set `enabled` to `false` in the config to disable it. The [integration docs](https://langfuse.com/integrations/developer-tools/cursor) cover every option, the Cursor CLI, and Cloud Agents.
+
+## What a Cursor turn looks like in Langfuse {#what_a_cursor_turn_looks_like_in_langfuse}
+
+The plugin runs on Cursor hooks and creates one trace per prompt, named `Cursor Turn`. Inside it you find:
+
+* An `LLM` observation for every assistant message, with the conversation history as input and the text, thinking, and requested tool calls as output.
+* A tool observation for every tool the agent runs, such as `Shell`, `Read`, `StrReplace`, and MCP tools, with input, output, duration, and error status.
+* Nested `Cursor Subagent` observations for subagents, and an event when Cursor compacts the context.
+
+All turns of one conversation are grouped into a [session](https://langfuse.com/docs/observability/features/sessions), and the user defaults to the signed-in Cursor account’s email unless you override it.
+
+Cursor reports token usage once per turn, not per model call. The plugin records it on the last `LLM` observation of the turn, so read the cost from the trace total.
+
+## Track cost and usage across a team {#track_cost_and_usage_across_a_team}
+
+Every trace carries the Cursor user, your tags, and an environment label, so you can keep coding-agent traces apart from production traces. [Custom dashboards](https://langfuse.com/docs/metrics/features/custom-dashboards) chart cost and usage by user, model, and time, and the same filters apply to the trace table. Models without a price definition display tokens but no cost; you can add a [custom model definition](https://langfuse.com/docs/observability/features/token-and-cost-tracking) for them. For rolling this out across teams, see [Track and optimize coding agent usage](https://langfuse.com/coding-agents).
+
+## Find expensive turns and check the fix {#find_expensive_turns_and_check_the_fix}
+
+Take a team that rolled Cursor out to all of its engineers. After a week of traces, the cost dashboard shows spend by developer and model, and a handful of turns stand out as expensive.
+
+**1.** The team opens those turns. Several have the same shape: the agent reads the same files repeatedly, and a shell command fails and is retried until it succeeds.
+
+**2.** The team turns the repeated context into a project rule that says where the relevant code lives and which build command to run.
+
+**3.** To check that the rule helps, the team builds a [dataset](https://langfuse.com/docs/evaluation/experiments/datasets) from prompts in those real sessions. An evaluator assesses whether each task was completed, and the [comparison view](https://langfuse.com/docs/evaluation/experiments/compare-experiments) shows cost and latency alongside those scores. The rule ships if the cost drops and completion holds.
+
+You can also let Cursor do the search. The [Langfuse plugin](https://cursor.com/marketplace/langfuse/langfuse) adds the Langfuse skill, which gives the agent access to your traces, prompts, datasets, and scores through the Langfuse CLI. Install it next to Langfuse Observability, then ask: "List this week's most expensive Cursor turns and what they have in common."
+
+After the rollout, the dashboard from the first step shows whether the cost per turn came down.
+
+## Use the same loop on the AI application you build with Cursor {#use_the_same_loop_on_the_ai_application_you_build_with_cursor}
+
+Cursor edits your application's prompts, models, and tools, too, and each change can be an experiment. Save real cases as a dataset, define [scores](https://langfuse.com/docs/evaluation/scores/overview) with LLM-as-a-judge, [code evaluators](https://langfuse.com/docs/evaluation/evaluation-methods/code-evaluators), or human review, run the application on the dataset, and compare the run with your current version before you merge. In [CI](https://langfuse.com/docs/evaluation/experiments/experiments-ci-cd), the `langfuse/experiment-action` GitHub Action fails the job when a score violates your threshold.
+
+After you deploy, [online evaluation](https://langfuse.com/docs/evaluation/get-started/online) scores a sample of production traces with the same evaluators. Traces that score badly go back into the dataset, so the next experiment covers them. The [AI engineering loop](https://langfuse.com/academy/ai-engineering-loop) in the Langfuse Academy describes the full cycle.
+
+Cursor can set this up for you. With the Langfuse skill installed, prompt the agent:
+
+<pre><code type='click-ui' language='bash'>
+Set up offline evaluation for this application with Langfuse.
+</code></pre>
+
+## Get started {#get_started}
+
+Create a [Langfuse Cloud project](https://cloud.langfuse.com/) or use your self-hosted instance, then follow the setup above to capture your first Cursor session. Inspect an expensive turn, update the relevant instruction, and evaluate the result before rolling it out.
+
+If your application uses ClickHouse, the [ClickHouse plugin for Cursor](https://cursor.com/marketplace/clickhouse) gives the agent guidance on schema design, query optimization, and data ingestion. Ask Cursor to review a table schema or check SQL against ClickHouse best practices.
+
+---
+
+## Get started today
+
+Interested in seeing how ClickHouse works on your data? Get started with ClickHouse Cloud in minutes and receive $300 in free credits.
+
+[Sign up](https://console.clickhouse.cloud/signUp?loc=blog-cta-2772-get-started-today-sign-up&utm_blogctaid=2772)
+
+---
+
+---
+
+## Front-end observability at scale: How OpenReplay captures billions of daily events in real time with ClickHouse
+Published: 2026-10-21T18:40:19+00:00
+URL: https://clickhouse.com/blog/openreplay-front-end-observability-at-scale-clickhouse
+
+---
+title: "Front-end observability at scale: How OpenReplay captures billions of daily events in real time with ClickHouse"
+date: "2026-10-21T18:40:19.428Z"
+author: "ClickHouse"
+category: "User stories"
+excerpt: "OpenReplay replaced Postgres with ClickHouse to ingest billions of events and up to 6 TB a day on a single, vertically scaled instance, with sub-second queries and retention handled by a single TTL setting."
+---
+
+# Front-end observability at scale: How OpenReplay captures billions of daily events in real time with ClickHouse
+
+## Summary
+
+- OpenReplay is a self-hosted session replay and product analytics platform that helps developers reproduce bugs by showing them exactly what a user did.
+- With ClickHouse, a single TTL setting replaced Postgres’s weekend-long manual cleanups, and materialized views cut pipeline changes from two days to half a day.
+- Today, OpenReplay’s largest customers ingest billions of events and ~6 TB per day on a single, vertically scaled ClickHouse instance, with sub-second queries.
+
+[OpenReplay](https://openreplay.com/) is a session replay and product analytics platform built for developers. By seeing how users interact with their app, product teams can use the platform to identify friction, understand user behavior, and troubleshoot and fix issues faster.
+
+Mehdi Osman, OpenReplay’s founder and CEO, describes it as observability for front-end engineers. “It’s like sitting next to a user,” he says. “You don’t have to call them, you don’t have to do interviews. You’re just sitting quietly and looking at exactly what they’re doing.”
+
+One of OpenReplay’s biggest differentiators is that it’s fully self-hosted. “That gives absolute data control and governance for our end customers,” Mehdi says. It’s also open source, which lets the team rapidly iterate on community feedback, and fits with the platform being built on other open-source projects like ClickHouse, Postgres, Kafka, and Redis.
+
+As Mehdi puts it, the data challenge has three parts. The backend has to ingest terabytes per day for each customer. “Any grain of sand could impact the whole ingestion pipeline,” he says. OpenReplay then has to turn that data into something useful, which is “where ClickHouse comes into the picture.” And all of it has to run inside each customer’s own environment, with minimal operational overhead for the customer and for OpenReplay’s small team.
+
+We caught up with Mehdi and senior software engineer Taha Yassine Kraiem to chat about their journey, including how OpenReplay’s largest customers ingest billions of events per day on a single, vertically scaled ClickHouse instance, with sub-second queries.
+
+## Replacing Postgres with ClickHouse
+
+Back in 2019, OpenReplay ran everything on Postgres, hosted on AWS. The transactional database handled metadata fine, but behavioral events (the clicks and page views that make up a session) were a different story. “It’s not an analytics database,” Mehdi says. “There were things we couldn’t do on Postgres that would take ages to run.” The team tried sharding the tables to compensate, but as Mehdi says, “that created an operational mess we couldn’t deal with. That was a no-go.”
+
+A good example of the performance problem is OpenReplay’s session search. It can combine multiple event types in sequence, with criteria on each. The team’s target was a response under one second. Even after adding indexes, partitioning, and sharding, typical Postgres queries came back in around three seconds, with some taking up to 10 seconds.
+
+After migrating to ClickHouse, average response time dropped to about a second. “We could never accomplish that with Postgres,” Mehdi says. “I mean, we could, but it would mean lots of work, lots of sharding, operational overhead which we didn’t have.”
+
+Storage was a similar story. Events tables that had grown to around 1 TB in Postgres compressed down to 1 or 2 GB in ClickHouse. “It was like nothing basically,” Taha says. “And even running queries on compressed data is still super fast.”
+
+The other problem with Postgres was retention. OpenReplay keeps session data for a set period and then deletes it. In Postgres, that meant scripts, deletes, and vacuuming that locked tables and forced restarts. “It was a complete mess,” Taha says. “It took us a lot of time and a lot of effort, and sometimes something doesn’t go right and we have to fix it.”
+
+Because customers self-host, cleanups also meant coordinating with each of them over the weekend, when traffic was low. “That takes days because it’s just vacuuming, it’s locking tables, you don’t understand what's going on,” Mehdi says.
+
+With ClickHouse’s [TTL (time-to-live) feature](https://clickhouse.com/docs/concepts/features/operations/delete/ttl), retention is set once, at installation. “For some customers it’s three months, for others it’s a year, for others it’s a month,” Mehdi says. “We just set it there and that’s it, the data is taken care of.” A lifecycle rule on the object store handles the recording files the same way, and Postgres holds only metadata. Weekend cleanup calls with customers are a thing of the past. “With ClickHouse,” Taha says, “we connect with them once or twice every six months, just to check if there’s any maintenance we need to do.”
+
+“That TTL is damn valuable,” Mehdi adds. “I know it’s a small feature. You’ll talk about the JSON and the caching and the queries. But TTL saved us too many weekends.”
+
+## How OpenReplay builds on ClickHouse
+
+Today, ClickHouse is at the center of OpenReplay’s data pipeline. Every behavioral event lands in a single table; from there, a chain of [materialized views](https://clickhouse.com/docs/concepts/features/materialized-views) fires on each insert, transforming the rows and passing them along. “Each one will extract and transform data until it reaches its destination table,” Taha explains. “It works awesomely fast. We just change the database and that’s it. We don’t have to edit any code behind it.”
+
+That’s a marked change from how the pipeline used to work, when moving data between tables meant either Postgres triggers or Go workers (the language the pipeline is written in), and any change to a table’s structure required a matching change to the worker. Go workers still handle part of the pipeline today, but with materialized views, a change that used to take two days of development and debugging now takes around half a day. “Having everything centralized in ClickHouse has made life far simpler,” Taha says.
+
+Mehdi adds that materialized views are also where new features start. “When it’s a new feature and we’re not yet sure about the data structure, we rely on these materialized views because we can process data very quickly,” he says. “We can drop it, redo it again. Over a few iterations, when we’re sure about it, we take that part and put it into the Go code, because then the insertion is way faster.”
+
+He also highlights ClickHouse’s [native JSON support](https://clickhouse.com/docs/reference/data-types/newjson), which opened the door to custom events. While clicks and page views are captured automatically, customers doing serious product analytics want to instrument their own events (e.g. “payment done” or “order sent” with a name, body, and list of properties). “Without the JSON support in ClickHouse, we wouldn’t be able to do it,” Mehdi says, “because you’re not just inserting those events, it needs to be super easy to query later on and build all of these funnels and heat maps and flows. Behind the scenes, ClickHouse treats these properties like columns, and you don’t even see it.”
+
+It all sits in a schema simple enough to describe in a sentence or two. “We basically have two main tables,” Mehdi says. “A sessions table that contains the metadata about the recording, and an events table, a big flat table where all the events are being inserted. Two tables, pretty easy to understand, and yet we’re able to do very powerful queries on top of it.”
+
+## Billions of events a day on one instance
+
+OpenReplay sees a wide range of data volumes. Some customers ingest a million or two events a day. Others ingest billions, up to 6 TB of data per day. Even at that scale, each deployment runs on a single ClickHouse instance, a deliberate choice for a product that lives on customer infrastructure. Rather than sharding or clustering, the team scales vertically, adding RAM and CPU as a customer grows. As Mehdi puts it, “We haven’t even covered the depth of what ClickHouse can handle.”
+
+He cites one customer, a multi-billion-dollar fintech company, that chose OpenReplay because it’s self-hosted. “They can run the entire platform on their servers, and they have full control over data privacy and security,” he says. Their two main use cases are bug reproduction and support. Users write in saying they couldn’t complete a payment or sign a contract. A support agent can co-browse with them live and annotate their screen. If that doesn’t resolve it, a developer replays the session with the developer tools open.
+
+The fintech’s deployment records hundreds of thousands of sessions a day, each containing hundreds of events. That adds up to hundreds of millions of events daily, all of it going into a single ClickHouse instance on Kubernetes. “Whenever they grow, every few months, we scale it vertically,” Mehdi says. “We don't have to shard it, we don’t have to add other ClickHouse instances. So it makes the operational cost pretty low, which is extremely important in a self-hosting setting.”
+
+The calculus would be different, he adds, if OpenReplay were SaaS-only. “We would probably subscribe to the [ClickHouse Cloud](https://clickhouse.com/cloud) offering and that’s it,” he says. “But we’re deploying the entire product onto their servers, and that’s why we have to be very lean.”
+
+## Time to replay, and what’s next
+
+Internally, OpenReplay tracks a metric it calls “time to replay,” measuring how long it takes from a session happening to a developer being able to click play and watch it.
+
+> “Ingestion has to be real-time at scale. If you’re capturing a few thousand events, you won’t see it. But if you’re capturing terabytes of data every day, any small hiccup can have an impact and it would take a day or two to recover from the lag. So it’s very important to have a streamlined pipeline, and ClickHouse is a big part of that.”
+>
+> — Mehdi Osman, OpenReplay’s founder and CEO
+
+On the query side, the goal is that every view in the product, from searches to funnels, heat maps, and flow charts, returns in under two seconds. The team recently enabled ClickHouse’s [query cache](https://clickhouse.com/docs/concepts/features/performance/caches/query-cache), so a query one engineer runs is instantaneous for a colleague a few minutes later. “Caching is one of those things you enable and it just works,” Mehdi says. Asked if there was anything he wanted to add about writing queries against ClickHouse, Taha’s answer was the same. “Nothing special,” he says. “It just works.”
+
+OpenReplay is now using ClickHouse to build an upcoming agents feature that automatically reviews session recordings and proactively surfaces issues, since no team can watch hundreds of thousands of recordings a day. “Think of it as a team of analysts whose job is to review all of the user sessions as a human would,” Mehdi says, adding that every trace the agents produce goes into ClickHouse: “This is what we use for eval, this is what we use for troubleshooting, this is what we use to learn about how the agents are performing.”
+
+Seven years in, ClickHouse has become one of a handful of standard components OpenReplay trusts to run on infrastructure it doesn’t control. Customers keep data on their own servers, and OpenReplay’s stack stays lean enough for them to run it themselves. “All of these things are picked for a reason,” Mehdi says, “which is very little overhead, even when it comes to deploying it for the customer and maintaining it later.”
+
+---
+
+## Get started today
+
+Interested in seeing how ClickHouse works on your data? Get started with ClickHouse Cloud in minutes and receive $300 in free credits.
+
+[Sign up](https://console.clickhouse.cloud/signUp?loc=blog-cta-2768-get-started-today-sign-up&utm_blogctaid=2768)
+
+---
+
+---
+
+## Running ClickHouse on NVIDIA Vera CPU: Is your favorite database up to the challenge?
+Published: 2026-10-21T13:13:15+00:00
+URL: https://clickhouse.com/blog/clickhouse-performance-on-nvidia-vera
+
+---
+title: "Running ClickHouse on NVIDIA Vera CPU: Is your favorite database up to the challenge?"
+date: "2026-10-21T13:13:15.208Z"
+author: "Robert Schulze"
+category: "Engineering"
+excerpt: "NVIDIA Vera tops the ClickBench hardware leaderboard, and three micro-benchmarks for filters, aggregation and joins show ClickHouse scaling almost linearly across its 176 cores."
+---
+
+# Running ClickHouse on NVIDIA Vera CPU: Is your favorite database up to the challenge?
+
+The engineers at ClickHouse are obsessed with performance. With every release, we look for new ways to make ClickHouse run faster and scale better on the underlying hardware. When NVIDIA recently provided us with an early-access server of their upcoming Vera CPU platform, we did the obvious thing: we ran ClickBench, our popular benchmark for analytics, on it. We used the standard ClickHouse binary from our website and did not perform any optimizations or customizations in the database specifically for NVIDIA Vera. [The results speak for themselves](https://x.com/ClickHouseDB/status/2095640541858078755):
+
+![](https://clickhouse.com/uploads/vera_oct2026_clickbench_tweet_2f8f39ce6f.png)
+
+NVIDIA Vera immediately made it to the top of the ClickBench hardware leaderboard by a wide margin.
+
+Any database engineer will admit that Vera is a truly impressive platform. It features 88 NVIDIA Olympus cores which are fully Arm-v9.2-compatible. In a two socket system, this results in a total of 176 cores with 352 hardware threads thanks to NVIDIA Spatial Multithreading. Each core has access to 96/64 kB L1 data/instruction cache, 2 MB L2 cache, and 164 MB shared L3 cache. The maximum memory bandwidth ranges from 1.0 TB/s to 1.2 TB/s, depending on the amount of DRAM capacity in the system.
+
+You could argue that more CPU cores, more cache, and higher memory bandwidth naturally make any benchmark run faster. While there is some truth to that, the real challenge lies in scaling the database performance linearly with the machine resources. Basically: if a machine becomes twice as powerful, i.e. twice as many more CPU cores, twice as much cache, twice as much memory bandwidth, and so on, one would expect that queries run twice as fast, not just faster by a factor of less than two. How the data is organized on disk, how it is represented in memory, and how it is processed - all of these things affect how the database is able to scale. Without careful engineering at every layer,  the database would not be able to utilize Vera’s immense number of cores and memory bandwidth, potentially leaving performance untapped.
+
+More powerful hardware helps to handle new data- and compute-intensive use cases in real-time analytics, data warehousing, observability, and machine learning. While traditionally the majority of queries were generated by dashboards (e.g. Grafana, Superset), or BI tools (e.g. Tableau and Looker), we increasingly see agents in ClickHouse Cloud which autonomously answer data questions. From a database perspective, agentic queries are characterized by three properties: First, they are much more “ad-hoc” in nature than regular queries, for example, they can have complex shapes which also change significantly between queries. Second, they arrive at unpredictable times and often in bursts. And third, large numbers of agentic queries run typically in parallel as agents spawn sub-agents that themselves run in parallel.
+
+I wanted to test ClickHouse’s scalability on Vera, so I developed three micro-benchmarks  that simulate common basic database operations in most regular and agent-based queries.
+
+1. filter evaluation (SQL WHERE clause),
+2. aggregation (SQL GROUP BY clause), and
+3. joins (SQL JOIN clause).
+
+The synthetic dataset should be stored entirely in memory, so that disk I/O (object storage or local SSD) did not pose an artificial bottleneck. Fortunately, ClickHouse offers the [Memory table engine](https://clickhouse.com/docs/reference/engines/table-engines/special/memory) specifically for this purpose. ClickHouse’s query processing layer is completely decoupled from its storage layer. Assuming sufficient storage bandwidth, the benchmark results translate to a regular [MergeTree](https://clickhouse.com/docs/reference/engines/table-engines/mergetree-family/mergetree) table in [ClickHouse Cloud](https://clickhouse.com/cloud) or [ClickHouse Open Source](https://github.com/clickhouse/clickhouse).
+
+### Table setup
+
+Our test table consists of a single column with 62.5 billion random strings, each between 5 and 10 ASCII characters. The table size is exactly 1 TB. The strings are stored raw without compression (compression is optional in the Memory table engine).
+
+<pre><code type='click-ui' language='sql'>
+CREATE TABLE default.strings
+(
+    `s` String
+)
+ENGINE = Memory;
+
+INSERT INTO strings SELECT randomPrintableASCII(5 + (rand() % 6))
+FROM numbers_mt(62500000000);
+</code></pre>
+
+## Micro-benchmark 1: Filter evaluation {#microbenchmark_1_filter_evaluation}
+
+The first micro-benchmark I ran was a simple LIKE query:
+
+<pre><code type='click-ui' language='sql'>
+SELECT count()
+FROM strings
+WHERE s LIKE '%ab%';  -- how many strings contain sub-string ‘ab’
+</code></pre>
+
+I measured the query runtimes with different thread counts (setting [max_threads](https://clickhouse.com/docs/reference/settings/session-settings/max-threads#max_threads)):
+
+| max_threads | time      | speedup | efficiency |
+| ----------- | --------- | ------- | ---------- |
+| 1           | 50.44 sec | 1.00x   | 100.00%    |
+| 4           | 13.19 sec | 3.82x   | 95.60%     |
+| 16          | 3.25 sec  | 15.52x  | 97.00%     |
+| 64          | 1.23 sec  | 41.01x  | 64.08%     |
+| 256         | 1.11 sec  | 45.44x  | 17.75%     |
+
+“time” is the time to run the query. “speedup” specifies by how much faster query runtime becomes compared to `max_threads = 1`. “efficiency” is the observed speedup in relation to the expected speedup. For example, with 32 used threads, one would expect a speedup of 32x. Lower speedups mean an efficiency of less than 100%.
+
+The runtimes decrease proportionally with the number of query threads … until they hit a barrier at 64 threads. Increasing the threads further to 256 does not provide significant additional speedups. Such behavior typically indicates that the query is I/O-bound, meaning that the cores process data faster than the memory bus can read or write it from/to DRAM. We can quickly verify by dividing the total data volume (1 TB) by the query execution time.
+
+| max_threads | time      | speedup | efficiency | throughput  |
+| ----------- | --------- | ------- | ---------- | ----------- |
+| 1           | 50.44 sec | 1.00x   | 100.00%    | 19.83 GB/s  |
+| 4           | 13.19 sec | 3.82x   | 95.60%     | 75.82 GB/s  |
+| 16          | 3.25 sec  | 15.52x  | 97.00%     | 307.69 GB/s |
+| 64          | 1.23 sec  | 41.01x  | 64.08%     | 813.01 GB/s |
+| 256         | 1.11 sec  | 45.44x  | 17.75%     | 900.90 GB/s |
+
+Indeed, when the query stops scaling, memory I/O is 813 GB/s (64 cores), respectively 900 GB/s (256 cores). This value roughly corresponds to the physical memory bandwidth of the Vera system. This suggests that the query is memory bound - adding more cores will not further speed it up.
+
+To ensure that all CPU resources are fully utilized also beyond this limit, I changed the query to make it more CPU-intensive:
+
+<pre><code type='click-ui' language='sql'>
+SELECT count()
+FROM strings
+WHERE match(s, '[0-9][a-z][A-Z]'); -- how many strings match this regular expression?
+</code></pre>
+
+While the previous query performed a simple substring search, this query evaluates a costly regular expression for every string in the table. Here are the results:
+
+| max_threads | time   | speedup | efficiency |
+| ----------- | ------ | ------- | ---------- |
+| 1           | 1209.7 | 1.00    | 100.00%    |
+| 2           | 598    | 2.02    | 101.15%    |
+| 4           | 302.9  | 3.99    | 99.84%     |
+| 8           | 150.9  | 8.02    | 100.21%    |
+| 16          | 75.5   | 16.02   | 100.14%    |
+| 32          | 37.8   | 32.00   | 100.01%    |
+| 64          | 19.1   | 63.34   | 98.96%     |
+| 128         | 9.8    | 123.44  | 96.44%     |
+| 176         | 7.4    | 163.47  | 92.88%     |
+| 256         | 5.6    | 216.02  | 84.38%     |
+| 352         | 5.3    | 228.25  | 64.84%     |
+
+The execution times now scale almost perfectly with the number of CPU cores. Well, almost always … starting at 176 cores (the number of physical cores in the Vera machine), the efficiency begins to decline gradually. After this number of cores, further software threads are served by logical instead of physical hardware threads. Logical hardware threads (or SMT threads) share physical cores with other logical hardware threads. While, logical hardware threads are great for masking stalls such as cache misses, mispredicted branches, or remote data access, it helps only moderately (e.g. 10-30% speedup) for compute-bound workloads like the filter query. This is exactly what we are observing here.
+
+Query processing is parallelized in an obvious way: ClickHouse divides the table is split into 352 equally sized virtual chunks, which are then filtered concurrently simultaneously. This can be seen in the [EXPLAIN PIPELINE](https://clickhouse.com/docs/reference/statements/explain#explain-pipeline) output:
+
+<pre><code type='click-ui' language='sql'>
+EXPLAIN PIPELINE
+SELECT count()
+FROM strings
+WHERE match(s, '[0-9][a-z][A-Z]')
+SETTINGS max_threads = 352;
+</code></pre>
+
+```shell
+┌─explain───────────────────────────┐
+│ (Expression)                      │
+│ ExpressionTransform               │
+│   (Aggregating)                   │
+│   Resize 352 → 1                  │
+│     AggregatingTransform × 352    │
+│       (Expression)                │
+│       ExpressionTransform × 352   │
+│         (Filter)                  │
+│         FilterTransform × 352     │
+│           (ReadFromMemoryStorage) │
+└───────────────────────────────────┘
+```
+
+Without explaining the plan operators in detail, `x 352` after each operator means the 352 virtual table chunks are processed in parallel. The final `Resize` operator consolidates the 352 partial results to the final result.
+
+## Micro-benchmark 2: Aggregation {#microbenchmark_2_aggregation}
+
+Next, I tested an aggregation query:
+
+<pre><code type='click-ui' language='sql'>
+SELECT ascii(s) AS first_char, count(), sum(sipHash64(s))
+FROM strings
+GROUP BY first_char;
+</code></pre>
+
+The query groups the strings by their first character (i.e., 255 groups), and returns both the group size and the sum of each string’s [(sip)hash](https://en.wikipedia.org/wiki/SipHash) value. 255 groups is what database engineers call a “low cardinality” aggregation. High-cardinality aggregation, such as millions of groups, pose a greater challenge from a database perspective, yet low-cardinality aggregation is a lot more common in practice, e.g. grouping datasets by hour. To avoid becoming memory-bound again, the hash calculation makes the query intentionally more CPU-intensive.
+
+Here are the results for different query thread counts:
+
+| max_threads | time  | speedup | efficiency |
+| ----------- | ----- | ------- | ---------- |
+| 1           | 884.1 | 1.00    | 100.00%    |
+| 2           | 437.6 | 2.02    | 101.02%    |
+| 4           | 221.3 | 4.00    | 99.88%     |
+| 8           | 110.6 | 7.99    | 99.92%     |
+| 16          | 55.7  | 15.87   | 99.20%     |
+| 32          | 27.4  | 32.27   | 100.83%    |
+| 64          | 13.9  | 63.60   | 99.38%     |
+| 128         | 7.2   | 122.79  | 95.93%     |
+| 176         | 5.4   | 163.72  | 93.02%     |
+| 256         | 4.9   | 180.43  | 70.48%     |
+| 352         | 4.9   | 180.43  | 51.26%     |
+
+The runtimes scale again almost perfectly with the core count. Vera's neural branch prediction and sophisticated prefetching helps ClickHouse to write and read the hash table efficiently and hide access latencies caused by skew. Like in the previous query, the efficiency starts to decline past the physical cores since compute-bound queries can take only limited advantage of SMT.
+
+This is the output of EXPLAIN PIPELINE:
+
+<pre><code type='click-ui' language='sql'>
+EXPLAIN PIPELINE
+SELECT
+    ascii(s) AS first_char,
+    count(),
+    sum(sipHash64(s))
+FROM strings
+GROUP BY first_char
+SETTINGS max_threads = 352;
+</code></pre>
+
+```shell
+┌─explain─────────────────────────┐
+│ (Expression)                    │
+│ ExpressionTransform × 352       │
+│   (Aggregating)                 │
+│   Resize × 14 26 → 26           │
+│     AggregatingTransform × 352  │
+│       (Expression)              │
+│       ExpressionTransform × 352 │
+│         (ReadFromMemoryStorage) │
+└─────────────────────────────────┘
+```
+
+The plan is best understood from the bottom up. `ExpressionTransform` calculates `ascii` (the grouping key) and `sipHash` (the argument of `sum`) for each table row in 352 parallel streams. `AggregatingTransform` then creates hash table for each stream, and when the last stream has finished processing, merges them into a combined hash table. Both operators are fully parallelized and take full advantage of the hardware resources. The plan contains two more operators: `Resize` splits the combined hash table again and spreads its entries across the inputs of the next operator - the `ExpressionTransform`-s. In this query, the hash table has just few entries (256), yet ClickHouse inserts the resize operator unconditionally into the query plan because the hash table size is not known until runtime. `ExpressionTransform` (at the very end of the pipeline) evaluates additional expressions in the SELECT list. In this query, the SELECT list references the grouping expression and the aggregates directly - no extra calculations after aggregation takes place and the operator basically performs no work. But assuming it had to perform some work, `ExpressionTransform` would also run with maximal parallelism.
+
+## Micro-benchmark 3: Joins {#microbenchmark_3_joins}
+
+The third and final micro-benchmark is a join with a smaller table. This represents the common use case of a join between a fact table and a dimension table. I sampled the original table to created a dimension table with 625k rows (0.001% of the original table):
+
+<pre><code type='click-ui' language='sql'>
+CREATE TABLE strings_tiny
+(
+    s String
+)
+ENGINE = Memory;
+
+INSERT INTO strings_tiny
+SELECT s FROM strings
+WHERE rand() % 99999 = 0
+LIMIT 625000;
+</code></pre>
+
+Next, I ran a simple join query:
+
+<pre><code type='click-ui' language='sql'>
+SELECT count()
+FROM strings AS big JOIN strings_tiny AS small ON big.s = small.s;
+</code></pre>
+
+Here are the results:
+
+| max_threads | time   | speedup | efficiency |
+| ----------- | ------ | ------- | ---------- |
+| 1           | 1132.6 | 1.00    | 100.00%    |
+| 2           | 554    | 2.04    | 102.22%    |
+| 4           | 286.1  | 3.96    | 98.97%     |
+| 8           | 138.7  | 8.17    | 102.07%    |
+| 16          | 71.2   | 15.91   | 99.42%     |
+| 32          | 35.9   | 31.55   | 98.59%     |
+| 64          | 17.8   | 63.63   | 99.42%     |
+| 128         | 9.3    | 121.78  | 95.14%     |
+| 176         | 7.3    | 155.15  | 88.15%     |
+| 256         | 6.1    | 185.67  | 72.53%     |
+| 352         | 6.1    | 185.67  | 52.75%     |
+
+The runtimes go down almost proportionally to the number of query threads. In other words, ClickHouse scales perfectly.
+
+The EXPLAIN PIPELINE statement for this query is rather complex, so I will omit it here. The join makes use of ClickHouse’s `parallel_hash` join algorithm described [here](https://clickhouse.com/blog/clickhouse-release-25-01#faster-parallel-hash-join), ensuring that the hash table can be build by all query threads in parallel. It also builds a [runtime filter](https://clickhouse.com/blog/clickhouse-release-25-10#bloom-filters-in-joins) to speed up probing the hash table. In practice, the join column is typically part of the fact tables primary key (“foreign key join”). In this experiment, no table had a primary key, but if it had, it would unlock [another performance optimization](https://clickhouse.com/blog/clickhouse-release-26-07#the-right-side-of-a-join-can-now-prune-the-left) which we introduced recently.
+
+## Bonus: SIMD vectorization {#bonus_simd_vectorization}
+
+The three microbenchmarks mentioned above primarily relied on multi-threading to speed up query processing. An orthogonal way to parallelize data processing is SIMD - single instruction multiple data. ClickHouse makes full use of the hardware’s SIMD capabilities to speed up hot loops using [compiler auto-vectorization](https://en.wikipedia.org/wiki/Automatic_vectorization) or [intrinsics](https://en.wikipedia.org/wiki/Intrinsic_function). In these frequently repeated sections of code, the CPU processes several values at once instead of handling each value individually.
+
+So as a bonus, I ran the following simple filter query on the Vera machine to illustrate the benefits of SIMD. For demonstration purposes, I disabled multi-threading:
+
+<pre><code type='click-ui' language='sql'>
+CREATE TABLE t (x UInt32) ENGINE = Memory;
+INSERT INTO t SELECT rand() FROM numbers(2500000000);
+
+SELECT count()
+FROM t
+WHERE x > 2000000000
+FORMAT Null
+SETTINGS max_threads = 1;
+</code></pre>
+
+This query completed in 0.42 sec.
+
+Next, I opened ClickHouse’s [WHERE filter implementation in the C++ code](https://github.com/ClickHouse/ClickHouse/blob/93c3c0a91e84ba81a0b940e7f5fa9c3469a2dbb0/src/Functions/FunctionsComparison.h#L261-L276):
+
+```cpp
+/// From src/Functions/FunctionsComparison.h
+static void const ContainerA & a, B b, PaddedPODArray<UInt8> & c)
+{
+    size_t size = a.size();
+    const A * __restrict a_pos = a.data();
+    UInt8 * __restrict c_pos = c.data();
+    const A * a_end = a_pos + size;
+
+    while (a_pos < a_end)
+    {
+        *c_pos = Op::apply(*a_pos, b);
+        ++a_pos;
+        ++c_pos;
+    }
+}))
+```
+
+`a` and `b` represent the left and the right side of the filter condition - that is `x` and `2000000000`. `Op::apply` (“apply operation”) calculates `a < b` for a batch of input rows and returns the result as `c`.
+
+To demonstrate how ClickHouse benefits from powerful SIMD instructions, I instructed the compiler to disable auto-vectorization by inserting `Pragma("clang loop vectorize(disable) interleave(disable)”)` directly before the while loop. This lets ClickHouse compare the input values sequentially without applying SIMD instructions. As a result, the query now executed in 1.48 sec, that’s 3.5x slower than before. With auto-vectorization on, ClickHouse uses Vera’s 128-bit NEON instructions to compare four 32-bit integers simultaneously (the theoretical speedup is 4x). Beyond NEON, Vera also provides a powerful 6x128-bit SVE2 implementation, allowing for significantly higher vector processing throughput across its execution units. Support for these instructions in ClickHouse is currently being added together with the open-source community: [PR #122860](https://github.com/ClickHouse/ClickHouse/pull/122860).
+
+## Summary {#summary}
+
+> “NVIDIA Vera is an incredibly fast and powerful server platform - the fastest we have seen so far. ClickHouse is committed to translate its immense potential into world-class analytics performance.”
+>
+> — Alexey Milovidov, ClickHouse CTO
+
+While ClickHouse runs well on high-core-count machines already today, the ClickHouse engineering team of course questions the status quo continuously. Are there any inefficiencies during query execution? Do steps of the query pipeline not take full advantage of hardware parallelism yet? Can data structures be made more compact and thereby more cache-efficient? Can the database make even better use of compression, asynchronous processing, batching, or caching? Stay tuned for a follow-up blog post about performance engineering at ClickHouse where we reveal how we analyze, optimize, and test query performance at scale at ClickHouse.
+
+More information about NVIDIA Vera here: https://developer.nvidia.com/blog/nvidia-vera-cpu-boosts-ai-factory-throughput-to-accelerate-agentic-workloads/
+
+---
+
+## Get started today
+
+Interested in seeing how ClickHouse works on your data? Get started with ClickHouse Cloud in minutes and receive $300 in free credits.
+
+[Sign up](https://console.clickhouse.cloud/signUp?loc=blog-cta-2757-get-started-today-sign-up&utm_blogctaid=2757)
+
+---
 
 ---
 
