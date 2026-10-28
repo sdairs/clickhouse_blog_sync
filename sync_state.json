@@ -1,5 +1,5 @@
 {
-  "last_sync": "2026-10-27T11:42:39.437273Z",
+  "last_sync": "2026-10-28T12:15:35.758323Z",
   "processed_blogs": {
     "https://clickhouse.com/blog/clickhouse-raises-400-million-series-d-acquires-langfuse-launches-postgres": {
       "title": "ClickHouse raises $400M Series D led by Dragoneer to accelerate expansion across analytics and AI infrastructure",
@@ -6102,9 +6102,21 @@
       "pub_date": "2026-10-26T15:22:20+00:00",
       "file_path": "blogs/2026-10-26-expanding-customer-notifications-for-clickhouse.md",
       "processed_at": "2026-10-27T11:42:39.310328Z"
+    },
+    "https://clickhouse.com/blog/why-clickhouse-cloud-wins-at-real-time-analytics": {
+      "title": "Why ClickHouse Cloud wins at real-time analytics",
+      "pub_date": "2026-10-28T06:10:06+00:00",
+      "file_path": "blogs/2026-10-28-why-clickhouse-cloud-wins-at-real-time-analytics.md",
+      "processed_at": "2026-10-28T12:15:35.396399Z"
+    },
+    "https://clickhouse.com/blog/agentic-analytics-benchmark-jev": {
+      "title": "The Agentic Analytics Benchmark: ranking tables and labeling failures with Jev",
+      "pub_date": "2026-10-27T16:57:44+00:00",
+      "file_path": "blogs/2026-10-27-the-agentic-analytics-benchmark-ranking-tables.md",
+      "processed_at": "2026-10-28T12:15:35.646514Z"
     }
   },
-  "total_blogs": 1017,
+  "total_blogs": 1019,
   "failed_blogs": [
     {
       "url": "https://clickhouse.com/jp/blog/clickhouse-gcp-japan-availability",
