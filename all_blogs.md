@@ -1,6 +1,446 @@
 # ClickHouse Blogs
-Last updated: 2026-11-01 12:47:10 UTC
-Total blogs: 1021
+Last updated: 2026-11-02 14:56:23 UTC
+Total blogs: 1023
+
+---
+
+## What's new in clickhousectl v0.5.0
+Published: 2026-11-02T14:45:00+00:00
+URL: https://clickhouse.com/blog/clickhousectl-v0-5-0
+
+---
+title: "What's new in clickhousectl v0.5.0"
+date: "2026-11-02T14:46:08.768Z"
+author: "Al Brown"
+category: "Product"
+excerpt: "clickhousectl v0.5.0 takes UDFs from local to Cloud, adds ClickHouse Managed Postgres observability, standardises the command surface, and lists the API-key permissions every Cloud command needs."
+---
+
+# What's new in clickhousectl v0.5.0
+
+[`clickhousectl`](https://github.com/ClickHouse/clickhousectl) (`chctl`) is one CLI for ClickHouse and Postgres, both on your laptop and in ClickHouse Cloud.
+Locally it installs and switches ClickHouse versions, runs project-scoped ClickHouse servers and Docker-backed
+Postgres, and connects clients. In Cloud it covers the whole lifecycle of ClickHouse, ClickHouse Managed Postgres,
+ClickPipes, ClickStack, backups, keys and members.
+
+[v0.4.0](https://clickhouse.com/blog/clickhousectl-v0-4-0) left beta and added horizontal autoscaling and ClickPipe schema discovery. The highlights in v0.5.0:
+
+- **UDFs end-to-end**: scaffold, test locally, then ship to Cloud with one command.
+- **ClickHouse Managed Postgres**: metrics, server logs, slow-query patterns, read-only SQL over HTTP, and
+  IP allow rules.
+- **A more consistent, automation-friendly CLI**: uniform selectors, `--file` inputs, global org selection,
+  JSON errors everywhere. Note that some of these are **breaking**; see [the breaking changes](#breaking-changes).
+- **Saved queries and Query API endpoints**: saved queries are GA, and can be exposed as HTTP endpoints.
+- **BigQuery CDC ClickPipes**: continuous replication from BigQuery, on an interval or a cron schedule.
+- **ClickStack** comes to the CLI: dashboards, alerts, webhooks, saved searches, sources and roles.
+- **Permissions in help**: every Cloud command lists the API-key permissions it needs.
+- **Far wider Cloud coverage**: service settings, scaling schedules, upgrade windows, snapshots, backup buckets,
+  BYOC infrastructure, org roles, quotas, credits.
+
+If you already have it installed, update in place:
+
+```bash
+clickhousectl update
+```
+
+If not, install it using your favorite method below:
+
+```bash
+curl https://clickhouse.com/cli | sh
+pip install clickhousectl
+uv tool install clickhousectl
+npm i -g clickhousectl
+cargo install clickhousectl
+```
+
+## User-defined functions: local to Cloud
+
+Executable UDFs now have a complete workflow. `local udf init` scaffolds a UDF directory (a `udf.json` definition plus a
+Python script, or native `amd64/`/`arm64/` binaries). `local udf deploy` installs it into a local server so you can
+test it with plain SQL. When it works, `cloud udf deploy` packages the directory, creates the UDF (or a new version),
+attaches it to your service and wakes the service, all in one step.
+
+For finer control, the lower-level Cloud commands are also available (Beta): `cloud udf create`, `version create`,
+`attach` / `detach` (with `--wake`) and `attachment list`.
+
+```bash
+clickhousectl local udf init my_udf
+clickhousectl local udf deploy my_udf
+clickhousectl local client --query "SELECT my_udf(1)"
+clickhousectl cloud udf deploy my_udf --service <service-id>
+```
+
+See the [user-defined functions guide](https://github.com/ClickHouse/clickhousectl/blob/main/docs/guides/user-defined-functions.md).
+
+## ClickHouse Managed Postgres: observability, querying and network access
+
+You can now inspect ClickHouse Managed Postgres services from the terminal. `postgres metrics` returns service metrics as compact
+series, `postgres logs` shows server logs as a table (filter by severity or body text), and `postgres slow-queries`
+lists normalised query patterns sorted by total/avg/p95/p99 duration, CPU, rows, WAL and more. `get` then shows one
+pattern's recent executions. `postgres prometheus` exposes the raw Prometheus endpoint for your existing scraping setup.
+Agents can use the same commands to do root-cause analysis on slow Postgres.
+
+`cloud postgres query` runs read-only SQL over HTTP using your OAuth login, with no `psql`, network path or password
+needed. Also new: `postgres backup list` (with a Status column), provider shown in `postgres list`, and
+validated `config` inputs. `postgres get` shows the earliest restore time. Config writes (`--set`,
+`--pg-config-file`) accept 29 more Postgres settings, including autovacuum thresholds, `checkpoint_timeout`,
+`wal_buffers`, `io_method` and `default_toast_compression`. Enum values are checked before anything is sent.
+
+You can also set network access from the CLI. `postgres create` takes repeatable
+`--ip-allow <IP_OR_CIDR>:<PORTS>[=<DESCRIPTION>]` rules or `--block-public-access`, and `postgres update` adds and
+removes rules with `--add-ip-allow` and `--remove-ip-allow <RULE_ID>` (IPv4 only). `postgres restore` copies the
+source's IP rules to the restored service, because the restore API would otherwise open it to all addresses.
+
+```bash
+clickhousectl cloud postgres slow-queries list <postgres-id> \
+  --from-date 2026-10-14T00:00:00Z --to-date 2026-10-15T00:00:00Z --sort-by p95_duration
+clickhousectl cloud postgres logs <postgres-id> --from-date ... --to-date ... --severity ERROR
+clickhousectl cloud postgres query <postgres-id> --query "SELECT version()"
+clickhousectl cloud postgres update <postgres-id> --add-ip-allow '203.0.113.0/24:5432..6432=office'
+```
+
+See the [ClickHouse Managed Postgres guide](https://github.com/ClickHouse/clickhousectl/blob/main/docs/guides/managed-postgres.md).
+
+## A consistent command surface
+
+0.5.0 standardises how commands take their inputs, so that once you've learnt one command you know the shape of
+the rest. That matters for people, and even more for agents that generalise from one command to the next. The rules
+are now:
+
+- Finish the subcommand path, then give existing resources by **positional ID**.
+- Alternatively, select a resource by exact name with **`--name`**.
+- Choose the organisation with **`--org-id` or `--org-name`**, accepted anywhere after `cloud`.
+- **`--new-name`** renames a resource.
+
+Most changes keep the old spelling as a hidden alias, but a few break existing scripts.
+
+### Breaking changes
+
+| Change | 0.4.x | 0.5.0 |
+| --- | --- | --- |
+| Rename flag on updates (`service`, `postgres`, `key`, `org update`). `--name` now *selects* the target | `cloud service update <id> --name reporting` | `cloud service update <id> --new-name reporting` |
+| Org commands (`org get`, `update`, `usage`, `prometheus`) now select the org like every other command, with `--org-id` / `--org-name`, not a positional ID. The org is the scope, not the resource | `cloud org get <org-id>` | `cloud org get --org-id <org-id>` (or `--org-name prod`) |
+| ClickPipe schema discovery argument order (Kafka, Kinesis, object storage, Pub/Sub) | `cloud clickpipe schema-discover <service-id> kafka ...` | `cloud clickpipe schema-discover kafka <service-id> ...` |
+| Native client/server arguments must follow `--`. Unknown flags were previously swallowed silently | `local client dev --some-native-flag` | `local client dev -- --some-native-flag` |
+| `--wait` / `--wait-timeout` removed from `postgres promote` / `switchover` | `cloud postgres promote <id> --wait` | `cloud postgres promote <id>`, then poll `cloud postgres get <id>` |
+| GCP Postgres sizes renamed to match the API, with no aliases. C4/C4A/C4D gain `-lssd-`, Z3 gains `highmem` | `--size c4-standard-4` | `--size c4-standard-lssd-4` (`z3-highlssd-8` → `z3-highmem-highlssd-8`) |
+| `--encryption-key` / `--encryption-role` removed from `service create`, as the API no longer accepts them | `cloud service create ... --encryption-key <arn>` | Removed (`service get` still shows the fields) |
+
+The old forms fail with a usage error (exit 2) and are not silently reinterpreted.
+
+### Additive (old forms still work)
+
+| Change | 0.4.x | 0.5.0 |
+| --- | --- | --- |
+| Global org selection | `--org-id` only on the leaf command | `cloud --org-name prod service list`. Works at any depth |
+| Select by name everywhere (services, Postgres, keys, ClickPipes, roles, BYOC, endpoints, ClickStack); `--email` for members/invitations | `cloud service query --id <id>` / `--name` only on query | `cloud service get --name analytics`, `cloud clickpipe get <service-id> --name ingest-orders` |
+| Positional local instance names | mixed `--name` / positional per command | `local postgres start app`, `local server dotenv dev` (`--name` is a hidden alias) |
+| JSON document input | `--config-file` / `--settings-file` / `--file` | `--file <PATH>` (`-` for stdin where supported); old spellings are hidden aliases |
+| Postgres restore/read-replica source by name | source ID only | `--source-name primary` |
+
+## Saved queries and Query API endpoints
+
+`cloud saved-query` creates, updates and deletes saved queries with default parameters. The operations
+are now GA, so the Beta label has gone. With `cloud query-api-endpoint` you can manage Query API endpoints and expose
+saved queries as HTTP endpoints, for example to serve dashboards or apps straight from ClickHouse. Fixed:
+`query-api-endpoint list` and `--name` lookups failed with a decoding error as soon as an org had an endpoint.
+
+```bash
+clickhousectl cloud saved-query create <service-id> --name top_pages --database default \
+  --sql-file top_pages.sql --param limit=10
+```
+
+See the [Query API reference](https://github.com/ClickHouse/clickhousectl/blob/main/docs/reference/query-api.md).
+
+## ClickPipes
+
+ClickPipes support grew a lot in this release. The headline addition is `clickpipe update`, a complete update command
+that safely patches settings on running pipes, including the CDC pause → update → resume flow. CDC pipes gain advanced
+table mappings (including table engine choice; ReplacingMergeTree is now the default for Postgres), destination
+database selection, and CDC scaling.
+
+**BigQuery CDC.** `clickpipe create bigquery` used to support snapshots only. It now takes
+`--replication-mode cdc` or `cdc_only` with `--replication-method query_based` (each table names a
+`queryCdcWatermarkColumn`) or `events_based` (each table names an `eventsFunction`, `appends` or `changes`). Syncs run
+on `--sync-interval-seconds` or a cron schedule with `--sync-cron` (UTC unless you prefix `CRON_TZ=<zone>`). Tuning
+flags cover pull parallelism, visibility delay and pull window size. Invalid combinations fail locally, before the
+service-account key is read.
+
+```bash
+clickhousectl cloud clickpipe create bigquery <service-id> --name orders-cdc ... \
+  --replication-mode cdc --replication-method query_based --sync-cron '*/15 * * * *' \
+  --table-mapping-json '{"sourceDatasetName":"shop","sourceTable":"orders","targetTable":"orders","queryCdcWatermarkColumn":"updated_at"}'
+```
+
+The full example, with `--service-account-file` and `--staging-path`, is in the
+[ClickPipe configuration reference](https://github.com/ClickHouse/clickhousectl/blob/main/docs/reference/clickpipe-configuration.md) under "Configure BigQuery CDC".
+
+Also: MongoDB table mappings accept `structuredIngestion` (typed columns, exclusions, sorting keys and
+partitioning instead of a single JSON column), and MySQL pipes accept `--mysql-type cloudsqlmysql` for Cloud SQL.
+
+Smaller additions: Postgres TLS controls, GCP workload identity, Kinesis
+Protobuf schemas (and auth inferred from access keys), Kafka AWS Glue schema registry, MongoDB initial-load
+parallelism, BigQuery snapshot tuning, source tuning options, streaming table definitions, starting supported pipes
+paused, and DNS targets. Validation now happens before anything is sent: port ranges, scale ranges, insert sizes and
+required object-storage columns are checked up front.
+
+```bash
+clickhousectl cloud clickpipe stop <service-id> <clickpipe-id>
+clickhousectl cloud clickpipe update <service-id> <clickpipe-id> --file patch.json
+clickhousectl cloud clickpipe start <service-id> <clickpipe-id>
+```
+
+See the [ClickPipes guide](https://github.com/ClickHouse/clickhousectl/blob/main/docs/guides/clickpipes.md) and the [ClickPipe configuration reference](https://github.com/ClickHouse/clickhousectl/blob/main/docs/reference/clickpipe-configuration.md).
+
+## ClickStack
+
+New `cloud clickstack` command group for managing ClickStack (observability) resources in a Cloud service:
+data sources, roles, dashboards, alerts, webhooks and saved searches. You can keep dashboards and alerts as JSON in
+your repo and apply them from CI, or let an agent build a dashboard for you. `dashboard validate` checks a
+definition before you create it, and `webhook validate` does the same for webhooks.
+
+The CLI supports the latest ClickStack API contract:
+
+- Dashboards accept all four filter kinds (query expression, static list, Prometheus label, source filter),
+  stacked-line tiles, series heatmaps and `lineInterpolation`.
+- Alerts can use an inline `chartConfig` (`source: inline`) instead of a tile or saved search. `channel`/`channels`
+  are now optional, and the new `displayName` and `tags` fields pass through. `name` is now a Handlebars title template.
+  `alert list` shows `displayName`, and `--name` matches either field.
+- Role permissions are checked against their integration (ClickHouse or MongoDB), so a typo fails locally instead
+  of being dropped silently.
+
+```bash
+clickhousectl cloud clickstack source list <service-id>
+clickhousectl cloud clickstack dashboard validate <service-id> --file dashboard.json
+clickhousectl cloud clickstack dashboard create <service-id> --file dashboard.json
+clickhousectl cloud clickstack webhook validate <service-id> --file webhook.json
+clickhousectl cloud clickstack webhook create <service-id> --file webhook.json
+clickhousectl cloud clickstack alert create <service-id> --file alert.json
+```
+
+See the [ClickStack guide](https://github.com/ClickHouse/clickhousectl/blob/main/docs/guides/clickstack.md).
+
+## Service configuration
+
+Many more Cloud service settings can now be managed from the CLI:
+
+- `service settings`: read the ClickHouse settings schema and set or get settings, with typed values.
+- `service scaling-schedule`: time-based scaling schedules.
+- `service upgrade-window`: control when upgrades happen.
+- `service profile list`: discover the available service profiles for a region.
+- `service wake`: wake an idled service explicitly.
+- `service snapshot` (Beta): list snapshots and manage snapshot configuration.
+- `service replica-aware-routing`.
+- IP allowlist descriptions.
+
+```bash
+clickhousectl cloud service settings set <service-id> --setting 'enable_analyzer=1'
+clickhousectl cloud service scaling-schedule set <service-id> --file schedule.json
+```
+
+See the [Cloud service guide](https://github.com/ClickHouse/clickhousectl/blob/main/docs/guides/cloud-service.md).
+
+## Backups
+
+`backup bucket` manages a service's own backup bucket (bring your own storage), and `service backup-config` manages
+backup configuration, including encryption. Backup timestamps are now normalised to UTC. AWS backup
+buckets take `iamRoleExternalId` in the `--file` body (required on create; on update, omit it to keep the current
+value, set it to replace it, or set it to `null` to clear it).
+
+## Organisation, governance and BYOC
+
+New org-level commands: `org role` (custom roles), `org quota`, `org balance` (credit balances), `org prometheus`
+discovery and `org notifications` (Beta). It pages through org notifications and filters by severity, type,
+resource and date range. `org byoc` manages BYOC infrastructure end to end: `validate` checks that your cloud account is ready,
+`create` (including bring-your-own-VPC flags) provisions it, `progress` tracks provisioning, and `get`, `update` and
+`delete` cover the rest. Private endpoint config and tags are also supported.
+
+```bash
+clickhousectl cloud org byoc validate ...
+clickhousectl cloud org byoc create ...
+clickhousectl cloud org byoc progress ...
+```
+
+## Authentication and identity
+
+`cloud auth whoami` shows the identity behind your active credentials, and `auth login` and `auth status` now
+verify and display it. The first time you run `service query`, the CLI now binds your own API key and no longer mints
+a separate query key, so it uses the roles you already have. Empty API-key credentials are rejected, and `--debug`
+explains which credential source was picked and why.
+
+```bash
+clickhousectl cloud auth whoami
+```
+
+## Commands tell you which permissions they need
+
+Every Cloud command's help now lists the API-key permissions required by the API calls it makes behind the scenes.
+The list is generated from the API definitions, so it stays in step with the API. An agent can read it before running
+a command and know whether its key is enough, instead of finding out from a failed call. It also lays the groundwork
+for an upcoming feature that will let agents request a permission elevation when they need to run a command their key
+doesn't cover.
+
+```bash
+clickhousectl cloud service create --help
+...
+  API key permission: control-plane:organization:create-service
+  API key permission: control-plane:service:manage
+```
+
+## Built for automation and agents
+
+- **JSON errors everywhere**: in `--json` mode (or when an agent is detected), every Cloud runtime failure, including
+  auth errors and cancellations, is printed as a structured JSON error. Exit codes are stable: 1 error, 2 usage,
+  3 cancelled, 4 auth required.
+- **Structured output for management commands**, with documented JSON output contracts (see the [automation reference](https://github.com/ClickHouse/clickhousectl/blob/main/docs/reference/automation.md)).
+- **`--all` pagination** for API keys, and selector pagination for ClickStack.
+- Closed stdout pipes (`| head`) are handled quietly.
+- Agent context blocks in help were standardised and checked across the whole command tree.
+- Agent detection now follows the agents.md `AI_AGENT` variable first. An unrecognised value in the legacy
+  `AGENT` variable no longer switches on JSON output (a known agent name or `AGENT=1` still does).
+- Paged list output is consistent: UDF lists return a top-level `result` array with `nextCursor`, the same
+  shape as `cloud key list`.
+
+## Local development improvements
+
+Local development gets a round of fixes:
+
+- Server ports are preserved across config reloads.
+- Postgres SQL files and stdin are streamed through Docker (`psql` piping works).
+- The runtime `.gitignore` is restored by `init`.
+- Downloads are conditional, so the latest builds are reused.
+- Errors for corrupted metadata and Docker failures are clearer.
+- Anonymous Postgres volumes are removed together with their containers.
+
+`local udf` (above) is the main new local feature.
+
+## Thanks
+
+Thanks to [Zach Naimon](https://github.com/ArctypeZach), who co-authored the UDF work in this release, and to
+[@ylw510](https://github.com/ylw510), who made failed installs show the error output from `clickhouse --version`
+([#993](https://github.com/ClickHouse/clickhousectl/pull/993)).
+
+
+---
+
+## How OpenRouter observes, understands, and acts on 740 million LLM requests a day with ClickHouse Cloud
+Published: 2026-11-02T13:24:32+00:00
+URL: https://clickhouse.com/blog/openrouter-llm-routing-observability-clickhouse-cloud
+
+---
+title: "How OpenRouter observes, understands, and acts on 740 million LLM requests a day with ClickHouse Cloud"
+date: "2026-11-02T13:24:32.982Z"
+author: "ClickHouse"
+category: "User stories"
+excerpt: "OpenRouter uses ClickHouse Cloud as the single store behind customer analytics, public model rankings, internal AI agents, and routing across 500+ models, as monthly requests grew 33x to 19.7 billion."
+---
+
+# How OpenRouter observes, understands, and acts on 740 million LLM requests a day with ClickHouse Cloud
+
+## Summary
+
+- OpenRouter uses ClickHouse Cloud as the single store behind customer analytics, public model rankings, internal AI agents, and routing across 500+ models.
+- Since OpenRouter adopted ClickHouse, monthly requests have grown 33x to 19.7 billion, with 110+ trillion tokens served per week.
+- Every request feeds back into ClickHouse for continuous routing evaluation; that same data now powers a Jev Router, from TypeSafe AI, that picks models based on real-world usage.
+
+If you ask a developer which LLM they’re using, they’ll often say “it depends.” It might be a frontier model for code review, a cheaper model for summarizing support tickets, or a similar model from a different provider.
+
+[OpenRouter](https://openrouter.ai/) sits between developers and inference providers, handling some over 1 billion requests every day. It offers a single interface to more than 500 models across over 80 providers, routing each request to the endpoint (a combination of model and provider) that best fits the user’s preferences, whether that’s price, quality, latency, or throughput.
+
+It also handles failover, falling back to another endpoint if one runs into trouble, and publishes model rankings that no single provider could. “Because we’re a gateway and not connected to any individual provider organization, we can provide public rankings about how models are actually being used in the real world,” says senior data engineer Joe Ciesielski.
+
+Joe joined us at [Open House 2026 in New York](https://clickhouse.com/videos/openhouse-nyc-openrouter), where he shared how [ClickHouse Cloud](https://clickhouse.com/cloud) on AWS and GCP powers those rankings and nearly everything else OpenRouter does with its analytics data. He broke their journey into three “eras,” from observing what happens on the platform, to understanding it more deeply, to acting on it with routing decisions in near real time.
+
+<iframe width="768" height="432" src="https://www.youtube.com/embed/IHex1XNhZdU" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe>
+
+## Growing up with ClickHouse
+
+OpenRouter adopted ClickHouse Cloud in November 2024. “We saw this forthcoming need that we would have to ingest a large amount of data in very quick succession and provide many different rollups of that same data set,” Joe says. Users, providers, and the public would each need their own view of the same data, in near real time.
+
+From November 2024 to August 2026, monthly requests grew from around 600 million to 19.7 billion, a 33x increase. OpenRouter now serves over 110 trillion tokens a week, and the raw generation log in ClickHouse holds roughly 134 billion rows.
+
+![](https://clickhouse.com/uploads/openrouter_nov2026_image1_5599d8c34e.jpg)
+
+Data reaches ClickHouse from multiple directions. The gateway writes request telemetry using a mix of [synchronous batched inserts](https://clickhouse.com/docs/concepts/features/operations/insert/bulkinserts) and [asynchronous inserts](https://clickhouse.com/docs/concepts/features/operations/insert/asyncinserts). The team has also been testing the new [GCP Pub/Sub connector for ClickPipes](https://clickhouse.com/blog/clickpipes-gcp-pub-sub-preview), which Joe calls “pretty fun to work with.” An asynchronous classifier anonymously tags each prompt with a task type, so OpenRouter can see how users spread their requests across model families. ClickPipes ingests data from the Postgres transactional database, and Fivetran ingests data from third-party tools.
+
+The data lands as raw tables, while [materialized views](https://clickhouse.com/docs/concepts/features/materialized-views) turn it into rollups for activity, endpoint health, and task types. A warehouse built with dbt and Airflow sits on top.
+
+> “Data stored across our ClickHouse data warehouses powers observability, AI agents, Slack bots, and routing decisions. The outcomes of those routing decisions are then written back to ClickHouse, creating a continuous feedback loop.”
+>
+> — Joe Ciesielski, Senior Data Engineer, OpenRouter
+
+## Observability: from generation log to customer charts
+
+“One of the benefits of using a gateway,” Joe explains, “is that you have all of your data in one place.” A team might have a contract with OpenAI, access other models through Bedrock, and hold other arrangements elsewhere. Routing through OpenRouter centralizes all of it. “We knew this was really key for our business,” he says. “We wanted to make sure that was key early on, making that data accessible to our customers.”
+
+Request telemetry started landing, and within a few weeks the user-facing activity charts for usage and token costs were reading from ClickHouse in November 2024. By January 2025 the team had added endpoint performance rollups and the public rankings, and in February 2025 routing began reading endpoint health from the same data.
+
+The overarching pattern is to write once and roll up many ways. As Joe puts it, “Because of how straightforward it is to add rollups, we’re able to write that telemetry one time and use materialized views to provide lots of different aggregations.”
+
+Today, those rollups power a range of dashboards and pages:
+
+- Activity and logs for tracking usage, costs, and errors
+- Provider dashboards showing endpoint health
+- Mission Control, which helps account executives understand enterprise usage
+- Rankings and model pages, with public leaderboards, latency, and uptime
+
+A unified query builder sits on top of ClickHouse and serves all of them. To build a new chart or report, engineers make a standard API call. As long as the metrics and dimensions they need are in the builder, it translates the call into SQL. The same query builder also powers OpenRouter’s public analytics endpoint.
+
+The [rankings page](https://openrouter.ai/rankings), which shows trending models and the kinds of tasks routed to each, is “a really important flywheel for our organization,” Joe says. “Folks can peruse our public rankings page and say, ‘Hey, I see that folks are really excited about this one model, let me go on OpenRouter and try that.’ It’s really easy to screenshot, tweet about, and provide some excitement about what we’re doing.”
+
+[Insert screen [recording](https://youtu.be/USUZi3LCF4Q) of leaderboard]
+
+## Understand: a warehouse built for agents
+
+In August 2025, the team decided to see what else the data could tell them. “We knew there was a lot of latent information baked into what we had available in ClickHouse,” Joe says.
+
+Rather than spin up a separate warehouse, they built one inside ClickHouse. It follows a standard medallion architecture in dbt, moving data from sources through staging, facts and dimensions, and marts. The warehouse has a relatively small number of dbt models, around 270 by Joe’s count, and every column in each one is documented. “That’s really important for how we’re accessing the data, which is primarily through agents,” he says.
+
+OpenRouter runs dozens of internal agents, anyone in the company can spin up a new one for their own use case. Team members talk to their agents mainly through Slack. Each agent can read the dbt documentation and comes with a small set of skills, which are essentially markdown files covering how to access ClickHouse and the quirks of querying it. This lets staff pull answers from ClickHouse without needing a deep understanding of where the data lives or how to structure a query.
+
+If, for example, a customer writes in to say that their requests are failing, a support engineer doesn’t have to look up the customer’s ID and dig through logs and traces by hand. They can instead pass the question to the support team’s agent, which is able to:
+
+- Find the account, its keys, and recent activity
+- Trace the failing requests end to end
+- Attribute each error to the provider, the customer, or OpenRouter
+- Answer in Slack with the evidence attached
+
+Every step is a ClickHouse read via a bounded support API. “That makes it a really straightforward process for all of our staff to have access to all the information that’s within our ClickHouse database,” Joe says, “without needing to dig in manually.”
+
+## Act: continuous evaluation and the Jev Router
+
+“Routing is really our core business,” Joe says. The goal is to get each request to the endpoint that best meets the user’s needs. “ClickHouse sits right at the center of this process of continuous evaluation, where every request that comes in becomes a piece of data that we can then use to make sure subsequent requests are better meeting those user needs.”
+
+Users say what’s important to them (price, speed, reliability), and ClickHouse shows which providers deliver it. The loop has four steps. OpenRouter reads the user’s preference on the request, measures how each provider performs, chooses the provider that best fits the ask, and records the outcome for the next request.
+
+The process has become more sophisticated over time. In February 2025, OpenRouter could sort by price or speed and skip providers that were down. By May 2025, it preferred providers with a record of successful requests. In 2026, the same routing extended to images, audio, video, and embeddings, and by mid-2026 the platform was scoring every provider on reliability, speed, quality, and cost.
+
+The newest piece is the [Jev Router](https://openrouter.ai/typesafe/jev-router) from TypeSafe AI, which became available October 2026. Normally, the user picks the model and OpenRouter picks the provider. With the Jev Router, OpenRouter picks the model, too. Joe calls it a kind of “dealer’s choice mechanism” with four steps:
+
+1. Classify: A lightweight classifier assigns the prompt one of roughly 30 fine-grained task types. These are the same task types shown on the public rankings page.
+2. Rank: OpenRouter ranks models by real usage for that task, using ClickHouse data. “If you want to do a code review, for example, we’ll look at how recent users of OpenRouter are routing to different models to do code review tasks,” Joe says.
+3. Filter: The ranking is filtered by the user’s constraints (e.g. capability, cost tier), honoring account-level model and provider restrictions, guardrails, and zero data retention policies.
+4. Choose: The router picks an endpoint and keeps fallbacks ready.
+
+As with the rest of OpenRouter’s routing, the outcome is then written back into ClickHouse to inform the next decision.
+
+## Many streams, one store, one loop
+
+Taken together, the three eras form a single cycle. Request telemetry becomes customer charts. Rollups, marts, and agents read the same data to explain what’s happening. Routers use it to pick the next endpoint, and their outcomes flow back in as new telemetry.
+
+> “ClickHouse sits right at the center of how we use our data to make sure we’re meeting our users’ needs in the best way possible, to build observability, to deepen our understanding about what’s happening, and to make decisions around our routing.”
+>
+> — Joe Ciesielski, Senior Data Engineer, OpenRouter
+
+---
+
+## Get started today
+
+Interested in seeing how ClickHouse works on your data? Get started with ClickHouse Cloud in minutes and receive $300 in free credits.
+
+[Sign up](https://console.clickhouse.cloud/signUp?loc=blog-cta-2827-get-started-today-sign-up&utm_blogctaid=2827)
+
+---
 
 ---
 

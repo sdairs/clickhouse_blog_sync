@@ -1,5 +1,5 @@
 {
-  "last_sync": "2026-11-01T12:47:10.178682Z",
+  "last_sync": "2026-11-02T14:56:23.882704Z",
   "processed_blogs": {
     "https://clickhouse.com/blog/clickhouse-raises-400-million-series-d-acquires-langfuse-launches-postgres": {
       "title": "ClickHouse raises $400M Series D led by Dragoneer to accelerate expansion across analytics and AI infrastructure",
@@ -6126,9 +6126,21 @@
       "pub_date": "2026-10-29T12:53:19+00:00",
       "file_path": "blogs/2026-10-29-meet-groeneai-our-autonomous-contributor-to.md",
       "processed_at": "2026-10-30T12:16:16.110482Z"
+    },
+    "https://clickhouse.com/blog/clickhousectl-v0-5-0": {
+      "title": "What's new in clickhousectl v0.5.0",
+      "pub_date": "2026-11-02T14:45:00+00:00",
+      "file_path": "blogs/2026-11-02-what-s-new-in-clickhousectl-v0-5-0.md",
+      "processed_at": "2026-11-02T14:56:23.557057Z"
+    },
+    "https://clickhouse.com/blog/openrouter-llm-routing-observability-clickhouse-cloud": {
+      "title": "How OpenRouter observes, understands, and acts on 740 million LLM requests a day with ClickHouse Cloud",
+      "pub_date": "2026-11-02T13:24:32+00:00",
+      "file_path": "blogs/2026-11-02-how-openrouter-observes-understands-and-acts-on.md",
+      "processed_at": "2026-11-02T14:56:23.713671Z"
     }
   },
-  "total_blogs": 1021,
+  "total_blogs": 1023,
   "failed_blogs": [
     {
       "url": "https://clickhouse.com/jp/blog/clickhouse-gcp-japan-availability",
