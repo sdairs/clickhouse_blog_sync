@@ -1,5 +1,5 @@
 {
-  "last_sync": "2026-11-03T13:44:19.361653Z",
+  "last_sync": "2026-11-04T13:53:02.445397Z",
   "processed_blogs": {
     "https://clickhouse.com/blog/clickhouse-raises-400-million-series-d-acquires-langfuse-launches-postgres": {
       "title": "ClickHouse raises $400M Series D led by Dragoneer to accelerate expansion across analytics and AI infrastructure",
@@ -6138,9 +6138,27 @@
       "pub_date": "2026-11-02T13:24:32+00:00",
       "file_path": "blogs/2026-11-02-how-openrouter-observes-understands-and-acts-on.md",
       "processed_at": "2026-11-02T14:56:23.713671Z"
+    },
+    "https://clickhouse.com/blog/fencing-a-postgres-primary-that-might-still-be-alive": {
+      "title": "Fencing a Postgres primary that might still be alive",
+      "pub_date": "2026-11-05T00:00:00+00:00",
+      "file_path": "blogs/2026-11-05-fencing-a-postgres-primary-that-might-still-be.md",
+      "processed_at": "2026-11-04T13:53:01.833405Z"
+    },
+    "https://clickhouse.com/blog/whats-new-in-clickstack-october-2026": {
+      "title": "What's new in ClickStack - September and October '26",
+      "pub_date": "2026-11-03T19:09:52+00:00",
+      "file_path": "blogs/2026-11-03-what-s-new-in-clickstack-september-and-october-26.md",
+      "processed_at": "2026-11-04T13:53:02.008957Z"
+    },
+    "https://clickhouse.com/blog/does-your-application-need-local-data-or-faster-postgres": {
+      "title": "Does your application need local data or faster Postgres?",
+      "pub_date": "2026-11-03T14:55:13+00:00",
+      "file_path": "blogs/2026-11-03-does-your-application-need-local-data-or-faster.md",
+      "processed_at": "2026-11-04T13:53:02.313880Z"
     }
   },
-  "total_blogs": 1023,
+  "total_blogs": 1026,
   "failed_blogs": [
     {
       "url": "https://clickhouse.com/jp/blog/clickhouse-gcp-japan-availability",

@@ -1,6 +1,663 @@
 # ClickHouse Blogs
-Last updated: 2026-11-03 13:44:19 UTC
-Total blogs: 1023
+Last updated: 2026-11-04 13:53:02 UTC
+Total blogs: 1026
+
+---
+
+## Fencing a Postgres primary that might still be alive
+Published: 2026-11-05T00:00:00+00:00
+URL: https://clickhouse.com/blog/fencing-a-postgres-primary-that-might-still-be-alive
+
+---
+title: "Fencing a Postgres primary that might still be alive"
+date: "2026-11-04T13:50:25.559Z"
+author: "Furkan Sahin"
+category: "Engineering"
+excerpt: "Promoting a standby doesn't stop the old Postgres primary from taking writes. Here's how the control plane behind ClickHouse Managed Postgres fences it on bare metal, AWS and GCP, and why the design is fail-open."
+---
+
+# Fencing a Postgres primary that might still be alive
+
+*This post is based on my PGConf.EU 2026 talk, ["The Primary Is Down. Are You Sure?"](https://www.postgresql.eu/events/pgconfeu2026/schedule/session/8547-the-primary-is-down-are-you-sure/).*
+
+A managed Postgres service needs to prevent any possible connections from writing into primary before promoting a new standby. This is called fencing, and it is important for preventing lost writes or split brain scenarios.
+
+![The failover in seven steps: detect, confirm, pick a standby, fence the old primary, promote, then the DNS cutover and the WAL archive fill](https://clickhouse.com/uploads/postgres_fencing_nov2026_failover_sequence_4ce8f6cf5e.png)
+
+## Why do we need to fence, if we are already promoting a standby? {#why_do_we_need_to_fence}
+
+To answer this, we need to first understand what a promotion looks like, and the steps involved to make a standby the new primary. Keep in mind that the old primary may not really be down. If we have a network partitioning where the client can connect to the primary but we cannot, the client can keep writing into the old primary.
+
+Here are the steps:
+
+1. We promote the standby by running `SELECT pg_promote(true, 300)`. At this point, this standby stops acknowledging commits from the primary.
+
+2. We refresh DNS records so new connections go to the new primary.
+
+None of these steps stop the old primary from accepting writes, and that can cause a split brain scenario. The DNS part is clear: until the TTL expires, new clients can still go to the old primary, and the clients that are already connected just stay there. What about when we stop the commit acknowledgements from a standby? There are three scenarios where that doesn't help:
+
+1. If we have a single standby, it is configured with async replication, so the primary does not wait for it. Even with two standbys, any session can turn the wait off for itself with `SET synchronous_commit = local` or `off`.
+
+2. If we have two standbys, we configure them with quorum commit (`ANY 1`). After we promote one of them, as long as the other standby ACKs the commit, the old primary would commit.
+
+3. Even if both standbys are totally disconnected, a client that is still connected to the old primary can send a `COMMIT`. Normally, Postgres waits for an acknowledgement, but if the client cancels the query (Ctrl+C in psql), or the old primary crashes and restarts, every session would see the commit in the old primary, because the commit is already written in the old primary's WAL (write-ahead log). This is [a known Postgres synchronous replication behavior](https://www.postgresql.org/docs/18/warm-standby.html#SYNCHRONOUS-REPLICATION).
+
+Therefore, we try to stop the old primary from accepting any writes before promoting the standby.
+
+## Minimizing downtime during fencing {#minimizing_downtime_during_fencing}
+
+Fencing is time-critical because we cannot promote a standby until fencing is complete. Any time spent fencing directly extends downtime. To minimize this, we attempt multiple fencing approaches in parallel and proceed with failover as soon as the first one completes successfully.
+
+Ubicloud's control plane supports managed PostgreSQL across three environments: bare metal, AWS, and GCP. Each environment supports common fencing methods, complemented by additional platform-specific approaches. We combine these methods to fence the old primary as quickly as possible.
+
+> ClickHouse Managed Postgres runs on the [open source Ubicloud control plane](https://github.com/ubicloud/ubicloud), which [Ubicloud](https://www.ubicloud.com) and ClickHouse build together. Several of us on both teams have been building managed Postgres together since the Citus Data and Microsoft days, and I'm one of them.
+
+## Common fencing mechanisms across environments {#common_fencing_mechanisms_across_environments}
+
+Let's assume the control plane has SSH access to the underlying VM, but Postgres itself is not healthy. We have two handy tools in our hands: `pg_stop` and `hba`.
+
+`pg_stop` simply stops the cluster with `pg_ctlcluster`, but it has a problem with reboots. By default, the `start.conf` from postgresql-common has auto start baked in, and we keep it, because most of the time, we want the Postgres instance to auto restart in case of a VM reboot. However, that means, when we stop the cluster, if the VM reboots for whatever reason, we will have the primary running again.
+
+The `hba` mechanism, on the other hand, writes a new `pg_hba.conf` and reloads Postgres, so it sticks after a reboot. However, the rules only apply to new connection attempts. The Postgres [documentation](https://www.postgresql.org/docs/18/auth-pg-hba-conf.html) says for each record type that the record "matches connection attempts". So every session that is already open doesn't go through the `pg_hba` validation again. These connections include long-lived PgBouncer server connections as well. Therefore, we really don't get anything from it for the existing connections.
+
+Furthermore, both of these mechanisms depend on SSH access being available, so the control plane must be able to reach the underlying VM. If the VM itself is not reachable, the control plane needs a mechanism outside of the guest. This is where things start to branch out depending on the underlying VM provider.
+
+## Fencing on bare metal {#fencing_on_bare_metal}
+
+On bare metal, the control plane also manages the host that runs the Postgres VM. So, we can fence from the host. Each VM gets its own network namespace on its host, and a veth pair connects the two. The `vethi<vm>` end is inside the namespace, and the `vetho<vm>` end stays on the host. The host routes the VM's public IPv4 and IPv6 addresses to `vetho<vm>`, and the encrypted private network, which carries replication, also goes through this pair.
+
+So the fence is basically the following command being run on the host:
+
+<pre><code type='click-ui' language='bash'>
+timeout 10 sudo ip link set vetho&lt;vm&gt; down
+</code></pre>
+
+![The fence on bare metal: the control plane sets vetho<vm> down on the host, which cuts the veth pair into the VM's network namespace](https://clickhouse.com/uploads/postgres_fencing_nov2026_bare_metal_veth_b7a941c146.png)
+
+The [veth(4) man page](https://man7.org/linux/man-pages/man4/veth.4.html) says: "When either device is down, the link state of the pair is down." Clients, replication, the WAL uploads to object storage and the control plane's own SSH into the VM all go through that pair, so all of them are cut. Postgres keeps running inside, but nothing outside the namespace can reach it, and the control plane can still destroy the VM through the host.
+
+The fence needs the host to answer. If the host is unreachable, all three mechanisms fail, because `pg_stop` and `hba` also reach the guest through that host.
+
+## Fencing on AWS {#fencing_on_aws}
+
+On AWS, the control plane has no access to the host, so the only thing it can do outside the guest is to call the EC2 API. We evaluated three ways for fencing through that API, but none of them satisfied our needs.
+
+* `stop-instances --force` is slow, as it waits for a graceful shutdown.
+  * Since July 2025, `StopInstances` has a [skipOsShutdown](https://docs.aws.amazon.com/AWSEC2/latest/APIReference/API_StopInstances.html) parameter that skips the OS shutdown. We did not use it, because the method we found is actually faster and at the time of a failover, time is something we can definitely not waste.
+* Security groups are fast but stateful, so tracked connections remain active.
+* Network ACLs (access control lists) are more complicated and create additional resources which will need cleanup.
+
+The solution we ended up with is detaching the [network interface (NIC)](https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/using-eni.html). This cuts the traffic both for existing and new connections. The problem is that each EC2 instance has a primary network interface at device index 0, and it is not possible to detach primary network interface while the instance is running. However, it is possible to detach secondary network interfaces even while the instance is running.
+
+So we designed the control plane to give every Postgres server on AWS a second NIC. The management NIC is at device index 0 and carries the control plane's SSH. The user NIC is at device index 1. It holds the public addresses and the database's DNS record also points to it. It also carries the clients and replication. This is the reverse of the [management network example](https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/scenarios-enis.html) in the AWS documentation, where the primary interface takes the public traffic.
+
+![Two paths into the primary VM: the control plane's SSH on the management NIC, and clients, replication and WAL uploads on the user NIC, which the fence cuts](https://clickhouse.com/uploads/postgres_fencing_nov2026_cloud_user_nic_f4c291f288.png)
+
+To fence, the control plane detaches the user NIC with force:
+
+<pre><code type='click-ui' language='ruby'>
+client.detach_network_interface(
+  attachment_id: network_interface.attachment.attachment_id,
+  force: true,
+)
+</code></pre>
+
+The [API reference](https://docs.aws.amazon.com/AWSEC2/latest/APIReference/API_DetachNetworkInterface.html) says: "Use the Force parameter only as a last resort to detach a network interface from a failed instance." We are not reusing failed primaries. Nothing in the control plane attaches the user NIC again, and it stays detached until the old VM is destroyed, so it is OK to use the force option in our case.
+
+Here is an example where this fencing mechanism works in real life. Below are control plane logs of a failover on AWS:
+
+```shell
+21:19:40 respirate.2 | {"ssh":{...,"cmd":"timeout 10 sudo pg_ctlcluster 18 main stop -m immediate","exit_code":2,...,"stdout":"Cluster is not running.\n",...}
+21:19:40 respirate.1 | {"ssh":{...,"cmd":"timeout 10 sudo postgres/bin/lockout-hba 18","exit_code":1,...,"stderr":"... command failed: sudo pg_ctlcluster 18 main reload (CommandFail)...
+21:19:42 respirate.1 | {"fenced_unresponsive_primary":{...,"mechanism":"detach_nic"},"message":"Fenced unresponsive primary",...}
+21:19:42 respirate.2 | {"strand_hopped":{...,"from":"Postgres::PostgresServerNexus.wait_representative_lockout","to":"Postgres::PostgresServerNexus.prepare_taking_over"},...}
+```
+
+The `pg_stop` mechanism found no running cluster, and `hba` could not reload, which is expected after a SIGKILL. So the detach was the only mechanism that succeeded, and the standby moved on to the promotion. Thirteen seconds later, the control plane saved the kernel log of the old primary over the management NIC, and this was its last line:
+
+```shell
+2026-08-26T21:19:42,694874+00:00 pcieport 0000:26:00.1: pciehp: Slot(36): Button press: will power off in 5 sec
+```
+
+## Fencing on Google Cloud {#fencing_on_google_cloud}
+
+On Google Cloud (GCP), the control plane also has no access to the host, so outside the guest it can only call the Compute Engine API. We have evaluated multiple ways, and none of the obvious Compute Engine options works as a fence:
+
+| Option | What happens |
+| :---- | :---- |
+| Firewall deny rule | "Existing connections persist, and their associated traffic remains unaffected." ([docs](https://docs.cloud.google.com/firewall/docs/firewalls)) |
+| Remove the external IP | Replication on the internal address keeps going, and on a VM with one NIC, the control plane also loses its SSH, which uses that address |
+| Stop or delete the VM | The guest gets "up to a maximum of 120 seconds" to shut down ([docs](https://docs.cloud.google.com/compute/docs/instances/suspend-stop-reset-instances-overview)), and the Local SSD data is discarded. [skipGuestOsShutdown](https://docs.cloud.google.com/compute/docs/instances/decrease-shutdown-time) skips the wait, but in our tests, Google marked the stop as done 16 to 19 seconds after the call |
+| Add a secondary NIC | A regular secondary NIC cannot be detached |
+
+Thankfully, Dynamic NICs have become [generally available](https://docs.cloud.google.com/vpc/docs/release-notes) on GCP on October 30, 2025. A Dynamic NIC is a VLAN sub-interface of a regular NIC. The [GCP documentation](https://docs.cloud.google.com/vpc/docs/multiple-interfaces-concepts) says: "Adding or removing Dynamic NICs doesn't require restarting or recreating the instance." It also says that a Dynamic NIC shares the bandwidth and the queues of its parent NIC.
+
+On GCP, nic0 is the management NIC, in a separate VPC (virtual private cloud network) that lets the control plane's SSH in and denies all egress. The user NIC is a Dynamic NIC on VLAN 2 in the database's private subnet, and it carries the public addresses, replication and the default routes. The fence deletes the user NIC with one call to [deleteNetworkInterface](https://docs.cloud.google.com/compute/docs/reference/rest/v1/instances/deleteNetworkInterface).
+
+The documentation gives the usual delay for adding a Dynamic NIC and nothing about when traffic stops after a delete, so we measured it. In our trials, the last packet on any user flow came 0.7 to 2.5 seconds after the request, and Google marked the operation as done 5.0 to 7.0 seconds after it.
+
+## When all options fail {#when_all_options_fail}
+
+The old primary's state machine starts one child job per mechanism, all at the same time:
+
+<pre><code type='click-ui' language='ruby'>
+label def lockout
+  decr_lockout
+
+  resource.lockout_mechanisms.each do |mechanism|
+    bud Prog::Postgres::PostgresLockout, {"mechanism" => mechanism}
+  end
+
+  hop_wait_lockout_attempt
+end
+</code></pre>
+
+In this code, `bud` starts a child job, and `hop` moves the state machine to its next step. Each [child](https://github.com/ubicloud/ubicloud/blob/50b3499cf78fb1a07a51d3eada89ecb8b32bdaa3/prog/postgres/postgres_lockout.rb) tries its mechanism and reports `lockout_succeeded` when the command or the API call returns. An SSH error, a failed or timed-out command, or an error returned by the EC2 API makes it report `lockout_failed`. When no child is left, the old primary counts as locked out, whatever the children reported. The standby checks for that once a second, and then it promotes.
+
+So when every mechanism fails, the control plane still promotes. We did that on purpose: the design is fail-open, and a test in the repository pins that behavior. A stricter design would page a person when no fence worked, and the database would have no primary until someone acted. In that trade-off, we chose availability.
+
+## Conclusion {#conclusion}
+
+The failover code is the same on AWS, on bare metal and on GCP, and the fence is the step that needs a different mechanism in each place. On AWS, every Postgres server that the control plane creates has a second NIC, and the fence is a forced detach of the user NIC. On bare metal, the fence is one `ip link` command on the host. On GCP, the fence deletes a Dynamic NIC. When every mechanism fails, the control plane still promotes, because the design is fail-open.
+
+Two things from this work also apply outside the control plane. First, on servers with postgresql-common, check what `start.conf` says and what a stopped primary does at its next boot. Second, a fence that removes a NIC depends on which NICs the cloud can detach from a running VM. On AWS, that is every NIC except the one at device index 0, and on GCP, only Dynamic NICs, because regular NICs are set when the VM is created.
+
+---
+
+## Get started with ClickHouse Managed Postgres today
+
+Interested in seeing how ClickHouse Managed Postgres works on your data? Get started with ClickHouse Cloud in minutes and receive $300 in free credits.
+
+[Sign up](https://console.clickhouse.cloud/signUp?intent=pg&loc=blog-cta-2867-get-started-with-clickhouse-managed-postgres-today-sign-up&utm_blogctaid=2867)
+
+---
+
+---
+
+## What's new in ClickStack - September and October '26
+Published: 2026-11-03T19:09:52+00:00
+URL: https://clickhouse.com/blog/whats-new-in-clickstack-october-2026
+
+---
+title: "What's new in ClickStack - September and October '26"
+date: "2026-11-03T19:09:52.130Z"
+author: "The ClickStack Team"
+category: "Product"
+excerpt: "The September and October ClickStack releases bring ad hoc dashboard filters, PromQL for every chart type, ClickStack query tracing, a Trace logs tab, alerts from the chart explorer, and a long list of search page and collector improvements."
+---
+
+# What's new in ClickStack - September and October '26
+
+We've had a busy couple of months on ClickStack, with four minor releases and some exciting news we'll share soon. We've fallen a little behind on What's New, so this edition combines September and October, covering v2.39 through v2.42.
+
+Dashboards gained ad hoc filters for more interactivity, single-select and required filters, saved relative time ranges, and variables in markdown tiles. PromQL, introduced in preview in August, now supports every chart type in the editor, including number tiles, tables, pie charts, and heatmaps. PromQL tiles are also supported through the external API for managing Prometheus dashboards as code, while heatmaps gained a series mode.
+
+Every ClickStack query now includes its origin, helping you track read load on shared ClickHouse clusters. We've also added a Trace logs tab, aligned span panels with current OpenTelemetry conventions, and improved the search page with help from the community. Other additions include alert creation from the chart explorer, an MCP service health tool for faster agentic investigations, and StatsD and span metrics support in the collector.
+
+If two months is too long to wait, our weekly [Demo Day videos](https://clickhouse.com/docs/clickstack/demo-days) are a good way to keep up with the latest. The dev team shows what they're working on, so you can see what's taking shape before it reaches this newsletter. We also share the videos in the `#o11y-clickstack` channel on [Slack](https://clickhouse.com/slack).
+
+> We'll be at [KubeCon in Salt Lake City next week](https://clickhouse.com/campaigns/kubecon-north-america-2026). Join us at booth #108, or get hands-on with[ ClickStack training on November 9](https://clickhouse.com/company/events/202611slckubecon). For drinks, request a spot at[ Gracie's on November 10](https://luma.com/vgcotljq) or[ AprèsKube at Keys on Main on November 11](https://luma.com/apreskube-slc), with registration subject to approval.
+
+
+## New contributors {#new_contributors}
+
+Thank you to our open source contributors and to the users whose feedback shaped many of these features.
+
+[Harshul1484](https://github.com/Harshul1484), [DevShoaib78](https://github.com/DevShoaib78), [breken-ai](https://github.com/breken-ai), [krishs01](https://github.com/krishs01), [BilalAtique](https://github.com/BilalAtique), [28Hus](https://github.com/28Hus), [squaredg](https://github.com/squaredg), [archat-hash](https://github.com/archat-hash), [octo47](https://github.com/octo47), [wanjinhao1](https://github.com/wanjinhao1), [felipe-carvalho12](https://github.com/felipe-carvalho12), [adityareddy-dev](https://github.com/adityareddy-dev), [bahltushar](https://github.com/bahltushar), [andrewdunndev](https://github.com/andrewdunndev), [poblahblahblah](https://github.com/poblahblahblah), [marcleblanc2](https://github.com/marcleblanc2)
+
+Contributing doesn't have to mean writing code. Documentation fixes, ideas, feature requests, bug reports, and general feedback are all welcome through [the repository.](https://github.com/hyperdxio/hyperdx/tree/v2) Small contributions count too, and each one improves ClickStack for the wider community.
+
+## Ad hoc dashboard filters {#ad_hoc_dashboard_filters}
+
+Until now, dashboard filters had to be defined up front by the user. Whoever built the dashboard chose a column, and everyone else got a dropdown for it. But during an investigation, you might spot a host, status code, or customer ID you want to filter by that the dashboard author hadn't anticipated. That meant editing individual tiles or adding another dashboard filter.
+
+The new **Ad hoc keys and values** filter type lets you choose which fields to filter as you investigate. It supports columns and map keys for log, trace, and metric sources, and label names for PromQL sources. 
+
+![](https://clickhouse.com/uploads/clickstack_whatsnew_nov2026_adhoc_filters_522a52cc04.png)
+
+Pick a key, an operator, and a value from the filter bar, with suggestions for both keys and values. The condition then applies to every tile using those sources.
+
+<video autoplay="1" muted="1" loop="1" controls="0">
+  <source src="https://clickhouse.com/uploads/clickstack_whatsnew_nov2026_adhoc_filters_b96389abce.mp4" type="video/mp4" />
+</video>
+
+These filters also unlock greater dashboard interactivity, allowing users to add conditions directly from visualizations. Click a cell in a search tile, a group-by cell in a table tile, or a series in a time chart tooltip to filter by that value. For raw SQL tiles, ClickStack uses the query's `GROUP BY` clause to identify columns available for click-to-filter. If it can't parse the query, it offers the string columns instead. If errors are up for a particular service, you can filter to that service, then narrow further by region without editing any tiles. The SQL and PromQL previews show the conditions applied to each query.
+
+<video autoplay="1" muted="1" loop="1" controls="0">
+  <source src="https://clickhouse.com/uploads/clickstack_whatsnew_nov2026_adhoc_filters_2_1efb24d514.mp4" type="video/mp4" />
+</video>
+
+Conditions support equality, negation, regular expression matches, and `LIKE` for SQL sources. Selections are stored in the dashboard URL, so you can share a filtered view or save them as dashboard defaults alongside your existing filters. When you import a dashboard, its ad hoc filters are remapped to your sources, just like its tiles.
+
+> For now Ad-hoc filters are experimental. Enable with the environmental variable `NEXT_PUBLIC_ENABLE_ADHOC_FILTERS=true` while we gather feedback.
+
+## PromQL for every chart type {#promql_for_every_chart_type}
+
+When we [introduced PromQL support](https://clickhouse.com/blog/introducing-promql) in August, you could use a single PromQL expression in a time series chart. We've since expanded the chart editor to support more of the chart types and query options teams need when bringing their Prometheus dashboards to ClickStack.
+
+Time series charts now support multiple PromQL expressions, each with its own alias. You can plot p50, p95, and p99 latency together, for example. The query preview below the editor shows each expression with dashboard variables substituted. 
+
+![](https://clickhouse.com/uploads/clickstack_whatsnew_nov2026_promql_chart_6976be0ac6.png)
+
+Number tiles will feel familiar if you've used Grafana stat panels. Choose an Instant query to evaluate the expression once at the end of the time range, or a Range query to reduce the results to a single value using Last, Min, Max, Avg, Sum, or Count. Range queries can also display a sparkline behind the number. If your expression still returns more than one value, the tile warns you.
+
+![](https://clickhouse.com/uploads/clickstack_whatsnew_nov2026_promql_chart_2_0dcee98229.png)
+
+PromQL also works with tables, pie charts, and bar charts. Tables show each returned sample as a row, with a column for each label. Pie and bar charts support the same instant and range query options as number tiles, along with legend templates.
+
+![](https://clickhouse.com/uploads/clickstack_whatsnew_nov2026_promql_chart_3_7aac5b9c1c.png)
+
+You can use three Grafana-compatible macros in your expressions: `$__interval` for the chart's granularity, `$__range` for the selected time range's duration, and `$__rate_interval` for a window covering several scrape intervals. All three appear in autocomplete suggestions and are substituted in the query preview, just like dashboard variables.
+
+For queries that return hundreds of series, Series Limit in the display settings helps keep charts readable. Line and stacked bar charts retain the top series by peak value, while pie and bar charts keep the largest slices or bars.
+
+![](https://clickhouse.com/uploads/clickstack_whatsnew_nov2026_promql_chart_4_c4d7c27bd8.png)
+
+> PromQL support remains experimental. Enable it with `ENABLE_PROMQL=true` on the API and `NEXT_PUBLIC_ENABLE_PROMQL=true` on the app.
+
+## Single-select and required dashboard filters {#singleselect_and_required_dashboard_filters}
+
+We've also made improvements to the dashboard variables introduced in August, based on user feedback.
+
+Filters can now be marked **as single-select**, so choosing a new value replaces the current selection. This is particularly useful for PromQL, where multi-select variables expand to regular expression alternations and would require the `=~` matcher.
+
+![](https://clickhouse.com/uploads/clickstack_whatsnew_nov2026_single_select_required_3cda1c1f4e.png)
+
+Single-select variables work with plain equality, such as `instance="$instance"`. The new PromQL variable format, used by default in PromQL expressions, handles escaping for both single-select and multi-select values. 
+
+You can also mark filters as Required. Previously, opening a dashboard would run every tile before you'd selected any filters, potentially querying a lot of data you weren't interested in.
+
+Tiles that use a required filter now wait until you've selected a value. You can also extend this requirement to every tile on the dashboard. When editing a tile, the preview uses your current dashboard filter selections, with an **Apply filters** toggle to compare the filtered and unfiltered results.
+
+<video autoplay="1" muted="1" loop="1" controls="0">
+  <source src="https://clickhouse.com/uploads/clickstack_whatsnew_nov2026_required_filters_1428feefa9.mp4" type="video/mp4" />
+</video>
+
+Dashboards now remember relative time ranges too. Save a dashboard with "last 6 hours" selected, and it will open on the last 6 hours each time, rather than the fixed dates shown when you saved it.
+
+Finally, markdown tiles now support dashboard variables, including in links. You can use them to show which service or environment you're viewing, or pass the current selection to another page through a link. Values are escaped for Markdown by default, with ${var:csv} and other formats available when you need a different representation.
+
+![](https://clickhouse.com/uploads/clickstack_whatsnew_nov2026_markdown_c2562db19d.png)
+
+## Flexible heatmaps with PromQL support {#flexible_heatmaps_with_promql_support}
+
+Heatmaps in ClickStack previously showed numeric distributions, with a bucketed value such as span duration on the y-axis and color indicating the number of events in each bucket. This works well for understanding latency, but doesn't let you use the visual for broader behavioral investigations.
+
+The new **Series** mode gives each group-by value its own row, with time buckets remaining along the x-axis and color representing your chosen aggregate. You can use it much like a multi-series line chart, with color showing the values instead of line height.
+
+![](https://clickhouse.com/uploads/clickstack_whatsnew_nov2026_latency_heatmap_6ccc0c4ce8.png)
+
+For PromQL sources, heatmaps support three modes. **Series** works as described above using a range query, with support for macros, variables, and legend templates. **Histogram** works with metrics that Prometheus has already bucketed. Bucket bounds come from the `le` labels, and you can use `sum by (le) (...)` to combine series that share those bounds.
+
+**Distribution** groups sample values from all series into buckets at each timestamp, using either linear or logarithmic spacing. This is useful for data that isn't already a histogram, such as CPU utilization across cores.
+
+<video autoplay="1" muted="1" loop="1" controls="0">
+  <source src="https://clickhouse.com/uploads/clickstack_whatsnew_nov2026_promql_heatmap_41d4ccaa30.mp4" type="video/mp4" />
+</video>
+
+When a group-by returns more than 50 series, the heatmap displays the top 50 and shows a warning. It uses the same ranking as time charts.
+
+## PromQL becomes a first-class API citizen {#promql_becomes_a_firstclass_api_citizen}
+
+The external dashboards API now supports PromQL tiles. `GET /api/v2/dashboards` includes them in responses, and `POST` and `PUT` accept them using `configType: "promql"`, a `sourceId`, and a list of expressions. Previously, PromQL tiles were omitted from responses, meaning they could be lost when saving a dashboard back through the API.
+
+You can now manage dashboards containing PromQL tiles through the [API](https://clickhouse.com/docs/clickstack/api-reference) or Terraform, just like other dashboards.
+
+We've also added PromQL source detection to onboarding. When PromQL is enabled, ClickStack automatically creates a source for any ClickHouse TimeSeries table it detects on the connection, alongside the log, trace, and metric sources detected from OpenTelemetry tables.
+
+Under the hood, PromQL queries now use ClickHouse's Prometheus HTTP API where the server supports it. ClickHouse maintains forward compatibility for this interface while the TimeSeries engine is in preview. PromQL tiles and the /api/v1/prometheus/* routes now use sourceId in place of connectionId, resolving the connection through the source.
+
+> The bundled ClickHouse images move to 26.8. If you run PromQL against a ClickHouse server of your own, we recommend 26.8 or newer. 
+
+## ClickStack query tracing {#clickstack_query_tracing}
+
+Many ClickStack deployments share a ClickHouse cluster with other workloads. Until now, a heavy query in `system.query_log` told you it came from ClickStack and nothing more, so tracking read load back to a dashboard or an alert meant matching SQL text by hand.
+
+To address this, every query ClickStack runs now carries a small JSON `log_comment` naming the surface that issued it, along with the IDs that pin it down: the dashboard and tile, the saved search, the alert, the MCP tool, or the chart explorer. Its `query_id` starts with `hdx-` and the surface name, so a query can be recognized in `system.processes` while it is still running, with no JSON parsing needed. 
+
+> The comment records what was asked for, never who asked, so no user or team identifiers are written.
+
+The following query allows users to quickly identify where the load for a ClickStack service is originating:
+
+
+```sql
+SELECT
+    JSONExtractString(log_comment, 'surface') AS surface,
+    JSONExtractString(log_comment, 'dashboard') AS dashboard,
+    count() AS queries,
+    formatReadableSize(sum(read_bytes)) AS read
+FROM system.query_log
+WHERE (type = 'QueryFinish') AND startsWith(query_id, 'hdx-')
+GROUP BY
+    surface,
+    dashboard
+ORDER BY sum(read_bytes) DESC
+```
+
+You can even run this in ClickStack itself to see what's happening under the hood. A little observability for your observability:
+
+![](https://clickhouse.com/uploads/clickstack_whatsnew_nov2026_cluster_queries_ceff071f55.png)
+
+PromQL queries include the same attribution, whether they run through ClickHouse's Prometheus API or table functions, so you can track their load alongside your other dashboards. Beyond cost tracking, this lets you trace a slow query back to the tile that generated it. It also lays the groundwork for query recommendations we're thinking of building.
+
+## Trace viewing improvements {#trace_viewing_improvements}
+
+We've made three improvements to reading traces in the side panel. All three work with traces you've already collected.
+
+### A Trace logs tab
+
+Previously, finding trace logs meant looking through the spans in the waterfall, which could get crowded for traces with many logs. The event side panel now has a **Trace logs** tab that displays logs in a flat, chronological table with the same pagination, sorting, and expandable JSON as the search page.
+
+<video autoplay="1" muted="1" loop="1" controls="0">
+  <source src="https://clickhouse.com/uploads/clickstack_whatsnew_nov2026_trace_logs_4f17edf4a6.mp4" type="video/mp4" />
+</video>
+
+The tab appears for any span or log with a trace ID and an associated log source. Select a log to inspect it in the panel, or use **Open in search** to continue filtering on the search page with the same source, trace, and time window. We've also added the trace's total duration and span count to the waterfall's controls bar, so you can see both without working them out from the timeline.
+
+### Exceptions wherever they were recorded
+
+OpenTelemetry SDKs can record exceptions as logs with `exception.*` attributes as well as span events. The Exception panel now appears for any log or span carrying `exception.type`, `exception.message`, or `exception.stacktrace`. The waterfall also highlights error logs and exception events in red, making them easier to spot.
+
+Default trace sources now load span events and links automatically, so span exceptions appear without any manual source configuration.
+
+## Search page improvements {#search_page_improvements}
+
+We've invested time in the search page over the last two months, and so has the community. Several of the improvements below came from community contributions, which we're hugely grateful for. Thanks to everyone who's sent a PR, flagged something frustrating, or told us what would make their day a little easier.
+
+### Group the histogram by a field
+
+Spotted a spike in the search histogram and wondered which service was responsible? Previously, you'd have to build a chart elsewhere to find out. Now, the histogram's **Group by** control lets you break down the volume by a field. Pick one from the same key list as the filter sidebar, or enter a SQL expression. Compatible group-bys stay selected when you switch sources.
+
+![](https://clickhouse.com/uploads/clickstack_whatsnew_nov2026_histogram_grouping_525a793ba8.png)
+
+### Select rows to copy or download
+
+Sometimes you just need a few log lines to share with a colleague. You can now select individual rows using checkboxes, or `Shift`-click to select a range, then choose **Download CSV**, **Copy as CSV**, or **Copy as JSON**. The export includes only your selected rows and the columns currently shown.
+
+Checkboxes appear on hover and stay visible once you've selected something. 
+
+![](https://clickhouse.com/uploads/clickstack_whatsnew_nov2026_doc_img17_3de96f0f8a.png)
+
+### Row details and row clicks
+
+If you've added `MATERIALIZED` or `ALIAS` columns to a table, you might have noticed they were missing from row details. The panel fetches rows with `SELECT *`, which excludes those columns. You can now include them by enabling **Show materialized and alias column**s in the Column Values view options menu. For now, we leave this off by default.
+
+![](https://clickhouse.com/uploads/clickstack_whatsnew_nov2026_show_materialized_columns_db15a27ed1.png)
+
+The same menu now lets you choose **Property order**: A-Z, Z-A, or original order. That last option is handy when you'd rather preserve the key order in a `Map` column or the JSON body.
+
+We also had some feedback that some users prefer rows to expand inline instead of opening the side panel. You can now set **Preferences → Search results → Row** click to Expand inline, making the whole row clickable instead of just the small chevron. You can still open the side panel using the button that appears on hover.
+
+<video autoplay="1" muted="1" loop="1" controls="0">
+  <source src="https://clickhouse.com/uploads/clickstack_whatsnew_nov2026_expand_rows_42c7c779de.mp4" type="video/mp4" />
+</video>
+
+### A searchable, faster filter sidebar
+
+With recent changes, hopefully finding a key in a long list of attributes should be a little less tedious now. Map groups such as `LogAttributes` and `ResourceAttributes` have their own key search, much like the value search on regular filters. Each Map column also gets its own key fetch limit, so hundreds of log attributes won't push `ResourceAttributes` out of the sidebar.
+
+<img loading="lazy" width="350" src="/uploads/clickstack_whatsnew_nov2026_key_search_8fa4f8dc92.png"/>
+
+We've also stopped making the whole sidebar wait for its slowest query. Filter values appear as each query finishes. Over longer time ranges, you'll see keys first and values filling in as they arrive, so you can start filtering while the rest load.
+
+## Alerting improvements {#alerting_improvements}
+
+We've kept investing in alerting based on what you need and ask for, so please keep the feedback coming.
+
+### Alerts straight from the chart explorer
+
+Want an alert without creating a dashboard tile you'll never look at? Previously, every alert needed a saved search for logs or a dashboard tile for metrics. That's a lot of extra housekeeping if you're bringing over a thousand Grafana rules.
+
+You can now build a chart in the explorer using logs, traces, or metrics, with either the query builder or raw SQL, and add an alert directly. The alert stores its own chart configuration and appears on the alerts page with a chart icon. Follow its link back to the explorer, and the query is ready for you to inspect or edit.
+
+### Richer webhook templates
+
+Grouped alerts can now tell you which group needs attention. Use `{{var.<column>}}` to include the breaching group's value for any group-by column. For example, `{"summary": "{{var.ServiceName}} has an elevated error rate"}` names the service in each notification. Those values are included in resolve notifications too.
+
+Alert tags are also available through `{{tags}}`. This came from a user who needed to route alerts to the right team through a shared incident.io webhook.
+
+<iframe width="768" height="432" src="https://www.youtube.com/embed/Lb77q9zFVmA?start=4" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" allowfullscreen></iframe>
+
+We've also added a few ways to catch template mistakes before an alert needs to fire. Errors appear in the webhook editor as you type, and the API rejects bodies that don't compile. For automated workflows, `POST /api/v2/webhooks/validate` checks a webhook configuration without saving it, handy during a Terraform plan. The editor also lists every available variable with a description, and Send test populates them with sample values.
+
+## MCP server improvements {#mcp_server_improvements}
+
+We've been putting the ClickStack MCP server through its paces in production and our evaluation suite. Watching where agents get stuck, or take the long way round, has given us plenty to work on.
+
+### A service health report in one call
+
+"How are my services doing?" sounds like a simple question. Previously, answering it took an agent several calls to fetch tables and time series and then piece the results together.
+
+The new `clickstack_service_health` tool returns throughput, error rate, latency percentiles, and top error groups for every service in one call. It compares results with the same window yesterday and highlights unhealthy services and new or growing errors. In our service-health-check evaluation, agents scored higher while using about half as many tool calls.
+
+We'll keep investing in tools that help agents get investigations off to a good start, wasting fewer tokens gathering context and making investigations more consistent and efficient, with the aim of resolving issues faster.
+
+### Behavior hints and server metadata
+
+We've also filled in a few details that help MCP clients work with the server. Every tool now declares all four behavior hints: whether it's read-only, destructive, idempotent, and open-world. Clients use these hints when deciding which calls need approval, and some compatibility checks require all four.
+
+The server now includes a title, description, website, and icon in its initialize response too, so MCP directories and clients have the details they need when listing it.
+
+## StatsD and span metrics in the collector {#statsd_and_span_metrics_in_the_collector}
+
+If your application already uses StatsD to count failed payments, track queue sizes, or measure how long a job takes, you shouldn't have to rewrite that instrumentation to use ClickStack. The [ClickStack collector](https://clickhouse.com/docs/clickstack/ingesting-data/collector) now includes a [StatsD receiver](https://github.com/open-telemetry/opentelemetry-collector-contrib/tree/main/receiver/statsdreceiver), so you can send those metrics straight to it. It also understands DogStatsD tags, making this useful for applications currently sending custom metrics to Datadog.
+
+We've also added a [span metrics connector](https://github.com/open-telemetry/opentelemetry-collector-contrib/tree/main/connector/spanmetricsconnector) for a different but related job: turning traces into metrics. Traces describe individual requests, but you often want an overview of how many requests a service handles, how many fail, and how long they take. The connector generates call counts and latency histograms from incoming spans, including traces from the Datadog Agent, so you can build those views without adding separate metrics instrumentation.
+
+![](https://clickhouse.com/uploads/clickstack_whatsnew_nov2026_doc_img21_3493a0abfd.png)
+
+Together, these additions let you bring existing application metrics into ClickStack and generate service metrics from the traces you're already collecting. For teams moving from Datadog, that means less instrumentation work up front and more room to migrate gradually. You can compare metrics across both systems and rebuild dashboards before switching anything off. 
+
+Both components are opt-in and configured through a custom pipeline using `CUSTOM_OTELCOL_CONFIG_FILE`. The span metrics connector emits `traces.span.metrics.calls` and `traces.span.metrics.duration`, with support for exponential histograms that ClickStack stores natively.
+
+## Line chart interpolation {#line_chart_interpolation}
+
+Want to see the total and which services contribute most, without adding up the lines yourself? Time series tiles now support a **stacked line** display alongside stacked bars. Each series has a filled area, stacked on the others, so you can see both the overall trend and the individual contributions.
+
+![](https://clickhouse.com/uploads/clickstack_whatsnew_nov2026_doc_img22_37e114cb95.png)
+
+You can also choose how lines connect between points with the **line interpolation** setting: smooth, linear, or step. Step is handy for values that change in discrete jumps, such as the number of running replicas. The setting is available in the app, the external API, and the MCP server.
+
+## Little but useful things {#little_but_useful_things}
+
+### Tile alerts in the Terraform export
+
+The Terraform export previously skipped alerts that weren't attached to a saved search. Dashboard tile alerts are now included, using the `source \= "tile"` form added in version 3.28.0 of the [ClickHouse Terraform provider](https://registry.terraform.io/providers/ClickHouse/clickhouse/latest/docs/resources/clickstack_alert).
+
+### Tile descriptions
+
+Dashboard tiles can now have a description explaining what they show or how to read them. Set it next to the chart name in the tile editor, and it appears as an info tooltip beside the tile title. Descriptions are also supported through the external API.
+
+![](https://clickhouse.com/uploads/clickstack_whatsnew_nov2026_doc_img23_968fde7a41.png)
+
+### Minimum auto granularity on metric sources
+
+When you zoom into a chart, auto-granularity may choose buckets smaller than the metric's scrape interval. A metric collected once a minute might appear in 30-second buckets, leaving every other bucket empty and making the chart look like data is missing. To avoid this, you can now set **Minimum auto granularity** under **Team Settings → Sources** to keep automatic buckets at least as wide as your scrape interval. Tiles with an explicit granularity are unaffected.
+
+PromQL sources also have a Minimum auto granularity setting to prevent short time ranges from producing buckets finer than your scrape interval. This value is also used to calculate `$__rate_interval`, which otherwise assumes a 15-second scrape interval.
+
+![](https://clickhouse.com/uploads/clickstack_whatsnew_nov2026_auto_granularity_c94a5d6bde.png)
+
+### Pick any time zone
+
+The **Use UTC time** switch in User Preferences is now a time zone picker, with Local and UTC pinned at the top and all browser-supported zones below. The sidebar badge and timestamp column headers show your selected zone.
+
+![](https://clickhouse.com/uploads/clickstack_whatsnew_nov2026_time_range_94c90d4740.png)
+
+### Label each instance
+
+Running several ClickStack instances, perhaps one per region? Set `NEXT_PUBLIC_INSTANCE_LABEL` to a short label such as "UK". It appears in the browser tab title and sidebar, making it easier to find the right instance in a sea of tabs.
+
+### A configurable external API rate limit
+
+You can now set the cap on `/api/v2/*` requests with `EXTERNAL_API_RATE_LIMIT_MAX`, giving busy integrations or export jobs more room. The default remains 100 requests per minute.
+
+### Faster metric name picker
+
+Metric names now stream from the table's primary index instead of waiting for an aggregation over the data. On sources with thousands of metrics, the first options appear in tens of milliseconds. Typing searches exhaustively, so you can still find any metric the index leaves out.
+
+### Consistent dashboard refresh loading states
+
+Number, bar, pie, table, and heatmap tiles now keep their previous data visible and pulse while refreshing, just as time charts already did. You can see when an update is still in progress without losing the current results. Thanks to the community for this contribution.
+
+### Live tail presets up to 6h
+
+Live tail now supports 3h and 6h presets, up from the previous one-hour limit. Longer ranges remain disabled, with an explanation in the picker: each refresh re-queries the whole window.
+
+### Alerts page pagination
+
+The alerts page now loads one page at a time with server-side filtering, rather than fetching every alert into the browser. Teams with thousands of alerts can filter by state, name, and tags without slowing the page down.
+
+## Conclusion {#conclusion}
+
+That's it for September and October. Give the new features a try and let us know how you get on.
+
+> One thing to check before upgrading a self-hosted deployment: if authentication is enabled, you must now set `EXPRESS_SESSION_SECRET` explicitly. The API no longer falls back to a public default.
+
+A big thank you to everyone who's shared feedback, reported a rough edge, or sent a pull request. You've helped shape much of what's covered here. Keep it coming, and let us know what you'd like to see next.
+
+---
+
+## Get started today
+
+Interested in seeing how ClickHouse works on your data? Get started with ClickHouse Cloud in minutes and receive $300 in free credits.
+
+[Sign up](https://console.clickhouse.cloud/signUp?loc=blog-cta-2856-get-started-today-sign-up&utm_blogctaid=2856)
+
+---
+
+---
+
+## Does your application need local data or faster Postgres?
+Published: 2026-11-03T14:55:13+00:00
+URL: https://clickhouse.com/blog/does-your-application-need-local-data-or-faster-postgres
+
+---
+title: "Does your application need local data or faster Postgres?"
+date: "2026-11-03T14:55:13.054Z"
+author: "Lionel Palacin and Gülçin Yıldırım Jelínek"
+category: "Engineering"
+excerpt: "Local synchronization makes reads fast, but adds another data layer to manage. Explore how AI agents change the trade-off and when NVMe-backed Postgres can simplify the architecture."
+---
+
+# Does your application need local data or faster Postgres?
+
+## Summary
+
+Before adding local copies to make your application fast, ask why it’s slow to begin with.
+
+Local synchronization adds complexity, especially when agents keep changing the working set. A fast, central NVMe-backed Postgres offers a simpler starting point: query directly and scale reads with replicas.
+
+Applications need fast reads and writes, otherwise they’re not usable. When the main Postgres instance cannot deliver good performance, one existing solution is to synchronize part of the working set close to the application. Reads become local, and less pressure is placed on the central database. This can be good, but the trade off is another layer of data to manage, while writes still depend on a central Postgres.
+
+In this blog, we’ll explore how local data synchronization works, why AI agents make the local working set harder to predict, and whether a faster central Postgres instance could simplify the architecture from the beginning.
+
+## Start with the database bottleneck
+
+Many of the managed Postgres services keep their data on network-attached storage. [Amazon RDS for PostgreSQL](https://docs.aws.amazon.com/AmazonRDS/latest/UserGuide/CHAP_Storage.html), for example, stores data on EBS volumes reached over the network, and each volume has its own IOPS and throughput limits. Other services, such as Neon, go further and separate compute from storage entirely. These designs give you storage that survives the loss of a compute node and flexible provisioning, but every read that misses the cache has to cross the network.
+
+That matters once a workload becomes I/O-bound. At that point, adding compute doesn't make the database faster. Reads still have to fetch pages from storage, writes still generate [WAL](https://www.postgresql.org/docs/current/wal-intro.html), and background work such as [VACUUM](https://www.postgresql.org/docs/current/routine-vacuuming.html) competes for the same I/O budget. As concurrency rises, queries slow down and tail latency grows.
+
+This is why applications on managed Postgres often get slower as usage grows, even when CPU and memory look fine. Before you add a local data layer to work around that latency, check whether the real bottleneck is the storage under your database.
+
+## Do you need a second copy of your data?
+
+When the main database gets slow, the usual fix is to add a layer in front of it. For years that meant a cache like Redis or Valkey. More recently, sync engines have taken the idea further by keeping a synchronized copy of the data the application needs inside the application itself. A sync layer subscribes to the database's [logical replication](https://www.postgresql.org/docs/current/logical-replication.html) stream, filters the changes down to a declared subset, and keeps that subset materialized in a local store. The store can live in memory, in an embedded database on the client, or in a cache on an edge node. The mechanism is the same.
+
+The developer declares the subset up front: which tables, which rows (usually a filter on a tenant or user column), and which columns. In a multi-tenant application, the subset for one client is typically that tenant's rows and nothing else. Every client that declares the same subset receives the same stream of changes, so the sync layer's cost is shared when many clients want the same data.
+
+Once the subset is in place, reads for anything inside it are local. Screens, forms and dashboards query the local store, and the round trip to Postgres disappears from the read path for those reads. Reads for anything outside the subset still go to the database, or the subset has to be widened first.
+
+<iframe src="/uploads/01_electric_local_reads_bddae64671.html" title="Local synchronization: select a subset, synchronize it, and read locally" width="100%" height="720" frameborder="0" style="width:100%;height:720px;border:0;max-height:none;" loading="lazy"></iframe>
+
+What the application has gained is a second copy of part of its data, with its own lifecycle. Someone has to decide what belongs in the subset, when it changes, how long a client keeps it, and what happens when the schema changes. This is worth it for applications that work offline or on unreliable networks, and for applications where many clients read the same, stable working set. It is less obviously worth it when the only requirement is fast reads from an online database with good connectivity. Predictable queries make the subset easy to declare. On their own, they don't mean you need a local copy.
+
+## Most applications also need to write
+
+A sync layer handles the read path only, so the application must maintain a separate write path to the central Postgres, usually through its own API. Once a transaction commits, the change flows back out via logical replication, through the sync layer, and into every local store whose declared subset includes the affected rows. So a write produces two separate events on the client: the API response, and the arrival of the committed change in the local dataset shortly after..
+
+To hide that gap, applications keep optimistic state. The change is applied to the local view immediately, before the server has confirmed it. The application then has to reconcile that provisional state with what arrives through the sync stream, which includes the committed version of its own write as well as writes from other clients touching the same rows. When its own write shows up in the stream, the provisional copy is dropped. If the write is rejected, the provisional copy has to be rolled back and the view corrected.
+
+<iframe src="/uploads/02_write_and_reconcile_e094f8720c.html" title="Write to Postgres and reconcile the synchronized local view" width="100%" height="720" frameborder="0" style="width:100%;height:720px;border:0;max-height:none;" loading="lazy"></iframe>
+
+Postgres remains the authoritative source throughout, and it is still the place where [concurrent writes](https://www.postgresql.org/docs/current/transaction-iso.html) are ordered, through transactions. An application that reads committed state directly from Postgres gets that ordering for free. It never waits for a local copy to catch up and never holds two versions of the same row. A local copy gives fast reads in exchange for a reconciliation problem the application has to own. Pending local changes, committed data arriving asynchronously, and the view the user sees all have to agree.
+
+## Agents make the working set harder to predict
+
+A traditional application works with a bounded working set because people navigate it in predictable patterns. A product page loads product information, a billing page loads one specific account, and a search page queries a given set of fields. An AI agent behaves differently: it could load a product, identify the customers who bought it, and then look for similar products, all based on the prompts and context provided at runtime.
+
+The paradigm is different now. With agents, a developer cannot always predict the application’s working set or accurately define its boundaries. Declared subsets remain possible, but the working-set boundary must be broad enough to support the agent’s possible query paths. On-demand and progressive loading  can avoid synchronizing the entire subset upfront, but data that has not been materialized still requires a remote request before it becomes locally queryable.
+
+This creates several trade-offs:
+
+- Synchronize broadly and transfer data the agent may never use.
+- Load progressively and put synchronization back in the read path.
+- Create task-specific subsets and manage their lifecycle individually.
+
+A sync layer’s fan-out is most effective when many consumers reuse the same subset. When agents require different, changing subsets of data, there is less reuse across local copies and fewer opportunities to amortize synchronization work. The question becomes: if the dataset is a moving target, keeps growing, and continually requires new data to be synchronized locally, is this architecture still relevant?
+
+## What if Postgres is already fast enough?
+
+[ClickHouse Managed Postgres](https://clickhouse.com/blog/postgres-managed-by-clickhouse-beta) runs Postgres on [NVMe storage](https://clickhouse.com/blog/postgres-on-nvme) physically attached to the database compute. Compared with network-attached storage, this lowers disk latency and provides substantially more IOPS for reads, writes, WAL activity, and maintenance. The result is [lower query latency and higher  query throughput than network attached Postgres solution.](https://postgresbench.clickhouse.com/)
+
+In the case of an application with good connectivity, if querying a central Postgres instance already satisfies the requirements in terms of latency and throughput, then maintaining a synchronized local dataset might result in greater complexity than the improvement in performance brings.
+
+This matters also for server-side agents. They usually run close to backend services and already depend on network access to an inference service or other tools. They may also exist for only one task, making it difficult to reuse a local dataset enough to justify synchronizing it. When the agent’s working set keeps moving, directly querying a fast authoritative database can be simpler:
+
+- Query any authorized operational data through the existing API
+- Read and write against the same authoritative system
+- Read from the central instance when immediate consistency matters
+- Avoid synchronizing data the agent may never query
+
+The architecture becomes:
+
+<iframe src="/uploads/03_nvme_postgres_473d96d4ca.html" title="Applications and agents querying ClickHouse Managed Postgres on local NVMe" width="100%" height="720" frameborder="0" style="width:100%;height:720px;border:0;max-height:none;" loading="lazy"></iframe>
+
+ClickHouse Managed Postgres [supports read replicas](https://clickhouse.com/docs/products/managed-postgres/read-replicas), allowing read-heavy agent workloads to scale horizontally without creating a local dataset for every agent.
+
+NVMe does not solve inefficient queries. Connection pooling, query optimization, and concurrency controls are still important. Although faster storage increases the capacity of the central database, it does not eliminate all the limitations. The advantage from an architectural point of view is that more work can remain on the usual Postgres path before it becomes necessary to carry out another application-level data copy.
+
+## What if you need multi-AZ durability?
+
+There is one copy the database does need, and it isn’t an application-level one. Local NVMe is fast because it sits next to the compute, which also means it doesn’t survive the loss of that compute on its own. ClickHouse Managed Postgres handles this the way Postgres has always handled it: with replication at the database layer rather than a replicated disk.
+
+A service can run with [up to two standbys](https://clickhouse.com/docs/products/managed-postgres/high-availability) spread across availability zones. With two standbys, replication is synchronous: the primary waits for at least one standby to acknowledge a write before confirming it, so a failover loses no committed transactions. With one standby, replication is asynchronous, which trades a small window of recent transactions for lower write latency. In both cases, failover promotes a standby automatically. Independently of standbys, WAL is continuously archived to object storage and base backups support point-in-time recovery.
+
+[The HA round of PostgresBench](https://clickhouse.com/blog/postgresbench-ha) measured what these guarantees cost. With two synchronous standbys, ClickHouse Managed Postgres delivered about 4x the throughput of an Amazon RDS Multi-AZ cluster running the same two-standby quorum configuration, so the durability doesn’t give back the performance the previous section argued for.
+
+For the question this post is asking, what matters is where those copies live. They sit under the database, the service manages them, and the application never sees them or has to reconcile them.
+
+
+
+---
+
+## Start with ClickHouse Managed Postgres
+
+See how your workload performs on local NVMe. Sign up for ClickHouse Cloud and provision your first managed Postgres service.
+
+[Sign up](https://console.clickhouse.cloud/signup?intent=PG&loc=blog-cta-2841-start-with-clickhouse-managed-postgres-sign-up&utm_blogctaid=2841)
+
+---
+
+## Scale analytics beyond Postgres
+
+As the dataset grows and more agents access it, the workload will include more historical scans, aggregations, and comparisons involving large volumes of data. Although the system has fast NVMe storage, Postgres is still a row-oriented transactional database, so those queries would be better met by ClickHouse.
+
+ClickHouse Managed Postgres combines the two engines into a single data layer. [WalShadow](https://clickhouse.com/docs/products/managed-postgres/sync-to-clickhouse/walshadow) replicates certain Postgres tables directly into ClickHouse by using the physical WAL. The feature is currently in private preview and has a commit-to-visible latency of about [200 ms as shown in ClickHouse's benchmark](https://clickhouse.com/blog/introducing-walshadow). The replication process remains asynchronous.
+
+The [pg_clickhouse extension](https://clickhouse.com/docs/products/managed-postgres/extensions/pg_clickhouse/introduction) makes it possible to access ClickHouse tables via Postgres and sends supported analytical queries down to ClickHouse. Applications and agents can maintain a connection to Postgres while using different engines for transactional work and for analytical purposes. For this to work, foreign tables must be configured and pushdown must be supported; automatic routing of every query is not provided.
+
+<iframe src="/uploads/04_postgres_and_clickhouse_b3ea8f8d85.html" title="Transactional and analytical queries with pg_clickhouse and WalShadow" width="100%" height="720" frameborder="0" style="width:100%;height:720px;border:0;max-height:none;" loading="lazy"></iframe>
+
+Replication is still involved, but the analytical copy handles the shared workload at the data layer by carrying out large scans and aggregations on a columnar engine. The analytical capacity is able to increase on its own without the need to distribute those datasets among each agent's runtime.
+
+## Start with the simplest architecture
+
+Local synchronization is a great solution when applications need offline access, have limited network connection, or repeatedly read a predictable working set. For normal applications, the first step is to measure whether the central database can meet the required latency and throughput before introducing another copy of the data.
+
+AI agents make this decision more important: their queries can change with every task, making local datasets harder to define. ClickHouse Managed Postgres provides a foundation for serving those evolving needs: keep operational reads and writes in Postgres, add read replicas where freshness requirements allow. When application usage outscale Postgres, offload analytical workloads to ClickHouse.
+
+Start simple with ClickHouse Managed Postgres, grow with ClickHouse.
 
 ---
 
