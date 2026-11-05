@@ -1,5 +1,5 @@
 {
-  "last_sync": "2026-11-04T13:53:02.445397Z",
+  "last_sync": "2026-11-05T14:07:55.049566Z",
   "processed_blogs": {
     "https://clickhouse.com/blog/clickhouse-raises-400-million-series-d-acquires-langfuse-launches-postgres": {
       "title": "ClickHouse raises $400M Series D led by Dragoneer to accelerate expansion across analytics and AI infrastructure",
@@ -6156,9 +6156,15 @@
       "pub_date": "2026-11-03T14:55:13+00:00",
       "file_path": "blogs/2026-11-03-does-your-application-need-local-data-or-faster.md",
       "processed_at": "2026-11-04T13:53:02.313880Z"
+    },
+    "https://clickhouse.com/blog/mongodb-cdc-connector-clickpipes-ga": {
+      "title": "MongoDB CDC connector for ClickPipes is now generally available",
+      "pub_date": "2026-11-04T02:00:00+00:00",
+      "file_path": "blogs/2026-11-04-mongodb-cdc-connector-for-clickpipes-is-now.md",
+      "processed_at": "2026-11-05T14:07:54.894040Z"
     }
   },
-  "total_blogs": 1026,
+  "total_blogs": 1027,
   "failed_blogs": [
     {
       "url": "https://clickhouse.com/jp/blog/clickhouse-gcp-japan-availability",
