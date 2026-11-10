@@ -1,5 +1,5 @@
 {
-  "last_sync": "2026-11-09T15:25:53.454407Z",
+  "last_sync": "2026-11-10T14:27:23.132381Z",
   "processed_blogs": {
     "https://clickhouse.com/blog/clickhouse-raises-400-million-series-d-acquires-langfuse-launches-postgres": {
       "title": "ClickHouse raises $400M Series D led by Dragoneer to accelerate expansion across analytics and AI infrastructure",
@@ -6174,9 +6174,51 @@
       "pub_date": "2026-11-06T16:16:22+00:00",
       "file_path": "blogs/2026-11-06-what-i-learned-from-a-month-with-walshadow-on.md",
       "processed_at": "2026-11-07T12:34:49.240563Z"
+    },
+    "https://clickhouse.com/blog/announcing-clickhouse-observability": {
+      "title": "Announcing ClickHouse Observability - fully managed observability on ClickHouse Cloud",
+      "pub_date": "2026-11-09T17:00:00+00:00",
+      "file_path": "blogs/2026-11-09-announcing-clickhouse-observability-fully-managed.md",
+      "processed_at": "2026-11-10T14:27:21.804613Z"
+    },
+    "https://clickhouse.com/blog/announcing-clickhouse-platform-largest-expansion": {
+      "title": "The largest expansion of ClickHouse yet",
+      "pub_date": "2026-11-09T00:45:00+00:00",
+      "file_path": "blogs/2026-11-09-the-largest-expansion-of-clickhouse-yet.md",
+      "processed_at": "2026-11-10T14:27:21.983605Z"
+    },
+    "https://clickhouse.com/blog/clickhouse-unifies-enterprise-ai-data-stack": {
+      "title": "ClickHouse Unifies Enterprise AI Data Stack with Launch of Expanded Platform",
+      "pub_date": "2026-11-09T17:01:12+00:00",
+      "file_path": "blogs/2026-11-09-clickhouse-unifies-enterprise-ai-data-stack-with.md",
+      "processed_at": "2026-11-10T14:27:22.244282Z"
+    },
+    "https://clickhouse.com/blog/introducing-clickhouse-security-agentic-siem": {
+      "title": "Introducing ClickHouse Security in private preview, built on RunReveal",
+      "pub_date": "2026-11-09T16:59:45+00:00",
+      "file_path": "blogs/2026-11-09-introducing-clickhouse-security-in-private.md",
+      "processed_at": "2026-11-10T14:27:22.460416Z"
+    },
+    "https://clickhouse.com/blog/langfuse-ai-gateway": {
+      "title": "Langfuse launches AI Gateway",
+      "pub_date": "2026-11-09T16:57:37+00:00",
+      "file_path": "blogs/2026-11-09-langfuse-launches-ai-gateway.md",
+      "processed_at": "2026-11-10T14:27:22.642118Z"
+    },
+    "https://clickhouse.com/blog/observability-ui-is-dead-whats-next": {
+      "title": "The observability UI as we know it is dead. So what comes next?",
+      "pub_date": "2026-11-09T17:00:00+00:00",
+      "file_path": "blogs/2026-11-09-the-observability-ui-as-we-know-it-is-dead-so.md",
+      "processed_at": "2026-11-10T14:27:22.838718Z"
+    },
+    "https://clickhouse.com/blog/managed-postgres-ga-xata-acquisition": {
+      "title": "ClickHouse Managed Postgres goes GA and Xata acquisition brings agentic capabilities to the service",
+      "pub_date": "2026-11-09T16:56:11+00:00",
+      "file_path": "blogs/2026-11-09-clickhouse-managed-postgres-goes-ga-and-xata.md",
+      "processed_at": "2026-11-10T14:27:23.045148Z"
     }
   },
-  "total_blogs": 1029,
+  "total_blogs": 1036,
   "failed_blogs": [
     {
       "url": "https://clickhouse.com/jp/blog/clickhouse-gcp-japan-availability",

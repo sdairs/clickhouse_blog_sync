@@ -1,6 +1,772 @@
 # ClickHouse Blogs
-Last updated: 2026-11-09 15:25:53 UTC
-Total blogs: 1029
+Last updated: 2026-11-10 14:27:23 UTC
+Total blogs: 1036
+
+---
+
+## ClickHouse Unifies Enterprise AI Data Stack with Launch of Expanded Platform
+Published: 2026-11-09T17:01:12+00:00
+URL: https://clickhouse.com/blog/clickhouse-unifies-enterprise-ai-data-stack
+
+---
+title: "ClickHouse Unifies Enterprise AI Data Stack with Launch of Expanded Platform"
+date: "2026-11-09T17:01:12.644Z"
+author: "ClickHouse"
+category: "Company and culture"
+excerpt: "Now serving more than 5,000 customers, ClickHouse is introducing new capabilities spanning Postgres, observability and security, alongside its acquisition of Xata, challenging established vendors across the enterprise."
+---
+
+# ClickHouse Unifies Enterprise AI Data Stack with Launch of Expanded Platform
+
+*Now serving more than 5,000 customers, ClickHouse is introducing new capabilities spanning Postgres, observability and security, alongside its acquisition of Xata, challenging established vendors across the enterprise*
+
+**SAN FRANCISCO — November 9, 2026 —** [ClickHouse](https://clickhouse.com/), the leading data platform for AI, today announced a major platform expansion that unifies traditionally siloed systems as AI agents push enterprise data infrastructure to its limits. ClickHouse also announced it has acquired Xata, the agent-native Postgres company, giving developers and AI agents isolated, production-like data environments on demand. These updates integrate a transactional database, observability, cybersecurity, and AI engineering into a single, composable platform to simplify operations for
+enterprises grappling with spiraling AI costs and complexity.
+
+The expansion comes as AI agents are [changing](https://journals.plos.org/plosone/article?id=10.1371/journal.pone.0360157) how applications interact with data, generating unpredictable bursts of queries as they explore and iterate across multiple systems. As enterprises deploy agents at scale, these more intensive and variable workloads threaten to overwhelm fragmented data infrastructure and multiply cost, creating an urgent need for systems built to handle massive query volumes more efficiently.
+
+To address these demands, ClickHouse is expanding across the four workloads now at the center of enterprise AI infrastructure. ClickHouse Managed Postgres brings transactional data onto the platform; ClickHouse Observability and ClickHouse Security, built on technology from its September acquisition of RunReveal, bring logs, traces, and security telemetry alongside it; and Langfuse, the open-source AI engineering platform ClickHouse acquired in January, adds an AI Gateway that gives organizations visibility and control over how AI models are used across their applications. All of it runs on the same open, composable foundation as ClickHouse’s analytics engine, so developers and the agents they deploy can build, observe, and secure data-intensive applications in one place, with the cost efficiency to run them at scale.
+
+Bolstering the Managed Postgres product within the expanded ClickHouse platform are powerful new capabilities enabled by ClickHouse’s acquisition of Xata. The new functionality will enable developers to instantly branch and clone databases, creating isolated Postgres environments for development and testing, while also laying the foundation for a dedicated tier designed for AI agents.
+
+Enterprises including DoorDash, Ramp, Meta, Tesla, Cisco and Visa rely on ClickHouse for data-intensive workloads at scale. [Mercado Libre](/blog/mercado-libre-observability-on-clickhouse-cloud), Latin America’s leading commerce and fintech platform, processes 400 million spans per minute on ClickHouse for observability, with 75x faster queries and roughly 89% compression that have significantly reduced its infrastructure costs. Others are consolidating workloads onto the platform, among them, [Physical Intelligence](https://www.pi.website/), which is bringing general-purpose AI into the physical world.
+
+“Building robotics foundation models means making sense of billions of annotations and telemetry records,” says Karan Dhabalia, Engineer at Physical Intelligence. “We started with ClickHouse for observability, then expanded into real-time analytics, Postgres, and AI development with Langfuse. This shared foundation simplifies operations and helps our researchers develop better models. With ClickHouse Security now in private preview, we’re excited to see the platform grow."
+
+ClickHouse Managed Postgres is generally available today in ClickHouse Cloud. ClickHouse Observability is available in public beta, and ClickHouse Security in private preview, with access by request. The open-source Langfuse AI Gateway is available today in public beta. Instant database branching, cloning, and scale-to-zero environments from Xata, along with a dedicated tier for AI agents, are planned additions to ClickHouse Managed Postgres. To learn more about today’s announcements, read the [full post](/blog/announcing-clickhouse-platform-largest-expansion). 
+
+### About ClickHouse
+ClickHouse is the data platform enterprises trust for their most demanding workloads. From real-time analytics and transactions to observability, security, and AI engineering, ClickHouse brings together purpose-built technologies on an open, composable foundation, helping organizations achieve greater performance and cost efficiency at scale.
+
+### Media contact
+press@clickhouse.com
+
+---
+
+## Announcing ClickHouse Observability - fully managed observability on ClickHouse Cloud
+Published: 2026-11-09T17:00:00+00:00
+URL: https://clickhouse.com/blog/announcing-clickhouse-observability
+
+---
+title: "Announcing ClickHouse Observability - fully managed observability on ClickHouse Cloud"
+date: "2026-11-10T09:24:02.887Z"
+author: "Mike Shi"
+category: "Product"
+excerpt: "Introducing ClickHouse Observability: fully managed observability with the speed and scale of ClickHouse. Just send telemetry; we'll handle the rest. Plus, build the observability experience you've always wanted with a simple prompt in Observability Apps."
+---
+
+# Announcing ClickHouse Observability - fully managed observability on ClickHouse Cloud
+
+Today, we're introducing ClickHouse Observability in public beta: a fully managed observability solution for SREs and their agents, powered by ClickHouse Cloud and open-source ClickStack.
+
+Send your OpenTelemetry data to a managed OTLP endpoint, and we'll handle the rest. You get ClickHouse's query performance without having to size compute, tune your database and schemas, or manage ingestion. 
+
+Thanks to ClickHouse's efficiency, we can offer market-leading pricing with a fully managed service and keep it simple: just gigabytes ingested for logs and traces ($0.20/GB), and data points ingested for metrics ($0.10/M).
+
+<div class="toc-ignore rounded-lg bg-white/10 p-4" data-galaxy-component="blogCta"><h3 class="mb-2.5">Try ClickHouse Observability, now in public beta.</h3><p>Already using ClickHouse? <strong><a href="https://clickhouse.com/docs/clickstack/observability/getting-started">Follow the getting started guide</a></strong> to turn on observability in your existing service.
+</p><a class="btn-primary mt-6 w-full" href="https://console.clickhouse.cloud/signUp?intent=o11y&amp;loc=blog-cta-2921-try-clickhouse-observability-now-in-public-beta-sign-up&amp;glxid=eacb8509-de05-4687-9dca-cb40d67e476a&amp;pagePath=%2Fblog%2Fannouncing-clickhouse-observability&amp;origPath=%2Fblog%2Fsnowflake-clustering-vs-clickhouse-built-in-ordering&amp;utm_ga=GA1.1.1957155534.1777812673">Sign up</a></div>
+
+Get the benefits of ClickHouse for observability in minutes, with full-fidelity logs, metrics, and traces ready to investigate. Explore your telemetry through the ClickStack UI or connect your own agents through purpose-built MCP tools and SQL. Focus on understanding production and resolving failures while we operate the platform.
+
+<iframe width="768" height="412" src="https://www.youtube.com/embed/Gu1HS7nsNaU?si=rAK-CW2dLHp3dxlW" title="YouTube video player" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" referrerpolicy="strict-origin-when-cross-origin" allowfullscreen></iframe>
+
+We're also announcing **ClickHouse Observability Apps in private preview**. While ClickHouse Observability makes the benefits of ClickHouse easier to access, Apps addresses a larger question: if agents can investigate and software can adapt to the task, why should observability interfaces stay fixed?
+
+With Observability Apps, you describe what you need and build an interactive custom observability UI around your company, your use case, your team, your role, or even an individual investigation. Agents can use purpose-built investigation tools and SQL to turn those questions into an experience you can explore, refine, and share.
+
+## Why we built ClickHouse Observability
+
+The benefits of ClickHouse for observability are well established.[ Leading enterprises, such as Netflix](https://clickhouse.com/blog/mercado-libre-observability-on-clickhouse-cloud),[ Anthropic](https://clickhouse.com/blog/how-anthropic-is-using-clickhouse-to-scale-observability-for-ai-era), [Twilio](https://clickhouse.com/videos/openhouse-london-twilio), and[ OpenAI](https://clickhouse.com/blog/why-openai-uses-clickhouse-for-petabyte-scale-observability), use it to store and query telemetry at an enormous scale. 
+
+This is thanks to high compression, fast queries, and efficient storage, which make it practical to preserve full-fidelity telemetry with no sampling and more history. Combined with expressive SQL, this gives engineers and agents the rich context they need to investigate and diagnose issues.
+
+ClickHouse's efficiency has changed what teams can afford to keep and investigate. We've steadily lowered the barrier to those benefits over the last year with [open source](https://clickhouse.com/blog/clickstack-a-high-performance-oss-observability-stack-on-clickhouse) and [Managed ClickStack](https://clickhouse.com/blog/introducing-managed-clickstack-beta), but database expertise, managing ingestion and infrastructure, have remained part of the equation. 
+
+That control remains valuable for teams with the expertise and scale to justify the investment. But many teams want to investigate their applications without also administering an observability database. And as agents run more investigations, teams shouldn't have to keep revisiting capacity decisions to accommodate agents.
+
+With ClickHouse Observability, we're removing these requirements.
+
+<iframe
+  src="/uploads/managed_to_fully_2555c1822c.html"
+  title="From Managed ClickStack to ClickHouse Observability"
+  loading="lazy"
+></iframe>
+
+
+
+
+<blockquote>
+<p>"ClickHouse powers Buildkite’s Test Engine, ingesting billions of test executions a day with just 10 seconds of ingestion latency. We’re excited to build on that success with ClickHouse Observability to better understand our own CI. In the private preview, connecting Buildkite’s OpenTelemetry integration to the ClickStackUI OTLP endpoint was straightforward. The ClickStack agent created a dashboard in minutes that let us drill into individual jobs, track overall pipeline performance over time, and slice and dice by step, agent tags, and more. We’re excited for Buildkite customers to try this with their own pipelines.</p>
+<br><strong><p>Chris Atkins, Distinguished Engineer, BuildKite</p>
+</strong></blockquote>
+
+ClickHouse Observability makes that work our responsibility. You decide what telemetry to send and what questions to ask. We manage the database and the infrastructure behind it. Just send data and start investigating.
+
+## Send telemetry. Start investigating.
+
+To get started, create a ClickHouse Observability service to get your managed OTLP endpoint and credentials. Point your OpenTelemetry collectors at that endpoint, keeping your existing instrumentation and collection pipelines.
+
+
+
+
+<video autoplay="1" muted="1" loop="1" controls="1">
+  <source src="https://clickhouse.com/uploads/onboarding_hd_601850858b.mp4" type="video/mp4" />
+</video>
+
+From there, we handle ingestion, schemas, and storage. Separate compute for ingestion and queries lets us automatically adjust investigation capacity as demand grows, without asking you to size or tune the underlying services.
+
+![2026-11-08_14-58-03.png](https://clickhouse.com/uploads/2026_11_08_14_58_03_048a269c19.png)
+
+Once telemetry arrives, you're ready to investigate. Search logs, explore metrics, and follow traces in the ClickStack UI. Turn useful queries into dashboards and alerts your team can return to.
+
+![search.png](https://clickhouse.com/uploads/search_f944dcc932.png)
+
+The same telemetry is available to your agents through the included ClickStack MCP server. Purpose-built tools let them search logs, follow traces, and analyze event patterns and deltas. SQL lets them go further: joining signals, comparing historical behavior, and testing questions the predefined tools don't cover.
+
+<blockquote>
+<p>“It’s absolutely mission-critical, our ability to function as a small team and still ship a lot of features, but also maintain a high-quality service. That’s just impossible without that always-on, AI-assisted triage, which is amazing with an off-the-shelf agent and just access to ClickHouse Observability.”</p>
+<br><strong><p>Matt Matheson, Co-Founder and CTO, Trunk.io</p></strong></blockquote>
+
+<iframe width="768" height="412" src="https://www.youtube.com/embed/chmN0NQbaFI?si=m6VBwytTx4SphWCO" title="YouTube video player" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" referrerpolicy="strict-origin-when-cross-origin" allowfullscreen></iframe>
+
+## Simple volume-based pricing
+
+Historically, running observability on ClickHouse Cloud meant paying for compute and storage. That gives teams control, but estimating the bill requires understanding the resources their workload needs. Without that understanding, teams often overprovision to be safe, paying for capacity they don't use.
+
+We also believe pricing should be easy to understand, with as few dimensions as possible. We've chosen two familiar measures: the volume of logs and traces you send, and the number of metric data points. Charging for metrics by data points rather than unique time series means adding useful dimensions doesn't introduce a separate cardinality charge - ClickHouse doesn't suffer with cardinality, so neither should you.
+
+During public beta, both are available at a 50% discount.
+
+|      Signal     |         Standard price        |       Public beta price       |
+|:---------------:|:-----------------------------:|:-----------------------------:|
+| Logs and traces | $0.20 per GB ingested         | $0.10 per GB ingested         |
+| Metrics	         | $0.10 per million data points	 | $0.05 per million data points |
+
+Logs and traces are billed on the uncompressed volume ingested each month. Metrics are billed on the data points ingested each month. Both include 30 days of retention during public beta, with longer retention planned for general availability.
+
+## ClickHouse Observability Apps
+
+Making ClickHouse's capabilities accessible through a managed experience gives more teams full-fidelity telemetry without the burden of operating the database.
+
+The next step is giving those teams the freedom to shape how they investigate. Core workflows for searching logs and following traces still matter. But every business has systems, responsibilities, and questions that a vendor's screens won't fully accommodate. **Your observability experience shouldn't have to wait for a place on someone else's roadmap.**
+
+ClickHouse Observability Apps, now in private preview, lets you describe the experience you want and build a custom application around your live data, without writing application code. The agent generates the queries, custom visualizations, and connected screens. You can refine them through conversation and share the application with your team. SQL provides the freedom to explore individual customers, tenants, and transactions, with the queries available to inspect.
+
+<iframe width="768" height="412" src="https://www.youtube.com/embed/XNqc44M4ZsQ?si=oe5h7iQAEamF8BSr" title="YouTube video player" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" referrerpolicy="strict-origin-when-cross-origin" allowfullscreen></iframe>
+
+
+A payments team could compare success rates against each processor's usual performance, follow an anomaly into affected orders, and see which succeeded after a retry. From an order, they could open the underlying trace, carrying context through the investigation. Support might need a different starting point, organized around the customer's incomplete purchase.
+
+An application can be worth creating for a single investigation, then evolve into something the team uses every day. Each user and team gets the freedom to build an experience around their questions, while familiar investigation tools remain part of the workflow.
+
+<iframe width="768" height="412" src="https://www.youtube.com/embed/tS0uNbeAtBU?si=X95wm732J7nwj5ni" title="YouTube video player" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" referrerpolicy="strict-origin-when-cross-origin" allowfullscreen></iframe>
+
+We designed Observability Apps around three principles: security, live data, and an interactive experience integrated with ClickStack. Generated code runs in a sandbox, and queries are read-only and use the viewing user's database permissions. Apps reuse the API layer behind our investigation tools and MCP server, with SQL available for analysis beyond those established operations.
+
+Build an application for a specific incident, then share it with your team and reuse it as the data changes. ClickStack's time picker and trace and log viewers connect custom screens to familiar investigation tools, so you can follow a question into the underlying evidence while keeping context.
+
+Teams can shape their own experience as their questions evolve, without waiting for a vendor to design every screen. Core investigation tools become reusable components within applications built around each team's needs. In our[ dedicated post](https://clickhouse.com/blog/observability-ui-is-dead-whats-next), we explore what this means for observability and the work still needed to make generated experiences consistent and correct.
+
+## Help shape what comes next
+
+During beta, we're focused on improving automatic scaling and schema optimization. We're building on capabilities such as [On-Demand Compute](https://clickhouse.com/docs/products/cloud/features/infrastructure/on-demand-compute) to make query capacity more responsive to bursts of investigations from engineers and agents. We're also improving how the service adapts schemas to your telemetry and query patterns, taking more tuning decisions off your team's hands.
+
+Bring your telemetry and your real investigation workflows. Your feedback will help us decide what to improve as we work toward general availability.
+
+## What happens to Managed ClickStack and open source ClickStack?
+
+Managed ClickStack becomes a **self-configured option within ClickHouse Observability**. You keep the ClickStack UI and investigation tools, with control over your database, schemas, tuning, and compute configuration. ClickHouse Cloud continues to manage the underlying infrastructure.
+
+> Self configued ClickHouse Observability remains a good fit for teams with database expertise and the scale to justify that engineering investment in pursuit of the lowest unit costs. For most teams, the default experience should be the starting point: send telemetry, investigate, and leave database operations to us.
+
+**ClickStack remains open source,** and we remain fully committed to its continued development. We'll keep investing in our open source roots and delivering a great out-of-the-box experience for teams that want to run observability themselves on ClickHouse. You can deploy the stack on your own infrastructure, adapt it to your needs, and connect your agents through MCP and SQL. ClickStack continues to provide the foundation for ClickHouse Observability.
+
+## Get started with ClickHouse Observability today
+
+Users can get started today in a few minutes. Create a ClickHouse Observability service, send telemetry to your managed endpoint, and start investigating. Explore your data in the ClickStack UI or connect your agents through MCP and SQL. We'll handle the platform so you can focus on understanding production.
+
+<div class="toc-ignore rounded-lg bg-white/10 p-4" data-galaxy-component="blogCta"><h3 class="mb-2.5">Try ClickHouse Observability, now in public beta.</h3><p>Already using ClickHouse? <strong><a href="https://clickhouse.com/docs/clickstack/observability/getting-started">Follow the getting started guide</a></strong> to turn on observability in your existing service.
+</p><a class="btn-primary mt-6 w-full" href="https://console.clickhouse.cloud/signUp?intent=o11y&amp;loc=blog-cta-2921-try-clickhouse-observability-now-in-public-beta-sign-up&amp;glxid=eacb8509-de05-4687-9dca-cb40d67e476a&amp;pagePath=%2Fblog%2Fannouncing-clickhouse-observability&amp;origPath=%2Fblog%2Fsnowflake-clustering-vs-clickhouse-built-in-ordering&amp;utm_ga=GA1.1.1957155534.1777812673">Sign up</a></div>
+
+---
+
+## Join the Observability Apps private preview
+
+Join the observability apps private preview and help shape the direction of generated apps in ClickHouse Observability.
+
+[Sign up](https://clickhouse.com/cloud/clickhouse-observability-apps-waitlist?loc=blog-cta-3006-join-the-observability-apps-private-preview-sign-up&utm_blogctaid=3006)
+
+---
+
+---
+
+## The observability UI as we know it is dead. So what comes next?
+Published: 2026-11-09T17:00:00+00:00
+URL: https://clickhouse.com/blog/observability-ui-is-dead-whats-next
+
+---
+title: "The observability UI as we know it is dead. So what comes next?"
+date: "2026-11-09T16:57:20.026Z"
+author: "Alex Fedotyev"
+category: "Product"
+excerpt: "Your observability UI shouldn't limit the questions you can ask. Explore how ClickHouse Observability Apps turns a prompt into custom investigation experiences, why SQL makes it possible, and what we still need to get right."
+---
+
+# The observability UI as we know it is dead. So what comes next?
+
+The happiest observability users we meet are almost invariably those who have built their own UI. As we've been building [ClickStack](https://clickhouse.com/clickstack) and trying to work out which features to prioritize, that's been a recurring theme.
+
+Core workflows cover some needs well. But there's always a long tail of requests for experiences that fit a particular business, team, or way of investigating. Supporting those needs without making the product more complicated for everyone else is a familiar product design tension that will resonate with PMs.
+
+Generating observability applications with AI may offer a way out of this dilemma, though. Users could shape the experience around their questions, rather than reshaping their questions to fit the available screens. 
+
+We built ClickHouse Observability Apps to give every user their own experience, without needing the resources to build an observability UI from scratch. These are interactive applications over live data, with connected screens, custom visualizations, and workflows that go beyond dashboards. They reuse our investigation APIs and core components, bringing established query logic and consistent behavior into the experiences teams create.
+
+<iframe width="768" height="412" src="https://www.youtube.com/embed/tS0uNbeAtBU?si=-P4HxaoCybtdwP7W" title="YouTube video player" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" referrerpolicy="strict-origin-when-cross-origin" allowfullscreen></iframe>
+
+## Everyone wanted their own UI
+
+Over the last few years, we’ve seen companies like [Anthropic](https://clickhouse.com/blog/how-anthropic-is-using-clickhouse-to-scale-observability-for-ai-era), [DoorDash](https://clickhouse.com/videos/meetupsf_dec_2024), [Tesla](https://clickhouse.com/blog/how-tesla-built-quadrillion-scale-observability-platform-on-clickhouse), and [Netflix](https://clickhouse.com/blog/netflix-petabyte-scale-logging) build their own observability experiences on top of ClickHouse. They shape their experiences around their systems, their teams, and the questions they need to answer. If a workflow is missing, they just build it. Trying to convince these teams to use a vendor UI is like asking a Vim user to switch editors because yours has nicer menus.
+
+Not every company has the resources to build its own observability UI, but each needs an experience that reflects its systems, business processes, and critical customer journeys. Within the company, that experience also needs to fit the people using it. A payments engineer might start with a processor's success rate, a support agent with a customer's incomplete order, and an infrastructure team with the services behind checkout. Each needs a different path through the same underlying data. Expecting a vendor to anticipate and build every combination just isn't realistic.
+
+We also kept hearing two things from users. Some felt their existing tool was too complicated, even though they only used a fraction of it. Others wanted visualizations and workflows we didn't offer. Building everything the second group asked for risked creating exactly the complexity the first group wanted to escape.
+
+![meme.png](https://clickhouse.com/uploads/meme_d00a03e598.png)
+
+So we decided to try a different approach. We built **ClickHouse Observability Apps** to let teams generate the experiences they need. Describe an application in natural language, and an agent builds it inside ClickHouse Observability, with its own views and navigation over live data. Refine it through conversation, adapt it as your questions change, and share it with your team.
+
+To make this a little more concrete, here are a few examples. They're a little contrived, but broadly reflect the kinds of requests we hear from users.
+
+### See infrastructure through the customer journeys it supports
+
+> "Build me an app that lists and visualizes our infrastructure maps around critical user journeys, such as checkout and sign-in. Let me select a journey, explore its dependencies, and understand each component's criticality based on the journeys and functionality it supports. When a component fails, show which journeys are affected and what that puts at risk for users. Make it useful both for understanding our infrastructure day to day and assessing impact during an incident."
+
+<iframe width="768" height="412" src="https://www.youtube.com/embed/nccDU730ud4?si=P2I5sGviHGSuELLd" title="YouTube video player" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" referrerpolicy="strict-origin-when-cross-origin" allowfullscreen></iframe>
+
+A component's importance depends on what your customers use it for. A custom visualization can make those relationships visible, even when the product doesn't offer this. No vendor can anticipate every customer's architecture, shared services, and business priorities or the exact visualizations they will need. Instead, let your team build a view that reflects those details without convincing a vendor that enough other customers need the same thing.
+
+### Investigate what changed after a feature flag rollout
+
+> "Build me an app that tracks feature flag values alongside application and infrastructure KPIs. Let me select a change, compare affected tenants, and explore the requests behind a performance regression."
+
+<iframe width="768" height="412" src="https://www.youtube.com/embed/0qqL6UONWZU?si=ZGPFKevQFqwwSUxa" title="YouTube video player" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" referrerpolicy="strict-origin-when-cross-origin" allowfullscreen></iframe>
+
+An engineer might investigate latency after a rollout, while support needs to identify affected customers. Each can adapt the application around their responsibilities, adding views or changing the investigation as new questions emerge. It might even be worth building this for a single rollout, then discarding it once the question is answered. Alternatively, colleagues can share it, branch it, and refine it into something they use every day.
+
+### Follow failed payments to their eventual outcome
+
+> "Build me a view of payment success by credit card type, compared with each processor’s normal rate. Let me follow failures into the affected orders and their traces. Analyze impact and whether the orders eventually succeeded or not. Look at the last 36 hours of logs, traces, and metrics."
+
+<iframe width="768" height="412" src="https://www.youtube.com/embed/y36V30U_sTo?si=JdAQFbpIKi43mNxb" title="YouTube video player" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" referrerpolicy="strict-origin-when-cross-origin" allowfullscreen></iframe>
+
+The team controls the screens, how they connect, and what happens at each step of the investigation. A processor comparison leads to affected orders, then an order's history, then the familiar trace viewer, carrying the relevant filters and time range throughout. This goes beyond generating a dashboard: the application connects live data and reusable investigation tools around the way your team needs to work.
+
+## SQL makes the analysis possible
+
+These applications need freedom in what they can ask of the data. An app limited to fixed query endpoints can mostly repackage the answers those endpoints already provide. A different visualization won't help if the underlying analysis can't answer the question.
+
+Using ClickHouse’s support for SQL has given us room to go much further. The payments application needs to calculate each processor's baseline, link payment attempts to orders, and determine which failures eventually recovered. Combining those results with order data could reveal the value of purchases that are still incomplete. That business logic needs to be expressed somewhere.
+
+It also requires exploration across individual customers, orders, tenants, and requests. The next question might involve a particular deployment or a combination of attributes nobody anticipated. The data and query engine need to support high-cardinality exploration, with sufficient detail and responsiveness to support the investigation.
+
+Some users already do this themselves. Our own observability team writes SQL in Python notebooks to build visualizations that our existing tools don't provide. In one example, a Plotly timeline shows the exact start and end of log scrapes to reveal duplicates. Before investigating the problem, the team had to build the view.
+
+![scrape_windows_chdb_notebook.png](https://clickhouse.com/uploads/scrape_windows_chdb_notebook_837884d24f.png)
+
+> Here, a Plotly chart maps scrape time against wall time, with each rectangle spanning a scrape's exact start and end times. The annotations highlight a window of duplicate scrapes, confirming overlapping data in that range. Before we could investigate the problem, we had to build the visualization. More details [here](https://clickhouse.com/blog/scaling-observability-beyond-100pb-wide-events-replacing-otel#leveraging-data-science-tools-for-observability-analysis).
+
+Agents potentially make this capability accessible to more people. Given the relevant schema and context, they can write and test the queries, then build an application colleagues can explore. As the question changes, the queries and interface can evolve together, with the SQL available to inspect.
+
+The challenge is making sure that analysis answers the question the user intended. A query can run successfully and still count failed attempts when what you needed was customers who couldn't pay. As we discuss below, this is one of the main things we still need to get right.
+
+## What else is needed to make this work
+
+Generated applications use the same API layer as our investigation tools and MCP server. They can reuse established operations for searching logs, following traces, and comparing events. The work we put into correctness and performance carries over to those applications, keeping common operations consistent across the experiences built on top.
+
+Beneath that sits ClickHouse as a common data layer where logs, traces, and metrics live together in a single data store, allowing correlations to happen in the query engine. When an investigation needs analysis beyond the existing tools, agents can use SQL to join signals, apply business-specific logic, and explore other datasets, with the queries available to inspect.
+
+OpenTelemetry also gives us a documented model of what the data means. Its[ semantic conventions](https://opentelemetry.io/docs/specs/semconv/) define attribute names, types, meanings, and expected values across resources, logs, traces, and metrics. For telemetry that follows those conventions, the agent has a specification to work from when interpreting the schema and writing queries. Combined with context about the team's available data sources, this reduces how much it needs to infer.
+
+The same principle applies to the interface. The agent can import reusable UI components and connect them to the existing investigation tools. It can assemble charts, controls, and detail views around the problem, while reusing the behavior and styling we've already built. That means less code to generate and check, and more consistent applications.
+
+## Giving generated apps freedom within boundaries
+
+The agent starts with context about your team's data sources, schemas, and how to query OpenTelemetry data in ClickStack. It also gets instructions for building applications with the Apps SDK. It tests queries against ClickHouse before putting them into the application, while lint checks catch common SDK and styling mistakes.
+
+![o11y_apps_internals.png](https://clickhouse.com/uploads/o11y_apps_internals_5dc980fb60.png)
+
+The generated app runs in your browser inside a sandboxed iframe. It can't make network requests, navigate elsewhere, load unapproved scripts, or read your ClickStack session directly. Instead, it sends messages requesting specific actions: run a query, open a trace or log drawer, or change the time picker. ClickStack validates those messages, performs the allowed action, and returns the result.
+
+Queries are read-only and run with the viewing user's database permissions. Sharing an app doesn't share its creator's access. You get live data and familiar investigation tools within those boundaries.
+
+From there, you can ask the agent to change the application, fix something, or explore a different approach. If its improvements turn out to be "improvements," you can instantly revert to an earlier version.
+
+## What we still need to get right
+
+A query can run successfully and still answer the wrong question. Counting failed payment attempts isn't the same as counting customers who couldn't pay. Testing queries and checking code catches some mistakes, but it doesn't prove that an application reflects what you meant.
+
+We're still improving our evaluations to measure that alignment, then using the results to improve the agent's context, instructions, and tools. We're also working toward browser-based interaction testing, stronger lint and type checks, and adversarial review. The aim is to give the agent better ways to find its own mistakes before you do.
+RBAC and sandboxing provide enforced boundaries, but we will still be improving robustness to prompt injection before beta. Currently, we explicitly mark query results, existing app code, previous users' prompts, and error messages as untrusted input. A log entry can contain instructions; that doesn't mean it gets to give orders. This reduces the risk, but we don't treat this as a solved problem while the feature remains in private preview.
+
+We're also extending our reusable components with established query logic and behavior, so agents don't have to invent every chart and filter from scratch. Further out, we want teams to build and manage apps through their own agents over MCP and through configuration as code.
+
+## Bring the question your observability UI can't answer
+
+Observability Apps, now in private preview, puts the power of SQL in your team's hands. Describe the question, let an agent build the analysis, and turn it into an interactive application your colleagues can explore without writing the queries themselves.
+
+We want to see the awkward questions, the business-specific logic, and the investigations that don't fit the usual screens.
+
+SQL gives you the freedom to ask. Your interface should give you the freedom to explore.
+
+
+
+
+---
+
+## Join the Observability Apps private preview
+
+Join the observability apps private preview and help shape the direction of generated apps in ClickHouse Observability.
+
+
+
+[Sign up](https://clickhouse.com/cloud/clickhouse-observability-apps-waitlist?loc=blog-cta-2980-join-the-observability-apps-private-preview-sign-up&utm_blogctaid=2980)
+
+---
+
+---
+
+## Introducing ClickHouse Security in private preview, built on RunReveal
+Published: 2026-11-09T16:59:45+00:00
+URL: https://clickhouse.com/blog/introducing-clickhouse-security-agentic-siem
+
+---
+title: "Introducing ClickHouse Security in private preview, built on RunReveal"
+date: "2026-11-09T16:59:45.905Z"
+author: "Evan Johnson"
+category: "Product"
+excerpt: "ClickHouse Security, an agentic SIEM built on RunReveal and ClickHouse Cloud, is now in private preview, with AI agents, 100+ integrations and built-in detections running on your own ClickHouse service."
+---
+
+# Introducing ClickHouse Security in private preview, built on RunReveal
+
+Today we’re announcing ClickHouse Security is entering Private Preview. [ClickHouse Security](http://clickhouse.com/security) is an agentic SIEM built for the next decade of scale, and is the integrated offering between RunReveal and ClickHouse Cloud.
+
+The RunReveal team has been working to rapidly integrate with ClickHouse Cloud [since joining forces in September](https://clickhouse.com/blog/clickhouse-welcomes-runreveal). Our goal is to make ClickHouse Cloud the easiest and most performant place for a company’s security data, and provide the interfaces that AI agents need to defend modern environments.
+
+To request access to the ClickHouse Security Private Preview, [please fill out the form found here](http://clickhouse.com/security#request-access).
+
+## Getting started with the ClickHouse Security private preview {#getting_started}
+
+Once approved for our Private Preview, customers will log into ClickHouse Security using their ClickHouse Cloud account. You’ll see your existing ClickHouse services pre-populated in our dashboard.
+
+Schemas, views, and all of the batteries are included to turn your ClickHouse service into a fully functioning security data platform. Setting this up requires selecting the ClickHouse service you want to deploy ClickHouse Security to, provisioning the schemas, and that’s all! You’ll be able to then connect data sources, run agents, and detect threats as described in the [RunReveal documentation](http://docs.runreveal.com/).
+
+### How ClickHouse Security works
+
+ClickHouse Security turns a ClickHouse Cloud service into a battery-included agentic SIEM, using the schemas and views provisioned on the service you pick during setup.
+
+* **Put agents to work:** Agents are part of the platform, not an add-on. Using the AI capabilities within ClickHouse Security, security engineers can create agents for alert triage, detection tuning and generation, threat hunting, and more. Team members can ask follow-up questions in natural language through AI chat, without writing traditional queries. Security teams that want to go further can build their own agentic workflows with the LLM of their choice, through an MCP server, API, CLI, and Slack bot.
+* **Get data in fast:** First-party integrations connect over one hundred cloud, identity, and SaaS sources and bring data in normalized. Built-in pipelines filter, route, and enrich logs before they’re stored, so there’s no separate pipeline layer to buy or manage.
+* **Detection built-in, or your own:** Managed detections cover common threats from day one. Write your own as scheduled SQL or streaming Sigma rules, and manage them as code with the CLI (export, test, sync, dry run). Each finding stores the matched log, MITRE ATT&CK mapping, risk score, and the rule that fired.
+
+<iframe width="768" height="432" src="https://www.youtube.com/embed/_qnyZ7Ytag8" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe>
+
+### Why run it in ClickHouse
+
+ClickHouse Security sits on the database built for how telemetry looks today: continuous high-volume ingest, retention measured in years, and investigation queries that need to return while an analyst is still looking at the screen. ClickHouse’s columnar storage and compression keep large volumes of logs affordable to retain, and its parallel query execution keeps searches fast as the data grows, so teams don’t have to choose between keeping the data and being able to search it.
+
+A SIEM is usually one more silo to send data to. If you already use ClickHouse, ClickHouse Security is an extension of the platform you’re familiar with. It runs on your own ClickHouse Cloud service and uses your ClickHouse Cloud sign-in, so there’s no separate system to feed and no separate login to manage.
+
+> “Building robotics foundation models means making sense of billions of annotations and telemetry records,” says Karan Dhabalia, Engineer at Physical Intelligence. “We started with ClickHouse for observability, then expanded into real-time analytics, Postgres, and AI development with Langfuse. This shared foundation simplifies operations and helps our researchers develop better models. With ClickHouse Security now in private preview, we’re excited to see the platform grow.”
+
+During the preview, ClickHouse Security is provided at no charge, and you pay only for the ClickHouse Cloud compute and storage your service uses, at standard ClickHouse Cloud pricing. Participation requires accepting the [ClickHouse Security Cloud Preview Addendum](https://clickhouse.com/legal/clickHouse-security-cloud-preview-addendum). Pricing for ClickHouse Security will be set at general availability.
+
+## What’s happening with RunReveal? {#whats_happening_with_runreveal}
+
+RunReveal was built on ClickHouse from day one of forming the company. This means that there is no hairy migration or major bait-and-switch as we continue to support our customers with the technology stack we’ve already built. ClickHouse Security is the same RunReveal team with additional resources and a tighter integration with ClickHouse Cloud.
+
+As part of this work, we updated RunReveal to use ClickHouse Cloud authentication, and connecting it to an existing ClickHouse service now takes just a few clicks. This is the new model for ClickHouse Security and the future deployment model for existing RunReveal SaaS customers.
+
+The only key change in RunReveal’s offering is that our customers will not have the option of using RunReveal’s multi-tenant ClickHouse cluster in the future. Over the coming months, we plan to work with our customers to transition them to their own independent ClickHouse service along with their data. 
+
+## One platform for security data, built to keep pace with AI {#one_platform_for_security_data}
+
+We have an aggressive roadmap over the next few months. Here is where we’re focused:
+
+* **More deployment regions**, so ClickHouse Security can run alongside your ClickHouse services wherever they run.
+* **More capabilities**, prioritized by what customers ask for. Our team remains committed to working incredibly close to our customers to ensure we are providing the most powerful and flexible platform for their security data.
+* **Agent powered security**: Our customers power their detection and response programs through agents and we’re working on making that experience even better. Tedious authoring of detections, threat hunting, and incident response are jobs for an agent and not a SOC analyst. 
+
+We’ll share more as we get closer to general availability.
+
+---
+
+## Get started today
+
+Interested in seeing how ClickHouse works on your data? Get started with ClickHouse Cloud in minutes and receive $300 in free credits.
+
+[Sign up](https://console.clickhouse.cloud/signUp?loc=blog-cta-2982-get-started-today-sign-up&utm_blogctaid=2982)
+
+---
+
+---
+
+## Langfuse launches AI Gateway
+Published: 2026-11-09T16:57:37+00:00
+URL: https://clickhouse.com/blog/langfuse-ai-gateway
+
+---
+title: "Langfuse launches AI Gateway"
+date: "2026-11-09T16:57:37.502Z"
+author: "Marc Klingen, Tobias Wochinger, Hassieb Pakzad and Leonard Wolters"
+category: "Product"
+excerpt: "One open source entry point for all AI usage in your company. See every model call, who made it and what it cost, natively traced in Langfuse."
+---
+
+# Langfuse launches AI Gateway
+
+> Every AI application generates a constant stream of data: prompts, model calls, costs and evaluation results. Storing and querying that data at scale is exactly what ClickHouse was built for. That’s why Langfuse runs on ClickHouse, and why it joined ClickHouse in January. Langfuse is the open-source AI engineering platform that thousands of teams use to trace, evaluate and improve their AI applications, from prompt management to production monitoring. Today, Langfuse is launching the AI Gateway in public beta, so every model call, including those made by coding agents, lands in one place with who made it and what it cost. Here’s the Langfuse team with the details.
+
+Today, we are launching [Langfuse AI Gateway](https://langfuse.com/docs/gateway/overview) in public beta. We're excited to introduce our next product. Thank you to everyone who shared feedback that this is what you want us to build next to establish a unified way use models, track costs, and govern access to AI.
+
+## Why we built Langfuse AI Gateway {#why-we-built-langfuse-ai-gateway}
+
+Over the last three years, something changed in how companies use AI. It is no longer one chatbot built by one team. It is coding agents on every engineer's laptop, AI assistants in every team, workflow tools adopted bottom-up, and dozens of custom AI apps in production.
+
+It is becoming increasingly hard for companies to answer the questions: **who in our organization uses which models, what for, how much does it cost, is it secure, and how can we optimize and govern it?**
+
+Managing AI usage within a company is becoming its own discipline:
+
+- **Platform teams** are asked to make AI adoption safe, simple, and affordable at scale.
+- **Finance teams** need to track AI costs across providers and teams every month.
+
+[Langfuse AI Gateway](https://langfuse.com/docs/gateway/overview) is a central entry point to govern all AI traffic that is easy to host, adopt, and enforce. It can log all requests natively in Langfuse, so you can analyze AI usage and make decisions based on it.
+
+## Langfuse is uniquely positioned for this {#langfuse-is-uniquely-positioned-for-this}
+
+Langfuse is the [leading open source project](https://langfuse.com/adoption) for AI observability and evals (35k+ GitHub stars, 90B+ observations/month, 90M+ package downloads/month). 21 of the Fortune 50 and leading AI-native businesses like Ramp, Hugging Face, and Canva rely on Langfuse to understand and improve their AI agents. Open source is important here as an AI gateway needs to be scalable, reliable, and self-hosting it air-gapped can solve many security concerns in regulated industries.
+
+Adding a gateway was widely requested by our users. To get a complete picture of your company's AI usage, you need to see every model call. Our [100+ integrations](https://langfuse.com/integrations) already cover many of the AI agents you build, but much of a company's AI usage happens in tools nobody instruments, like coding agents, internal assistants, and scripts. A gateway sits centrally, where every call passes, so nothing is missed. And unlike a standalone gateway, which can only count tokens and cost, Langfuse turns each call into a full trace you can search, evaluate, and improve. This is why adding a native gateway is a natural next step for Langfuse.
+
+## Our gateway goes far beyond cost accounting {#our-gateway-goes-far-beyond-cost-accounting}
+
+Most gateways tell you what AI costs. Langfuse AI Gateway goes further, because every call through it becomes a full Langfuse trace (opt-in).
+
+**See your spend.** Cost and usage for every call land in one AI spend [dashboard](https://langfuse.com/docs/metrics/overview), by model and provider. Set spend limits per key and get [alerted](https://langfuse.com/docs/observability/features/alerts) before anyone runs into a surprise bill.
+
+<video autoplay="1" muted="1" loop="1" controls="0">
+  <source src="https://clickhouse.com/uploads/261106_gateway_analytics_cabf7141cc.mp4" type="video/mp4" />
+</video>
+
+**Know who spends it.** Every key belongs to a person or service and can carry a team or cost center, so AI spend breaks down the way your company is organized.
+
+**Understand what it's spent on.** Each call is a complete trace, not just a cost line. You can see what an application or a team actually did with a model, and use the same [search](https://langfuse.com/docs/observability/features/full-text-search), [evaluations](https://langfuse.com/docs/evaluation/overview), and [annotation](https://langfuse.com/docs/evaluation/evaluation-methods/annotation-queues) you already use in Langfuse. Or simply ask [Halo](https://langfuse.com/docs/api-and-data-platform/features/halo): "What does this team use Claude Code for?"
+
+<video autoplay="1" muted="1" loop="1" controls="0">
+  <source src="https://clickhouse.com/uploads/251106_gateway_halo_49f341c28f.mp4" type="video/mp4" />
+</video>
+
+**Control which models are used and keep them secure.** Approve models centrally, so expensive or unvetted ones don't creep in unnoticed. You decide what gets recorded: usage and cost only, full prompts and responses, or nothing at all.
+
+<video autoplay="1" muted="1" loop="1" controls="0">
+  <source src="https://clickhouse.com/uploads/261106_gateway_modelcontrol_c3a3f2873a.mp4" type="video/mp4" />
+</video>
+
+**Incrementally adopt deeper tracing.** Enforce logging of every model call by mandating the gateway, and let teams incrementally add more detail to their AI traces in Langfuse, such as the tool call executions of complex agents, via OpenTelemetry or one of our 50+ integrations. OpenTelemetry distributed tracing merges these traces within Langfuse.
+
+![Gateway ingestion settings with Full and Usage recording modes](https://clickhouse.com/uploads/langfuse_ai_gateway_nov2026_ingestion_modes_2fce6b0769.png)
+
+**Use Langfuse as memory for agents.** All data in Langfuse is available via [MCP](https://langfuse.com/docs/api-and-data-platform/features/mcp-server) and [CLI](https://langfuse.com/docs/api-and-data-platform/features/cli), so you can give agents access to search all AI requests they made in the past. This is the foundation for self-improvement loops.
+
+**Export metrics and raw logs to your data lake.** This enables any custom downstream process in finance and data teams.
+
+## Fully open source {#fully-open-source}
+
+- **Open source.** Like the rest of Langfuse, the core gateway is MIT-licensed. [Run it in your own infrastructure](https://langfuse.com/self-hosting/configuration/ai-gateway), or use it fully managed in Langfuse Cloud.
+- **Easy to self-host.** Deploy it as a single 22MB Docker image alongside your existing Langfuse instance, with no extra dependencies. [Read the docs](https://langfuse.com/self-hosting/configuration/ai-gateway).
+- **Your keys, no markup.** You keep your contracts, rates, and compliance agreements, such as zero data retention, with model/cloud providers. We don't resell tokens.
+
+## Built for maximum performance and predictable scaling {#built-for-maximum-performance-and-predictable-scaling}
+
+- **Built in Rust.** We built the gateway in Rust for high performance, availability, and reliability, even during usage peaks.
+- **High speed.** <3ms median latency with tracing on.
+- **High reliability.** 1,000+ concurrent streams on a single 2 vCPU node.
+- **Predictable scaling.** Memory footprint scales in line with load.
+
+## What's next {#whats-next}
+
+This is only the beginning. We have a strong roadmap for AI Gateway to help govern AI usage:
+
+- **Cost:** spend limits by team, user, or API key
+- **Reliability:** fallbacks between providers
+- **Safety:** guardrails and PII redaction
+- **Access:** user provisioning (SCIM)
+- **More providers:** Bedrock, Vertex, Google AI Studio, and custom providers
+- **Model routing:** automatically pick the best model for the task
+
+If you are interested in being a design partner on one of these, [reach out to us](https://langfuse.com/talk-to-us).
+
+## How to get started {#how-to-get-started}
+
+The gateway is in public beta, and you can try it out today. If you're an admin, [set up the gateway for your organization](https://langfuse.com/docs/gateway/get-started/admin-setup), then create a gateway key under **Organization settings → AI Gateway**.
+
+Point your app or coding agent at your region's gateway host (for example, `https://gateway.cloud.langfuse.com`) and use the gateway key instead of your provider key. Open the ingestion project in Tracing to see incoming traffic.
+
+<pre><code type='click-ui' language='python'>import os
+
+from openai import OpenAI
+
+# Before: client = OpenAI()
+client = OpenAI(
+    base_url="https://gateway.cloud.langfuse.com/openai/",
+    api_key=os.environ["LANGFUSE_GATEWAY_KEY"],
+)</code></pre>
+
+For a full walkthrough of setting up Claude Code, Codex, and more, see [Send your first request](https://langfuse.com/docs/gateway/get-started/first-request).
+
+Langfuse is part of ClickHouse since January and the Langfuse AI Gateway is one of many big launches at today. We're announcing the **largest expansion of the ClickHouse platform** since the launch of ClickHouse Cloud, introducing new capabilities across postgres, observability, security, and AI engineering. [Read more](https://clickhouse.com/blog/announcing-clickhouse-platform-largest-expansion?utm_medium=referral&utm_source=langfuse&utm_campaign=unified-platform-launch).
+
+## FAQ
+
+### Question 1: Is Langfuse AI Gateway open source?
+
+Yes. The gateway is MIT-licensed and runs on Langfuse Cloud and self-hosted deployments.### Question 2: Do I need to change my code?
+
+No. Change the base URL and use a gateway key. Requests and responses stay in the provider's native format, whether you build custom agents or use a coding agent harness on your own machine.### Question 3: Does Langfuse record my prompts?
+
+Only if you opt in. By default, the gateway records metadata, usage, and cost, not content. Pass-through mode records nothing, and self-hosting keeps all data on your infrastructure. Turn on full logging, and every request becomes a complete Langfuse trace you can debug, evaluate, and turn into datasets, all without touching your code.### Question 4: Which providers are supported?
+
+OpenAI and Anthropic in the beta. OpenRouter, AWS, GCP, Azure, and custom inference APIs follow very soon.### Question 5: What does it cost?
+
+You can self-host the gateway for free. Langfuse Cloud currently charges only if you decide to log requests; non-logged requests are free.
+
+---
+
+## Get started today
+
+Interested in seeing how ClickHouse works on your data? Get started with ClickHouse Cloud in minutes and receive $300 in free credits.
+
+[Sign up](https://console.clickhouse.cloud/signUp?loc=blog-cta-2981-get-started-today-sign-up&utm_blogctaid=2981)
+
+---
+
+---
+
+## ClickHouse Managed Postgres goes GA and Xata acquisition brings agentic capabilities to the service
+Published: 2026-11-09T16:56:11+00:00
+URL: https://clickhouse.com/blog/managed-postgres-ga-xata-acquisition
+
+---
+title: "ClickHouse Managed Postgres goes GA and Xata acquisition brings agentic capabilities to the service"
+date: "2026-11-09T16:56:11.397Z"
+author: "Sai Srirampur"
+category: "Product"
+excerpt: "ClickHouse Managed Postgres, our NVMe-backed Postgres service natively connected to ClickHouse, is generally available, and we're acquiring Xata to add instant branching, cloning and scale-to-zero for developers and AI agents."
+---
+
+# ClickHouse Managed Postgres goes GA and Xata acquisition brings agentic capabilities to the service
+
+Production-grade applications need a strong database foundation for predictable performance and always-on reliability. As AI agents help build and run software, that foundation also needs to support fully isolated, cost-effective environments that can be provisioned quickly and cloned instantly. With ClickHouse Managed Postgres, we’re building toward that future: **one complete Postgres experience, from the first experiment to production at scale.**
+
+Today, we’re announcing the general availability of [**ClickHouse Managed Postgres**](https://clickhouse.com/cloud/postgres), our high-performance, enterprise-grade Postgres service, and the [**acquisition of Xata**](https://xata.io/blog/xata-is-joining-clickhouse) to expand the platform with instant branching, cloning, and serverless capabilities for developers and AI agents.
+
+Over the past 10 months, our local NVMe-backed Postgres service has delivered up to 10× performance improvements and better reliability for customers. It now supports hundreds of production customers, from fast-growing AI-native startups to enterprises running multi-terabyte workloads, spanning both greenfield applications and migrations from Aurora, RDS, [Neon](https://clickhouse.com/blog/neon-to-clickhouse-managed-postgres), and more. Native CDC through [WalShadow](https://clickhouse.com/blog/introducing-walshadow) and ClickPipes, alongside extensions such as [`pg_clickhouse`](https://github.com/ClickHouse/pg_clickhouse), brings transactions and analytics together, powered by best-of-breed databases: Postgres and ClickHouse.
+
+[Clay](https://www.clay.com/), one of the fastest-growing AI companies in the world, is already using ClickHouse Managed Postgres to power its next-generation platform.
+
+> “ClickHouse Managed Postgres and WALShadow opens up a new way of thinking about databases at Clay. The raw speed of NVMe combined with low latency replication to ClickHouse allows us to build high throughput operational systems with massive scale real time visibility, unlocking experiences for customers that simply weren't possible in the past. We're currently powering our next generation platform with it at scale, and are looking forward to what comes next!”
+>
+> — Graham Cantor-Cooke, Principal Engineer, Clay Inc.
+
+With Xata, we’re extending this strong foundation with agentic capabilities. Instant branches and clones, automatic idling, and scale to zero, powered by [Xatastor’s](https://xata.io/blog/xatastor-zfs-nvme-of-for-millions-of-postgres-databases) state-of-the-art copy-on-write storage, make it ideal for agents and developers to build, preview, and test features in isolated Postgres environments. With this acquisition, we are also welcoming world-class engineering talents led by Monica Sabru and Tudor Golubenco.
+
+In the coming months, we’ll fully integrate Xata into ClickHouse Managed Postgres. Customers will get local NVMe-backed Postgres for mission-critical production workloads, tightly coupled with serverless Postgres for development workflows, agent sandboxing, and agent memory, all integrated with the ClickHouse database for world-class analytics.
+
+Below is a testimonial from David AI, a joint customer of ClickHouse and Xata that migrated from Neon Postgres.
+
+> “As an AI company working with large volumes of data, we need reliable infrastructure that help us move fast. We moved from Neon to ClickHouse Managed Postgres for better reliability and performance, and our users immediately noticed how much faster everything felt. Xata’s branching has been a great fit for our devs (and AI coding agents!), making it easy to build and test in parallel. Bringing both together means high-performance Postgres and instant branching in a single platform, simplifying our infrastructure and giving our team more time to build”
+>
+> — Jarrod Servilla, Platform Engineer, David AI
+
+<iframe
+  width="768"
+  height="432"
+  src="https://www.youtube.com/embed/HflbD1FW-eg"
+  title="ClickHouse Managed Postgres Goes GA + Xata Acquisition"
+  frameborder="0"
+  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+  allowfullscreen>
+</iframe>
+
+## Available today: Fast, enterprise-grade Postgres unified with ClickHouse {#available_today}
+
+### Local NVMe performance
+
+Local NVMe-backed storage delivers [2–10X performance improvements](https://clickhouse.com/blog/postgresbench) for OLTP workloads.
+
+> Note: Managed Postgres is generally available on AWS today. On [GCP it's in private preview](https://clickhouse.com/blog/postgres-managed-by-clickhouse-gcp-private-preview), with general availability coming soon.
+
+### Postgres and ClickHouse, natively connected
+
+[WalShadow](https://github.com/ClickHouse/walshadow/blob/main/docs/quickstart.md) consumes physical WAL for sub-second replication. ClickPipes offers a battle-tested alternative at no additional cost. With `pg_clickhouse`, applications can query ClickHouse through the Postgres interface, reducing migration effort and enabling federated queries across transactions and analytics.
+
+Customers across all industries, including Infinitas Learning, Clay, and ShipSideKick, are seeing performance gains first hand, and benefiting from the unified Postgres and ClickHouse platform. Customers also benefit from the comprehensive [platform capabilities](https://clickhouse.com/docs/products/managed-postgres/overview) including:
+
+* **High availability and reliability:** Up to two standbys across availability zones, automatic failover, automated backups, point-in-time recovery and more.
+* **Connection management and read scaling:** Built-in PgBouncer connection pooling and dedicated read replicas.
+* **Built-in observability:** Query Insights, ClickHouse Agents, logs, metrics, and a Prometheus endpoint.
+* **Enterprise-grade security:** SAML/SSO, RBAC, IP allow-listing, private connectivity, and encryption at rest and in transit.
+* **Infrastructure as code and automation:** OpenAPI, Terraform, and the ClickHouse CLI give developers and agents programmatic control.
+
+All within ClickHouse Cloud, with a consistent experience across Managed Postgres and ClickHouse. Explore the [documentation](https://clickhouse.com/docs/products/managed-postgres/overview) for the full set of platform features and capabilities.
+
+> With GA, the beta discount ends, and backup storage and public network egress become billable, as previously communicated to existing customers. We expect these additional charges to be modest for most customers. Pricing remains competitive, with native ClickHouse connectivity and ClickPipes replication included. See the [pricing calculator](https://clickhouse.com/pricing?service=postgres#pricing-calculator) for details.
+
+## Coming next: Agentic capabilities, one complete Postgres experience {#coming_next}
+
+Xata extends this production foundation with instant branches and clones, automatic idling, and scale to zero, powered by Xatastor’s copy-on-write storage. We plan to integrate these capabilities into ClickHouse Managed Postgres through two complementary paths.
+
+> If you need instant branching and cloning today, we’re actively onboarding customers to Xata and can help you [get started](https://console.xata.io/signup).
+
+**Instant branches and clones for local NVMe-backed Postgres.** Developers and agents will be able to build, preview, and test against isolated copies of production data, with automatic idling and scale to zero for these branch environments. These capabilities will be tightly coupled with NVMe-backed production Postgres, delivering **one unified experience within ClickHouse Cloud**. Workflows that customers such as David AI currently run across two separate platforms will become native to a single unified platform.
+
+**A dedicated tier for agents.** A new tier within ClickHouse Managed Postgres will support agent sandboxing, agent memory, and agent-first workloads where elastic compute and ephemeral environments matter. Copy-on-write storage, instant branching and cloning, automatic idling, and scale to zero will make it economical to run millions of intermittently active Postgres environments.
+
+Together, ClickHouse Managed Postgres will provide an end-to-end solution for developers to build, test, deploy, and scale AI-native applications, from POC to production faster. Stay tuned for updates as we bring these capabilities into ClickHouse Managed Postgres.
+
+---
+
+## Get started with ClickHouse Managed Postgres today
+
+Interested in seeing how ClickHouse Managed Postgres works on your data? Get started with ClickHouse Cloud in minutes and receive $300 in free credits.
+
+[Sign up](https://console.clickhouse.cloud/signUp?intent=pg&loc=blog-cta-2978-get-started-with-clickhouse-managed-postgres-today-sign-up&utm_blogctaid=2978)
+
+---
+
+---
+
+## The largest expansion of ClickHouse yet
+Published: 2026-11-09T00:45:00+00:00
+URL: https://clickhouse.com/blog/announcing-clickhouse-platform-largest-expansion
+
+---
+title: "The largest expansion of ClickHouse yet"
+date: "2026-11-09T23:27:47.419Z"
+author: "ClickHouse"
+category: "Product"
+excerpt: "ClickHouse Managed Postgres is generally available, ClickHouse Observability enters public beta, ClickHouse Security launches in private preview, Langfuse introduces an open-source AI Gateway, and ClickHouse acquires Xata."
+---
+
+# The largest expansion of ClickHouse yet
+
+Today, we're announcing the largest expansion of the ClickHouse platform since the launch of ClickHouse Cloud, introducing new capabilities across transactions, observability, security, and AI engineering.
+
+ClickHouse now serves more than 5,000 customers, including DoorDash, Ramp, Meta, Tesla, Cisco, and Visa. What began as an open-source analytical database has grown into a foundation for some of the world's most demanding data workloads. Now, we're bringing together purpose-built offerings that help developers build, observe, and secure modern applications with the performance, scale, and cost efficiency ClickHouse is known for.
+
+Today's announcements include:
+
+* [**ClickHouse Managed Postgres general availability and Xata acquisition**](https://clickhouse.com/blog/managed-postgres-ga-xata-acquisition): A fully managed, high-performance PostgreSQL service with low-latency, native ClickHouse integration. The acquisition of [Xata](https://xata.io/), the agent-native Postgres company, accelerates our roadmap for instant branching, cloning, and scale-to-zero environments for developers and AI agents.  
+* [**ClickHouse Observability, launching in public beta**](https://clickhouse.com/blog/announcing-clickhouse-observability): A fully managed observability offering that lets teams ingest, retain, and investigate high-volume telemetry without sacrificing data fidelity.  
+* [**ClickHouse Security, launching in private preview**](https://clickhouse.com/blog/introducing-clickhouse-security-agentic-siem): An agentic SIEM built on technology from our acquisition of RunReveal, combining large-scale security data management with AI-powered investigations.  
+* [**Langfuse AI Gateway, launching in public beta**](https://langfuse.com/gateway): An open-source gateway that gives platform and finance teams greater visibility and control over AI usage, performance, and costs.
+
+AI is fundamentally changing the demands placed on data infrastructure. Applications and agents are generating more queries, more data, and increasingly unpredictable workloads, raising the bar for performance and scale across every system. From transactions and analytics to observability, security, and AI engineering, developers need purpose-built technologies that can meet these demands without adding complexity and cost. We're expanding ClickHouse to bring these capabilities together on an open, composable foundation built for performance, scale, and cost efficiency.
+
+## Build: ClickHouse Managed Postgres is now generally available, with Xata acquisition accelerating its agentic roadmap
+
+[ClickHouse Managed Postgres is now generally available in ClickHouse Cloud](https://clickhouse.com/blog/managed-postgres-ga-xata-acquisition), bringing together two foundational databases for modern applications: PostgreSQL for transactions and ClickHouse for real-time analytics. Together, they give developers a powerful foundation for building data-intensive applications that require both transactional and analytical capabilities, without the complexity of managing separate integration infrastructure.
+
+Built on NVMe-backed storage, ClickHouse Managed Postgres provides a fully managed, high-performance PostgreSQL database with native change data capture into ClickHouse, continuously replicating data with sub-second latency. The `pg_clickhouse` extension also allows developers to query analytical data in ClickHouse through a standard PostgreSQL interface. The service includes high availability and automated backups.
+
+The acquisition of Xata accelerates the roadmap for ClickHouse Managed Postgres, bringing technology for instant database branching and cloning, along with elastic, scale-to-zero environments. These capabilities will enable developers to create isolated Postgres environments for development and testing, while also laying the foundation for a dedicated tier designed for AI agents, supporting agent sandboxing, agent memory, and other agent-first workloads.
+
+Building on this foundation, customers are already seeing the benefits of bringing transactional and analytical workloads together. Clay, the AI-powered go-to-market platform, is powering its next-generation platform at scale with ClickHouse Managed Postgres.
+
+“Clickhouse Managed Postgres and WALShadow opens up a new way of thinking about databases at Clay. The raw speed of NVMe combined with low latency replication to ClickHouse allows us to build high throughput operational systems with massive scale real time visibility, unlocking experiences for customers that simply weren't possible in the past. We're currently powering our next generation platform with it at scale, and are looking forward to what comes next\!”
+
+– Graham Cantor-Cooke, Principal Engineer, Clay Inc.
+
+## Observe: Introducing ClickHouse Observability, now in public beta
+
+Today, we're [launching ClickHouse Observability in public beta](https://clickhouse.com/blog/announcing-clickhouse-observability), bringing a fully managed observability offering to ClickHouse Cloud.
+
+ClickHouse Cloud is already used to power demanding observability workloads today, taking advantage of its ability to ingest, store, and query large volumes of data quickly and cost-efficiently, thus allowing engineers to diagnose issues faster while unlocking agentic SRE workloads. 
+
+ClickHouse Observability turns that proven architecture into a fully managed cloud offering. Teams can ingest logs, metrics, traces, and session data through OpenTelemetry, investigate telemetry at scale, and retain full-fidelity high-cardinality data for longer without the cost trade-offs that have historically forced organizations to sample, drop, or aggressively expire data, which has created blind spots and prevented SRE agents from identifying the root cause of issues.
+
+As infrastructure and applications become more complex, including those powered by AI agents, engineers need to understand behavior across models, tools, services, and infrastructure. ClickHouse Observability provides visibility into application and infrastructure, while Langfuse helps teams trace, evaluate, and improve AI models and agents.
+
+The underlying architecture is already proven at scale. Mercado Libre, Latin America's leading commerce and fintech platform, processes approximately 400 million spans per minute using ClickHouse for observability, achieving 75x faster queries and roughly 89% compression, significantly improving its infrastructure efficiency.
+
+[Read Mercado Libre's story](https://clickhouse.com/blog/mercado-libre-observability-on-clickhouse-cloud)
+
+## Secure: ClickHouse Security, now in private preview, brings an agentic SIEM to ClickHouse Cloud
+
+We're also [introducing ClickHouse Security](https://clickhouse.com/blog/introducing-clickhouse-security-agentic-siem), now available in private preview, bringing an agentic security information and event management (SIEM) offering to the ClickHouse platform.
+
+Built on technology from our September acquisition of RunReveal, ClickHouse Security combines the analytical performance and scale of ClickHouse with security-specific data integrations, detections, and AI-powered investigations.
+
+Security teams are dealing with more data than ever: cloud audit logs, identity events, endpoint telemetry. Legacy SIEM wasn’t built for this volume of data or for the way AI is changing security operations. The result is most security teams struggle with basic data problems and their security operations have not evolved in over a decade. ClickHouse Security, now in private preview, is the agentic SIEM  built for the next decade of scale.
+
+Agents are part of the platform, not an add-on. Native AI agents triage alerts, query the underlying logs, and write their findings and reasoning back to the case, working from the same normalized data security teams use. Security teams can also investigate in natural language through native AI chat, asking follow-up questions to dig deeper into an alert without writing traditional queries. Teams that want to go further can build their own agentic workflows for threat hunting, detection coverage, and more with the LLM of their choice.
+
+The foundational data management work is also built in. ClickHouse Security, built on technology from RunReveal and integrated with ClickHouse Cloud, runs on the database built for large-volume, low-latency workloads. It connects over one hundred cloud, identity, and SaaS sources through first-party integrations, so data arrives normalized and ready for investigation. Built-in pipelines filter, route, and enrich logs before they’re stored, so there’s no separate pipeline layer to buy or manage. Managed detections and custom detections-as-code cover common threats from day one.
+
+For teams already running ClickHouse, security data can now sit alongside observability and analytics data instead of being copied into a separate SIEM.
+
+## AI Engineering: Langfuse launches open-source AI Gateway to give teams visibility and control over usage and spend
+
+Today, Langfuse is launching its new [open-source AI Gateway in public beta](https://langfuse.com/gateway), giving developers greater visibility and control over AI usage and spending.
+
+Langfuse, the open-source AI engineering platform ClickHouse acquired in January, is one of the most widely adopted in the space with 35k+ GitHub stars and 90M+ package downloads per month. Teams at 21 of the Fortune 50 and leading AI-native businesses like Merck, Ramp, Hugging Face, and Canva trace, evaluate, and improve AI applications and agents with Langfuse.
+
+As AI applications and coding agents spread across organizations, many teams lack a clear picture of which models are being used, by whom, for what purposes, and at what cost.
+
+Developers, platform, and finance teams need visibility into model requests, token consumption, costs, output quality, and how agents interact with models and tools.
+
+Traditionally, capturing this information requires instrumenting applications and integrating tracing libraries directly into application code.
+
+The new Langfuse AI Gateway makes this significantly easier.
+
+By routing model requests through Langfuse AI Gateway, organizations can automatically trace AI usage and costs with zero code changes. This makes it easier to get started with AI observability and take advantage of broader capabilities for evaluating and improving AI applications and agents.
+
+The Langfuse AI Gateway is built in Rust to ensure high performance and reliability, and is available self-hosted or on Langfuse Cloud.
+
+## One open, composable foundation for data-intensive applications
+
+These launches mark a major step in the evolution of ClickHouse, bringing together the technologies developers need to build, observe, and secure modern applications on a high-performance, open, and composable foundation.
+
+Each new product addresses a distinct need: Postgres for transactions, ClickHouse Observability for application and infrastructure monitoring, ClickHouse Security for threat detection and investigation, and Langfuse for AI engineering, now with an AI Gateway for managing model visibility and usage.
+
+Customers are already expanding their use of ClickHouse across multiple workloads. [Physical Intelligence](https://www.pi.website/), among them, is bringing general-purpose AI into the physical world.
+
+“Building robotics foundation models means making sense of billions of annotations and telemetry records,” says Karan Dhabalia, Engineer at Physical Intelligence. “We started with ClickHouse for observability, then expanded into real-time analytics, Postgres, and AI development with Langfuse. This shared foundation simplifies operations and helps our researchers develop better models. With ClickHouse Security now in private preview, we’re excited to see the platform grow.”
+
+— Karan Dhabalia, Engineer, Physical Intelligence
+
+As AI agents drive more intensive and unpredictable data workloads, we're continuing to invest in technologies that help developers build, observe, and secure their applications at scale.
+
+And with Xata joining ClickHouse, we're extending that foundation toward a future where AI agents can provision their own database environments, develop and test applications, and interact with data more autonomously.
+
+## Get started
+
+* ClickHouse Managed Postgres: Generally available in ClickHouse Cloud. [Get started](https://console.clickhouse.cloud/signUp?intent=pg&loc=postgres-managed-by-clickhouse-hero&glxid=445ab576-f16e-488c-a74a-1a9aecf1b470&pagePath=%2Fcloud%2Fpostgres&origPath=%2Fclickstack&experiments=mktg-hero-signup-card%3A0&utm_ga=GA1.1.20817310.1774892807)  
+* ClickHouse Observability: Available in public beta. [Try the beta](https://console.clickhouse.cloud/signUp?intent=o11y&loc=blog-cta-2921-try-clickhouse-observability-now-in-public-beta-sign-up&glxid=445ab576-f16e-488c-a74a-1a9aecf1b470&pagePath=%2Fblog%2Fannouncing-clickhouse-observability&origPath=%2Fclickstack&utm_ga=GA1.1.20817310.1774892807)  
+* ClickHouse Security: Available in private preview. [Request access](https://clickhouse.com/security#request-access)  
+* Langfuse AI Gateway: Available in public beta. [Explore the Gateway](https://langfuse.com/blog/introducing-gateway)
+
+
+---
+
+## Get started today
+
+Interested in seeing how ClickHouse works on your data? Get started with ClickHouse Cloud in minutes and receive $300 in free credits.
+
+[Sign up](https://console.clickhouse.cloud/signUp?loc=blog-cta-2987-get-started-today-sign-up&utm_blogctaid=2987)
+
+---
 
 ---
 
