@@ -1,5 +1,5 @@
 {
-  "last_sync": "2026-11-13T14:02:26.442153Z",
+  "last_sync": "2026-11-14T13:04:39.759396Z",
   "processed_blogs": {
     "https://clickhouse.com/blog/clickhouse-raises-400-million-series-d-acquires-langfuse-launches-postgres": {
       "title": "ClickHouse raises $400M Series D led by Dragoneer to accelerate expansion across analytics and AI infrastructure",
@@ -6228,9 +6228,15 @@
       "pub_date": "2026-11-13T09:32:01+00:00",
       "file_path": "blogs/2026-11-13-set-allow-preview-features-1-self-service.md",
       "processed_at": "2026-11-13T14:02:26.325144Z"
+    },
+    "https://clickhouse.com/blog/introducing-loom-agent-memory-that-keeps-up-with-your-code": {
+      "title": "Introducing Loom: agent memory that keeps up with your code",
+      "pub_date": "2026-11-13T13:00:00+00:00",
+      "file_path": "blogs/2026-11-13-introducing-loom-agent-memory-that-keeps-up-with.md",
+      "processed_at": "2026-11-14T13:04:39.686226Z"
     }
   },
-  "total_blogs": 1038,
+  "total_blogs": 1039,
   "failed_blogs": [
     {
       "url": "https://clickhouse.com/jp/blog/clickhouse-gcp-japan-availability",
