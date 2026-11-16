@@ -1,5 +1,5 @@
 {
-  "last_sync": "2026-11-15T13:33:10.893293Z",
+  "last_sync": "2026-11-16T15:00:52.661895Z",
   "processed_blogs": {
     "https://clickhouse.com/blog/clickhouse-raises-400-million-series-d-acquires-langfuse-launches-postgres": {
       "title": "ClickHouse raises $400M Series D led by Dragoneer to accelerate expansion across analytics and AI infrastructure",
@@ -6234,9 +6234,21 @@
       "pub_date": "2026-11-13T13:00:00+00:00",
       "file_path": "blogs/2026-11-13-introducing-loom-agent-memory-that-keeps-up-with.md",
       "processed_at": "2026-11-14T13:04:39.686226Z"
+    },
+    "https://clickhouse.com/blog/jsonbench-is-back-clickhouse-still-leads": {
+      "title": "JSONBench is back, and ClickHouse still leads",
+      "pub_date": "2026-11-16T00:30:00+00:00",
+      "file_path": "blogs/2026-11-16-jsonbench-is-back-and-clickhouse-still-leads.md",
+      "processed_at": "2026-11-16T15:00:52.336836Z"
+    },
+    "https://clickhouse.com/blog/infinitas-learning-clickhouse-managed-postgres": {
+      "title": "How Infinitas Learning uses ClickHouse Managed Postgres to process billions of events for 1.6M unique learners",
+      "pub_date": "2026-11-16T10:54:45+00:00",
+      "file_path": "blogs/2026-11-16-how-infinitas-learning-uses-clickhouse-managed.md",
+      "processed_at": "2026-11-16T15:00:52.542390Z"
     }
   },
-  "total_blogs": 1039,
+  "total_blogs": 1041,
   "failed_blogs": [
     {
       "url": "https://clickhouse.com/jp/blog/clickhouse-gcp-japan-availability",
