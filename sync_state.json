@@ -1,5 +1,5 @@
 {
-  "last_sync": "2026-11-17T15:36:43.598154Z",
+  "last_sync": "2026-11-18T15:13:45.997818Z",
   "processed_blogs": {
     "https://clickhouse.com/blog/clickhouse-raises-400-million-series-d-acquires-langfuse-launches-postgres": {
       "title": "ClickHouse raises $400M Series D led by Dragoneer to accelerate expansion across analytics and AI infrastructure",
@@ -6246,9 +6246,39 @@
       "pub_date": "2026-11-16T10:54:45+00:00",
       "file_path": "blogs/2026-11-16-how-infinitas-learning-uses-clickhouse-managed.md",
       "processed_at": "2026-11-16T15:00:52.542390Z"
+    },
+    "https://clickhouse.com/blog/faa-outage-clickhouse-format-png": {
+      "title": "The day the sky emptied: rendering the FAA outage with ClickHouse FORMAT PNG",
+      "pub_date": "2026-11-18T09:26:18+00:00",
+      "file_path": "blogs/2026-11-18-the-day-the-sky-emptied-rendering-the-faa-outage.md",
+      "processed_at": "2026-11-18T15:13:44.912095Z"
+    },
+    "https://clickhouse.com/blog/trunk-clickstack-observability": {
+      "title": "Trunk cuts observability costs by up to 95% and reclaims 20 engineering hours a week with ClickHouse Observability",
+      "pub_date": "2026-11-17T00:00:00+00:00",
+      "file_path": "blogs/2026-11-17-trunk-cuts-observability-costs-by-up-to-95-and.md",
+      "processed_at": "2026-11-18T15:13:45.240851Z"
+    },
+    "https://clickhouse.com/blog/tuning-postgres-read-replicas": {
+      "title": "More load is faster: Tuning Postgres read replicas",
+      "pub_date": "2026-11-17T00:00:00+00:00",
+      "file_path": "blogs/2026-11-17-more-load-is-faster-tuning-postgres-read-replicas.md",
+      "processed_at": "2026-11-18T15:13:45.483337Z"
+    },
+    "https://clickhouse.com/blog/claude-platform-linked-billing": {
+      "title": "Bring your Claude Platform organization to ClickHouse Cloud with linked billing",
+      "pub_date": "2026-11-17T18:14:57+00:00",
+      "file_path": "blogs/2026-11-17-bring-your-claude-platform-organization-to.md",
+      "processed_at": "2026-11-18T15:13:45.664018Z"
+    },
+    "https://clickhouse.com/blog/clickhouse-time-series-foundation-models": {
+      "title": "ClickHouse forecasting and anomaly detection with time series foundation models",
+      "pub_date": "2026-11-17T16:39:39+00:00",
+      "file_path": "blogs/2026-11-17-clickhouse-forecasting-and-anomaly-detection-with.md",
+      "processed_at": "2026-11-18T15:13:45.854751Z"
     }
   },
-  "total_blogs": 1041,
+  "total_blogs": 1046,
   "failed_blogs": [
     {
       "url": "https://clickhouse.com/jp/blog/clickhouse-gcp-japan-availability",

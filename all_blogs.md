@@ -1,6 +1,904 @@
 # ClickHouse Blogs
-Last updated: 2026-11-17 15:36:43 UTC
-Total blogs: 1041
+Last updated: 2026-11-18 15:13:45 UTC
+Total blogs: 1046
+
+---
+
+## The day the sky emptied: rendering the FAA outage with ClickHouse FORMAT PNG
+Published: 2026-11-18T09:26:18+00:00
+URL: https://clickhouse.com/blog/faa-outage-clickhouse-format-png
+
+---
+title: "The day the sky emptied: rendering the FAA outage with ClickHouse FORMAT PNG"
+date: "2026-11-18T09:26:18.597Z"
+author: "Alexey Milovidov"
+category: "Engineering"
+excerpt: "Visualize the November 13 FAA outage using ADS-B flight data and ClickHouse’s FORMAT PNG, rendering an entire day of US air traffic directly from SQL."
+---
+
+# The day the sky emptied: rendering the FAA outage with ClickHouse FORMAT PNG
+
+On Friday, November 13, 2026, an FAA outage grounded air traffic across the United States. This post shows the whole day over the lower 48 states, one frame per five minutes, from the ADS-B data on [adsb.exposed](https://adsb.exposed/).
+
+<video autoplay="1" muted="1" loop="1" controls="1">
+  <source src="https://clickhouse.com/uploads/faa_outage_2026_11_13_57ddad198a.mp4" type="video/mp4" />
+</video>
+
+The animation is rendered by ClickHouse itself. There is no plotting library and no image-processing script. A SQL query returns one row per pixel, and the built-in `PNG` output format turns those rows into an animated PNG. The map, the title, the clock and the timeline at the bottom are all rows of the same result set. Even the letters are SQL: a 3×5 bitmap font stored in a `map` literal.
+
+The same animation is also available as an [animated PNG](https://raw.githubusercontent.com/ClickHouse/adsb.exposed/faa-outage-2026-11-13/faa-outage-2026-11-13/faa-outage-2026-11-13.png), a [GIF](https://raw.githubusercontent.com/ClickHouse/adsb.exposed/faa-outage-2026-11-13/faa-outage-2026-11-13/faa-outage-2026-11-13.gif) and an [MP4](/uploads/faa_outage_2026_11_13_57ddad198a.mp4).
+
+## What the data shows {#what_the_data_shows}
+
+In the animation, each aircraft appears as a short streak: the distance it covered in five minutes. The colors follow the default palette of adsb.exposed:
+- Red fades with altitude.
+- Green grows over the first 5,000 feet, so climbs and descents around airports look yellow and orange.
+- Blue shows ground speed, so the cruising traffic at high altitude is blue.
+
+The morning looks like any Friday. The network fills in from the East Coast westwards, and by 13:00–14:00 ET almost 15,000 aircraft are in the air over the frame in any given hour. At around 15:40 ET the number of positions starts to fall, and it keeps falling for the rest of the afternoon. The high-altitude streaks thin out first, and the airports go dark one after another. By 20:00 ET, only scattered low-altitude flights and a few overflights at the edges of the frame are left.
+
+Hourly numbers for the frame (unique aircraft by ICAO address, and those seen above 18,000 ft):
+
+| Hour (ET) | Positions | Aircraft | Above FL180 |
+|----------:|----------:|---------:|------------:|
+| 12:00     | 4,038,963 | 14,787   | 5,850       |
+| 13:00     | 4,151,849 | 14,885   | 6,046       |
+| 14:00     | 4,217,014 | 14,957   | 5,995       |
+| 15:00     | 3,991,427 | 13,958   | 5,376       |
+| 16:00     | 2,556,066 | 10,080   | 3,196       |
+| 17:00     | 1,465,549 | 6,304    | 1,658       |
+| 18:00     | 949,405   | 4,084    | 907         |
+| 19:00     | 543,053   | 2,592    | 632         |
+| 20:00     | 418,486   | 2,131    | 559         |
+| 21:00     | 566,155   | 2,641    | 1,059       |
+| 22:00     | 819,072   | 3,132    | 1,731       |
+| 23:00     | 796,677   | 3,128    | 1,929       |
+
+At 20:00 ET, the number of aircraft at cruising altitude is less than a tenth of the early-afternoon level. For comparison, the quietest hour of the previous night (03:00 ET) still had 818. After 21:00 ET the high-altitude traffic starts to come back.
+
+Here is a still image of two 10-minute windows, 14:00 ET (top) and 20:00 ET (bottom). It was rendered by a single query on the public adsb.exposed server (see below):
+
+![14:00 ET vs. 20:00 ET](https://clickhouse.com/uploads/before_after_da78752d8d.png)
+
+You can explore the same days interactively: [adsb.exposed, Nov 11–16](https://adsb.exposed/?dataset=Planes&zoom=5&lat=39.9091&lng=-100.9484&query=f3fa6f78cbef2ffb60baafae766e333a&tfrom=2026-11-11&tto=2026-11-16).
+
+## The data {#the_data}
+
+adsb.exposed stores every position report from adsb.lol, airplanes.live and ADSB Exchange in a ClickHouse table, `planes_mercator`. It has 380 billion rows, and each one has the time, the coordinates, the altitude, the speed and the aircraft. The coordinates are also stored in the Web Mercator projection, precomputed as two `UInt32` columns:
+
+<pre><code type='click-ui' language='sql'>
+mercator_x UInt32 MATERIALIZED 4294967295 * ((lon + 180) / 360),
+mercator_y UInt32 MATERIALIZED 4294967295 * ((1 / 2) - ((log(tan(((lat + 90) / 360) * pi())) / 2) / pi())),
+</code></pre>
+
+The whole world is a 2³² × 2³² square. The table is sorted by `mortonEncode(mercator_x, mercator_y)`, a Z-order curve. A map tile, or any rectangle on the map, is a range of `mercator_x` and `mercator_y`, and the primary key makes such a range cheap to read. Turning a coordinate into a pixel takes one bit shift: `mercator_x >> 19` divides the world into 2¹³ = 8192 pixels, which is zoom level 5 on the website. At that scale, the rectangle from 128°W to 64°W and from 22°N to 51°N is 1456 × 840 pixels.
+
+## Step 1: aggregate on the server {#step_1_aggregate_on_the_server}
+
+For every frame and every pixel, the server counts the positions and averages the altitude and the speed ([`pixels.sql`](https://github.com/ClickHouse/adsb.exposed/blob/faa-outage-2026-11-13/faa-outage-2026-11-13/pixels.sql)):
+
+<pre><code type='click-ui' language='sql'>
+WITH
+    toUInt32(4294967295 * ((-128 + 180) / 360)) AS x0,
+    toUInt32(4294967295 * ((-64 + 180) / 360)) AS x1,
+    toUInt32(4294967295 * (1 / 2 - log(tan((51 + 90) / 360 * pi())) / 2 / pi())) AS y0,
+    toUInt32(4294967295 * (1 / 2 - log(tan((22 + 90) / 360 * pi())) / 2 / pi())) AS y1,
+    toDateTime('2026-11-13 05:00:00', 'UTC') AS t0,
+    t0 + {h:UInt32} * 3600 AS hour_begin
+SELECT
+    toUInt16(intDiv(toUnixTimestamp(time) - toUnixTimestamp(t0), 300)) AS frame,
+    toUInt16(bitShiftRight(mercator_x - x0, 19)) AS px,
+    toUInt16(bitShiftRight(mercator_y - y0, 19)) AS py,
+    toUInt32(count()) AS c,
+    toFloat32(avg(altitude)) AS alt,
+    toFloat32(avg(ground_speed)) AS speed
+FROM planes_mercator
+WHERE time &gt;= hour_begin AND time &lt; hour_begin + 3600
+    AND mercator_x &gt;= x0 AND mercator_x &lt; x1
+    AND mercator_y &gt;= y0 AND mercator_y &lt; y1
+GROUP BY frame, px, py;
+</code></pre>
+
+The day is the Eastern-time day: midnight ET is 05:00 UTC. The query reads 42.5 million positions and returns 9 million rows, one for each pixel that saw at least one aircraft in one of the 288 frames. That is about 31,000 lit pixels per frame on average, out of 1.2 million.
+
+The public endpoint of adsb.exposed limits a result to about a million rows. So the query takes the hour as a parameter, `{h:UInt32}`, and runs 24 times. `clickhouse-local` does this in one statement: the `url` table function expands `{0..23}` in a URL into 24 URLs, and here the glob is placed in the query parameter itself:
+
+<pre><code type='click-ui' language='bash'>
+URL="https://kvzqttvc2n.eu-west-1.aws.clickhouse-staging.com/?user=website&amp;default_format=RowBinary&amp;param_h={0..23}&amp;query=$(python3 -c 'import sys, urllib.parse; print(urllib.parse.quote(sys.stdin.read(), safe=""))' &lt; pixels.sql)"
+
+clickhouse local --query "
+    SELECT * FROM url('$URL', RowBinary, 'frame UInt16, px UInt16, py UInt16, c UInt32, alt Float32, speed Float32')
+    INTO OUTFILE 'pixels.native' TRUNCATE FORMAT Native
+    SETTINGS max_threads = 6"
+</code></pre>
+
+Mind the `default_format=RowBinary`. The `url` function tells the client what format to parse, but not the server what format to send. The `website` user defaults to `TSV`, and parsing TSV as `RowBinary` fails with a confusing "Cannot read all data" error.
+
+The result is a 160 MB file of pre-aggregated pixels, and every later step runs locally.
+
+## Step 2: render with `FORMAT PNG` {#step_2_render_with_format_png}
+
+ClickHouse has an output format that renders the result of a query as an image. The color mode comes from the column names: `r`, `g`, `b` for RGB, `r`, `g`, `b`, `a` for RGBA, or `v` for grayscale. If there are integer `x` and `y` columns, they place each row on the canvas. Otherwise the rows fill the pixels in scanline order. And if there is a `t` column, the result becomes an animated PNG with one frame per value of `t`. A frame lasts until the next value of `t`, and the settings `output_format_image_time_multiplier_seconds` and `output_format_image_time_divisor_seconds` set the unit of `t`. Here it is 2/25 of a second, so each 5-minute frame plays for 80 ms and the whole day takes 23 seconds.
+
+When two rows land on the same pixel, the last one wins (the painter's algorithm). So the picture is built in layers, sorted with `ORDER BY layer`:
+
+0. **The ghost.** The whole day's traffic, summed per pixel on a log scale and drawn in dark gray in every frame. It keeps the outline of the country visible when the sky empties. These are 405,000 pixels, copied into 288 frames with `ARRAY JOIN range(frames)`.
+1. **The aircraft.** The aircraft of the current frame, colored by altitude and speed.
+2. **The timeline.** The number of positions in every frame as a bar chart under the map, with the current frame highlighted and the past in a lighter gray than the future.
+3. **The text.** Every string is split into characters, every character into the 15 bits of its glyph, and every lit bit into a `scale × scale` square of pixels. Four `ARRAY JOIN`s, one after another, produce the cross product. The clock is plain `formatDateTime` in the `America/New_York` and `UTC` time zones.
+
+The complete query ([`render.sql`](https://github.com/ClickHouse/adsb.exposed/blob/faa-outage-2026-11-13/faa-outage-2026-11-13/render.sql)):
+
+<pre><code type='click-ui' language='sql'>
+-- Renders the animation from the per-frame, per-pixel aggregates in `pixels.native`.
+-- Every row of the result is one pixel of one frame: (t, x, y, r, g, b).
+-- Rows are painted in the order they arrive, so the layers are sorted: background first, text last.
+
+WITH
+    1456 AS width,          -- map width in pixels
+    840 AS map_height,      -- the timeline goes below the map
+    288 AS frames,          -- one frame per 5 minutes
+
+    pixels AS
+    (
+        SELECT * FROM file('pixels.native')
+        WHERE px &lt; width AND py &lt; map_height AND frame &lt; frames
+    ),
+
+    -- The faint trace of the whole day, repeated in every frame, so that the outline of the US
+    -- is still there when the sky is empty.
+    ghost AS
+    (
+        SELECT px, py, toUInt8(pow(log1p(total) / log1p(max(total) OVER ()), 1.5) * 55) AS v
+        FROM (SELECT px, py, sum(c) AS total FROM pixels GROUP BY px, py)
+        QUALIFY v &gt;= 4
+    ),
+
+    -- The number of positions in every frame, for the timeline.
+    activity AS
+    (
+        SELECT frame, sum(c) / max(sum(c)) OVER () AS share
+        FROM pixels
+        GROUP BY frame
+    ),
+
+    -- A 3x5 bitmap font: five rows of three bits each.
+    map(
+        '0', '111101101101111', '1', '010110010010111', '2', '111001111100111', '3', '111001111001111',
+        '4', '101101111001001', '5', '111100111001111', '6', '111100111101111', '7', '111001001001001',
+        '8', '111101111101111', '9', '111101111001111', ':', '000010000010000', '.', '000000000000010',
+        '-', '000000111000000', ' ', '000000000000000',
+        'A', '010101111101101', 'B', '110101110101110', 'C', '111100100100111', 'D', '110101101101110',
+        'E', '111100110100111', 'F', '111100110100100', 'G', '111100101101111', 'I', '111010010010111',
+        'N', '110101101101101', 'O', '010101101101010', 'P', '111101111100100', 'R', '110101110101101',
+        'S', '111100111001111', 'T', '111010010010010', 'U', '101101101101111', 'V', '101101101101010',
+        'X', '101101010101101', 'Y', '101101010010010') AS font,
+
+    -- All the text, one row per string: the frame, the position of the top-left corner, the scale, the color.
+    texts AS
+    (
+        SELECT number AS frame, 20 AS x0, 16 AS y0, 4 AS scale,
+            'FAA OUTAGE - FRIDAY NOV 13 2026' AS text, 255 AS r, 255 AS g, 255 AS b
+        FROM numbers(frames)
+        UNION ALL
+        SELECT number, 20, 44, 4,
+            formatDateTime(toDateTime('2026-11-13 05:00:00', 'UTC') + number * 300, '%H:%i ET', 'America/New_York')
+            || '   ' || formatDateTime(toDateTime('2026-11-13 05:00:00', 'UTC') + number * 300, '%H:%i UTC', 'UTC'),
+            255, 210, 110
+        FROM numbers(frames)
+        UNION ALL
+        SELECT number, width - 20 - 12 * 8, map_height - 22, 2, 'ADSB.EXPOSED', 150, 150, 150
+        FROM numbers(frames)
+        UNION ALL
+        -- The hour labels under the timeline: 00:00, 03:00, ..., 24:00.
+        SELECT frame, toInt32(30 + (width - 60) * hour / 24 - 2.5 * 8), map_height + 72, 2,
+            leftPad(toString(hour), 2, '0') || ':00', 150, 150, 150
+        FROM (SELECT number * 3 AS hour FROM numbers(9)) ARRAY JOIN range(frames) AS frame
+    ),
+
+    text_pixels AS
+    (
+        SELECT frame,
+            x0 + ((char_num - 1) * 4 + bit % 3) * scale + dx AS x,  -- glyphs are 3 pixels wide, plus 1 of spacing
+            y0 + intDiv(bit, 3) * scale + dy AS y,
+            r, g, b
+        FROM texts
+        ARRAY JOIN arrayEnumerate(splitByString('', text)) AS char_num
+        ARRAY JOIN range(15) AS bit
+        ARRAY JOIN range(scale) AS dx
+        ARRAY JOIN range(scale) AS dy
+        WHERE substring(font[substring(text, char_num, 1)], bit + 1, 1) = '1'
+    ),
+
+    -- The timeline: a bar for every frame, highlighted for the current one.
+    timeline AS
+    (
+        SELECT
+            current AS frame,
+            toInt32(floor(30 + (width - 60) * bar / frames)) AS xa,
+            toInt32(floor(30 + (width - 60) * (bar + 1) / frames)) - 1 AS xb,
+            toInt32(48 * share) AS h,
+            multiIf(bar = current, (255, 200, 80), bar &lt; current, (110, 110, 110), (55, 55, 55)) AS color
+        FROM (SELECT frame AS bar, share FROM activity) ARRAY JOIN range(frames) AS current
+    )
+
+SELECT t, toInt32(x) AS x, toInt32(y) AS y, toUInt8(round(r)) AS r, toUInt8(round(g)) AS g, toUInt8(round(b)) AS b
+FROM
+(
+    -- Layer 0: the ghost of the whole day.
+    SELECT 0 AS layer, frame AS t, px AS x, py AS y, v AS r, v AS g, v AS b
+    FROM ghost ARRAY JOIN range(frames) AS frame
+
+    UNION ALL
+
+    -- Layer 1: the aircraft, colored with the same formula as on adsb.exposed: red fades with the altitude,
+    -- green grows over the first 5000 feet (so the climbs and descents near airports are yellow), blue is the speed.
+    SELECT 1, frame, px, py,
+        (1 + transparency) / 2 * (1 - least(alt, 50000) / 50000) * 255,
+        transparency * greatest(0, least(alt, 5000)) / 5000 * 255,
+        greatest(0, least(speed, 700)) / 700 * 255
+    FROM (SELECT *, pow(least(c / 30, 1), 1 / 5) AS transparency FROM pixels)
+
+    UNION ALL
+
+    -- Layer 2: the timeline.
+    SELECT 2, frame, xa + dx, map_height + 66 - dy, color.1, color.2, color.3
+    FROM timeline
+    ARRAY JOIN range(xb - xa + 1) AS dx
+    ARRAY JOIN range(h + 1) AS dy
+
+    UNION ALL
+
+    -- Layer 3: the text.
+    SELECT 3, frame, x, y, r, g, b
+    FROM text_pixels
+)
+ORDER BY layer
+
+INTO OUTFILE 'faa-outage-2026-11-13.png' TRUNCATE
+FORMAT PNG
+SETTINGS
+    output_format_image_width = 1456,
+    output_format_image_height = 930,
+    -- One unit of `t` is 2/25 of a second: 80 ms per frame, the whole day in 23 seconds.
+    output_format_image_time_multiplier_seconds = 2,
+    output_format_image_time_divisor_seconds = 25;
+</code></pre>
+
+The query produces about 130 million pixel rows: 117 million for the ghost, 9 million for the aircraft, and the rest for the timeline and the text. It writes all 288 frames in 31 seconds on a single machine.
+
+A few things to note:
+
+- **Pixel values are clamped, and floats are scaled.** An integer channel is clamped to `[0, 255]`, and a `Float` channel is clamped to `[0, 1]` and then multiplied by 255. The color math here produces floats in `[0, 255]`, so the outer `SELECT` converts them with `toUInt8(round(...))`. Otherwise, every lit pixel would come out pure white.
+- **Frames are independent.** Each frame starts from a black canvas, which is why the ghost has to be repeated in every frame and is not drawn just once. In return, `t` can arrive in any order. The rows of one frame only need to be ordered among themselves, by layer.
+- **Memory versus streaming.** By default, the format keeps every frame in memory until the end of the query: 288 × 1456 × 930 × 3 bytes, about 1.2 GB here. With `output_format_image_streaming_animation = 1`, it writes each frame as soon as `t` advances and keeps only one frame in memory. This requires `ORDER BY t, layer`. Also, the frame count in the header is then only an upper bound: browsers play such a file, but some decoders complain.
+
+`FORMAT PNG` writes truecolor frames, and the 288 frames come to 150 MB. The picture is mostly black, so a single 256-color palette, built from a few sample frames, loses very little. Converting to that palette brings the APNG down to 25 MB. The GIF and the MP4 come from the same file with `ffmpeg`:
+
+<pre><code type='click-ui' language='bash'>
+PALETTE="split[a][b];[a]palettegen=max_colors=256:stats_mode=full[p];[b][p]paletteuse=dither=none"
+ffmpeg -i faa-outage-2026-11-13.png -vf "$PALETTE" -loop 0 faa-outage-2026-11-13.gif
+ffmpeg -i faa-outage-2026-11-13.png -c:v libx264 -preset slow -crf 18 -pix_fmt yuv420p \
+    -profile:v high -level 4.1 -movflags +faststart faa-outage-2026-11-13.mp4
+</code></pre>
+
+The MP4 uses H.264 High profile in `yuv420p`, so it plays in QuickTime, the Windows players, VLC, browsers and messengers. It is the largest of the three, because thousands of thin, one-pixel streaks are hard for video compression.
+
+## A picture straight from the server {#a_picture_straight_from_the_server}
+
+The public `website` user of adsb.exposed is read-only, so it cannot change the image size. But the default canvas is 1024 × 1024, and for a still image that is enough. This query fits two panels, one above the other, keeping the aspect ratio of the map. It runs on the server and returns the PNG in the HTTP response ([`before-after.sql`](https://github.com/ClickHouse/adsb.exposed/blob/faa-outage-2026-11-13/faa-outage-2026-11-13/before-after.sql)):
+
+<pre><code type='click-ui' language='sql'>
+WITH
+    toUInt32(4294967295 * ((-128 + 180) / 360)) AS x0,
+    toUInt32(4294967295 * ((-64 + 180) / 360)) AS x1,
+    toUInt32(4294967295 * (1 / 2 - log(tan((51 + 90) / 360 * pi())) / 2 / pi())) AS y0,
+    toUInt32(4294967295 * (1 / 2 - log(tan((22 + 90) / 360 * pi())) / 2 / pi())) AS y1,
+    -- Two panels of 1024 x 512, one above the other; keep the aspect ratio of the map.
+    512 / (y1 - y0) AS scale,
+    (1024 - (x1 - x0) * scale) / 2 AS left_margin,
+    time &gt;= '2026-11-13 21:00:00' AS after,  -- 14:00 ET goes to the top panel, 20:00 ET to the bottom one
+    toInt32(left_margin + (mercator_x - x0) * scale) AS x,
+    toInt32((mercator_y - y0) * scale) + after * 512 AS y,
+    pow(least(count() / 20, 1), 1 / 5) AS transparency
+SELECT x, y,
+    toUInt8((1 + transparency) / 2 * (1 - least(avg(altitude), 50000) / 50000) * 255) AS r,
+    toUInt8(transparency * greatest(0, least(avg(altitude), 5000)) / 5000 * 255) AS g,
+    toUInt8(greatest(0, least(avg(ground_speed), 700)) / 700 * 255) AS b
+FROM planes_mercator
+WHERE ((time &gt;= '2026-11-13 19:00:00' AND time &lt; '2026-11-13 19:10:00')
+    OR (time &gt;= '2026-11-14 01:00:00' AND time &lt; '2026-11-14 01:10:00'))
+    AND mercator_x &gt;= x0 AND mercator_x &lt; x1
+    AND mercator_y &gt;= y0 AND mercator_y &lt; y1
+GROUP BY x, y
+FORMAT PNG;
+</code></pre>
+
+<pre><code type='click-ui' language='bash'>
+curl 'https://kvzqttvc2n.eu-west-1.aws.clickhouse-staging.com/?user=website' --data-binary @before-after.sql &gt; before-after.png
+</code></pre>
+
+It takes 10 seconds, and no code runs outside of ClickHouse.
+
+## Reproduce it {#reproduce_it}
+
+Everything is in this directory: [`make.sh`](https://github.com/ClickHouse/adsb.exposed/blob/faa-outage-2026-11-13/faa-outage-2026-11-13/make.sh) runs the three steps. You need `clickhouse` (any recent version with `FORMAT PNG`; this was made with 26.10), `ffmpeg`, and Python with Pillow for the final palette conversion.
+
+The data is © adsb.lol (ODbL v1.0), © airplanes.live, © adsbexchange.com.
+
+---
+
+## Get started today
+
+Interested in seeing how ClickHouse works on your data? Get started with ClickHouse Cloud in minutes and receive $300 in free credits.
+
+[Sign up](https://console.clickhouse.cloud/signUp?loc=blog-cta-3068-get-started-today-sign-up&utm_blogctaid=3068)
+
+---
+
+---
+
+## Bring your Claude Platform organization to ClickHouse Cloud with linked billing
+Published: 2026-11-17T18:14:57+00:00
+URL: https://clickhouse.com/blog/claude-platform-linked-billing
+
+---
+title: "Bring your Claude Platform organization to ClickHouse Cloud with linked billing"
+date: "2026-11-17T18:14:57.955Z"
+author: "Ryadh Dahimene, Alice Dalby and Andrew Wilkins"
+category: "Product"
+excerpt: "Link your Claude Platform organization to ClickHouse Cloud and have Anthropic bill Claude API usage in ClickHouse Agents and AI Functions directly on your existing terms."
+---
+
+# Bring your Claude Platform organization to ClickHouse Cloud with linked billing
+
+Linked billing lets you link your Claude Platform organization to ClickHouse Cloud, with no API key to share. Anthropic bills Claude API usage in ClickHouse Agents and AI Functions directly to your Claude organization, on your existing terms. 
+
+[ClickHouse Agents](https://clickhouse.com/docs/products/cloud/features/ai-ml/agents) has run on Claude since its public beta in June, preconfigured for every ClickHouse Cloud customer. [AI Functions](https://clickhouse.com/docs/reference/functions/regular-functions/ai-functions), now in private preview in ClickHouse Cloud, let you call a model directly from SQL. Customers who already have a Claude organization asked whether that usage could be billed to it directly. With linked billing, it can.
+
+## No API key to manage {#no_api_key_to_manage}
+
+Bringing your own model provider to a platform usually means pasting an API key, then scoping it, rotating it and tracking where it is stored. Linked billing removes that step. An admin approves the link, and Claude API usage in ClickHouse Agents and AI Functions is then billed to your Claude organization. You can review the link or unlink at any time under Linked platforms in the Claude Console, or unlink from Organization settings in ClickHouse Cloud.
+
+## What ships {#what_ships}
+
+* Anthropic bills Claude API usage in ClickHouse Agents and AI Functions directly to your Claude organization, on your existing terms.   
+* Requests go to Anthropic directly and run in ClickHouse’s organization on Claude Platform. ClickHouse’s organization settings apply, including data retention, rate limits and enabled features. Your Claude organization’s settings, such as zero data retention (ZDR), IP allowlists, and encryption keys, do not carry over.  
+* You can set a monthly spend limit when you link and change it at any time in the Claude Console. Your organization-wide limit also applies.  
+* The Claude Console shows this month’s spend through ClickHouse Cloud and the full link history.
+
+ClickHouse is building the open platform for AI. You choose the models, agents, and MCP clients, and they run where your data already lives. Linked billing extends that flexibility to how you pay. If your organization already has a Claude organization, you can link it to ClickHouse Cloud without opening a second account or managing a new API key.
+
+## Who can use it {#who_can_use_it}
+
+Ask your ClickHouse account team to enable linked billing. You need the Admin role in ClickHouse Cloud and the Owner, Admin or Billing role in your Claude organization. While linked billing is enabled, ClickHouse Cloud serves Claude models only. The full requirements are in the [linked billing docs](https://clickhouse.com/docs/products/cloud/features/ai-ml/linked-billing-claude-platform). 
+
+## How to link {#how_to_link}
+
+1. In ClickHouse Cloud, open Organization settings and click **Link your Claude organization** in the Claude organization section.  
+2. Choose the Claude organization to link.  
+3. Review how billing works and click **Continue**.  
+4. Set a monthly spend limit, or click **Continue** without a limit.  
+5. Click **Link and authorize**.  
+6. Back in ClickHouse Cloud, the section shows **Linked**.
+
+To unlink, click Unlink in Organization settings.
+
+## Resources {#resources}
+
+* [Linked billing docs](https://clickhouse.com/docs/products/cloud/features/ai-ml/linked-billing-claude-platform)   
+* [ClickHouse Agents docs](https://clickhouse.com/docs/products/cloud/features/ai-ml/agents)  
+* [AI Functions docs](https://clickhouse.com/docs/reference/functions/regular-functions/ai-functions) and [private preview sign-up](https://clickhouse.com/cloud/ai-functions-and-inference-services-waitlist)
+
+
+---
+
+## Get started today
+
+Interested in seeing how ClickHouse works on your data? Get started with ClickHouse Cloud in minutes and receive $300 in free credits.
+
+[Sign up](https://console.clickhouse.cloud/signUp?loc=blog-cta-3057-get-started-today-sign-up&utm_blogctaid=3057)
+
+---
+
+---
+
+## ClickHouse forecasting and anomaly detection with time series foundation models
+Published: 2026-11-17T16:39:39+00:00
+URL: https://clickhouse.com/blog/clickhouse-time-series-foundation-models
+
+---
+title: "ClickHouse forecasting and anomaly detection with time series foundation models"
+date: "2026-11-17T16:39:39.099Z"
+author: "Gil Raphaelli"
+category: "Engineering"
+excerpt: "Connect TimesFM to ClickHouse with executable UDFs to forecast retail demand, detect anomalies, and account for known future events using SQL."
+---
+
+# ClickHouse forecasting and anomaly detection with time series foundation models
+
+ClickHouse is a common home for time-series data, from logs and infrastructure metrics to sales and customer activity. Our own internal logging platform, [LogHouse](https://clickhouse.com/blog/a-quadrillion-rows-across-the-three-cloud-scaling-loghouse), stores more than a quadrillion time series rows. Forecasting future values and detecting unusual observations are common tasks for this data, but training and maintaining a separate classical time series model, like ARIMA, for every service, customer, or product can be difficult as the number of series grows.
+
+Time-series foundation models (TSFMs) promise to remove that per-series training requirement: pretrained on many series, they can produce zero-shot forecasts from a new series' history, which can also be used to flag observations that deviate from expectations. This makes them a natural fit for ClickHouse's real-time analytics and data warehousing workloads, where SQL already handles the aggregation, time bucketing, and filtering needed to construct each series.
+
+In this post, we connect [TimesFM 3.0](https://huggingface.co/google/timesfm-3.0-pytorch) to ClickHouse through executable user-defined functions. As an illustration, we use recorded retail sales from the [M5 dataset](https://www.kaggle.com/competitions/m5-forecasting-accuracy/data) to forecast daily demand and identify unusual historical observations.
+
+## Setup {#setup}
+
+The companion [`clickhouse-timeseries-ai`](https://github.com/clickhouse/clickhouse-timeseries-ai) repository contains a TimesFM model server, ClickHouse executable UDF definitions, and a Docker Compose configuration. You need Git, Docker with Compose v2, and internet access for the first build and model download. Allow roughly 8 GB of available memory and several GB of disk space as a starting point; this is not a measured minimum. No GPU is required.
+
+Clone the repository and start the demo:
+
+<pre><code type='click-ui' language='bash'>
+git clone https://github.com/ClickHouse/clickhouse-timeseries-ai.git
+cd clickhouse-timeseries-ai
+docker compose up --build -d --wait --wait-timeout 1200
+</code></pre>
+
+This starts ClickHouse and the model server, downloads a pinned checkpoint, and registers the functions. The default configuration uses CPU inference and caches the weights for subsequent starts.
+
+TimesFM inference runs outside the ClickHouse process. An executable Python UDF receives a numerical array, sends it to the model service over HTTP, and converts the response into ClickHouse arrays and tuples. The service exposes two endpoints:
+
+```
+/v1/timeseries/forecast  
+/v1/timeseries/anomalies
+```
+
+Forecasting essentially wraps `timesfm3.TimesFM3Evaluator.predict_batch`. No training or fine-tuning is performed for the examples below.
+
+The downloaded TimesFM 3.0 weights have [non-commercial, non-production restrictions](https://huggingface.co/google/timesfm-3.0-pytorch/blob/43046b85ec22d584a13f8098c2ed39c889e129c2/LICENSE). Check the applicable model terms before using this setup beyond a local evaluation. These functions are part of the demo, not built-in [ClickHouse AI functions](https://clickhouse.com/docs/reference/functions/regular-functions/ai-functions) (yet!).
+
+### SQL interface
+
+The functions operate on complete series:
+
+```
+aiForecast(values, horizon)  
+aiForecastMultivariate(targets, horizon, past_covariates, future_covariates)  
+aiDetectAnomalies(values, options_json)
+```
+
+`values` is an `Array(Float64)`. Inputs do not need to be literal arrays or stored array columns: they can be SQL expressions built from CTEs, subqueries, joins, or aggregated query results. For example, a query can filter and aggregate events into daily totals, collect those totals into a time-ordered array, and pass it directly to `aiForecast`. The functions receive the resulting arrays, not a table or query string.
+
+Forecasts return an array of named tuples `(expected, lower_bound, upper_bound, quantiles)`, one per future step. `expected` is the median; the lower and upper bounds are `q10` and `q90`, forming a nominal 80% prediction interval. `quantiles` contains all nine native TimesFM quantiles, `q10` through `q90`, as `(level, value)` pairs. All values come from the same model call.
+
+The SQL helper `aiForecastQuantile(prediction, 0.8)` selects `q80` from a forecast step, for example, to use a higher demand estimate in inventory planning. `aiForecastInterval(prediction, 0.6)` returns the `q20`–`q80` bounds for a nominal 60% interval. These helpers only select values from the returned tuple; they do not invoke the model. Unsupported quantiles or intervals, including a 95% interval from this checkpoint, raise an error rather than extrapolating beyond its output.
+
+Multivariate inputs are `Array(Array(Float64))`, with one inner array for each target series or additional input feature. A target series is a sequence of values to predict, such as daily sales. An input feature provides context, such as a promotion schedule or event-day indicator.  Historical channels are aligned by time. Known-future covariates must also cover the forecast horizon. The result contains one forecast array per target. This can represent related demand series together with a promotion calendar, for example.
+
+`aiDetectAnomalies` accepts optional `past_covariates` and `future_covariates` arrays in its `options_json`, with one inner array per feature. All inputs cover the same observed dates; the service supplies each known-future channel through the end of each scored window, but target values only through its forecast origin. The output remains one aligned array.  This is quite dense - a full example follows in the daily sales forecast section below where `future_covariates` looks like `[0,0,0…1,0…]` indicating known future events, a Christmas holiday in this case.
+
+The model receives ordered numbers, not timestamps or table names. SQL determines the aggregation and sampling interval, handles missing periods, and orders each series. A horizon of 28 therefore means 28 days for daily input, or 28 hours for hourly input. Neither the UDF nor the model infers the time grid from the source table.
+
+## Forecasting daily sales {#forecasting_daily_sales}
+
+M5 contains daily unit sales for products sold in ten Walmart stores spanning 5 years: 2011-01-29 through 2016-04-24. It’s possible M5 is included in the model training, but our goal here is to demonstrate how to use a time series model, not to prove effectiveness.  For this example, `m5.store_daily` contains daily totals of the products represented in the dataset, with columns `store_id`, `day`, and `units`:
+
+|  | `store_id` | `date` | `units` |
+| ----: | :---- | :---- | ----: |
+| `1` | `WI_1` | `2016-04-24` | `4874` |
+| `2` | `CA_1` | `2016-04-24` | `6113` |
+| `3` | `CA_2` | `2016-04-24` | `6082` |
+| `7` | `TX_1` | `2016-04-24` | `4033` |
+
+The following query uses 730 days of observations through March 27, 2016, to forecast the next 28 days for each store:
+
+<pre><code type='click-ui' language='sql'>
+SELECT
+    store_id,
+    aiForecast(
+        arrayMap(p -&gt; p.2, arraySort(p -&gt; p.1, groupArray((day, units)))),
+        toUInt32(28)
+    ) AS forecast
+FROM m5.store_daily
+WHERE day &gt;= toDate('2014-03-29') AND day &lt; toDate('2016-03-28')
+GROUP BY store_id
+ORDER BY store_id
+SETTINGS max_threads = 1;
+</code></pre>
+
+`groupArray` collects the observations for each store. Sorting the `(day, units)` tuples makes their order explicit before `arrayMap` extracts the values. Each store produces one model request and receives 28 forecast tuples, corresponding to March 28 through April 24. `max_threads = 1` limits query parallelism for this demo's model server, which accepts one active inference request at a time.
+
+![](https://clickhouse.com/uploads/timeseries_ai_nov2026_image1_891e044697.png)
+
+The plot shows the final 42 days of input history and the following 28 forecast days for `CA_1`. The white line includes observed sales in the held-out period; those observations were not provided to the model. The shaded band is the native `q10`–`q90` interval, with nominal 80% coverage.
+
+The returned arrays can be expanded with `ARRAY JOIN` and associated with future dates. From there, forecasts are ordinary query results: they can be joined to product or store dimensions, compared with subsequently observed sales, or stored in a table for downstream queries. The same query structure applies to series aggregated from transaction or event data rather than a prepared daily table.
+
+For a stored forecast array, `arrayMap(p -> aiForecastQuantile(p, 0.8), forecast)` selects `q80` at each future step. Choosing another quantile does not require a new forecast, and it does not change the median or the other quantiles.
+
+## Anomaly detection {#anomaly_detection}
+
+Forecasts can also provide an expected value against which to compare an observation that has already arrived. `aiDetectAnomalies` applies that approach to historical data. It forecasts a held-out window from earlier observations, compares the forecast with the actual values, and then advances to the next window. Observations become context only after their window has been scored.
+
+The following query scores the final 180 days in each store's input, in seven-day windows. `score_last_n` selects how many trailing observations receive scores; it does not limit the history available to the model. The result is aligned with the original series, so it can be combined with its dates and observed units using `arrayZip`:
+
+<pre><code type='click-ui' language='sql'>
+SELECT
+    store_id,
+    point.1 AS day,
+    point.2 AS observed,
+    point.3.expected AS expected,
+    point.3.anomaly_score AS anomaly_score
+FROM
+(
+    SELECT
+        store_id,
+        arrayJoin(arrayZip(
+            arrayMap(p -&gt; p.1, points),
+            arrayMap(p -&gt; p.2, points),
+            aiDetectAnomalies(
+                arrayMap(p -&gt; p.2, points),
+                '{"score_last_n":180,"horizon":7,"threshold":3}'
+            )
+        )) AS point
+    FROM
+    (
+        SELECT
+            store_id,
+            arraySort(p -&gt; p.1, groupArray((day, units))) AS points
+        FROM m5.store_daily
+        WHERE day &gt;= toDate('2013-10-28')
+        GROUP BY store_id
+    )
+)
+WHERE point.3.is_anomaly = 1
+ORDER BY anomaly_score DESC
+LIMIT 10
+SETTINGS max_threads = 1;
+</code></pre>
+
+The function returns `(expected, lower_bound, upper_bound, anomaly_score, is_anomaly)` for each input observation. Unscored context positions have null predictions and scores. The score is the absolute forecast error divided by the distance from the median to the interval bound on that side, with a numerical floor. It is not a probability: `threshold=3` filters scores above 3 rather than specifying a confidence level.  
+Anomaly scores always use `q10` and `q90` as their reference bounds. Selecting a different forecast quantile or interval for another query does not change that reference, the scores, or the anomaly threshold.
+
+Some of the rows returned from M5 are (higher scores indicate more anomalous data):
+
+| Store | Date | Observed units | Expected median | Anomaly score |
+| :---: | :---: | :---: | :---: | :---: |
+| TX_2 | 2015-12-25 | 0 | 3,520 | 8.65 |
+| WI_3 | 2015-12-25 | 1 | 3,074 | 8.37 |
+| CA_2 | 2016-03-19 | 2,779 | 6,021 | 7.82 |
+| CA_2 | 2016-03-20 | 2,300 | 5,827 | 7.79 |
+
+![](https://clickhouse.com/uploads/timeseries_ai_nov2026_image2_0138c30cee.png)
+
+The upper panels compare observations with forecasts from preceding history. The lower panels show the corresponding normalized errors and the threshold of 3. Highlighted observations are actual values from M5, not injected events.
+
+Christmas Day has very low recorded sales across the stores. The history-only forecast does not receive the holiday schedule. The March observations in `CA_2` also fall well below the forecast, but the calendar does not identify an event on those dates. SQL can join the flagged rows to other records that might explain the change. The model score alone does not establish whether it was a stockout, a closure, or a data issue. M5 has no ground-truth anomaly labels, so these rows demonstrate the scoring workflow rather than detection accuracy.
+
+### Supplying known future events
+
+Known-future features can describe expected events such as holidays, scheduled closures, promotions, or maintenance windows. An `is_event_day` flag marks the dates of a selected event in both the history and the forecast window. The model receives aligned numbers, not event names; there is no special holiday logic in the UDF. We should use separate feature channels when event types have different effects, rather than grouping every holiday or event into one flag.
+
+As a measured example, we repeat the seven-day scoring window for December 23–29, 2015, for all ten stores, with and without the Christmas event flag. Both runs use the same 786 preceding daily observations, model checkpoint, `q10`–`q90` score reference, and threshold of 3. The only added input is the event-day flag.
+
+The reproduction script loads `m5.event_calendar` from M5's `calendar.csv`, with one row per date. For this experiment, `is_event_day=1` when either event-name field is `Christmas`, and 0 otherwise. Joining the calendar to sales keeps the selected event aligned with each observation:
+
+<pre><code type='click-ui' language='sql'>
+WITH ordered_store_history AS (
+    SELECT
+        s.store_id AS store_id,
+        arraySort(p -&gt; p.1,
+            groupArray((s.day, s.units, c.is_event_day))
+        ) AS points
+    FROM m5.store_daily AS s
+    INNER JOIN m5.event_calendar AS c ON s.day = c.day
+    WHERE s.day &gt;= toDate('2013-10-28')
+      AND s.day &lt; toDate('2015-12-30')
+    GROUP BY s.store_id
+),
+store_series AS (
+    SELECT
+        store_id,
+        arrayMap(p -&gt; p.1, points) AS days,
+        arrayMap(p -&gt; p.2, points) AS observed_units,
+        arrayMap(p -&gt; toFloat64(p.3), points) AS event_flags
+    FROM ordered_store_history
+),
+scoring_requests AS (
+    SELECT
+        store_id,
+        days,
+        observed_units,
+        arrayJoin([0, 1]) AS with_calendar,
+        toJSONString(CAST(
+            (7, 7, 3, if(with_calendar = 1,
+                [event_flags], CAST([], 'Array(Array(Float64))'))),
+            'Tuple(score_last_n UInt32, horizon UInt32, threshold Float64, future_covariates Array(Array(Float64)))'
+        )) AS options_json
+    FROM store_series
+),
+scored_history AS (
+    SELECT
+        store_id,
+        with_calendar,
+        days,
+        observed_units,
+        aiDetectAnomalies(observed_units, options_json) AS scores
+    FROM scoring_requests
+)
+SELECT
+    store_id,
+    any(observed) AS observed_units,
+    round(maxIf(score.expected, with_calendar = 0), 0) AS history_only_median,
+    round(maxIf(score.expected, with_calendar = 1), 0) AS with_calendar_median,
+    round(maxIf(score.anomaly_score, with_calendar = 0), 2) AS history_only_score,
+    round(maxIf(score.anomaly_score, with_calendar = 1), 2) AS with_calendar_score
+FROM scored_history AS h
+ARRAY JOIN
+    h.days AS day,
+    h.observed_units AS observed,
+    h.scores AS score
+WHERE day = toDate('2015-12-25')
+GROUP BY store_id
+ORDER BY store_id
+SETTINGS max_threads = 1;
+</code></pre>
+
+`toJSONString` serializes the named tuple into the options object. Its `future_covariates` field contains one feature array: `is_event_day`. There are no past-only features, so `past_covariates` is omitted. The scoring service can see the event schedule for December 23–29 without seeing those days' sales.  All that to say that this is how to provide the model with known future events to consider when producing a forecast.
+
+Christmas Day scores fall below the unchanged threshold in nine of ten stores. All ten are flagged in the history-only run. For the two Christmas examples:
+
+| Store | Observed units | History-only median | With calendar median | History-only score | With calendar score |
+| :---: | :---: | :---: | :---: | :---: | :---: |
+| TX_2 | 0 | 3,520 | 1,384 | 8.65 | 2.71 |
+| WI_3 | 1 | 3,074 | 749 | 8.37 | 1.45 |
+
+![](https://clickhouse.com/uploads/timeseries_ai_nov2026_image3_f05e7624a8.png)
+
+The calendar helps the model anticipate the dip, but does not fully predict near-zero sales. `TX_2`'s zero sales still falls below the calendar-aware `q10` bound of 874 units; its normalized error no longer exceeds 3. `CA_2` remains flagged, with a score of 3.50. This is a separate, calendar-aware comparison, not a change to the history-only results above, and does not establish general anomaly detection accuracy.
+
+## Using the results in an analytics workflow {#using_the_results_in_an_analytics_workflow}
+
+This interface fits the work already done in a real-time analytics system or data warehouse. Transaction and event data can be aggregated into a regular series in ClickHouse, optionally using materialized views to maintain those aggregates as data arrives. A query selects the history and invokes inference while the returned predictions remain available to SQL for filtering, joins, and further aggregation.
+
+For a recurring workflow, forecast results can be stored with their forecast origin and model revision, then compared with actual values as new data arrives. Recent observations can be scored in a bounded trailing window while retaining earlier history as context. That avoids rescoring the entire table on every run. The demo does not schedule these queries or maintain forecast tables automatically; those are separate choices for the application.
+
+The model service is still an external dependency on the query path. Context length, series count, inference capacity, and request timeouts need to be bounded. The SQL examples use historical data and do not establish streaming latency or production throughput. Interval coverage and scoring thresholds also need to be checked for the intended use.
+
+## Conclusion {#conclusion}
+
+We connected ClickHouse to a time-series foundation model and used SQL to forecast demand, detect anomalies, and supply known-future events that help explain expected changes. ClickHouse prepares and orders the data, while the model supplies forecasts without per-series training. Predictions return as ordinary query results, ready for joins, filtering, and further time-series analysis in the database.
+
+The same SQL-to-model approach could connect ClickHouse to tabular foundation models for predictions on structured rows. In a future post, we'll explore how to prepare tabular inputs in ClickHouse, call a tabular foundation model, and use its predictions in SQL.
+
+---
+
+## Get started today
+
+Interested in seeing how ClickHouse works on your data? Get started with ClickHouse Cloud in minutes and receive $300 in free credits.
+
+[Sign up](https://console.clickhouse.cloud/signUp?loc=blog-cta-3054-get-started-today-sign-up&utm_blogctaid=3054)
+
+---
+
+---
+
+## Trunk cuts observability costs by up to 95% and reclaims 20 engineering hours a week with ClickHouse Observability
+Published: 2026-11-17T00:00:00+00:00
+URL: https://clickhouse.com/blog/trunk-clickstack-observability
+
+---
+title: "Trunk cuts observability costs by up to 95% and reclaims 20 engineering hours a week with ClickHouse Observability"
+date: "2026-11-18T15:03:59.204Z"
+author: "ClickHouse"
+category: "User stories"
+excerpt: "Trunk cuts observability costs by up to 95%, reclaims 20 engineering hours a week, and accelerates flaky test detection with ClickHouse."
+---
+
+# Trunk cuts observability costs by up to 95% and reclaims 20 engineering hours a week with ClickHouse Observability
+
+## Summary
+
+- Trunk, a CI acceleration platform, uses ClickHouse Observability to analyze about 2 billion customer test results a day.
+- Replacing Datadog with ClickHouse Observability cut costs by 15-20x while ingesting 100% of traffic instead of just 15%, and agents can now investigate incidents across application and observability data in one technology.
+- Moving from self-managed TimescaleDB to ClickHouse Cloud cut flaky test detection from up to an hour to five minutes or less, with fewer service issues.
+
+[Trunk](https://trunk.io/) is a CI acceleration platform that helps engineering teams ship code as fast as their engineers and agents write it. As co-founder and CTO Matt Matheson explains, the company was founded on the premise that the teams behind developer tooling are generally understaffed. 
+
+“If you look at big players like Facebook and Google, they pour a lot of money into developer experience and developer productivity,” he says. “We wanted to build those same services and tools, democratize that, and bring it to companies that can’t afford to staff a team of 10 or 15 or 100, but still give them access to the same high-quality developer experience.”
+
+That gap has only grown as coding agents have multiplied the number of pull requests teams open every day. Trunk tackles it as a unified platform built on a shared data layer. [Dynamic CI](https://trunk.io/dynamic-ci) uses it to skip the CI jobs a change doesn’t need. [Flaky Tests](https://trunk.io/flaky-tests) uses it to detect and quarantine unreliable tests automatically. [Merge Queue](https://trunk.io/merge-queue) uses it to test unrelated changes in parallel and keep main green. Teams like Brex, Ramp, and Zillow rely on it.
+
+That shared data layer is the heart of the platform, and as Matt notes, getting it right took a few attempts. “Once we adopted ClickHouse Cloud and learned how to really marry it to the problems we were solving,” he says, “we saw a much better user experience, we saw our costs go down significantly, and our efforts to operate our own product went way down.”
+
+We caught up with Matt and staff platform engineer Patrice Boisclair-Laberge to learn how replacing Datadog with self-managed ClickHouse Observability cut observability costs by 15-20x and moving from TimescaleDB to [ClickHouse Cloud](https://clickhouse.com/cloud) on AWS made flaky test detection faster and more reliable.
+
+## From 15% of logs in Datadog to 100% in ClickHouse Observability {#from_15_of_logs_in_datadog_to_100_in_clickhouse_observability}
+
+As Matt notes, observability matters more to Trunk than to most startups its size, since parts of its products are on the critical path. The merge queue gates every change to a customer’s repository. Flaky test quarantining keeps unreliable tests from blocking that work. 
+
+“If those things go down, our customers lose the ability to do work,” he says. “Our ability to know that something is going down and prevent it or fix it before customers even realize is critical to maintaining those relationships. We don’t want to ever risk our reputation.”
+
+Trunk’s previous observability setup was built around Datadog. By 2025, however, the cost had become unsustainable. “The shift to agents means that we need more data, more logs to be successful. We needed a new, cost-efficient solution to build our observability platform on.”
+
+The team had already moved to ClickHouse for analytics, so when Patrice learned that ClickHouse had [acquired HyperDX](https://clickhouse.com/blog/clickhouse-acquires-hyperdx-the-future-of-open-source-observability), he decided to give it a try. HyperDX later became the UI for ClickStack, ClickHouse's open-source observability stack.
+
+Trunk already collected metrics with OpenTelemetry, so the setup was straightforward. They installed ClickStack’s [OpenTelemetry collector](https://clickhouse.com/docs/clickstack/ingesting-data/collector) and just started uploading, using the ClickStack UI for dashboards and investigations. 
+
+Near the end of their time on Datadog, Trunk sent it only 15% of traffic to manage costs. Today, 100% goes to ClickHouse Observability, and the team no longer samples logs. Everything at info level and higher is kept, about 375,000 log lines and 2.2 million traces per minute, with 30 days of retention. Patrice estimates ClickHouse Observability is 15-20x cheaper to run than Datadog.
+
+> “On-call investigation in ClickHouse Observability now matches the speed it had on Datadog, but now with 100% of our logs. That was the gold standard of what we wanted to achieve and we’re very happy we achieved it.” — Patrice Boisclair-Laberge, Staff Platform Engineer, Trunk
+
+## A unified platform for people and agent observability {#a_unified_platform_for_people_and_agent_observability}
+
+For Matt, a key benefit is having traces, logs, and metrics under one roof. “More data in ClickHouse Observability means faster on-call response from humans and agents,” he says. “I can grab the traces that hit this endpoint, I can pull all the logs related to them, I can see if there’s temporal correlation on metrics there, and just put the whole story together in one place.”
+
+Patrice says Trunk’s agents are great at investigating issues in ClickHouse Observability, and they’ve taken over dashboards too. “I don’t think we have a single human-made dashboard in the last six months. We all use the [ClickStack MCP](https://clickhouse.com/docs/clickstack/mcp) or the notebooks to generate them. You just tell your agent what you want, and it makes the dashboard. It’s fantastic.”
+
+Agents are also doing more of the work on the application side. Trunk runs an internal incident bot that uses the MCP server to query its application tables, triggered automatically by incidents or manually to look into a customer’s usage. “Salespeople can more easily debug stuff and not escalate to engineers as often,” Patrice says. Matt agrees, adding, “Teams that don’t work on the product at all can just dispatch Claude Code to check out any customer issue.”
+
+Because Trunk’s application data and observability data are both in ClickHouse, agents have fewer technologies to work across. 
+
+> “I want people to learn the fewest technologies possible. That also applies to AI. It just means we need fewer MCPs. The AI models are really good at using ClickHouse for observability, especially with the ClickStack MCP, and investigating an outage often means pulling from both.” — Matt Matheson, co-founder and CTO, Trunk
+
+Trunk evaluated other leading AI SRE tools, but found them unnecessary. “At the end of the day, ClickHouse Observability with the MCP plus Claude Code or Codex was as good,” Matt says. “There was no need to bring in a whole other vendor to respond to incidents and get things fixed.” By his estimate, AI-assisted triage with ClickStack gives back about half an engineer’s time, roughly 20 hours a week.
+
+For Trunk, Matt says, leaning on agents for triage has become essential. “It’s absolutely mission-critical, our ability to function as a small team and still ship a lot of features, but also maintain a high-quality service. That’s just impossible without that always-on, AI-assisted triage, which is amazing with an off-the-shelf agent and just access to ClickHouse Observability.”
+
+## Migrating analytics from TimescaleDB to ClickHouse Cloud {#migrating_analytics_from_timescaledb_to_clickhouse_cloud}
+
+Before ClickHouse, Trunk stored customer test and CI data in TimescaleDB, a time-series extension for Postgres. In the beginning, the team used Timescale’s hosted service, but as Patrice says, “We faced a ton of performance issues.” 
+
+They moved to self-managed bare metal servers running Postgres and TimescaleDB on local SSDs. Performance improved, but maintenance became a burden. “It took us a lot of custom work,” Matt says. “We were very much in the weeds of changing things in Timescale that we shouldn’t have to touch.”
+
+Patrice recalls the team digging into Postgres functions and reimplementing some of them to better suit Trunk’s workload. By his estimate, Timescale took half of an engineer’s time each year across the company. All the processing around Timescale also slowed the product down, so detecting a flaky test could take up to an hour. “It was becoming unmanageable for us, I was constantly getting paged in the middle of the night,” he says.
+
+When the team discovered ClickHouse, they first tried self-hosting it, and then quickly moved to fully managed [ClickHouse Cloud](https://clickhouse.com/cloud) once it could connect privately in Trunk’s region, which their data-heavy workload needed to avoid egress costs. 
+
+Patrice, who had spent a year and a half running Postgres on bare metal, admits he had doubts about how well a SaaS database could perform. “But once we tested ClickHouse Cloud, it was very performant,” he says. “The proof was in the pudding.”
+
+## Faster detection, new features, and lower costs {#faster_detection_new_features_and_lower_costs}
+
+Trunk moved off TimescaleDB in stages. They first used [ClickPipes](https://clickhouse.com/cloud/clickpipes) to sync data from Postgres into ClickHouse, then switched to dual writes, and finally wrote only to ClickHouse and deleted the Timescale tables. A few Postgres tables still replicate over ClickPipes. The team leaned heavily on ClickHouse’s [documentation](https://clickhouse.com/docs/concepts/best-practices). “We learned a ton from that,” Patrice says.
+
+Customers didn’t see the move itself, but they did notice flaky test detection dropping from up to an hour to five minutes at most. Because ClickHouse handles the data load, Matt explains, analysis jobs run faster and more often. “That was huge for customers, and the reliability went way up,” he says. “If we were to look at our own outages, the adoption of ClickHouse would be a huge marker, like a step function down in terms of issues for the service.”
+
+“We did get positive feedback on the speed-up in detection,” he adds. “But this is an area where no news is good news. What really happened is we just heard less from our customers.”
+
+Faster queries also unlocked new features like rollups and real-time views of CI usage. “There were a lot of features we wanted to implement that were impossible with TimescaleDB,” Patrice says. “They would be like two or three minute page loads, which is unacceptable. But then with ClickHouse, it’s a matter of seconds.” Behind the scenes, the team retired many of their legacy ETL pipelines, handling that work with [materialized views](https://clickhouse.com/docs/concepts/features/materialized-views) or computing it live.
+
+For Matt, the payoff is in velocity. “We’re able to ship more features,” he says. “Originally, our thesis was ‘let’s find flaky tests.’ That was the tip of the spear. But once we got onto ClickHouse, it became so easy to do any other type of data analysis such as finding slow tests, new tests, and cluster analysis. All that stuff that was always on the roadmap, suddenly we were able to ship just very quickly.”
+
+Trunk now processes almost 2 billion test results a day, with customer workloads 10-15x larger than what it handled on Postgres. “It’s scaled amazingly,” Patrice says. 
+
+Database for database, Matt adds, Timescale may have cost less to operate, but Trunk ran “so much compute to do data processing that is almost free in ClickHouse, or way cheaper.” Factor in the engineering time Timescale took to maintain, he says, and “if we were to add it up, ClickHouse would end up being much cheaper.”
+
+## Moving fast on ClickHouse Cloud {#moving_fast_on_clickhouse_cloud}
+
+Two migrations in, Trunk plans to keep building on ClickHouse. “ClickHouse scales so well, we want to put everything in ClickHouse,” Matt says. Next up is sending every PagerDuty page straight to an agent that reads ClickHouse Observability first. “The context and the leg up the first time a human looks at it is invaluable, and it happens so fast that it should always happen.” Patrice notes that ClickHouse’s continuous innovation gives Trunk confidence in the technology and partnership. For example, they’ve been invited to ClickHouse’s [PromQL private preview](https://clickhouse.com/blog/introducing-promql) and plan to try it.
+
+Patrice takes a moment to shout out the support they’ve received from ClickHouse. “The team is extremely responsive,” he says. “Also, we’ve barely had to talk to them, which is great.” 
+
+For Matt, access to ClickHouse’s product teams has been equally valuable. “Being able to give feedback on things we use and hear about what’s coming up has been really valuable,” he says. “It’s a good way to get exposure to the roadmap and have our voice heard.”
+
+Asked to sum up the team’s experience with ClickHouse for observability and real-time analytics so far, Patrice keeps it short and sweet. “It allows us to move fast, and we love that.”
+
+---
+
+## Get started today
+
+Interested in seeing how ClickHouse works on your data? Get started with ClickHouse Cloud in minutes and receive $300 in free credits.
+
+[Sign up](https://console.clickhouse.cloud/signUp?loc=blog-cta-3070-get-started-today-sign-up&utm_blogctaid=3070)
+
+---
+
+---
+
+## More load is faster: Tuning Postgres read replicas
+Published: 2026-11-17T00:00:00+00:00
+URL: https://clickhouse.com/blog/tuning-postgres-read-replicas
+
+---
+title: "More load is faster: Tuning Postgres read replicas"
+date: "2026-11-18T10:14:57.555Z"
+author: "Colton Shepard"
+category: "Engineering"
+excerpt: "Testing Postgres read replicas reveals why more write traffic can reduce lag, how WAL settings affect latency, and where aggressive tuning introduces tradeoffs."
+---
+
+# More load is faster: Tuning Postgres read replicas
+
+## TL;DR {#tldr}
+
+* Replica lag is lower than conventional wisdom suggests out of the box if you have traffic, and pretty easy to get to a few seconds with basic tuning.   
+* You can get some spectacularly short replica lag if you’re willing to be unreasonable or incur tradeoffs.   
+* If you care a lot about read replica lag and want a relatively safe starting point for tuning, try `archive_timeout=5s` and `wal_retrieve_retry_interval=500ms`.  
+* Some of these options can lead to high network bills with synchronous HA.
+
+Sometimes, the simple problems are the ones that really surprise you. Recently, a user of ClickHouse Managed Postgres mentioned an issue with unexpectedly high read replica delay, and I took the chance to poke around. I quickly realized that Postgres has a lot of config options that I haven’t tested for a few major versions, and that some of what I’ve taken as well-known information is a bit out of date. I hope you’ll also be surprised by some of this. 
+
+Read replicas are one of the classic pillars of any traditional relational database. If you’ve ever wanted to separate read traffic from write, or just wanted to scale reads, you’ve probably considered setting one up, and I’d bet that most readers of this blog have one in production somewhere. The way they work is fairly simple: you have a primary database that takes normal traffic, and mirror all of its updates to one or more read replicas that serve your non-updating traffic. 
+
+There’s a few ways to set this up. The classic configuration is streaming replication, where changes are sent in (more or less) real time to the replicas, but it has some downsides we don’t like that I’ve detailed at the end of this blog. The other popular method, which we’ve chosen as the default on ClickHouse Managed Postgres, is to take advantage of the fact that we already collect WAL to use for our backups, and use it to keep the replica in sync. It’s somewhat slower, and since we can’t use `hot_standby_feedback` without a streaming connection, long running queries on the replica block replay until they complete or hit timeouts, but it’s a tradeoff we’re happy about. 
+
+Unfortunately, Postgres likes to be efficient about switching WAL segments, which can lead to some unexpected behavior. With the default configs we ship, Postgres switches segments every 16MB of changes or 60 seconds, whichever comes first. We’ve found this to be a good default value in practice, as on a production system under moderate load you’ll usually only see a couple seconds of replica lag. This happens because changes on a moderately loaded system hit the 16MB target pretty quickly and you’re not really left waiting most of the time, and most environments with a read replica have a considerable level of baseline load. 
+
+The problem comes from low throughput scenarios. If you don’t have a lot of write traffic coming in, Postgres won’t ship the change, and your replica won’t see an update for as long as 60 seconds. In my experience, this typically is discovered in the early phases of testing a platform, and this isn’t the first company where I’ve heard complaints of the resulting slow replica behavior. It’s always awkward to explain that a system is slow because you didn’t put enough load on it, and I like knowing how far you can push software before breaking it, so when it came up I thought I’d test things for myself. 
+
+## Baseline tests {#baseline_tests}
+
+I fired up a few test instances of ClickHouse Managed Postgres, set up pgbench to simulate load, and got to work. In order to measure replica lag, I added a heartbeat tool that wrote a row to the primary every 200ms and continually polled the same table on the replica. I kept the hardware pretty small to make it easier to actually stress the systems. There was a primary and one read replica, each using i8g.large instances with 16GB of RAM, 2 vCPUs, and 468GB of local NVMe SSD running PG 18.6. I ended up adding 2 quorum synchronous commit HA standbys midway through testing to better reflect production workloads, which cut throughput about 10% and had no measurable effect on replica lag. WAL generation reached up to 120MB/s (105MB/s with HA) in these tests, so despite the low core count this should give the replica mechanism the kind of throughput you’d see in a busy production environment. Please note that “idle” in the charts below does include trivial traffic to the heartbeat table (1 write every ~200ms), but zero pgbench load.
+
+The first finding confirmed the cause of the surprise: the report of replica lag was, indeed, caused by not having enough load on the system. Replica lag with stock tuning yields a U-shaped curve based on throughput, with both extremely low and extremely high throughput causing big spikes in lag. The sweet spot in the middle is where data comes in fast enough to ship WAL segments right away but not fast enough to overwhelm anything, and the right side of the U comes from archive upload starting to fall behind. 
+
+![](https://clickhouse.com/uploads/postgres_replica_nov2026_image1_d589648c1a.png)
+
+This was pretty good right out of the gate, as the moderate load of 12MB/s led to ~3 second replication delay, and that’s good enough for most use cases. Having confirmation that it wouldn’t be an issue in prod was a good start, but we could do better, and I had a test environment in dire need of a good workout. 
+
+## Sensible tuning {#sensible_tuning}
+
+There’s not a lot of tuning relevant to replication lag, but a few things came to mind. The 16MB WAL segment size can only be tuned when building a new database using `initdb --wal-segsize` or by using `pg_resetwal --wal-segsize` in a maintenance window, which is not generally useful for tuning an existing environment. The next good candidate was the 60 second interval, which is controlled by the `archive_timeout` parameter. This simply controls how long Postgres will wait before shipping the segment anyways, so it’s about as relevant as it gets. 
+
+There’s a related setting here of `wal_retrieve_retry_interval` that also turned out to be relevant. This one controls how long Postgres will wait between retry attempts if it fails to find the requested WAL segment on the first try, and for all practical purposes it can be better seen as a poll interval.
+
+I tried a bunch of different values under a couple different levels of simulated load. I’ve lumped `wal_retrieve_retry_interval` and `archive_timeout` together here, as in practice they were doing the same job for the purposes of replication lag. 
+
+![](https://clickhouse.com/uploads/postgres_replica_nov2026_image2_9f3362f374.png)
+
+Interestingly, this seemed to stop giving improvements once it got too low. The limit is that each poll ended up taking about 0.8s of WAL-G sequential calls, so there wasn’t much point going below a second or so. Here’s a constructed example with a breakdown on where the time typically went:
+
+```shell
+t+0.00  restored log file N              <- N fetched
+t+0.20  Archive N+1 does not exist       <- wal-g call (not there yet)
+t+0.45  restored log file N   (again)    <- Postgres re-fetches N from the archive
+t+0.70  Archive N+1 does not exist       <- wal-g call
+t+0.80  Archive 00000002.history ...     <- timeline check (recovery_target_timeline=latest)
+        waiting for WAL ...              -> sleep wal_retrieve_retry_interval (5 s), repeat
+
+```
+
+The re-fetch occurs because Postgres does not persist a local copy of segments restored from archive. If the next segment is not yet archived when requested, or Postgres otherwise fails to fetch it, then it will re-fetch and re-read the segment containing the last valid record before trying the next segment again. I believe the history check could be omitted if `recovery_target_timeline` was pinned instead of using the default value of latest, but that would mean the replica wouldn’t survive HA failover and probably wouldn’t be worth the cost. 
+
+Unfortunately, this does come with some nontrivial costs. `archive_timeout` is going to increase network overhead with synchronous HA, which might get expensive with cross-AZ HA configurations. Shipping 16MB to each standby once every `archive_timeout` will add up over time, with a 2s `archive_timeout` costing 17MB/s and reaching over 1TB/day with 2 standbys. The read replica will also see some side effects, as every missed poll will re-download and re-decompress the previous segment from object storage. 
+
+Replica CPU spiked a bit more than I expected, too. The replica only had 2 vCPUs, so the tests had an unrealistically high relative impact. As far as I can tell, the CPU load is almost entirely driven by poll rate, as every poll forces a re-fetch and decompression and is effectively a fixed cost regardless of instance size or data volume. The load overhead should more or less disappear into the background on a more realistic 8+ core production-grade system. Unfortunately, I ran out of time to test that for this project. 
+
+![](https://clickhouse.com/uploads/postgres_replica_nov2026_image3_5252c21ac9.png)
+
+## Less sensible tuning {#less_sensible_tuning}
+
+When I looked for other room for improvement, I found that `archive_timeout` sadly only accepts integer parameters, so going below 1 second wasn’t reasonable. I eventually realized that Postgres has a nifty little mechanism to force a switch to a new WAL file, `pg_switch_wal()`. I started firing it off in a loop at various short intervals, and got some more interesting results. I’ve included the previous values for comparison: 
+
+![](https://clickhouse.com/uploads/postgres_replica_nov2026_image4_da92d33a5a.png)
+
+This didn’t actually make things better enough to be worthwhile. Each segment incurred WAL-G fetch overhead of its own, so as intervals shrunk that overhead ate more and more of our time. It also gives us an explanation as to why the p99 was so much worse than the p50 when WAL switches were too aggressive: any slowdown or failure causes a cascade of backed up segments.
+
+The switch loop also had a notable impact on overhead. The primary sends a 16MB segment to each HA standby every time there’s a forced WAL switch, which is going to add up pretty fast if there’s cross-AZ or cross-cloud traffic to worry about. Primary throughput dropped by somewhere around 15% with the switch loop running, which is a fairly significant tradeoff.  
+
+The next decreasingly reasonable thing to try was to get creative and deal with the WAL-G overhead. A lot of time was being spent waiting for WAL-G to start up a fresh process for each and every fetch, and I didn’t actually need to do that. We have a WAL-G daemon already running on these machines, so I could abuse that fact with a simple config line:
+
+```shell
+restore_command = '/usr/bin/walg-daemon-client /tmp/wal-g wal-fetch %f %p'
+```
+
+This shaved about 55ms on a hit and about 85ms on a miss for every fetch, and as you can see below this really added up for the 250ms switch loop. It was helpful but less dramatic at 1s and pretty pointless for anything else. Increasing external dependencies in the replay path certainly isn’t a good idea in a production environment, but it’s neat to see how far you can push such things: 
+
+![](https://clickhouse.com/uploads/postgres_replica_nov2026_image5_536ae6a287.png)
+
+All in all, not a bad day’s work! One last thing to check: How does all the archive shipping tuning compare to just using streaming replication, anyways?
+
+![](https://clickhouse.com/uploads/postgres_replica_nov2026_image6_24149633ee.png)
+
+Alas, we haven’t beaten it. On the bright side, we don’t need to. A second or three of replication lag is more than enough for most use cases, and there are a few well-known downsides to streaming replication that prevent us from making it the default choice.
+
+* The `hot_standby_feedback` parameter can prevent VACUUM from removing recently dead rows on the primary if they are needed by the replica.   
+* A replication slot getting stuck or backing up can fill up your disk and cause an outage on the primary unless `max_slot_wal_keep_size` is set.  
+* Replication overhead can contribute to primary load. As most users of read replicas use them to prevent resource constraints, this hurts the people who need replicas most.   
+* HA failovers can be tricky, and it’s pretty easy to get a setup that breaks the replica on failover. 
+
+We do use streaming replicas for HA standbys, where the lack of read activity and guaranteed hardware match to prod mitigates those downsides effectively, and the subsecond lag matters a lot for minimizing downtime. 
+
+---
+
+## Get started with ClickHouse Managed Postgres today
+
+Interested in seeing how ClickHouse Managed Postgres works on your data? Get started with ClickHouse Cloud in minutes and receive $300 in free credits.
+
+[Sign up](https://console.clickhouse.cloud/signUp?intent=pg&loc=blog-cta-3069-get-started-with-clickhouse-managed-postgres-today-sign-up&utm_blogctaid=3069)
+
+---
 
 ---
 
