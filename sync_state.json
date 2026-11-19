@@ -1,5 +1,5 @@
 {
-  "last_sync": "2026-11-18T15:13:45.997818Z",
+  "last_sync": "2026-11-19T15:21:26.054194Z",
   "processed_blogs": {
     "https://clickhouse.com/blog/clickhouse-raises-400-million-series-d-acquires-langfuse-launches-postgres": {
       "title": "ClickHouse raises $400M Series D led by Dragoneer to accelerate expansion across analytics and AI infrastructure",
@@ -6276,9 +6276,27 @@
       "pub_date": "2026-11-17T16:39:39+00:00",
       "file_path": "blogs/2026-11-17-clickhouse-forecasting-and-anomaly-detection-with.md",
       "processed_at": "2026-11-18T15:13:45.854751Z"
+    },
+    "https://clickhouse.com/blog/pg-clickhouse-0-11-1": {
+      "title": "pg_clickhouse 0.11.1: Now with pgvector, UPDATE, DELETE pushdown",
+      "pub_date": "2026-11-19T11:52:49+00:00",
+      "file_path": "blogs/2026-11-19-pg-clickhouse-0-11-1-now-with-pgvector-update.md",
+      "processed_at": "2026-11-19T15:21:25.550477Z"
+    },
+    "https://clickhouse.com/blog/node-reliability-across-three-clouds": {
+      "title": "Detect, act, keep the evidence: node reliability across three clouds",
+      "pub_date": "2026-11-19T11:48:57+00:00",
+      "file_path": "blogs/2026-11-19-detect-act-keep-the-evidence-node-reliability.md",
+      "processed_at": "2026-11-19T15:21:25.791228Z"
+    },
+    "https://clickhouse.com/blog/front-elasticsearch-clickhouse": {
+      "title": "Why Front migrated from Elasticsearch to ClickHouse for “pixel-perfect” analytics at scale",
+      "pub_date": "2026-11-18T00:00:00+00:00",
+      "file_path": "blogs/2026-11-18-why-front-migrated-from-elasticsearch-to.md",
+      "processed_at": "2026-11-19T15:21:25.967375Z"
     }
   },
-  "total_blogs": 1046,
+  "total_blogs": 1049,
   "failed_blogs": [
     {
       "url": "https://clickhouse.com/jp/blog/clickhouse-gcp-japan-availability",
