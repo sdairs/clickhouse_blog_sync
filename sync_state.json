@@ -1,5 +1,5 @@
 {
-  "last_sync": "2026-11-19T15:21:26.054194Z",
+  "last_sync": "2026-11-20T14:58:49.957838Z",
   "processed_blogs": {
     "https://clickhouse.com/blog/clickhouse-raises-400-million-series-d-acquires-langfuse-launches-postgres": {
       "title": "ClickHouse raises $400M Series D led by Dragoneer to accelerate expansion across analytics and AI infrastructure",
@@ -6294,9 +6294,27 @@
       "pub_date": "2026-11-18T00:00:00+00:00",
       "file_path": "blogs/2026-11-18-why-front-migrated-from-elasticsearch-to.md",
       "processed_at": "2026-11-19T15:21:25.967375Z"
+    },
+    "https://clickhouse.com/blog/202611-newsletter": {
+      "title": "November 2026 newsletter",
+      "pub_date": "2026-11-20T09:50:28+00:00",
+      "file_path": "blogs/2026-11-20-november-2026-newsletter.md",
+      "processed_at": "2026-11-20T14:58:49.519397Z"
+    },
+    "https://clickhouse.com/blog/clickhousectl-v0-6-0": {
+      "title": "What's new in clickhousectl v0.6.0",
+      "pub_date": "2026-11-19T19:41:35+00:00",
+      "file_path": "blogs/2026-11-19-what-s-new-in-clickhousectl-v0-6-0.md",
+      "processed_at": "2026-11-20T14:58:49.707323Z"
+    },
+    "https://clickhouse.com/blog/power-bi-arrow-flight-connector-public-preview": {
+      "title": "ClickHouse and Power BI, columnar end to end: the Arrow Flight connector is in public preview",
+      "pub_date": "2026-11-19T17:59:00+00:00",
+      "file_path": "blogs/2026-11-19-clickhouse-and-power-bi-columnar-end-to-end-the.md",
+      "processed_at": "2026-11-20T14:58:49.848243Z"
     }
   },
-  "total_blogs": 1049,
+  "total_blogs": 1052,
   "failed_blogs": [
     {
       "url": "https://clickhouse.com/jp/blog/clickhouse-gcp-japan-availability",

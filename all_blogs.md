@@ -1,6 +1,842 @@
 # ClickHouse Blogs
-Last updated: 2026-11-19 15:21:25 UTC
-Total blogs: 1049
+Last updated: 2026-11-20 14:58:49 UTC
+Total blogs: 1052
+
+---
+
+## November 2026 newsletter
+Published: 2026-11-20T09:50:28+00:00
+URL: https://clickhouse.com/blog/202611-newsletter
+
+---
+title: "November 2026 newsletter"
+date: "2026-11-20T09:50:28.361Z"
+author: "Mark Needham"
+category: "Community"
+excerpt: "The November ClickHouse newsletter brings four major platform launches, ClickHouse 26.10, JSONBench, GroeneAI, Loom, and our House Party at AWS re:Invent."
+---
+
+# November 2026 newsletter
+
+Hello and welcome to the November ClickHouse newsletter!
+
+This month, we did our biggest launch since ClickHouse Cloud, with Managed Postgres going GA, ClickHouse Observability and the Langfuse AI Gateway entering public beta, and ClickHouse Security launching in private preview.
+
+GroeneAI gets stuck into bug fixes, Loom helps coding agents with those “didn’t we already work this out?” moments, and the billion-document JSON benchmark is back.
+
+And AWS re:Invent is nearly here, which means it's time for us to throw another party with the Chainsmokers in Las Vegas!
+
+## Featured community member: Ana Lacruz {#featured-community-member-ana-lacruz}
+
+This month’s featured community member is Ana Lacruz, Data Engineer at Infinitas Learning.  
+![](https://clickhouse.com/uploads/nov2026_nl_image2_774850b63c.png)
+
+Ana works on the Results & Insights team, supporting educational platforms used by 1.6 million learners. The team uses ClickHouse Managed Postgres to record assignment results and learner progress, alongside ClickHouse Cloud for analytics.
+
+At Open House Amsterdam, Ana [shared the team’s journey](https://clickhouse.com/blog/infinitas-learning-clickhouse-managed-postgres) from ClickHouse Cloud to self-hosting and back again. She explained how cache misses caused unpredictable query latency, and how self-hosting improved performance but brought maintenance and recovery responsibilities.
+
+Working with ClickHouse’s support team, they optimized their queries and table settings before adopting distributed cache. In load tests, P99 query latency reached 410 milliseconds, meeting their 500-millisecond target. Ana also described how the team can now take a dashboard from proof of concept to production-ready, using real data, in hours.
+
+➡️ [Connect with Ana on LinkedIn](https://www.linkedin.com/in/ana-lacruz-69140b53/)
+
+## House Party with the Chainsmokers at AWS re:Invent {#house_party_with_the_chainsmokers_at_aws_reinvent}
+
+![](https://clickhouse.com/uploads/nov2026_nl_image3_76202da2e6.png)  
+The Chainsmokers are back for our third House Party at AWS re:Invent. 
+
+Join us at Intrigue Nightclub in Las Vegas on Tuesday, December 1 for music and drinks after a day of conference sessions.
+
+➡️ [Request a ticket](https://clickhouse.com/houseparty/reinvent?utm_source=clickhouse&utm_medium=email&utm_campaign=202611-newsletter&ref=newsletter)
+
+## 26.10 release {#2610_release}
+
+![ClickHouse 26.10 release](https://clickhouse.com/uploads/nov2026_nl_image4_50df69511a.png)
+
+ClickHouse 26.10 introduces function composition for more readable SQL, JOINs with arbitrary conditions, and direct import and export of SQLite files.
+
+Queries grouping by multiple `LowCardinality` columns get faster, while large `IN` subqueries can now spill to disk to reduce memory use. There’s also an experimental columns cache that reuses decoded column data across queries, avoiding repeated decompression and deserialization.
+
+➡️ [Read the release post](https://clickhouse.com/blog/clickhouse-release-26-10?utm_source=clickhouse&utm_medium=email&utm_campaign=202611-newsletter&ref=newsletter)
+
+## Our largest expansion yet {#our_largest_expansion_yet}
+
+![The largest expansion of ClickHouse yet](https://clickhouse.com/uploads/nov2026_nl_image5_443c66acfc.jpg)
+
+Our latest platform launch spanned transactions, observability, security, and AI engineering. 
+
+Managed Postgres is now generally available on AWS, with Xata’s branching, cloning, and scale-to-zero capabilities planned for integration.
+
+ClickHouse Observability enters public beta for investigating logs, metrics, traces, and session data.
+
+And finally, ClickHouse Security launches in private preview with AI-assisted threat investigations, while the open-source Langfuse AI Gateway enters public beta to help teams track model usage and costs.
+
+➡️ [Read the announcement](https://clickhouse.com/blog/announcing-clickhouse-platform-largest-expansion?utm_source=clickhouse&utm_medium=email&utm_campaign=202611-newsletter&ref=newsletter)
+
+## Postgres round-up {#postgres_round_up}
+
+![Postgres Round-up](https://clickhouse.com/uploads/nov2026_nl_image6_b7c14eabca.jpg)
+
+This month brings Managed Postgres GA and the Xata acquisition, plus hands-on replication tests, failover engineering, query diagnostics, and lessons from customer migrations. 
+
+➡️ [Register for the live webinar on November 23 to learn more!](https://clickhouse.com/company/events/202611-AMER-Webinar-Postgres-Vision-ClickHouse?utm_source=clickhouse&utm_medium=email&utm_campaign=202611-newsletter&ref=newsletter)
+
+* Sai Srirampur [announces the general availability of Managed Postgres on AWS and the acquisition of Xata](https://clickhouse.com/blog/managed-postgres-ga-xata-acquisition?utm_source=clickhouse&utm_medium=email&utm_campaign=202611-newsletter&ref=newsletter), whose branching, cloning, and serverless capabilities are planned for integration into the service.  
+* Hidehiko ASAHI [shares a month of WalShadow testing](https://clickhouse.com/blog/a-month-with-walshadow-clickhouse-managed-postgres?utm_source=clickhouse&utm_medium=email&utm_campaign=202611-newsletter&ref=newsletter), measuring a median replication latency of roughly 0.4 seconds in his private-preview workloads and verifying correctness, recovery, and materialized-view behavior.  
+* Furkan Sahin [explains how fencing prevents two Postgres servers from acting as the primary during a failover](https://clickhouse.com/blog/fencing-a-postgres-primary-that-might-still-be-alive?utm_source=clickhouse&utm_medium=email&utm_campaign=202611-newsletter&ref=newsletter), and how the implementation differs across clouds.  
+* Lionel Palacin and Gülçin Yıldırım Jelínek [make the case for testing faster Postgres before adding local data synchronization](https://clickhouse.com/blog/does-your-application-need-local-data-or-faster-postgres?utm_source=clickhouse&utm_medium=email&utm_campaign=202611-newsletter&ref=newsletter), especially when AI agents keep changing the data they need.  
+* Al Brown [walks through clickhousectl v0.5.0](https://clickhouse.com/blog/clickhousectl-v0-5-0?utm_source=clickhouse&utm_medium=email&utm_campaign=202611-newsletter&ref=newsletter), which brings Managed Postgres metrics, logs, and read-only SQL into the terminal.  
+* Amog Iska [previews more Managed Postgres notifications](https://clickhouse.com/blog/expanding-customer-notifications-managed-postgres?utm_source=clickhouse&utm_medium=email&utm_campaign=202611-newsletter&ref=newsletter) for inactive replication slots, switchovers, failovers, long-running transactions, and connection limits.  
+* Sawyer Bateman [explains why Shipsidekick moved from Neon to ClickHouse Managed Postgres](https://clickhouse.com/blog/shipsidekick-neon-to-clickhouse-managed-postgres?utm_source=clickhouse&utm_medium=email&utm_campaign=202611-newsletter&ref=newsletter). His team replicated 500 GB in hours and reports roughly 10× faster queries.  
+* Amog Iska also [introduces Postgres wait events in Query Insights](https://clickhouse.com/blog/postgres-wait-events-query-insights?utm_source=clickhouse&utm_medium=email&utm_campaign=202611-newsletter&ref=newsletter), with wait categories, blocked-session counts, and lock-wait durations to help explain slow queries.
+
+## Why ClickHouse Cloud wins at real-time analytics {#why_clickhouse_cloud_wins_at_real_time_analytics}
+
+![Why ClickHouse Cloud wins at real-time analytics](https://clickhouse.com/uploads/nov2026_nl_image7_0ed2f8431a.jpg)
+
+Tom Schreiber and Lionel Palacin wrap up the CostBench series with an illustrated tour of the architecture behind ClickHouse Cloud.
+
+They show how sorting and pre-aggregation during ingestion reduce query work, and how parallel execution spreads the remaining work across machines and CPU cores. The authors also explain how ClickHouse Cloud lets teams scale ingestion and queries separately, so each workload gets the resources it needs. 
+
+And across the blog post, they also share customer examples of the architecture in practice: faster data preparation at Appcues, real-time decisions at Buildkite, and AI-powered security investigations at Artemis.
+
+➡️ [Read the blog post](https://clickhouse.com/blog/why-clickhouse-cloud-wins-at-real-time-analytics?utm_source=clickhouse&utm_medium=email&utm_campaign=202611-newsletter&ref=newsletter)
+
+## JSONBench is back, and ClickHouse still leads {#jsonbench_is_back_and_clickhouse_still_leads}
+
+![JSONBench is back, and ClickHouse still leads](https://clickhouse.com/uploads/nov2026_nl_image8_7697190eb7.png)
+
+[JSONBench](https://benchmark.clickhouse.com/json/) is an open-source benchmark that compares the query performance of different databases on large datasets of nested JSON documents. It now covers 27 database engines, up from five, with ClickHouse leading the published billion-document comparisons.
+
+Tom Schreiber and Mark Needham walk through the results, including a cold-run aggregation over nested Bluesky events that took 661 milliseconds in ClickHouse and more than 32 minutes in MongoDB under the benchmark’s configurations. They also explain recent improvements to ClickHouse’s JSON type and how to reproduce the benchmark.
+
+➡️ [Read the blog post](https://clickhouse.com/blog/jsonbench-is-back-clickhouse-still-leads?utm_source=clickhouse&utm_medium=email&utm_campaign=202611-newsletter&ref=newsletter)
+
+## Meet GroeneAI: our autonomous contributor to ClickHouse {#meet_groeneai_our_autonomous_contributor_to_clickhouse}
+
+![Meet GroeneAI: our autonomous contributor to ClickHouse](https://clickhouse.com/uploads/nov2026_nl_image9_483e68c9e2.jpg)
+
+James Cunningham, Artem Brustovetskii and Alex Soffronow Pagonidis introduce GroeneAI, an autonomous contributor that investigates failures, writes and tests fixes, and follows pull requests through CI and human review.
+
+Built on the open-source Nerve runtime, it uses persistent memory to carry work across sessions and learn from maintainer feedback. By October 25, it had contributed more than 3,100 merged pull requests, with ClickHouse maintainers deciding which changes to merge.
+
+➡️ [Read the blog post](https://clickhouse.com/blog/meet-groeneai-our-autonomous-contributor-to-clickhouse?utm_source=clickhouse&utm_medium=email&utm_campaign=202611-newsletter&ref=newsletter)
+
+## Introducing Loom: agent memory that keeps up with your code {#introducing_loom_agent_memory_that_keeps_up_with_your_code}
+
+![Introducing Loom: agent memory that keeps up with your code](https://clickhouse.com/uploads/nov2026_nl_image10_9b31423edf.jpg)
+
+James Cunningham and Lareb Zafar introduce Loom, an open-source memory and code-search system built on ClickHouse. It lets coding agents share findings across sessions and teams, so they can build on earlier investigations.
+
+Loom records where memories came from, tracks code renames, and flags notes that may be stale when the underlying code changes. In the authors’ benchmark of questions about the ClickHouse codebase, Loom improved answer quality while lowering the average cost per question.
+
+➡️ [Read the blog post](https://clickhouse.com/blog/introducing-loom-agent-memory-that-keeps-up-with-your-code?utm_source=clickhouse&utm_medium=email&utm_campaign=202611-newsletter&ref=newsletter)
+
+## Quick reads {#quick-reads}
+
+* Nicole Mitich explains [how to stream Oracle changes into ClickHouse with Striim](https://medium.com/striim/streaming-oracle-cdc-into-clickhouse-with-striim-c242f86fe052), covering MergeTree engine selection, recovery, and throughput tuning.  
+* Patrick Salsbury shows [how ClickHouse’s LTTB function speeds up large time-series charts](https://medium.com/@p.r.salsbury/visualizing-large-scale-time-series-data-with-clickhouse-and-lttb-88635e100c05) by downsampling data, including the trade-off between faster charts and lost detail.  
+* Innovafour explains [how it reduced storage from about 48 to 13 bytes per event](https://medium.com/@innovafoursas/from-48-to-13-bytes-per-event-shrinking-a-product-analytics-stack-to-fit-a-2-gb-server-cb579539a1f3), using schema, compression, and ingestion changes to fit its analytics stack on a 2 GB RAM server.  
+* Frank Pacione shares lessons from [building a car search engine with ClickHouse and AI agents](https://medium.com/@fpacione/building-an-enthusiast-car-search-engine-with-provenance-using-ai-agents-227026b34e4d), including how fixing the agents’ JSON queries cut his daily ClickHouse costs by 30 to 50%.  
+* Jitin Bahri describes [how Zoop moved API billing and analytics from BigQuery to ClickHouse](https://medium.com/zoop-engineering/clickhouse-at-zoop-billing-and-analytics-without-a-per-query-bill-9495b25a7f5c), using Postgres CDC and materialized views to keep usage totals up to date and costs more predictable.  
+* Andrew Fleming and Abed Habli show [how they built Metabase data apps on ClickHouse for the AI Builders meetup in Stockholm](https://www.metabase.com/blog/data-apps-world-tour), including an F1 race replay that runs many queries per second over 60 million rows of telemetry.
+
+## Events {#events}
+
+### Global virtual events
+
+* [Langfuse Workshop](https://luma.com/qi4abwvx) - Hybrid: Austin and Zoom - Nov 19, 2026  
+* [ClickHouse Managed Postgres: The Vision Comes Together](https://clickhouse.com/company/events/202611-AMER-Webinar-Postgres-Vision-ClickHouse?utm_source=clickhouse&utm_medium=email&utm_campaign=202611-newsletter&ref=newsletter) - Nov 23, 2026  
+* [v26.11 Community Call](https://clickhouse.com/company/events/v26-11-community-release-call?utm_source=clickhouse&utm_medium=email&utm_campaign=202611-newsletter&ref=newsletter) - Nov 24, 2026  
+* [How ClickHouse's security team uses ClickHouse Security](https://clickhouse.com/company/events/202612-AMER-Webinar-ClickHouse-Security?utm_source=clickhouse&utm_medium=email&utm_campaign=202611-newsletter&ref=newsletter) - Dec 3, 2026  
+* [ClickHouse for Starters「AI時代のデータプラットフォームとは」](https://clickhouse.com/ja/company/events/202612-APJ-Webinar-Japan-ClickHouseForStarters?utm_source=clickhouse&utm_medium=email&utm_campaign=202611-newsletter&ref=newsletter) - Japanese (Zoom) - Dec 9, 2026, 12:30–13:00 JST
+
+### Virtual training
+
+* [ClickHouse Observability Fundamentals (EMEA/APJ)](https://clickhouse.com/company/events/202612-EMEA-APJ-Observability-with-ClickStack?utm_source=clickhouse&utm_medium=email&utm_campaign=202611-newsletter&ref=newsletter) - Dec 2, 2026  
+* [Fundamentos do ClickHouse](https://luma.com/clickh-7luq) - Portuguese - Dec 2, 2026  
+* [ClickHouse Fundamentals (AMER)](https://clickhouse.com/company/events/202612-AMER-ClickHouse-Fundamentals?utm_source=clickhouse&utm_medium=email&utm_campaign=202611-newsletter&ref=newsletter) - Dec 2, 2026  
+* [ClickHouse Observability Fundamentals (AMER)](https://clickhouse.com/company/events/202612-AMER-Observability-with-ClickStack?utm_source=clickhouse&utm_medium=email&utm_campaign=202611-newsletter&ref=newsletter) - Dec 9, 2026  
+* [Observabilidad con ClickStack: Nivel 1 (LATAM)](https://luma.com/clickh-w10a) - Spanish - Dec 17, 2026  
+* [ClickHouse Fundamentals (APJ/EMEA)](https://clickhouse.com/company/events/202612-APJ-EMEA-ClickHouse-Fundamentals?utm_source=clickhouse&utm_medium=email&utm_campaign=202611-newsletter&ref=newsletter) - Dec 22, 2026
+
+### Events in AMER
+
+* [ClickHouse Meetup — Seattle: Real-Time Analytics in Production](https://luma.com/clickh-0alm) - Seattle - Nov 19, 2026  
+* [Treinamento presencial de 2 dias em São Paulo: Análise em tempo real com ClickHouse](https://clickhouse.com/company/events/202611-LATAM-Sao-Paulo-Real-time-Analytics-w-ClickHouse?utm_source=clickhouse&utm_medium=email&utm_campaign=202611-newsletter&ref=newsletter) - São Paulo - Nov 24–25, 2026  
+* [Maxa x ClickHouse: Data Developer Meetup MTL](https://luma.com/4812th4n) - Montréal - Nov 26, 2026  
+* [AWS re:Invent](https://clickhouse.com/campaigns/aws-reinvent-2026?utm_source=clickhouse&utm_medium=email&utm_campaign=202611-newsletter&ref=newsletter) - Las Vegas - Nov 30–Dec 4, 2026  
+* [House Party with The Chainsmokers](https://clickhouse.com/company/events/20261201-houseparty?utm_source=clickhouse&utm_medium=email&utm_campaign=202611-newsletter&ref=newsletter) - Las Vegas - Dec 1, 2026  
+* [45 RPM: Ramp x ClickHouse](https://luma.com/mqv2uyje) - Las Vegas - Dec 2, 2026  
+* [Hell's Software Factory: The Challenges of the AI SDLC](https://luma.com/jbj2va14) - Las Vegas - Dec 2, 2026  
+* [Holiday House](https://clickhouse.com/company/events/202612-AMER-Holiday-House-Dallas?utm_source=clickhouse&utm_medium=email&utm_campaign=202611-newsletter&ref=newsletter) - Grapevine, Texas - Dec 9, 2026  
+* [Holiday House](https://clickhouse.com/company/events/2026-12-14-AMER-holiday-house-bayarea) - Bay Area - Dec 10, 2026  
+* [Holiday House](https://clickhouse.com/company/events/202612-AMER-Holiday-House-NYC?utm_medium=email&utm_source=marketo&utm_content=202611-newsletter) - NYC - Dec 10, 2026  
+* [Capacitación presencial en Bogotá: Observabilidad con ClickStack](https://clickhouse.com/company/events/202612-LATAM-Bogota-Observability-with-ClickStack?utm_source=clickhouse&utm_medium=email&utm_campaign=202611-newsletter&ref=newsletter) - Bogotá - Dec 15, 2026  
+* [Holiday House](https://clickhouse.com/company/events/202612-AMER-Holiday-House-Salt-Lake-City?utm_source=clickhouse&utm_medium=email&utm_campaign=202611-newsletter&ref=newsletter) - Salt Lake City - Dec 17, 2026
+
+### Events in EMEA
+
+* [Search Week After Party: Pub Quiz by Qdrant with ClickHouse](https://luma.com/londonsearchweek_2026) - London - Nov 24, 2026  
+* [Langfuse Hands-On Workshop: From AI Agent Observability to Evaluation & Continuous Improvement](https://clickhouse.com/company/events/202611-EMEA-AIAgent-Observability-Evaluation-Continuous-Improvement?utm_source=clickhouse&utm_medium=email&utm_campaign=202611-newsletter&ref=newsletter) - Dubai - Nov 25, 2026  
+* [Datos rápidos, agentes inteligentes: desayuno con ClickHouse](https://clickhouse.com/company/events/202611-EMEA-SPIGT-Spain-Fast-Data-Smart-Agents-Breakfast-with-ClickHouse) - Madrid, Spain - Nov 25, 2026  
+* [Data TLV](https://datatlv.com/Home.html) - Tel Aviv - Nov 26, 2026  
+* [Daytona AI Builders](https://luma.com/ai-builders-paris-nov) - Paris, Nov 26, 2026  
+* [Scaling Data Systems with ClickHouse Cyprus Meetup](https://luma.com/clickh-hs3o) - Limassol - Nov 26, 2026  
+* [Data TLV](https://datatlv.com/Home.html) - Rishon LeZion, Israel - Nov 26, 2026  
+* [ClickHouse Hands-on TLV](https://luma.com/xp2h8odw) - Tel Aviv, Israel - Nov 30, 2026  
+* [AdoptAI](https://adoptai.artefact.com/) - Paris, France - Dec 3,4, 2026  
+* [AI Builders and Databases Munich](https://luma.com/clickh-rsxf) - Munich - Dec 3, 2026  
+* [Ahead of Time: A Hackathon by Mistral and ClickHouse](https://luma.com/clickh-mistral-hack-paris) - Paris - Dec 5, 2026  
+* [GITEX](https://www.gitex.com/) - Dubai - Dec 8-11, 2026  
+* [Microsoft Frontier Tour](https://frontiertour.microsoft.com/flow/microsoft/utrecht27/citylanding/page/cityhome) - Utrecht - Dec 10, 2026  
+* [AI Tinkerers Milan - December 10 Demo Night](https://milan.aitinkerers.org/p/ai-tinkerers-milan-december-10-demo-night) - Milan - Dec 10, 2026  
+* [kickoff(): hack, demo, play FC27 at Fulham’s Craven Cottage](https://luma.com/clickh-gqb5) - London - Dec 17, 2026
+
+### Events in APAC and Japan
+
+* [ClickHouse x OliveYoung x NxtCloud Seoul Meetup](https://luma.com/clickh-gb3i) - Seoul - Nov 25, 2026  
+* [See What Your Agent Did: Trace it. Debug it. Ship it.](https://luma.com/clickh-k5ti) - Singapore - Nov 26, 2026  
+* [The Agentic Data Stack](https://clickhouse.com/company/events/202611-APJ-Bengaluru-The-Agentic-Data-Stack?utm_source=clickhouse&utm_medium=email&utm_campaign=202611-newsletter&ref=newsletter) - Bengaluru - Nov 26, 2026  
+* [Braze x ClickHouse: Real-Time Analytics and AI-Driven Customer Engagement](https://globalevents.braze.com/clickhouse-braze-261127/) - Tokyo - Nov 27, 2026  
+* [Logs, metrics and traces at scale, without the bill shock](https://clickhouse.com/company/events/202612-APJ-Melbourne-Logs-Metrics-Traces-at-Scale?utm_source=clickhouse&utm_medium=email&utm_campaign=202611-newsletter&ref=newsletter) - Melbourne - Dec 8, 2026  
+* [Logs, metrics and traces at scale, without the bill shock](https://clickhouse.com/company/events/202612-APJ-Sydney-Logs-Metrics-Traces-at-Scale?utm_source=clickhouse&utm_medium=email&utm_campaign=202611-newsletter&ref=newsletter) - Sydney - Dec 9, 2026  
+* [Logs, metrics and traces at scale, without the bill shock](https://clickhouse.com/company/events/202612-APJ-Bengaluru-Logs-Metrics-Traces-at-Scale?utm_source=clickhouse&utm_medium=email&utm_campaign=202611-newsletter&ref=newsletter) - Bengaluru - Dec 10, 2026  
+* [Melbourne Data Night with ClickHouse and ThoughtSpot](https://luma.com/clickh-x6bl) - Melbourne - Dec 15, 2026
+
+➡️ [Browse all ClickHouse events](https://clickhouse.com/company/events?utm_source=clickhouse&utm_medium=email&utm_campaign=202611-newsletter&ref=newsletter) · [Follow the ClickHouse calendar on Luma](https://luma.com/clickhouse-events)
+
+
+---
+
+## Get started today
+
+Interested in seeing how ClickHouse works on your data? Get started with ClickHouse Cloud in minutes and receive $300 in free credits.
+
+[Sign up](https://console.clickhouse.cloud/signUp?loc=blog-cta-3120-get-started-today-sign-up&utm_blogctaid=3120)
+
+---
+
+---
+
+## What's new in clickhousectl v0.6.0
+Published: 2026-11-19T19:41:35+00:00
+URL: https://clickhouse.com/blog/clickhousectl-v0-6-0
+
+---
+title: "What's new in clickhousectl v0.6.0"
+date: "2026-11-19T19:41:35.286Z"
+author: "Al Brown"
+category: "Product"
+excerpt: "clickhousectl v0.6.0 finds projects the way Git does, connects to Cloud without a password, adds search, shell completions and feedback, and verifies every install."
+---
+
+# What's new in clickhousectl v0.6.0
+
+[`clickhousectl`](https://github.com/ClickHouse/clickhousectl) (`chctl`) is one CLI for ClickHouse and Postgres, both on your laptop and in ClickHouse Cloud. Locally it installs and switches ClickHouse versions, runs project-scoped ClickHouse servers and Docker-backed Postgres, and connects clients. In Cloud it covers the whole lifecycle of ClickHouse, ClickHouse Managed Postgres, ClickPipes, ClickStack, backups, keys and members.
+
+[v0.5.0](https://clickhouse.com/blog/clickhousectl-v0-5-0) took UDFs from local to Cloud, added ClickHouse Managed Postgres observability and standardised the command surface. The highlights in v0.6.0:
+
+- **Projects that work like Git**: run commands from any subdirectory of a project, pin the project root with an environment variable, and check server config into the repo.
+- **Cloud connections without a password**: `cloud clickhouse client` signs you in through the browser, and `create --dotenv` writes the one-time password to `.env` and keeps it out of the terminal.
+- **`search`, shell completions and `feedback`**: find a command or flag by keyword, complete it with Tab, and tell us what the CLI couldn't do.
+- **ClickHouse Managed Postgres**: the service is now GA, and the CLI adds Postgres 19, AWS PrivateLink endpoints, standby counts and deletion protection.
+- **ClickPipes from discovery output**: `--columns-from` turns `schema-discover` output into a pipe's destination columns.
+- **Verified installs**: the install script, `update`, and npm, check every download against the release's checksums. Install no longer relies on the GitHub API.
+
+A few of these change existing behaviour, and OAuth logins saved by 0.5.x need one fresh login. See [the upgrade notes](#upgrade-notes).
+
+If you already have it installed, update in place:
+
+```bash
+clickhousectl update
+```
+
+If not, install it using your favorite method below:
+
+```bash
+curl https://clickhouse.com/cli | sh
+pip install clickhousectl
+uv tool install clickhousectl
+npm i -g clickhousectl
+cargo install clickhousectl
+```
+
+## Projects that work like Git
+
+In 0.5.x, project-scoped commands used the exact current directory. Start a server in the project root, `cd` into `src/`, and the CLI no longer saw it. In 0.6.0 a directory containing `.clickhouse/` is a project root, the way a directory containing `.git/` is for Git.
+
+Run `clickhousectl local init` once in your project directory. Local servers, Postgres instances, saved API keys, UDF sources and the `.env` fallback then resolve from that directory or any subdirectory below it.
+
+```bash
+clickhousectl local init
+clickhousectl local clickhouse start dev
+cd src/app
+clickhousectl local client dev --query "SELECT version()"
+```
+
+The nearest `.clickhouse/` wins, so a project nested inside another is its own project. The walk stops at your home directory, so the global `~/.clickhouse/` is never a project for the directories beneath it. `.clickhouse/` is git-ignored, so run `local init` once after cloning a repository. Starting a server without `local init` still works.
+
+### Name the project root explicitly
+
+Scripts, CI jobs and monorepos often need one project root wherever a command runs. Set `CLICKHOUSECTL_PROJECT_DIR` and discovery is skipped:
+
+```bash
+export CLICKHOUSECTL_PROJECT_DIR=~/code/app
+clickhousectl local init               # initializes ~/code/app, not the current directory
+clickhousectl local clickhouse start   # state in ~/code/app/.clickhouse/
+```
+
+### Server config you can check in
+
+Named configs used to apply only with `--config`, and only from your home directory. Nothing applied to every start, and a team couldn't share a config through the repo. Every `local clickhouse start` now merges two `config.d` directories before the `--config` file:
+
+| Location | Applies to | When |
+| --- | --- | --- |
+| `~/.clickhouse/config.d/` | every server on this machine | every start |
+| `clickhouse/config.d/` in the project root | every server in this project | every start |
+| `~/.clickhouse/configs/` | the server you name it for | only with `--config NAME` |
+
+Later layers win, and the data path and ports the CLI manages always come last. `local init` scaffolds `clickhouse/config.d/`, and `local clickhouse configs` lists what will apply.
+
+```bash
+cat > clickhouse/config.d/logging.xml <<'XML'
+<clickhouse>
+    <logger><level>debug</level></logger>
+</clickhouse>
+XML
+clickhousectl local clickhouse start dev
+```
+
+See the [local development guide](https://github.com/ClickHouse/clickhousectl/blob/main/docs/guides/local-development.md).
+
+## Connect to Cloud without handling a password
+
+The Cloud API returns the `default` user's password once, at creation. Two additions mean you rarely need to see it.
+
+### An interactive client, signed in through the browser
+
+`cloud clickhouse client` opens `clickhouse client` on a Cloud service over the native TLS protocol. The client signs you in through a browser as your Cloud user, so no service password is involved. It needs an installed ClickHouse 25.12 or newer, and arguments after `--` go to `clickhouse client` unchanged.
+
+```bash
+clickhousectl local install latest
+clickhousectl cloud clickhouse client <service-id>
+clickhousectl cloud clickhouse client --name analytics -q "SELECT version()" -- --format CSV
+```
+
+The browser step needs a person, so keep using `cloud clickhouse query` in CI and agents.
+
+### Connection settings written to `.env`
+
+`cloud clickhouse create --dotenv` writes the new service's connection settings and its one-time password to `.env` (or the file you name). The password then goes only to the file. It is left out of both the human and the JSON output, so it never reaches an agent's context or a transcript.
+
+```bash
+clickhousectl cloud clickhouse create --name analytics \
+  --ip-allow 203.0.113.10/32 --dotenv .env.local
+```
+
+The target file is checked before the service is created. If the write fails after creation, the command prints the password as usual and exits 1, so the credential is never lost.
+
+For an existing service, `cloud clickhouse dotenv` writes the same settings without a password. It is a read, so it works with an OAuth login:
+
+```bash
+clickhousectl cloud clickhouse dotenv <service-id> --local
+```
+
+Both write `CLICKHOUSE_HOST`, `CLICKHOUSE_PORT`, `CLICKHOUSE_HTTP_PORT`, `CLICKHOUSE_USER` and `CLICKHOUSE_SECURE=true`. An existing file is edited in place and only those keys are replaced, so a password written at creation survives a later `dotenv`.
+
+See the [Cloud service guide](https://github.com/ClickHouse/clickhousectl/blob/main/docs/guides/cloud-service.md).
+
+## Find commands with `search`
+
+Agents learn the CLI by walking `--help`. That breaks down when the capability they want is a flag and not a command. An "IP access list", for example, is `--ip-allow`. The new top-level `search` ranks commands by their path, flags, descriptions and agent context, and shows up to three matching flags for each. A small synonym table maps console words to the CLI's words.
+
+```bash
+clickhousectl search ip access list
+cloud clickhouse create  Create a service
+    --ip-allow      Allowed IP/CIDR, optionally IP_OR_CIDR=DESCRIPTION (repeatable)
+cloud clickhouse update  Update service configuration
+    --add-ip-allow     IP/CIDR to add, optionally IP_OR_CIDR=DESCRIPTION (repeatable)
+    --remove-ip-allow  IP or CIDR to remove from the service allow list (repeatable)
+cloud postgres create  Create a Postgres service
+    --ip-allow  Allowed IPv4 address or CIDR and ports (repeatable)
+...
+```
+
+`--limit` sets how many commands come back (default 5) and `--json` returns a `results` array. A search that matches nothing exits 0 with an empty array. It runs offline and touches no state.
+
+## Shell completions
+
+The command tree is deep, so 0.6.0 adds Tab completion for bash, zsh and fish. One line in your shell startup file registers both `clickhousectl` and `chctl`:
+
+```bash
+eval "$(clickhousectl completions bash)"   # ~/.bashrc
+eval "$(clickhousectl completions zsh)"    # ~/.zshrc, after compinit
+clickhousectl completions fish | source    # ~/.config/fish/config.fish
+```
+
+Completion covers commands, flags, local server and Postgres instance names, and installed versions. It runs the installed CLI on each Tab press, so it stays current after `update`. It works offline and records no telemetry.
+
+## Tell us what the CLI couldn't do
+
+Telemetry shows which commands ran, not what someone was trying to do. `clickhousectl feedback` sends a short free-text message to the team, and the agent context in help invites coding agents to use it when the CLI lacked a capability or its help misled them.
+
+```bash
+clickhousectl feedback "postgres client should accept a database name"
+```
+
+A message is at most 500 characters. It is sent with the CLI version, OS, architecture, whether a coding agent was detected, and the IDs of the Cloud organisations your active credentials belong to. It never includes your name, email, keys or organisation names. Feedback is an explicit action, so `telemetry disable` and `DO_NOT_TRACK` don't block it. The [feedback reference](https://github.com/ClickHouse/clickhousectl/blob/main/docs/reference/feedback.md) lists everything that is sent.
+
+## ClickHouse Managed Postgres
+
+The Postgres operations have graduated from Beta in the Cloud API, so the Beta label has gone from `cloud postgres`. The release also adds four things you can set from the terminal.
+
+**Postgres 19.** `postgres create --pg-version 19` is accepted, for organisations that have Postgres 19 enabled.
+
+**Private endpoints over AWS PrivateLink (Beta).** The new `cloud postgres private-endpoint` group creates an endpoint service for an AWS Postgres service, approves the VPC endpoints that may connect, and manages the extra regions allowed to reach it. The API replaces each list it is sent in full, so `update` reads the endpoint, merges your change and sends only the lists that changed. Approving one VPC endpoint never revokes another.
+
+**Standby count.** `--standby-count 0|1|2` on `create` and `update` sets the number of hot standbys. `none` takes 0, `async` takes 1 and `sync` takes 1 or 2. A count the given `--ha-type` doesn't take fails as a usage error before any request. `get` and `list` show the count.
+
+**Deletion protection.** `postgres update --deletion-protection true` makes the API reject `delete` for that service until you turn it off. It applies to organisations with deletion protection enabled, and `get` and `list` show the setting.
+
+```bash
+clickhousectl cloud postgres create --name app-db --region us-east-1 --size <size> \
+  --pg-version 19 --ha-type sync --standby-count 2
+clickhousectl cloud postgres private-endpoint create <postgres-id>
+clickhousectl cloud postgres private-endpoint update <postgres-id> \
+  --add-vpc-endpoint 'vpce-0123456789abcdef0=Production VPC'
+clickhousectl cloud postgres update <postgres-id> --deletion-protection true
+```
+
+Smaller changes:
+
+- `logs`, `metrics`, `slow-queries list`, `slow-queries get` and `backup list` take `--name <postgres-name>` in place of the service ID.
+- `slow-queries list` shows each pattern's database, user, operation and app, which are the keys `slow-queries get` needs.
+- `logs --severity` is checked against the supported levels before the request.
+- `config patch` and `config replace` read the document from stdin with `--file -`.
+- New GCP local-SSD sizes are accepted by `--size`, and its help names a small size per provider.
+- Help for `switchover` now describes what it does. It also works on a service without HA, by moving the primary onto a newly provisioned server.
+
+See the [ClickHouse Managed Postgres guide](https://github.com/ClickHouse/clickhousectl/blob/main/docs/guides/managed-postgres.md).
+
+## ClickHouse service configuration
+
+**Deletion protection.** Turn it on with `clickhouse create --deletion-protection`, or change it later with `clickhouse update --deletion-protection true|false`. `clickhouse delete` refuses a protected service with the error code `deletion_protected`, and the error's `command` field holds the `update` command that turns protection off. With `--force`, the service is checked before it is stopped, so a protected service is never stopped either.
+
+```bash
+clickhousectl cloud clickhouse create --name prod --deletion-protection
+clickhousectl cloud clickhouse update <service-id> --deletion-protection false
+clickhousectl cloud clickhouse delete <service-id>
+```
+
+**JWT authentication providers (Beta).** `cloud clickhouse jwt-provider` lets users sign in to a service with a JWT from your identity provider, on the Enterprise tier. A token holder receives the ClickHouse roles listed in the token's roles claim. `update` replaces the whole configuration, so pass `--roles-claim` again to keep it.
+
+```bash
+clickhousectl cloud clickhouse jwt-provider create <service-id> corp-sso \
+  --issuer https://auth.example.com --audience analytics \
+  --jwks-url https://auth.example.com/.well-known/jwks.json \
+  --roles-claim clickhouse:roles
+```
+
+**Instance profiles.** Enterprise and BYOC organisations can change the instance profile with `clickhouse scale --profile`. `clickhouse profile list` shows the available profiles.
+
+**Any region.** `clickhouse create --region` now accepts any region ID and leaves validation to Cloud, so a private region that isn't publicly listed works like a public one. If Cloud rejects a region and a known one is a close match, the error names it. `--custom-region`, added in 0.5.1 for this case, is now a deprecated alias of `--region` and will be removed in 1.0.0.
+
+Also: `clickhouse delete --force` waits at most 10 minutes for the stop and deletes nothing if it times out, and `backup list` takes `--name <service-name>` in place of the service ID.
+
+See the [Cloud service guide](https://github.com/ClickHouse/clickhousectl/blob/main/docs/guides/cloud-service.md).
+
+## ClickPipes
+
+Creating a Kafka, Kinesis, object storage or Pub/Sub pipe used to mean copying every discovered field into a `--column` flag by hand. Those four creates now take `--columns-from <PATH|->`, which reads `clickpipe schema-discover --json` output as it is. Every source field becomes a destination column, along with every metadata field that isn't disabled by default, and each type is used as discovered.
+
+```bash
+clickhousectl cloud clickpipe schema-discover object-storage <service-id> \
+  --storage-type s3 --source-url 'https://example-bucket.s3.amazonaws.com/events/**' \
+  --format JSONEachRow --iam-role "$S3_IAM_ROLE_ARN" --json > discovery.json
+
+clickhousectl cloud clickpipe create object-storage <service-id> \
+  --name events-snapshot --storage-type s3 \
+  --source-url 'https://example-bucket.s3.amazonaws.com/events/**' \
+  --format JSONEachRow --iam-role "$S3_IAM_ROLE_ARN" \
+  --database default --table events \
+  --columns-from discovery.json --start-paused
+```
+
+Edit `discovery.json` first to drop fields you don't want, or add more with `--column`. `--columns-from -` reads stdin, so discovery can be piped straight into create. `schema-discover` also marks which fields are metadata that ClickPipes adds, such as `_topic` or `_path`, in new `Virtual` and `Disabled By Default` columns.
+
+New options:
+
+- **MongoDB**: `--table-mapping-json` accepts `mongoConfig`. `{"persistDeletedDocuments": true}` keeps the full document as it was right before a delete, not only its `_id`.
+- **Postgres and MySQL**: `--use-json-native-format true` stores JSON columns as native ClickHouse `JSON` and not `String`. It is a create-time choice and needs the feature enabled for the organisation.
+- **Object storage**: `--skip-first-lines <N>` for TabSeparated formats, on `create` and `schema-discover`, and `--object-storage-max-file-size <BYTES>` on `create` and `settings update`.
+- **Reverse private endpoints**: `--custom-private-dns-mapping NAME=TARGET_ID` is now accepted for `VPC_ENDPOINT_SERVICE`, where the target is an availability zone ID such as `use1-az1`.
+- `clickpipe list` and `--name` lookups follow every page, so they see all pipes without new flags.
+
+The CLI also catches more mistakes before a request is sent, and is clearer about what a command did:
+
+- Kafka creates and schema discovery require authentication, and Kafka, Kinesis and Pub/Sub creates require columns. The API always rejected these requests, and they now fail locally as usage errors.
+- Every source's flags are checked before credentials are read.
+- `clickpipe start` exits 1 with its own error code when the API accepts the start but doesn't apply it: `clickpipe_still_pausing`, `clickpipe_start_not_applied`, or `clickpipe_start_no_effect` for a `Completed` pipe.
+- `cdc-scaling update` needs both `--cpu-millicores` and `--memory-gb`, and says the change was accepted, not completed.
+- `clickpipe update` rejects a root `settings` object, because the whole-pipe update doesn't apply it. Use `clickpipe settings update`.
+
+See the [ClickPipes guide](https://github.com/ClickHouse/clickhousectl/blob/main/docs/guides/clickpipes.md) and the [ClickPipe configuration reference](https://github.com/ClickHouse/clickhousectl/blob/main/docs/reference/clickpipe-configuration.md).
+
+## ClickStack
+
+Dashboards and alerts accept PromQL charts. Set `configType` to `promql` in a chart config to query `expressions` against a source of kind `promql`, in `dashboard create`, `update` and `validate`, and in inline alert charts. In 0.5.0 the CLI's own chart check rejected these before they reached the API.
+
+`alert list` gains server-side filters: `--tag`, `--search`, `--source` and `--state`. Repeat a flag to match any of several values.
+
+```bash
+clickhousectl cloud clickstack alert list <service-id> --state ALERT --state PENDING --tag checkout
+```
+
+Log sources accept the OpenTelemetry `eventNameExpression` and `severityNumberExpression` fields in `source create|update --file`, and metric and PromQL sources accept `minAutoGranularity`.
+
+The CLI still rejects unknown keys in a `--file` body before sending it, but it now leaves the values to the API. A new chart kind or enum value in ClickStack no longer needs a CLI release before you can use it.
+
+See the [ClickStack guide](https://github.com/ClickHouse/clickhousectl/blob/main/docs/guides/clickstack.md).
+
+## Organisation and BYOC
+
+Three new Beta command groups:
+
+- `cloud org byoc access` controls when ClickHouse personnel may access your BYOC infrastructure. `--mode always` allows it, `--mode never` denies it, and `--mode window` allows it for `--duration` seconds from `--start`.
+- `cloud org preview` lists the preview features offered to the organisation and switches them on or off.
+- `cloud member notification-settings` lists and updates a member's own overrides of their role's notification defaults, from flags or a `--file` body.
+
+```bash
+clickhousectl cloud org byoc access update <byoc-id> --mode window \
+  --start 2026-11-10T09:00:00Z --duration 14400
+clickhousectl cloud org preview list
+clickhousectl cloud member notification-settings update <user-id> --effect disabled \
+  --notification service_backup_failed --resource <service-id> --channel email
+```
+
+`cloud org role list` and role name lookups now follow every page, so they stay complete for organisations with more than 250 roles. `cloud activity list` returns the last 7 days by default, because the whole history of a busy organisation floods an agent's context. Pass `--from-date` for older entries. `--to-date` now includes the named day.
+
+## Built for automation and agents
+
+### Async commands say what to poll
+
+Async Cloud writes return as soon as the API accepts them. Agents rarely read the completion table in the docs, so they guessed what to poll. Those commands' `--json` output now carries a `next` object with the resolved read command, the field to check and the values that mean done or failed:
+
+```json
+"next": {
+  "command": "clickhousectl cloud clickhouse get 1234-... --org-id 5678-... --json",
+  "field": "state",
+  "until": ["running"],
+  "fail_on": ["failed"],
+  "interval_seconds": 5
+}
+```
+
+Run `command` as it is and stop when `field` holds one of the `until` values. It covers ClickHouse service create, start, wake, stop and delete, Postgres create, restore, read-replica create, resize and promote, ClickPipe start, stop and resync, CDC scaling, and reverse private endpoint creation. Commands with no reliable completion signal, such as a Postgres switchover or an HA change, carry no `next`, and the [automation reference](https://github.com/ClickHouse/clickhousectl/blob/main/docs/reference/automation.md) says what to check for those.
+
+### Exit codes and error codes you can branch on
+
+- **A 403 is no longer an auth error.** Every Cloud API 403 used to exit 4 with `auth_required`, so a quota or policy refusal sent agents to log in again with a valid key. A 403 now exits 1 with `http_4xx` and the server's message. Exit 4 stays for a 401, missing credentials and rejected credential checks.
+- **Invalid input always exits 2.** Input that is checked after parsing but can never succeed, such as an unknown `--provider`, a malformed `--ip-allow` or a `--file` body with unknown fields, used to exit 1. An empty resource ID, often an unset shell variable, is also a usage error, and nothing is sent.
+- **`resource_not_found` means what it says.** It is reported consistently for missing resources selected by ID or `--name`, and its `command` field lists what does exist in that scope. A delete the API rejects for a service that still exists reports `http_4xx`.
+- **Errors name the problem.** A `--file` that can't be read names the flag and path. A body with the wrong shape names the JSON path of the offending value, such as `policies[0].permissions[0]`. Help lists `--file` body fields, and enum errors list the accepted values.
+- **One JSON error envelope.** `update` and `skills` failures, and `auth login`, `logout` and `signup`, now follow JSON mode. Local errors keep clickhousectl's own summary in `message` and put text from other programs (ClickHouse, Docker, the OS) in `details`.
+
+### Smaller changes
+
+- `CLICKHOUSECTL_AUTO_JSON=0` keeps human output under a detected coding agent. An explicit `--json` still wins.
+- Resize, HA and CDC scaling updates say the change was accepted, not completed.
+- Pagination cursors that start with `-` are accepted, and every list command a hint suggests is checked to parse.
+
+## Verified installs and safer updates
+
+Until now the install script, the npm postinstall and `update` all trusted TLS to one download path, and nothing checked the binary. From v0.6.0, every release publishes a `SHA256SUMS` file and a GitHub build provenance attestation for its archives. The archives are served from builds.clickhouse.com and `SHA256SUMS` is read from the GitHub release, so the server that delivers an archive can't also vouch for it.
+
+| Install path | What is checked |
+| --- | --- |
+| Install script | The archive against the GitHub release's `SHA256SUMS`. A mismatch installs nothing |
+| `clickhousectl update` | The same check, before extracting. A mismatch leaves the installed binary unchanged |
+| npm | The archive against the `SHA256SUMS` embedded in the npm package at publish time |
+| pip, uv, pipx | No separate download. The binary is inside the wheel that PyPI serves |
+| `cargo install` | Builds from the crates.io source, which Cargo checks against the index checksum |
+
+To check that an archive was built by the repository's release workflow, verify its attestation with the GitHub CLI:
+
+```bash
+gh attestation verify "clickhousectl-${TARGET}-${VERSION}.tar.gz" -R ClickHouse/clickhousectl
+```
+
+`update` itself is more careful:
+
+- It refuses to overwrite a binary that npm, pip, uv or pipx manages, and prints the package manager's upgrade command.
+- It swaps the binary only after the new one runs `--version` successfully. A failure leaves the old binary in place.
+- The latest version is resolved from builds.clickhouse.com. 0.5.0 asked the GitHub API, which allows 60 unauthenticated requests per hour per IP, so `update` could fail with `403 rate limit exceeded`. If you hit that on 0.5.x, rerun the install script.
+- The background update check can be turned off with `CLICKHOUSECTL_NO_UPDATE_CHECK=1`. `--version` no longer waits up to 10 seconds on the network, and a failed check is retried after an hour, not a day.
+
+See [release verification](https://github.com/ClickHouse/clickhousectl/blob/main/docs/reference/install-verification.md).
+
+## Authentication
+
+**OAuth logins are pinned to their authorization server.** `cloud auth login` now saves the authorization server's configuration with the tokens, and every refresh uses that saved configuration. A login saved by 0.5.x doesn't have it, so `auth status` shows OAuth as `Login required` and Cloud commands exit 4 with a re-login message. Run `clickhousectl cloud auth login` once after upgrading.
+
+**A saved API key works only against the API it was saved for.** When `auth login --api-key` verifies a key against a non-production API with `--url`, that API is saved with the key. A later command that names a different API exits 4 without sending the key.
+
+**Saved credentials fail closed.** A `credentials.json` that exists but can't be read stops Cloud commands with an error naming the file. The CLI no longer falls through to environment or OAuth credentials you didn't intend to use. An OAuth login that can't be refreshed is kept and reported as `Expired`, where it used to be removed. Tokens are written atomically and refresh is locked, so two commands running at once can't corrupt the file.
+
+**Stored query keys are gone.** Since 0.5.0, `cloud clickhouse query` binds your active API key to the service's Query API endpoint. 0.6.0 stops using the older per-service keys that earlier versions created and stored, though the keys themselves still exist in your organisation. It also removes `repair-query-key`. A leftover record is removed on the next query or delete of that service, and the CLI prints the `cloud key delete` command for the key it named. A read-only API key can't bind itself, and now fails with `query_key_bind_forbidden` and the command that binds it with a write-capable key.
+
+Also: when credentials reach several organisations and none is selected, the command exits 2 and lists each organisation's ID and name. An `--org-name` that matches more than one organisation lists the IDs to pass to `--org-id`. The OAuth device flow can sign in against a custom API target by setting `CLICKHOUSECTL_AUTH_URL` and `CLICKHOUSECTL_CLIENT_ID`.
+
+See the [authentication reference](https://github.com/ClickHouse/clickhousectl/blob/main/docs/reference/authentication.md).
+
+## Local development improvements
+
+**Run a ClickHouse build you compiled yourself.** `local install --binary <PATH>` copies the file into `~/.clickhouse/versions/`, runs the copy with `--version`, and installs it under the version it reports. From there `local use`, `clickhouse start --version` and `local remove` treat it like any other install. Pass `--force` to replace it after a rebuild.
+
+```bash
+clickhousectl local install --binary ~/ClickHouse/build/programs/clickhouse
+```
+
+The rest is a round of fixes:
+
+- A stopped server restarts on the version it last ran. Before, `stop` cleared the recorded version, so a later `start` without `--version` ran the data directory on the default version and silently upgraded or downgraded it.
+- Commands that take a server name follow one selection rule when it is omitted: the server named `default`, else the project's only server of that engine. With several and no `default`, they fail with `server_selection_required` and list the names. `remove` never guesses.
+- Read-only commands such as `list` no longer create `.clickhouse/` in the current directory.
+- The port check detects wildcard and `::1` listeners, rejects port 0 and equal HTTP and TCP ports, and an omitted port never takes the one the other listener uses.
+- Server processes are found natively, without `pgrep`, `ps` or `lsof`, and a stored PID is confirmed to be a ClickHouse server before the CLI trusts it.
+- `local clickhouse stop`, `remove` and `local remove` no longer need Docker.
+- Exact versions install on Intel macOS again.
+- `dotenv` quotes values that contain `$` or other shell-special characters.
+
+And for local Postgres:
+
+- `local postgres client` stops a script at the first failed statement and exits 3. Before, a failing `--queries-file` or piped script printed the error and exited 0. Pass `-- -v ON_ERROR_STOP=0` to run the remaining statements.
+- New containers are named `clickhousectl-pg-<project hash>-<name>-<major>`, so two projects can use the same instance name. Existing containers keep their names.
+- Resuming an instance whose port is now taken fails with `port_in_use`. Stopping an instance that is already stopped succeeds and reports `already_stopped`.
+
+See the [local development guide](https://github.com/ClickHouse/clickhousectl/blob/main/docs/guides/local-development.md).
+
+## Command renames
+
+`local server` is now `local clickhouse`, and `cloud service` is now `cloud clickhouse`, with `ch` and `pg` as short aliases for the two engines. The old names still work. Locally, each engine's `list` and `stop-all` now cover only that engine, and `local status` shows both.
+
+## Upgrade notes
+
+The renames keep their old spellings, so most scripts carry on working. These changes need action or change what an existing script sees.
+
+### Breaking changes
+
+| Change | 0.5.x | 0.6.0 |
+| --- | --- | --- |
+| OAuth logins saved by an earlier version can't be used | The saved login was refreshed and used | `auth status` shows `Login required`. Run `clickhousectl cloud auth login` once |
+| `local server list` and `local server stop-all` cover ClickHouse only | Both listed and stopped ClickHouse and Postgres | `local status` lists both engines. `local postgres stop-all` stops Postgres |
+| `repair-query-key` is removed, and stored per-service query keys are no longer used | `cloud service repair-query-key <id>` | Queries bind the active API key. Delete leftover `clickhousectl-query-<service-name>` keys with `cloud key delete` |
+| Kafka ClickPipe creates and discovery require authentication. Kafka, Kinesis and Pub/Sub creates require columns | The request was sent and the API rejected it (exit 1) | Usage error (exit 2) before any request. Pass `--auth` or a credential flag, and `--column` or `--columns-from` |
+| JSON `project_scope` for local commands | `parent_projects_searched` present | `kind` is `project_root`, `current_directory` or `env_override`. `parent_projects_searched` is removed |
+
+### Behaviour changes
+
+| Change | 0.5.x | 0.6.0 |
+| --- | --- | --- |
+| Project scope | The exact current directory | The nearest `.clickhouse/` in the current directory or a parent, up to your home directory. A `.clickhouse/` in a shared parent now becomes the project for directories beneath it, so run `local init` in each project |
+| A Cloud API 403 that isn't about credentials | Exit 4, `auth_required` | Exit 1, `http_4xx` |
+| Invalid input found after parsing | Exit 1, code `other` | Exit 2, usage error |
+| `local postgres client` with a file or piped script | Carried on after a failed statement and exited 0 | Stops at the first failed statement and exits 3 |
+| `cloud activity list` with no dates | The whole history | The last 7 days. Pass `--from-date` for more |
+| `clickhousectl update` on an npm, pip, uv or pipx install | Overwrote the managed binary | Refuses, and prints the package manager's upgrade command |
+| `--custom-region` on service create | Sent a region the CLI didn't know | Deprecated alias of `--region`, removed in 1.0.0 |
+| Installing a release older than v0.6.0 with the script or `update` | Installed without a checksum | Refused, because those releases have no `SHA256SUMS` |
+
+## The Rust API library
+
+`clickhousectl` is built on [`clickhouse-cloud-api`](https://crates.io/crates/clickhouse-cloud-api), a typed Rust client for the ClickHouse Cloud API that is released in lockstep with the CLI. From 0.6.0 it has a [changelog](https://github.com/ClickHouse/clickhousectl/blob/main/crates/clickhouse-cloud-api/CHANGELOG.md) that says what a Rust caller must change to upgrade. The larger changes in this release:
+
+- Timestamp fields are `jiff::Timestamp`, where they were `chrono` types. On the wire they are still RFC 3339 in UTC.
+- Request structs with a required field no longer implement `Default`, so `..Default::default()` can't silently fill a field the API has just made required.
+- The crate re-exports `reqwest`, so a prebuilt HTTP client uses the same version as the library.
+
+## Thanks
+
+Thanks to [Emanuele De Cupis](https://github.com/balanza), who added OAuth device login against custom API targets ([#1082](https://github.com/ClickHouse/clickhousectl/pull/1082)), to [@divyenduz](https://github.com/divyenduz), who removed the Beta label from Postgres ([#1382](https://github.com/ClickHouse/clickhousectl/pull/1382)), and to [Andrey Chudnovskiy](https://github.com/achudnovskij), who added Postgres 19 ([#1462](https://github.com/ClickHouse/clickhousectl/pull/1462)).
+
+
+---
+
+## ClickHouse and Power BI, columnar end to end: the Arrow Flight connector is in public preview
+Published: 2026-11-19T17:59:00+00:00
+URL: https://clickhouse.com/blog/power-bi-arrow-flight-connector-public-preview
+
+---
+title: "ClickHouse and Power BI, columnar end to end: the Arrow Flight connector is in public preview"
+date: "2026-11-19T17:59:00.511Z"
+author: "Bentsi Leviav and Alex Francoeur"
+category: "Product"
+excerpt: "The ClickHouse Arrow Flight connector for Power BI is in public preview, connecting directly to ClickHouse with faster refreshes, less CPU work, and no gateway to deploy."
+---
+
+# ClickHouse and Power BI, columnar end to end: the Arrow Flight connector is in public preview
+
+*Connect Power BI to ClickHouse directly, over Arrow Flight SQL.*
+
+ClickHouse stores data in columns. Power BI stores data in columns. Until now, getting from one to the other meant turning that data into rows and back again.
+
+Today we're announcing the **ClickHouse Arrow Flight connector for Power BI**, now in public preview. It connects Power BI directly to ClickHouse over Arrow Flight SQL, the open standard the data ecosystem has been converging on, and keeps your data columnar the whole way.
+
+In practice, that means three things: refreshes run straight from the Power BI service with nothing to deploy in between, large loads are faster, and ClickHouse does far less work to serve them.
+
+## Why a new connector? {#why_a_new_connector}
+
+The existing ClickHouse connector for Power BI is built on ODBC. It has served a lot of dashboards well, and it remains fully supported. But Power BI's connectivity is moving toward Arrow-native drivers, and the new connector is built for where the platform is heading. The reason comes down to the shape of the data.
+
+ODBC was designed in the early nineties and moves data in rows. So every refresh takes columnar data out of ClickHouse, turns it into rows, ships the rows, and turns them back into columns inside Power BI. It works. It is also a bit like translating a book into another language and back so two people who speak the same language can read it.
+
+The new connector skips the translation.
+
+![](https://clickhouse.com/uploads/power_bi_arrow_flight_nov2026_rows_vs_columns_e126f4da63.png)
+
+*Rows versus columns: the same table moved two ways. Example data.*
+
+## What is Arrow Flight SQL, anyway? {#what_is_arrow_flight_sql_anyway}
+
+ClickHouse has had an Arrow Flight interface since 25.8, and we substantially reworked it around 26.4, but we never really introduced it. So here is the short version. It is three ideas stacked on top of each other.
+
+* **Apache Arrow** is a standard way to lay out a table in memory, column by column, with typed, contiguous buffers. If two programs both speak Arrow, one can hand a table to the other without converting anything.  
+* **Arrow Flight** is a protocol for sending those Arrow tables over the network, built on gRPC. The batches go on the wire in the same layout they have in memory.  
+* **Arrow Flight SQL** adds the database part: send a SQL query, get Arrow batches back, plus the metadata calls a client needs to discover tables and types.
+
+There is a fourth name you will see next to these: **ADBC** (Arrow Database Connectivity). It is the client-side API, the Arrow-native counterpart to ODBC and JDBC. An application talks ADBC, and an ADBC driver speaks Flight SQL to the server.
+
+We have one of those too: ClickHouse maintains its own [open-source ADBC driver](https://github.com/ClickHouse/adbc_clickhouse) for applications that want an Arrow-native client (it talks to ClickHouse over HTTP). The Power BI connector doesn't need it, since Power BI ships the Flight SQL driver itself, but it is there if you are building something of your own.
+
+From ClickHouse's side, it is one more interface on one more port. A few lines of Python are enough to see it work:
+
+<pre><code type='click-ui' language='python'>
+import pyarrow.flight as flight
+
+client = flight.FlightClient("grpc+tls://&lt;host&gt;:9090")
+token = client.authenticate_basic_token("default", "&lt;password&gt;")
+options = flight.FlightCallOptions(headers=[token])
+
+# Send SQL, get Arrow back.
+info = client.get_flight_info(
+    flight.FlightDescriptor.for_command("SELECT country, count() FROM orders GROUP BY country;"),
+    options,
+)
+table = client.do_get(info.endpoints[0].ticket, options).read_all()
+print(table)
+</code></pre>
+
+That table is a real Arrow table. Nothing was parsed from text, and no value was converted on the way.
+
+## Why is everyone betting on Arrow? {#why_is_everyone_betting_on_arrow}
+
+Because the alternative is every tool inventing its own way to hand data to every other tool, and paying a conversion tax at each border.
+
+Over the last few years the data ecosystem has quietly converged on Arrow as the shared format. Apache Spark uses it to move data between the JVM and Python. pandas can back its DataFrames with Arrow, and Polars is built on Arrow's memory model from the ground up. DataFusion is a query engine that is Arrow-native end to end, and DuckDB reads and writes Arrow without copying. On the transformation side, dbt v2 and its Fusion engine talk to warehouses through ADBC drivers.
+
+And now the last mile is catching up: BI and visualization tools. Microsoft has been moving Power BI and Fabric connectivity onto ADBC and Flight SQL, which is what makes this connector possible.
+
+> *"Our goal is to make Microsoft Fabric the easiest place to connect, integrate, and get value from data wherever it lives. The new ClickHouse connector leverages Fabric's modern data connectivity stack with ADBC and Flight SQL, bringing customers a high-performance, open-standards-based path to their ClickHouse data."*
+>
+> **Faisal Mohamood, Corporate Vice President of Data Integration at Microsoft**
+
+![](https://clickhouse.com/uploads/power_bi_arrow_flight_nov2026_arrow_ecosystem_1ed90a464b.png)
+
+*One columnar format underneath, one protocol on the wire, and a growing list of tools on top.*
+
+For a columnar database this is good news twice over. The data never has to leave its natural shape, and one well-built interface serves a whole ecosystem of clients.
+
+## How does the new connector work? {#how_does_the_new_connector_work}
+
+The Power BI service already ships an ADBC driver for Flight SQL. The new connector uses it to open a gRPC connection, encrypted with TLS, directly to ClickHouse's Arrow Flight interface. Queries go out as SQL. Results come back as Arrow record batches.
+
+That's it 🙂
+
+![](https://clickhouse.com/uploads/power_bi_arrow_flight_nov2026_connection_architecture_6f357c1985.png)
+
+*The ODBC connector needs a gateway machine between the Power BI service and ClickHouse. The Arrow Flight connector connects directly.*
+
+Because the Power BI service makes that connection itself, there is no on-premises data gateway to deploy, size or patch, and no driver to install. When you create the connection in Power BI, the "Data gateway" field simply reads **(none)**.
+
+![](https://clickhouse.com/uploads/power_bi_arrow_flight_nov2026_power_bi_no_gateway_e24948630c.png)
+
+*ClickHouse Arrow Flight (Preview) in Power BI, with Data gateway set to (none).*
+
+Beyond moving data, the connector does the things you would expect from a first-class Power BI source:
+
+* **Query folding.** Filters, sorts, group-bys and inner joins you build in Power Query are pushed down to ClickHouse as SQL, so ClickHouse does the heavy lifting and Power BI receives only what it needs.  
+* **Faithful types.** Decimal and UInt64 values reach Power Query exactly, with no detour through floating point on the way. (Power BI's data model then applies its own number types, so pick "Fixed decimal" for columns where exactness matters.)  
+* **Encrypted by default.** Every connection is gRPC over TLS with full certificate validation. There is no plaintext mode.  
+* **Native queries.** When you want full control, Value.NativeQuery passes your SQL through as written.
+
+## Ok, but is it faster? {#ok_but_is_it_faster}
+
+Yes. Here is what we measured.
+
+We loaded the same table through both connectors in the Power BI service: 10 million rows, 20 columns, a realistic mix of integers, decimals, timestamps and strings (including a few high-cardinality ones, because real tables have those). Arrow Flight connected directly. ODBC went through a gateway VM we placed close to ClickHouse, in a neighboring cloud region, with the current ODBC driver, to give it the best conditions we could. We alternated the two, three runs each.
+
+![](https://clickhouse.com/uploads/power_bi_arrow_flight_nov2026_import_benchmark_a72ea44789.png)
+
+*Import-mode refresh of 10 million rows in the Power BI service. Bars show the median of three runs; dots show each run.*
+
+|  | Arrow Flight (no gateway) | ODBC + gateway |
+| :---- | :---- | :---- |
+| **Refresh time, median** | 278 s | 390 s |
+| **Refresh time, all runs** | 271 / 278 / 286 s | 377 / 390 / 460 s |
+| **Time ClickHouse spent on the query** | about 5 s | about 150 s |
+| **ClickHouse CPU per load** | 5.2 s | 32.4 s |
+| **Machines you run in between** | none | one gateway VM, busy at about 40% of 4 vCPUs for about 2.5 minutes per refresh |
+
+🔬 **Test setup.** ClickHouse Cloud service in AWS us-west-2, running ClickHouse 26.11 on three 16 GiB replicas. Power BI workspace on shared capacity in Azure West US. Gateway on a 4 vCPU / 16 GB Azure VM in West US 2, with the October 2026 gateway build and ClickHouse ODBC driver 1.5.5. Both semantic models load the same table with no transformations, and the loaded data was verified identical on both paths.
+
+So the refresh is about **1.4x faster**, and ClickHouse does roughly **6x less CPU work** to serve it. With ODBC, the query stays open for two and a half minutes while rows are pulled through the driver. With Arrow Flight, ClickHouse is done in about five seconds.
+
+If ClickHouse answers in 5 seconds instead of 150, why isn't the refresh 30 times faster? Because most of a refresh happens after the data arrives. Power BI compresses those 10 million rows into its in-memory model, and that work is the same whichever connector delivered them. What Arrow Flight changes is everything before that point.
+
+## A few things to keep in mind {#a_few_things_to_keep_in_mind}
+
+This is a public preview, and we'd love your feedback. Import mode is where the connector works best today, and DirectQuery support is still maturing, with improvements already on the way. For the current list of known limitations and how they are progressing, see the [ClickHouse Power BI documentation](https://clickhouse.com/docs/integrations/connectors/data-visualization/powerbi-and-clickhouse), and follow the open issues in the [connector's GitHub repository](https://github.com/ClickHouse/power-bi-clickhouse/issues).
+
+## How can I try it? {#how_can_i_try_it}
+
+**On ClickHouse Cloud**, [open a support ticket](https://clickhouse.com/support/program) and ask for Arrow Flight to be enabled on your service.
+
+**On self-managed ClickHouse** (26.5 or later), enable the interface with a port and a certificate:
+
+<pre><code type='click-ui' language='xml'>
+&lt;clickhouse&gt;
+    &lt;arrowflight_port&gt;9090&lt;/arrowflight_port&gt;
+    &lt;arrowflight&gt;
+        &lt;enable_ssl&gt;true&lt;/enable_ssl&gt;
+        &lt;ssl_cert_file&gt;/path/to/server.crt&lt;/ssl_cert_file&gt;
+        &lt;ssl_key_file&gt;/path/to/server.key&lt;/ssl_key_file&gt;
+    &lt;/arrowflight&gt;
+&lt;/clickhouse&gt;
+</code></pre>
+
+Then, in the Power BI service:
+
+1. Choose **Get data** and search for **ClickHouse Arrow Flight**.  
+2. Enter your server and the Arrow Flight port (9090 on ClickHouse Cloud), and optionally a database.  
+3. Sign in with your ClickHouse username and password.  
+4. Pick your tables and load.
+
+That is the whole setup: no driver to install, and nothing to deploy in between.
+
+The connector is open source, and we would love to hear what works and what doesn't. Issues and feedback are welcome in the [connector repository](https://github.com/ClickHouse/power-bi-clickhouse).
+
+Happy dashboarding!
+
+
+---
+
+## Get started today
+
+Interested in seeing how ClickHouse works on your data? Get started with ClickHouse Cloud in minutes and receive $300 in free credits.
+
+[Sign up](https://console.clickhouse.cloud/signUp?loc=blog-cta-3098-get-started-today-sign-up&utm_blogctaid=3098)
+
+---
 
 ---
 
