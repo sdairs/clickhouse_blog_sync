@@ -1,5 +1,5 @@
 {
-  "last_sync": "2026-11-22T14:11:12.606116Z",
+  "last_sync": "2026-11-23T17:33:01.671624Z",
   "processed_blogs": {
     "https://clickhouse.com/blog/clickhouse-raises-400-million-series-d-acquires-langfuse-launches-postgres": {
       "title": "ClickHouse raises $400M Series D led by Dragoneer to accelerate expansion across analytics and AI infrastructure",
@@ -6312,9 +6312,15 @@
       "pub_date": "2026-11-19T17:59:00+00:00",
       "file_path": "blogs/2026-11-19-clickhouse-and-power-bi-columnar-end-to-end-the.md",
       "processed_at": "2026-11-20T14:58:49.848243Z"
+    },
+    "https://clickhouse.com/blog/clickhouse-expands-aws-strategic-collaboration-scale-unified-enterprise-ai-data-stack": {
+      "title": "ClickHouse expands AWS strategic collaboration with a $1.5 billion-plus agreement to scale its unified enterprise AI data stack",
+      "pub_date": "2026-11-23T15:57:17+00:00",
+      "file_path": "blogs/2026-11-23-clickhouse-expands-aws-strategic-collaboration.md",
+      "processed_at": "2026-11-23T17:33:01.589775Z"
     }
   },
-  "total_blogs": 1052,
+  "total_blogs": 1053,
   "failed_blogs": [
     {
       "url": "https://clickhouse.com/jp/blog/clickhouse-gcp-japan-availability",
