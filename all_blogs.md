@@ -1,6 +1,393 @@
 # ClickHouse Blogs
-Last updated: 2026-11-23 17:33:01 UTC
-Total blogs: 1053
+Last updated: 2026-11-24 17:03:32 UTC
+Total blogs: 1055
+
+---
+
+## PostgreSQL 19 on ClickHouse Managed Postgres, from day one
+Published: 2026-11-24T11:54:58+00:00
+URL: https://clickhouse.com/blog/postgresql-19-on-clickhouse-managed-postgres-from-day-one
+
+---
+title: "PostgreSQL 19 on ClickHouse Managed Postgres, from day one"
+date: "2026-11-24T11:54:58.677Z"
+author: "Andrey Chudnovskiy, David Wheeler and Gülçin Yıldırım Jelínek"
+category: "Engineering"
+excerpt: "PostgreSQL 19 is available on ClickHouse Managed Postgres from day one, with new replication, maintenance, observability, and performance features."
+---
+
+# PostgreSQL 19 on ClickHouse Managed Postgres, from day one
+
+PostgreSQL 19 was released on November 19, 2026, and **it has been generally available on ClickHouse Managed Postgres** since release day. Not in preview, and not behind a waitlist: you can create a PostgreSQL 19 instance [right now](https://console.clickhouse.cloud). Below we explain what it takes on the engineering side to support a new major version on day one, then survey the PostgreSQL 19 features we think matter most and what each one means for ClickHouse Managed Postgres.
+
+## What it takes to support PostgreSQL 19 on release day {#what_it_takes_to_support_postgresql_19_on_release_day}
+
+We lean on the expertise of the PostgreSQL Global Development Group (PGDG) [APT repository](https://apt.postgresql.org/) for our Postgres server and all third-party extensions. This enables us to provide 100% community Postgres immediately upon release, with all supported extensions up-to-date and ready to go. The only bits we package ourselves are our first-party extensions, which we likewise build against the community Postgres for immediate inclusion on release day.
+
+The PostgreSQL community packaging frees us to focus on updating the ClickHouse Managed Postgres platform to support the new version, while an agile release process with continuous automated validation against fully integrated staging environments enables moving fast once release day arrives.
+
+That work doesn't happen on release day, of course. Roughly, it is these steps:
+
+1. **Readiness checklist, started well ahead of the release.** Every component that touches Postgres has to work with the new version: ClickPipes CDC, WalShadow (private preview), third-party extensions, and our server parameter defaults.  
+2. **VM images built from the release candidate.** Together with Ubicloud, we added PostgreSQL 19 RC2 to the VM images we deploy from and made it available in our provisioning and fleet management workflows.  
+3. **Extension packaging.** Third-party extensions come from the PGDG repository, so each one is available as soon as its maintainers publish a PostgreSQL 19 build. We package our own extensions ourselves: [`pg_clickhouse`](https://clickhouse.com/docs/products/managed-postgres/extensions/pg_clickhouse/introduction), [`chdb`](https://clickhouse.com/docs/products/managed-postgres/extensions/chdb/introduction), [`pg_stat_ch` and `pg_re2`](https://clickhouse.com/docs/products/managed-postgres/extensions).  
+4. **Control plane.** A feature flag lets us light up PostgreSQL 19 in the console, API and admin tooling in staging first and then switch it on for everyone at GA.  
+5. **Testing.** Our end-to-end stress test suite runs the Postgres batches on PostgreSQL 19 in staging, on AWS and GCP. The testing matrix covers managed service features, such as high availability, scaling, read replicas, telemetry and billing. Failovers in different high availability setups are tested under continuous stress with injection of hardware and software failures. By release day, we are confident the service runs PostgreSQL 19 at GA quality.   
+6. **Rollout.** Once the official PostgreSQL 19 builds are available in the package sources, we prepare and validate the VM image to deploy on our fleet. Separation of control plane and VM image deployments enables us to move newly built images to production in a matter of hours without compromising on validation across the testing matrix.
+
+The option to deploy PostgreSQL 19 on a fully managed service on day one of the release is an advantage for users. As the service team, we optimized our processes, control plane and release pipeline to make the new major version available with minimal hassle, risk or disruption. What made it possible is our commitment to a 100% open-source engine with no fork to maintain, our partners at Ubicloud, and PGDG packaging and tooling.
+
+We're excited to see you try PostgreSQL 19 on ClickHouse Managed Postgres, as a standalone service or as part of an integrated OLTP + OLAP solution with the ClickHouse analytical engine.
+
+**On ClickHouse Managed Postgres:** If you are already running an earlier major version, there are two ways to move to PostgreSQL 19. Managed in-place major version upgrades are available in private preview: we handle the upgrade for you, with a few minutes of downtime during the switchover (reach out to us if you want to try it). If you need more control over the cutover and want to keep downtime to a minimum, you can set up a Postgres-to-Postgres migration with logical replication into a new PostgreSQL 19 instance and switch your application over once the replica has caught up.
+
+## PostgreSQL 19 highlights {#postgresql_19_highlights}
+
+### REPACK
+
+If we had to pick one feature to get the biggest "finally" from people who run Postgres, it would be this one. PostgreSQL 19 adds the [`REPACK`](https://www.postgresql.org/docs/19/sql-repack.html) command to replace `VACUUM FULL` and `CLUSTER` (Antonin Houska). The two old commands did very similar things under confusing names and still work for compatibility, but the one to use from now on is `REPACK`.
+
+The bigger news is the `CONCURRENTLY` option (Antonin Houska, Mihail Nikalayeu, Álvaro Herrera). Without it, `REPACK` holds an `ACCESS EXCLUSIVE` lock for the whole rewrite, just like `VACUUM FULL` always did. With it, most of the work runs under a `SHARE UPDATE EXCLUSIVE` lock. Changes made while `REPACK` copies the table are captured with logical decoding, and `ACCESS EXCLUSIVE` is only taken for the final swap.
+
+<pre><code type='click-ui' language='sql'>
+-- reclaim space from a bloated table without blocking reads and writes
+REPACK (CONCURRENTLY, VERBOSE) orders;
+
+-- rewrite and physically order the table by an index (what CLUSTER used to do)
+REPACK orders USING INDEX orders_created_at_idx;
+</code></pre>
+
+Progress shows up in the new `pg_stat_progress_repack` view.
+
+Because locks are Gülçin’s favorite topic 😀 we want to point out the fine print before anyone assumes `CONCURRENTLY` is free:
+
+* It is **not MVCC-safe**. Once the repack commits, the table looks empty to concurrent transactions whose snapshot was taken before the repack started.  
+* It still needs `ACCESS EXCLUSIVE` at the end, so a long-running transaction on the table can still make it wait, and every query behind it waits too. A `lock_timeout` is your friend.  
+* It doesn't work on partitioned tables, unlogged tables, materialized views or system catalogs, or on tables without a primary key or index-based replica identity. It can fail if someone runs DDL on the table in the meantime, and it fails if more than about 104 million rows are updated or deleted while it runs.  
+* It needs a replication slot from a pool separate from the regular replication slots, sized by the new `max_repack_replication_slots` setting.
+
+If you have used the [`pg_repack`](https://github.com/reorg/pg_repack) extension (which [we also ship](https://clickhouse.com/docs/products/managed-postgres/extensions)), the pattern will look familiar. The difference is that this is now in core.
+
+**On ClickHouse Managed Postgres:** `REPACK` is especially valuable here. It simplifies proactive management of table size and helps prevent disk saturation and the need to scale up the server, and with `CONCURRENTLY` it does so without blocking production workloads. It needs room to work, though: `REPACK` writes a new copy of the table and its indexes, so you need at least that much free disk space, plus space for the changes captured during a concurrent run. Run it before the disk is close to full. 
+
+### Read-your-writes with WAIT
+
+Gülçin wrote a [whole post about `WAIT FOR`](https://clickhouse.com/blog/postgresql-19-wait-for-read-your-writes), so here is the short version. The new [`WAIT` command](https://www.postgresql.org/docs/19/sql-wait.html) (the syntax is `WAIT FOR LSN ...`) lets a session on a standby wait until WAL has been replayed up to a [given LSN](https://www.postgresql.org/docs/19/glossary.html#GLOSSARY-LOG-SEQUENCE-NUMBER) before it reads. That gives you read-your-writes on an asynchronous replica without making every commit wait for the replica.
+
+<pre><code type='click-ui' language='sql'>
+-- on the primary, right after the write
+SELECT pg_current_wal_insert_lsn();
+
+-- on the replica, before the read
+WAIT FOR LSN '0/306EE20' WITH (TIMEOUT '2s', NO_THROW);
+</code></pre>
+
+**On ClickHouse Managed Postgres**: `WAIT` matters [only for read replicas](https://clickhouse.com/docs/products/managed-postgres/read-replicas), since [HA standbys](https://clickhouse.com/docs/products/managed-postgres/high-availability) are not exposed for reads. By default, read replicas replay WAL shipped through object storage, so lag is typically a few seconds and can approach a minute on a quiet primary. `WAIT` gives correct results there, but the wait can be as long as that lag: always set a `TIMEOUT` and decide what to do when it expires, for example fall back to the primary. If you need sub-second lag, [streaming replication is available through support](https://clickhouse.com/docs/products/managed-postgres/read-replicas).
+
+### Logical replication: sequences and EXCEPT
+
+Two changes that anyone who has performed a logical-replication-based migration or upgrade will recognize:
+
+- **Sequences can finally be replicated** (Vignesh C, Tomas Vondra): `CREATE PUBLICATION ... FOR ALL SEQUENCES` publishes them, and `ALTER SUBSCRIPTION ... REFRESH SEQUENCES` syncs their values on the subscriber. Forgetting to bump sequences after a logical cutover is a classic mistake, and now there is a built-in feature to avoid it. Two limits to know: sequence values are copied when you run the command, not streamed continuously, so run `REFRESH SEQUENCES` right before cutover; and the publisher must be PostgreSQL 19 or later, so it does not help yet when you migrate into 19 from 17 or 18.  
+- **`EXCEPT` for publications** (Vignesh C, Shlok Kyal): `FOR ALL TABLES EXCEPT ...` lets you skip a few tables without listing all the others.
+
+<pre><code type='click-ui' language='sql'>
+CREATE PUBLICATION app_pub
+    FOR ALL TABLES EXCEPT (TABLE audit_log, session_cache), ALL SEQUENCES;
+</code></pre>
+
+**On ClickHouse Managed Postgres:** `wal_level` is set to `logical` on every instance and is not a setting you can change, so the PostgreSQL 19 change that removes the restart when moving from `wal_level = replica` to `logical` does not affect you.
+
+### Autovacuum: parallel index vacuuming and a scoring system
+
+Autovacuum can now vacuum a table's indexes with parallel workers (Daniil Davydov), controlled by `autovacuum_max_parallel_workers` and the per-table storage parameter `autovacuum_parallel_workers`. It only helps tables with two or more sizeable indexes, and the per-table parameter can lower the server-wide limit or turn it off for one table, but not raise it. Autovacuum also processes tables in an order determined by a score rather than the order in which it happens to find them (Nathan Bossart), and the new `pg_stat_autovacuum_scores` view (Sami Imseih) shows how it ranks your tables. We covered the scoring system and the view in detail in [New system views in PostgreSQL 19](https://clickhouse.com/blog/postgres-19-new-system-views).
+
+One change to keep in mind: parallel vacuum workers now share the cost-based delay budget with their leader, so `VACUUM` with parallel workers and cost-based delay can run more slowly than before.
+
+**On ClickHouse Managed Postgres:** `autovacuum_max_parallel_workers` keeps the upstream default of 0, so autovacuum does not use parallel index workers unless you raise it in Settings. The workers come out of `max_parallel_workers`, which is 4 by default on the service. The per-table `autovacuum_parallel_workers` parameter is set with `ALTER TABLE` as usual. The scoring system runs with the upstream weights, and `pg_stat_autovacuum_scores` is there to query. The five `autovacuum_*_score_weight` parameters are not in Settings, so reach out to us if you need to change them.
+
+### Observability
+
+Gülçin has already written two posts about this (and [talked about it at PGConf.EU 2026 in Valencia](https://www.postgresql.eu/events/pgconfeu2026/schedule/session/8182-whats-new-with-monitoring-in-postgresql-19/)), so we will keep it short and link to them:
+
+- [What's New with Monitoring in PostgreSQL 19](https://clickhouse.com/blog/postgres-19-monitoring-whats-new): `log_lock_waits` on by default, per-process `log_min_messages`, `log_autoanalyze_min_duration`, `wal_fpi_bytes`, new wait events, `pg_get_multixact_stats()` and the earlier wraparound warnings.  
+- [New system views in PostgreSQL 19](https://clickhouse.com/blog/postgres-19-new-system-views): `pg_stat_lock`, `pg_stat_recovery`, `pg_stat_autovacuum_scores` and `pg_dsm_registry_allocations`.
+
+One thing to add: `EXPLAIN (ANALYZE, IO)` now reports asynchronous I/O activity, and `auto_explain.log_io` can log it.
+
+**On ClickHouse Managed Postgres:** `pg_stat_ch` is verified on PostgreSQL 19, and `log_lock_waits` keeps the upstream default (`on`) and can be changed in Settings.
+
+### pg_plan_advice and pg_stash_advice
+
+PostgreSQL 19 ships a new contrib module, [`pg_plan_advice`](https://www.postgresql.org/docs/19/pgplanadvice.html) (Robert Haas). It describes the planner's key decisions in a small "plan advice" language, so you can reproduce a plan or nudge the planner. [`pg_stash_advice`](https://www.postgresql.org/docs/19/pgstashadvice.html) (Robert Haas, Lukas Fittl) applies advice automatically per query ID.
+
+<pre><code type='click-ui' language='sql'>
+LOAD 'pg_plan_advice';
+EXPLAIN (COSTS OFF, PLAN_ADVICE)
+SELECT * FROM orders o JOIN customers c ON o.customer_id = c.id;
+-- the plan output ends with a "Generated Plan Advice:" section,
+-- e.g. JOIN_ORDER(...), HASH_JOIN(...), SEQ_SCAN(...)
+
+-- to change the plan, supply only the items you want to control:
+-- here, start from customers and put orders on the inner side of a hash join
+SET pg_plan_advice.advice = 'JOIN_ORDER(c o) HASH_JOIN(o)';
+EXPLAIN (COSTS OFF)
+SELECT * FROM orders o JOIN customers c ON o.customer_id = c.id;
+-- the plan output now ends with a "Supplied Plan Advice:" section that
+-- reports on each item, e.g. JOIN_ORDER(c o) /* matched */
+</code></pre>
+
+To change a plan, set `pg_plan_advice.advice` for your session, as in the second half of the example. You don't need the whole generated string: supply only the items you want to control, such as the join order, and the planner decides the rest. Targets are the aliases the query uses (the table name only where there is no alias), and a join-method item names the relation on the inner side of the join. Advice only narrows the choices the planner already had, so planning does not fail, but advice that can't be followed can leave you with a worse plan than no advice at all. `EXPLAIN` shows it: the item is flagged as partially matched, not matched or failed, and plan nodes can be marked `Disabled: true`. Check the `Supplied Plan Advice` section before you rely on it. The docs carry their own warning, and we agree with it: the planner usually makes good decisions, and pinning a plan can backfire when your data changes. Use it to stabilize a plan you know is good, or for experiments.
+
+**On ClickHouse Managed Postgres:** `pg_plan_advice` ships with the PostgreSQL 19 contrib modules, so you can load it per session with `LOAD` or through `session_preload_libraries`. Both need a superuser, such as the default `postgres` user. For an application role, run `ALTER ROLE app_user SET session_preload_libraries = 'pg_plan_advice'` once as `postgres`, and new sessions for that role load it automatically. `pg_stash_advice` loads the same way, after `CREATE EXTENSION pg_stash_advice`. Its stashes are kept in shared memory on the server, and reloading them after a restart needs `shared_preload_libraries`, which is not available for this module on the service today, so a restart or failover clears them. Keep the statements that create your stashes in a script you can rerun.
+
+## Performance improvements {#performance_improvements}
+
+Highlights from the release notes:
+
+* Faster foreign key checks (Junwang Zhao, Amit Langote, Chao Li).  
+* Regular table scans can now mark pages all-visible in the visibility map, which used to be possible only for `VACUUM` and `COPY ... FREEZE` (Melanie Plageman).  
+* Radix sort, SIMD for `COPY FROM` text/CSV parsing, and `NOTIFY` waking up only the backends that listen.
+
+### Benchmarks
+
+As we prepared for the release, we added PostgreSQL 19 to the performance testing matrix and ran the same benchmarks on PostgreSQL 18 and PostgreSQL 19 side by side. Results without HA and on TPC-C are stable between the two versions. With one synchronous standby, the [PostgresBench](https://clickhouse.com/blog/postgresbench) 500 GB scenario (pgbench's TPC-B-like workload with 256 clients on 16 vCPU and 64 GiB of RAM) averaged 22,814 TPS on PostgreSQL 19 against 22,299 TPS on PostgreSQL 18. That is about 2% higher, close to the variation we see between runs:
+
+![](https://clickhouse.com/uploads/postgresql19_nov2026_postgresbench_2fa16efa82.png)
+
+We will publish more detailed PostgreSQL 19 results with the next PostgresBench release.
+
+### New defaults
+
+A few defaults also changed in PostgreSQL 19: `jit` is `off`, `default_toast_compression` is `lz4`, `log_lock_waits` is `on`, and `max_locks_per_transaction` is 128 (the lock allocation changed, so double an old custom value to keep the same capacity). With `io_method = worker`, the number of I/O workers now scales automatically. `io_workers` is removed and replaced by `io_min_workers`, `io_max_workers`, `io_worker_idle_timeout` and `io_worker_launch_interval` (Thomas Munro).
+
+**On ClickHouse Managed Postgres:** We keep these defaults and run `io_method = worker`. `default_toast_compression` was already `lz4` on earlier versions here. In Settings, `io_min_workers` and `io_max_workers` replace `io_workers` on PostgreSQL 19.
+
+### Small things developers will like
+
+* `COPY TO` can write JSON: `COPY orders TO STDOUT (FORMAT json, FORCE_ARRAY);`  
+* `COPY FROM ... (ON_ERROR SET_NULL)` sets bad input values to `NULL` instead of failing the load.  
+* Window functions get `IGNORE NULLS` / `RESPECT NULLS` for `lead()`, `lag()`, `first_value()`, `last_value()` and `nth_value()`.  
+* The `psql` prompt can show the search path (`%S`) and whether you are on a hot standby (`%i`).  
+* `INSERT ... ON CONFLICT DO SELECT ... RETURNING` returns the existing row on conflict, optionally locked with `FOR UPDATE/SHARE`. No more "insert, and if it conflicts, select again":
+
+## Outro {#outro}
+
+PostgreSQL 19 is a big release, and the community did great work on it. A huge thank you to everyone in the [acknowledgments list](https://www.postgresql.org/docs/19/release-19.html). Happy upgrades, and if you want to try PostgreSQL 19 today, you can do it on ClickHouse Managed Postgres.
+
+---
+
+## Get started with ClickHouse Managed Postgres today
+
+Interested in seeing how ClickHouse Managed Postgres works on your data? Get started with ClickHouse Cloud in minutes and receive $300 in free credits.
+
+[Sign up](https://console.clickhouse.cloud/signUp?intent=pg&loc=blog-cta-3131-get-started-with-clickhouse-managed-postgres-today-sign-up&utm_blogctaid=3131)
+
+---
+
+---
+
+## Your agents don't care that you're a batch shop
+Published: 2026-11-24T08:22:07+00:00
+URL: https://clickhouse.com/blog/your-agents-dont-care-that-youre-a-batch-shop
+
+---
+title: "Your agents don't care that you're a batch shop"
+date: "2026-11-24T08:22:07.825Z"
+author: "Jake Vernon"
+category: "Engineering"
+excerpt: "Once agents start querying your data at scale, you need a real-time engine. Even if your data arrives in nightly batches. Even if you only query old data."
+---
+
+# Your agents don't care that you're a batch shop
+
+## TL;DR
+
+Once agents start querying your data at scale, you need a real-time engine. Even if your data arrives in nightly batches. Even if you only query old data. Efficient query execution means more answers from the same compute, helping control costs as agent demand grows.
+
+## The wrong question
+
+"Where does real-time fit in our business?" Trading desks and risk teams rarely ask me that. They already know, and they come looking for it. The question comes from everyone else: the business units that hear real-time and picture a dashboard with a number that blinks. When they can't find one, the verdict is "we're a batch shop, real-time isn't for us."
+
+That verdict rests on a narrow definition: a fast answer on fresh data, shown to a human. Real-time is that, and it is also what sets the cost of every question your agents ask, including the ones asked of yesterday's data.
+
+Real-time describes how efficiently the system produces an answer. Seen that way, it stops being a use case you shop for and becomes the cost and capacity element of your entire data estate. Agents are about to make that element matter to firms that have never run a low-latency workload.
+
+## Speed is the symptom. Efficiency is the property.
+
+A query returns in 200 ms instead of 20 seconds for one reason: the engine did less work. It read fewer bytes, burned fewer CPU cycles and held memory for less time. Latency is the receipt for that work.
+
+<div class="blog-image-figure" style="margin:0 0 24px;max-width:100%;">
+  <img src="/uploads/batch_shop_visual_01_f60d43c368.png" alt="Real-time query latency and four engine properties" width="1600" height="900" style="display:block;width:100%;max-width:100%;height:auto;margin:0;">
+  <p class="blog-image-caption" style="margin:8px 0 0;font-family:inherit;font-size:0.8em;line-height:1.5;font-weight:400;font-style:normal;color:#aaa;text-align:left;">what real-time delivers · 1 visible outcome, 4 engine properties</p>
+</div>
+
+Everything in the lower band is something you pay for. A query that finishes 100 times sooner hands its cores back 100 times sooner. Those cores are then free for the next query, the next user or the next agent, on the same hardware.
+
+This is why "we don't need sub-second" misses the point. You may not need the answer in 200 ms. You do want to pay for 200 ms of compute instead of 20 seconds of it.
+
+## The batch shop that thinks it's exempt
+
+Much of financial services runs on batch, and for good reasons. End-of-day risk, overnight P&L, regulatory reporting, month-end close and reconciliation all work this way. Data lands on a schedule, jobs run in a window, and people read the output the next morning.
+
+In that world, slow queries hide well. The warehouse is sized for the batch window, and a 40-second ad hoc query costs an analyst a sip of coffee. Humans are a natural rate limiter: a desk of 20 quants asks a few hundred questions a day.
+
+So the firm concludes it will never have a real-time workload. It is right about its data freshness and wrong about its query load. The workload that breaks the model is already in pilot on the same floor, and it never stops for coffee.
+
+## Agents change the math
+
+An analyst asks one question and runs one query. An agent given the same question explores. It lists tables, reads schemas, samples rows, runs a first cut, checks it against a second source, hits an error and retries. One business question becomes tens of queries.
+
+<div class="blog-image-figure" style="margin:0 0 24px;max-width:100%;">
+  <img src="/uploads/batch_shop_visual_02_9ced02f69e.png" alt="An analyst query compared with an agent chain of six or more queries" width="1600" height="900" style="display:block;width:100%;max-width:100%;height:auto;margin:0;">
+  <p class="blog-image-caption" style="margin:8px 0 0;font-family:inherit;font-size:0.8em;line-height:1.5;font-weight:400;font-style:normal;color:#aaa;text-align:left;">analyst versus agent · 1 query against a chain of 6 or more</p>
+</div>
+
+Three things change at once:
+
+- **Volume.** Agents don't sleep, and a desk can run hundreds of them in parallel.
+- **Concurrency.** Their queries arrive in bursts instead of spreading across a working day.
+- **Compounding latency.** An agent's steps run in sequence. Thirty queries at 10 seconds each is five minutes before the agent says anything. At 200 ms each it is six seconds.
+
+The rest is queueing theory. Throughput on a fixed cluster is roughly its cores divided by the core-seconds each query holds. If every query holds resources for 10 seconds, a handful of agents saturates the cluster and everyone behind them waits.
+
+<div class="blog-image-figure" style="margin:0 0 24px;max-width:100%;">
+  <img src="/uploads/batch_shop_visual_03_71e8b3004e.png" alt="Illustrative compute-slot capacity at two query hold times" width="1600" height="900" style="display:block;width:100%;max-width:100%;height:auto;margin:0;">
+  <p class="blog-image-caption" style="margin:8px 0 0;font-family:inherit;font-size:0.8em;line-height:1.5;font-weight:400;font-style:normal;color:#aaa;text-align:left;">illustrative · one compute slot, 60 seconds, two hold times</p>
+</div>
+
+On a credit-metered cloud warehouse, the standard fix for that queue is to size up or add clusters. You buy your way out. On an engine that finishes in milliseconds, the same cores turn over 50 times in the same interval, so the next agent takes resources that are already free.
+
+A batch shop can keep its stale data and still need this. The agent may be querying yesterday's positions. It still needs each answer fast and cheap, because it asks so many questions to get to one.
+
+
+
+---
+
+## Put your agents’ queries to the test
+
+Run your analytical queries on ClickHouse Cloud and compare response times and compute use.
+
+[Try ClickHouse Cloud](https://console.clickhouse.cloud/signUp?loc=blog-cta-3125-put-your-agents-queries-to-the-test-try-clickhouse-cloud&utm_blogctaid=3125)
+
+---
+
+## The workload nobody budgets for
+
+The people driving this load are not engineers. A PM, a product controller or a compliance analyst asks an agent a question and expects it to work. They never see a query, a cluster or an invoice. Agents make it easy to be irresponsible with a budget you don't know you're spending.
+
+<div class="blog-image-figure" style="margin:0 0 24px;max-width:100%;">
+  <img src="/uploads/batch_shop_visual_04_15f0c8e3e7.png" alt="Agent workloads across three offices and nine functions" width="1600" height="900" style="display:block;width:100%;max-width:100%;height:auto;margin:0;">
+  <p class="blog-image-caption" style="margin:8px 0 0;font-family:inherit;font-size:0.8em;line-height:1.5;font-weight:400;font-style:normal;color:#aaa;text-align:left;">where agent load comes from · 3 offices, 9 functions</p>
+</div>
+
+Now scale it the way a firm is organized. Assume 8 users in a pod, 5 pods on a desk, and 1,000 agent queries per user per day inside an eight-hour day.
+
+| Scale | Users | Queries a day | In flight at 12 s | In flight at 0.4 s |
+| --- | --- | --- | --- | --- |
+| 1 pod | 8 | 8,000 | 3 | under 1 |
+| 1 desk (5 pods) | 40 | 40,000 | 17 | under 1 |
+| 10 desks | 400 | 400,000 | 167 | 6 |
+| 50 desks | 2,000 | 2,000,000 | 833 | 28 |
+| 125 desks | 5,000 | 5,000,000 | 2,083 | 69 |
+
+<div class="blog-image-figure" style="margin:0 0 24px;max-width:100%;">
+  <img src="/uploads/batch_shop_visual_05_66ae7e5175.png" alt="Illustrative queries in flight as agent usage scales" width="1600" height="900" style="display:block;width:100%;max-width:100%;height:auto;margin:0;">
+  <p class="blog-image-caption" style="margin:8px 0 0;font-family:inherit;font-size:0.8em;line-height:1.5;font-weight:400;font-style:normal;color:#aaa;text-align:left;">illustrative · 40 users a desk, 1,000 agent queries per user per day, 8-hour day</p>
+</div>
+
+Both lines rise with every desk. The slope is what you pay for, and hold time sets the slope. Here is what each traditional cloud pricing model does with the steeper line.
+
+| Pricing model | What happens as desks scale | Where it lands |
+| --- | --- | --- |
+| Credit-metered warehouse | Queries queue at the concurrency limit, so clusters get added, each at the full warehouse rate | Chargeback to the desk |
+| Cluster-based lakehouse SQL | Autoscaling adds clusters as concurrency rises, billed per cluster-hour | Run-the-bank budget overrun |
+| Per-query, priced on data scanned | Every exploratory query is its own charge, used or not | A line item per question |
+| Real-time engine | Cores free up in milliseconds, so the same compute absorbs far more desks | Headroom |
+
+Hedge funds feel this faster than banks. At a multi-manager platform, every pod is its own P&L. Technology cost is netted against the pod or passed through to investors. An agent bill that scales with query hold time is a drag on net returns, and it grows with every pod you add.
+
+## Where the P&L takes the hit
+
+The agent compute bill is a product of five terms, and you only control one of them.
+
+<div class="blog-image-figure" style="margin:0 0 24px;max-width:100%;">
+  <img src="/uploads/batch_shop_visual_06_34df831f1e.png" alt="Five factors in the agent query cost driver tree" width="1600" height="900" style="display:block;width:100%;max-width:100%;height:auto;margin:0;">
+  <p class="blog-image-caption" style="margin:8px 0 0;font-family:inherit;font-size:0.8em;line-height:1.5;font-weight:400;font-style:normal;color:#aaa;text-align:left;">driver tree · 5 terms, 1 controllable</p>
+</div>
+
+The first three terms rise by design, because that is what deploying agents means. The vendor sets the price. Compute-seconds per query is the only term your architecture decides.
+
+Here is an illustrative desk: 50 agents, 100 tasks a day each, 40 queries per task. That is 200,000 queries a day. Put your own numbers in; the ratio is what carries over.
+
+|  | Query holds compute for 12 s | Query holds compute for 0.4 s |
+| --- | --- | --- |
+| Compute held per day | 667 hours | 22 hours |
+| Average queries in flight | 28 | 1 |
+| Agent wait per 40-query task | 8 minutes | 16 seconds |
+
+That is a 30-fold gap on the same workload. In financial services it lands in specific places:
+
+- **Front office: pre-trade risk and limit checks.** An agent checks exposure against limits before an order goes out. If it queues behind other agents, the order waits and you eat the slippage, or the check gets bypassed and you carry a limit breach.
+- **Middle office: intraday P&L explain.** Desk heads want attribution at T+0. Agents can deliver it by rescanning positions, trades and market data all day. On metered compute that cost is charged back to the desk and shows up in its cost-to-income ratio.
+- **Front office: TCA and best execution.** Investigating one bad fill means as-of joins of orders against tick data across billions of rows. One investigation is cheap. A thousand a day across every algo and venue is a budget line.
+- **Middle office: surveillance and AML alert triage.** Each alert pulls months of transaction history. Slow queries grow the backlog, and a backlog becomes headcount or regulatory exposure.
+- **Back office: batch window contention.** Agents working overnight compete with EOD risk and regulatory reporting jobs. T+1 settlement already squeezed that window. A missed batch SLA costs more than any cloud invoice.
+- **Every office: the FinOps surprise.** Autoscaling hides the queue until the invoice arrives. Spend that used to track headcount now tracks agent count, and nobody budgeted for that.
+
+## This is an architecture question
+
+You cannot tune a batch engine into this. Work per query is set by design decisions made years before your agents showed up. Whatever you run, these are the properties to look for.
+
+| Property | What it means | Why agents care |
+| --- | --- | --- |
+| Reads less | Columnar storage and compression, so a query touches only the columns it needs | Fewer bytes and less I/O per question |
+| Skips more | Indexes that rule data out before reading it | Exploratory queries don't scan the table |
+| Uses every cycle | Vectorized execution across all cores | Fewer CPU cycles per row |
+| Precomputes | Aggregates maintained as data arrives | Repeated questions hit ready results |
+| Isolates workloads | Separate compute for ingest, batch and agent reads | Agents can't starve the batch run |
+| Caps runaways | Limits on time, memory and rows per user or role | A runaway agent gets cut off, not a bigger cluster |
+
+A disclosure: I lead field engineering for ClickHouse in the Americas, and it is one engine built this way. The checklist stands without it.
+
+You also don't have to rip out batch. Every firm I talk to has an Iceberg strategy. Keep the lake as the system of record and keep the heavy transformations where they run today. Serve the data agents need from a real-time engine, or query it in place on the lake.
+
+## You can measure this today
+
+None of this has to be taken on faith. Agents and queries both emit traces. Every model call, tool call and query is a span with a start, an end and a cost.
+
+<div class="blog-image-figure" style="margin:0 0 24px;max-width:100%;">
+  <img src="/uploads/batch_shop_visual_07_f6a8b84be2.png" alt="Illustrative nine-second agent task with six spans" width="1600" height="900" style="display:block;width:100%;max-width:100%;height:auto;margin:0;">
+  <p class="blog-image-caption" style="margin:8px 0 0;font-family:inherit;font-size:0.8em;line-height:1.5;font-weight:400;font-style:normal;color:#aaa;text-align:left;">illustrative trace · 1 agent task, 6 spans</p>
+</div>
+
+In this illustrative trace, one query holds 4.6 of the task's 9 seconds. That is where the compute-seconds term lives, and you only find it if you trace.
+
+There are two layers of telemetry, and you want both:
+
+- **Agent tracing.** What the agent did: model requests, tool calls, tokens and cost.
+- **Infrastructure telemetry.** Logs, metrics and traces from the services and databases the agent hits, collected through OpenTelemetry. This is where a slow query shows up as CPU, memory and rows read.
+
+Measure with whatever you already have. Instrument one agent pilot, find the spans that hold the compute, and put a price on them. We pair Langfuse for the agent layer with ClickHouse Observability for the infrastructure layer, and any stack that gives you both views will do.
+
+Measure the whole path, too. A 50 ms query can still be expensive to serve, because the cost also sits in ingesting the data, ordering it, indexing it and keeping aggregates fresh. [CostBench](https://clickhouse.com/benchmarks/costbench), an open benchmark that ClickHouse publishes, prices that full path on a market-data workload: NBBO quotes arriving at a million a second while dashboards and drill-downs run. The code and pricing assumptions are public, so rerun it on your own workload before you trust anyone's number, including mine.
+
+## Ask a different question
+
+Stop asking where real-time fits. Ask how many compute-seconds each answer costs you, and what happens to that number when the ones asking are agents.
+
+Fast answers on fresh data still count. Add the agent load to them, because it is the one that reaches the P&L.
+
+Three things worth doing this quarter:
+
+1. Measure compute-seconds per query on your current platform, by workload.
+2. Take one agent pilot and count its queries per task. Multiply by the rollout plan.
+3. Run the same queries on a real-time engine and compare hold time, since latency alone understates the gap.
+
+Two caveats, because this is not magic. A fast engine does not fix a badly behaved agent, so you still need guardrails on what agents can run. And cheaper queries invite more queries, so expect the saving to appear as headroom before it appears as a smaller bill.
+
+This is why you need real-time, whether or not a single dashboard in your firm ever blinks. It decides whether your agents scale with the business or your agent bill scales faster than it. The batch shops have the most to gain, because they have never had to count the cost of a question, and their agents are about to ask millions of them.
+
 
 ---
 

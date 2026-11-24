@@ -1,5 +1,5 @@
 {
-  "last_sync": "2026-11-23T17:33:01.671624Z",
+  "last_sync": "2026-11-24T17:03:33.042971Z",
   "processed_blogs": {
     "https://clickhouse.com/blog/clickhouse-raises-400-million-series-d-acquires-langfuse-launches-postgres": {
       "title": "ClickHouse raises $400M Series D led by Dragoneer to accelerate expansion across analytics and AI infrastructure",
@@ -6318,9 +6318,21 @@
       "pub_date": "2026-11-23T15:57:17+00:00",
       "file_path": "blogs/2026-11-23-clickhouse-expands-aws-strategic-collaboration.md",
       "processed_at": "2026-11-23T17:33:01.589775Z"
+    },
+    "https://clickhouse.com/blog/postgresql-19-on-clickhouse-managed-postgres-from-day-one": {
+      "title": "PostgreSQL 19 on ClickHouse Managed Postgres, from day one",
+      "pub_date": "2026-11-24T11:54:58+00:00",
+      "file_path": "blogs/2026-11-24-postgresql-19-on-clickhouse-managed-postgres-from.md",
+      "processed_at": "2026-11-24T17:03:32.458546Z"
+    },
+    "https://clickhouse.com/blog/your-agents-dont-care-that-youre-a-batch-shop": {
+      "title": "Your agents don't care that you're a batch shop",
+      "pub_date": "2026-11-24T08:22:07+00:00",
+      "file_path": "blogs/2026-11-24-your-agents-don-t-care-that-you-re-a-batch-shop.md",
+      "processed_at": "2026-11-24T17:03:32.926201Z"
     }
   },
-  "total_blogs": 1053,
+  "total_blogs": 1055,
   "failed_blogs": [
     {
       "url": "https://clickhouse.com/jp/blog/clickhouse-gcp-japan-availability",
