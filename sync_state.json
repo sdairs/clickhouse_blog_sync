@@ -1,5 +1,5 @@
 {
-  "last_sync": "2026-11-25T16:53:22.162928Z",
+  "last_sync": "2026-11-26T16:30:37.921656Z",
   "processed_blogs": {
     "https://clickhouse.com/blog/clickhouse-raises-400-million-series-d-acquires-langfuse-launches-postgres": {
       "title": "ClickHouse raises $400M Series D led by Dragoneer to accelerate expansion across analytics and AI infrastructure",
@@ -6336,9 +6336,27 @@
       "pub_date": "2026-11-24T19:55:17+00:00",
       "file_path": "blogs/2026-11-24-durable-and-auditable-workflows-with-dbos-and.md",
       "processed_at": "2026-11-25T16:53:22.045005Z"
+    },
+    "https://clickhouse.com/blog/pg-plan-advice-postgresql-19": {
+      "title": "Hints and hazards: pg_plan_advice in PG19",
+      "pub_date": "2026-11-25T20:49:01+00:00",
+      "file_path": "blogs/2026-11-25-hints-and-hazards-pg-plan-advice-in-pg19.md",
+      "processed_at": "2026-11-26T16:30:37.299153Z"
+    },
+    "https://clickhouse.com/blog/how-well-is-clickhouse-tested": {
+      "title": "How well is ClickHouse tested? A detailed view of increasing our own coverage",
+      "pub_date": "2026-11-25T17:13:02+00:00",
+      "file_path": "blogs/2026-11-25-how-well-is-clickhouse-tested-a-detailed-view-of.md",
+      "processed_at": "2026-11-26T16:30:37.479735Z"
+    },
+    "https://clickhouse.com/blog/clickhouse-security-agentic-siem-overview": {
+      "title": "What is ClickHouse Security? A technical overview of the agentic SIEM built on ClickHouse",
+      "pub_date": "2026-11-24T00:00:00+00:00",
+      "file_path": "blogs/2026-11-24-what-is-clickhouse-security-a-technical-overview.md",
+      "processed_at": "2026-11-26T16:30:37.778557Z"
     }
   },
-  "total_blogs": 1056,
+  "total_blogs": 1059,
   "failed_blogs": [
     {
       "url": "https://clickhouse.com/jp/blog/clickhouse-gcp-japan-availability",
